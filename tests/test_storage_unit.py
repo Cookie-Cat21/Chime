@@ -112,6 +112,21 @@ async def test_open_close_and_health_check() -> None:
 
 
 @pytest.mark.asyncio
+async def test_health_check_records_real_pool_checkout_wait(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    ticks = iter([10.0, 10.125])
+    monkeypatch.setattr("chime.storage.perf_counter", lambda: next(ticks))
+    conn = _Conn([{"ok": 1}])
+    store = _store(conn)
+
+    assert await store.health_check() is True
+
+    snapshot = store.pool_health_snapshot()
+    assert snapshot["health_checkout_wait_ms"] == pytest.approx(125.0)
+
+
+@pytest.mark.asyncio
 async def test_upsert_stock_normalizes_symbol() -> None:
     conn = _Conn([None])
     store = _store(conn)

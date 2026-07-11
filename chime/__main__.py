@@ -5,6 +5,7 @@ from __future__ import annotations
 import argparse
 import asyncio
 import contextlib
+import inspect
 import signal
 
 from telegram import Bot
@@ -20,6 +21,8 @@ from chime.poller import Poller, run_poller_forever
 from chime.storage import Storage
 
 log = get_logger(__name__)
+
+POOL_CHECKOUT_WAIT_ELEVATED_MS = 250.0
 
 
 def _install_stop_handler(stop: asyncio.Event) -> None:
@@ -56,6 +59,49 @@ def _circuits_for_health(poller: Poller) -> dict[str, object]:
     return raw if isinstance(raw, dict) else {}
 
 
+def _pool_for_health(storage: Storage) -> dict[str, object]:
+    """Safe storage pool snapshot for health JSON (mock-safe, real metrics only)."""
+    fn = getattr(storage, "pool_health_snapshot", None)
+    if not callable(fn) or inspect.iscoroutinefunction(fn):
+        return {}
+    raw = fn()
+    if not isinstance(raw, dict):
+        return {}
+
+    health_checkout_wait = raw.get("health_checkout_wait_ms")
+    checkout_wait_elevated = (
+        isinstance(health_checkout_wait, int | float)
+        and not isinstance(health_checkout_wait, bool)
+        and health_checkout_wait >= POOL_CHECKOUT_WAIT_ELEVATED_MS
+    )
+    requests_waiting = raw.get("requests_waiting")
+    waiting_requests = (
+        isinstance(requests_waiting, int | float)
+        and not isinstance(requests_waiting, bool)
+        and requests_waiting > 0
+    )
+
+    snapshot: dict[str, object] = {
+        "checkout_wait_elevated": checkout_wait_elevated,
+        "checkout_wait_elevated_after_ms": POOL_CHECKOUT_WAIT_ELEVATED_MS,
+        "contention": checkout_wait_elevated or waiting_requests,
+    }
+    for key in (
+        "health_checkout_wait_ms",
+        "pool_min",
+        "pool_max",
+        "pool_size",
+        "pool_available",
+        "requests_waiting",
+    ):
+        value = raw.get(key)
+        if value is None or (
+            isinstance(value, int | float) and not isinstance(value, bool)
+        ):
+            snapshot[key] = value
+    return snapshot
+
+
 async def _refresh_both_health(storage: Storage, health: HealthState, poller: Poller) -> None:
     db_ok = False
     try:
@@ -63,9 +109,11 @@ async def _refresh_both_health(storage: Storage, health: HealthState, poller: Po
     except Exception as exc:
         log.warning("health_db_failed", error=str(exc))
     missing = list(poller.watched_missing)
+    pool = _pool_for_health(storage)
+    pool_contention = bool(pool.get("contention"))
     # E8-Q02: non-empty watched_missing is always degraded (not only via last_tick_ok).
-    health.update(
-        ok=db_ok and poller.last_tick_ok and not missing,
+    details: dict[str, object] = dict(
+        ok=db_ok and poller.last_tick_ok and not missing and not pool_contention,
         db_ok=db_ok,
         last_tick_at=poller.last_tick_at.isoformat() if poller.last_tick_at else None,
         last_tick_ok=poller.last_tick_ok,
@@ -76,6 +124,9 @@ async def _refresh_both_health(storage: Storage, health: HealthState, poller: Po
         circuits=_circuits_for_health(poller),
         last_error=poller.last_error,
     )
+    if pool:
+        details["db_pool"] = pool
+    health.update(**details)
 
 
 async def _run_both(settings: Settings) -> None:

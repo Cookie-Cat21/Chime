@@ -5,6 +5,7 @@ from __future__ import annotations
 from collections.abc import AsyncIterator, Sequence
 from contextlib import asynccontextmanager
 from datetime import datetime
+from time import perf_counter
 from typing import Any, cast
 
 from psycopg.errors import UniqueViolation
@@ -47,6 +48,7 @@ class Storage:
         self._lock_cm: Any | None = None
         self._lock_conn: Any | None = None
         self._lock_id: int | None = None
+        self._last_health_checkout_wait_ms: float | None = None
 
     async def open(self) -> None:
         await self._pool.open()
@@ -756,9 +758,45 @@ class Storage:
         return _as_rows(rows)
 
     async def health_check(self) -> bool:
-        async with self._pool.connection() as conn:
+        cm = self._pool.connection()
+        started = perf_counter()
+        try:
+            conn = await cm.__aenter__()
+        except Exception:
+            self._last_health_checkout_wait_ms = (perf_counter() - started) * 1000
+            raise
+        self._last_health_checkout_wait_ms = (perf_counter() - started) * 1000
+        exc_info: tuple[Any, BaseException, Any] | tuple[None, None, None] = (None, None, None)
+        try:
             row = await (await conn.execute("SELECT 1 AS ok")).fetchone()
-        return bool(row and _as_row(row)["ok"] == 1)
+            return bool(row and _as_row(row)["ok"] == 1)
+        except BaseException as exc:
+            exc_info = (type(exc), exc, exc.__traceback__)
+            raise
+        finally:
+            await cm.__aexit__(*exc_info)
+
+    def pool_health_snapshot(self) -> dict[str, Any]:
+        """Return real pool metrics observed by health checks.
+
+        ``health_checkout_wait_ms`` is measured around the actual psycopg pool
+        checkout used by ``health_check``. Other keys are copied from psycopg's
+        own pool stats when available.
+        """
+        snapshot: dict[str, Any] = {
+            "health_checkout_wait_ms": self._last_health_checkout_wait_ms,
+        }
+        get_stats = getattr(self._pool, "get_stats", None)
+        if not callable(get_stats):
+            return snapshot
+        stats = get_stats()
+        if not isinstance(stats, dict):
+            return snapshot
+        for key in ("pool_min", "pool_max", "pool_size", "pool_available", "requests_waiting"):
+            value = stats.get(key)
+            if isinstance(value, int):
+                snapshot[key] = value
+        return snapshot
 
 
 def _row_to_snapshot(row: dict[str, Any]) -> PriceSnapshot:
