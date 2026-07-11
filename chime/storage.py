@@ -254,6 +254,37 @@ class Storage:
             ).fetchone()
         return row is not None
 
+    async def unwatch_symbol(self, user_id: int, symbol: str) -> tuple[bool, int]:
+        """Atomically remove watchlist row and deactivate rules for symbol.
+
+        Returns ``(removed_from_watchlist, deactivated_rule_count)`` in one
+        transaction so a crash cannot leave active orphans without a watch row.
+        """
+        symbol = symbol.strip().upper()
+        async with self._pool.connection() as conn, conn.transaction():
+            row = await (
+                await conn.execute(
+                    """
+                    DELETE FROM watchlist_items
+                    WHERE user_id = %s AND symbol = %s
+                    RETURNING symbol
+                    """,
+                    (user_id, symbol),
+                )
+            ).fetchone()
+            deactivated = await (
+                await conn.execute(
+                    """
+                    UPDATE alert_rules
+                    SET active = FALSE
+                    WHERE user_id = %s AND symbol = %s AND active
+                    RETURNING id
+                    """,
+                    (user_id, symbol),
+                )
+            ).fetchall()
+        return row is not None, len(_as_rows(deactivated))
+
     async def list_watchlist(self, user_id: int) -> list[str]:
         async with self._pool.connection() as conn:
             rows = await (

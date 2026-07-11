@@ -67,14 +67,12 @@ async def test_cancel_success() -> None:
 async def test_unwatch_deactivates_rules_for_symbol() -> None:
     storage = AsyncMock()
     storage.ensure_user = AsyncMock(return_value=42)
-    storage.remove_watch = AsyncMock(return_value=True)
-    storage.deactivate_rules_for_symbol = AsyncMock(return_value=2)
+    storage.unwatch_symbol = AsyncMock(return_value=(True, 2))
 
     update, context = _make_update_context(args=["JKH.N0000"], storage=storage)
     await cmd_unwatch(update, context)
 
-    storage.remove_watch.assert_awaited_once_with(42, "JKH.N0000")
-    storage.deactivate_rules_for_symbol.assert_awaited_once_with(42, "JKH.N0000")
+    storage.unwatch_symbol.assert_awaited_once_with(42, "JKH.N0000")
     reply = update.effective_message.reply_text.await_args.args[0]
     assert "Removed JKH.N0000" in reply
     assert "Deactivated 2 alert(s)." in reply
@@ -84,12 +82,12 @@ async def test_unwatch_deactivates_rules_for_symbol() -> None:
 async def test_unwatch_orphan_rules_honest_message() -> None:
     storage = AsyncMock()
     storage.ensure_user = AsyncMock(return_value=42)
-    storage.remove_watch = AsyncMock(return_value=False)
-    storage.deactivate_rules_for_symbol = AsyncMock(return_value=1)
+    storage.unwatch_symbol = AsyncMock(return_value=(False, 1))
 
     update, context = _make_update_context(args=["JKH.N0000"], storage=storage)
     await cmd_unwatch(update, context)
 
+    storage.unwatch_symbol.assert_awaited_once_with(42, "JKH.N0000")
     reply = update.effective_message.reply_text.await_args.args[0]
     assert "wasn't on your watchlist" in reply
     assert "orphan alert" in reply

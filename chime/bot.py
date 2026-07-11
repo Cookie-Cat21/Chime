@@ -188,8 +188,7 @@ async def cmd_unwatch(update: Update, context: ContextTypes.DEFAULT_TYPE) -> Non
         return
     user_id = await _user_id(storage, update)
     assert user_id is not None
-    removed = await storage.remove_watch(user_id, symbol)
-    deactivated = await storage.deactivate_rules_for_symbol(user_id, symbol)
+    removed, deactivated = await storage.unwatch_symbol(user_id, symbol)
     if removed:
         msg = f"Removed {symbol} from your watchlist."
         if deactivated:
