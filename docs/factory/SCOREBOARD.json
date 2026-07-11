@@ -4,18 +4,16 @@
   "farming_banned": true,
   "concurrency_preferred": 8,
   "concurrency_hard_max": 16,
-  "epoch": 3,
+  "epoch": 4,
   "branch": "cursor/epoch2-agentic-loop-cb19",
   "clean_streak": 0,
-  "lifetime_factory_score": 16,
-  "lifetime_proper_commits": 16,
-  "lifetime_clusters_closed": 16,
+  "lifetime_factory_score": 35,
+  "lifetime_proper_commits": 35,
+  "lifetime_clusters_closed": 35,
   "epoch2_done": 16,
-  "sessions": [
-    {
-      "note": "Epoch 2 board cleared 16/16; verify green; opened Epoch 3"
-    }
-  ],
-  "open_board": "docs/factory/EPOCH3_BOARD.md",
-  "loop_spec": "docs/factory/AGENTIC_LOOP.md"
+  "epoch3_done": 10,
+  "open_board": "docs/factory/EPOCH4_BOARD.md",
+  "loop_spec": "docs/factory/AGENTIC_LOOP.md",
+  "note": "Literal 5T git commits rejected; scoreboard is factory_score clusters",
+  "epoch4_done": 9
 }

@@ -80,8 +80,36 @@ Quality-gated workstreams live under [docs/factory/](docs/factory/)
 ([COMMIT_FACTORY.md](docs/factory/COMMIT_FACTORY.md),
 [DASH_IA.md](docs/factory/DASH_IA.md)). Telegram remains the primary
 user surface; a thin management dashboard (Next.js + Tailwind + shadcn)
-is planned as secondary — watchlist / alerts / fire history only, not a
-trading terminal.
+is secondary — watchlist / alerts / fire history only, not a trading
+terminal.
+
+### Dashboard runbook (`web/`)
+
+Local demo auth (ADR 001) — Postgres only; never calls cse.lk from `web/`.
+
+```bash
+# 1) Backend DB (same as bot/poller)
+make up && make migrate
+cp .env.example .env   # DATABASE_URL=postgresql://chime:chime@localhost:5432/chime
+
+# 2) Dashboard
+cd web
+cp .env.example .env.local
+# Required:
+#   DATABASE_URL=postgresql://chime:chime@localhost:5432/chime
+#   DASH_DEMO_AUTH=1
+#   DASH_DEMO_TELEGRAM_IDS=123456789   # allowlist; must match a users.telegram_id
+#   DASH_SESSION_SECRET=<long random>
+# Optional: DASH_DEFAULT_TELEGRAM_ID=123456789  (pre-fill /login)
+# Optional: HEALTH_URL=http://127.0.0.1:8080/health  (poller proxy)
+npm install
+npm run dev
+```
+
+Open [http://localhost:3000/login](http://localhost:3000/login). Demo sign-in
+posts `{ "telegram_id": <allowlisted id> }` → HttpOnly `chime_session` + CSRF.
+Mutations need matching `X-CSRF-Token`. Details: [web/README.md](web/README.md),
+[docs/adr/001-dash-auth.md](docs/adr/001-dash-auth.md).
 
 ## Disclaimer
 

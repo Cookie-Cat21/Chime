@@ -1,6 +1,6 @@
 # Epoch 4 Board — Wire UI + harden (loop continues)
 
-**Status:** OPEN  
+**Status:** CLEAR (9/9 DONE) — ready adversarial CLEAN×2 / Epoch 5  
 **Parent:** Epoch 2+3 boards cleared  
 
 ## DASH wire-up
@@ -16,11 +16,11 @@
 
 | ID | Item | Status |
 |---|---|---|
-| E4-C01 | Storage unit tests toward cov ≥70 (mock pool) | OPEN |
-| E4-C02 | Bot handler coverage ratchet (parametrize rate-limit) | OPEN |
-| E4-C03 | Health exports watched_missing in loopback details | OPEN |
-| E4-O01 | README dash runbook (env + npm + demo auth) | OPEN |
-| E4-O02 | SCOREBOARD auto-update script from board DONE counts | OPEN |
+| E4-C01 | Storage unit tests toward cov ≥70 (mock pool) | DONE |
+| E4-C02 | Bot handler coverage ratchet (parametrize rate-limit) | DONE |
+| E4-C03 | Health exports watched_missing in loopback details | DONE |
+| E4-O01 | README dash runbook (env + npm + demo auth) | DONE |
+| E4-O02 | SCOREBOARD auto-update script from board DONE counts | DONE |
 
 ## After clear
 

@@ -36,9 +36,9 @@ include = ["chime*"]
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
 testpaths = ["tests"]
-# Package-wide gate (was chime.rules-only @ 85). Unit (DATABASE_URL=) ~64–65%;
-# floor 63 toward 70 — remaining gap is mostly storage.py / __main__ / bot without DB.
-addopts = "-q --cov=chime --cov-report=term-missing --cov-fail-under=63"
+# Package-wide gate (was chime.rules-only @ 85). Unit (DATABASE_URL=) ~80% after
+# storage mock-pool + bot handler coverage (E4-C01/C02); floor 70 toward ratchet.
+addopts = "-q --cov=chime --cov-report=term-missing --cov-fail-under=70"
 
 [tool.ruff]
 line-length = 100

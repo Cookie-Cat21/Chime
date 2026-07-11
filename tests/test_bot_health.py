@@ -49,6 +49,7 @@ async def test_refresh_both_health_requires_tick_ok() -> None:
     poller.price_poll_ok = True
     poller.disclosure_poll_ok = True
     poller.lock_held_skip = False
+    poller.watched_missing = []
     poller.last_error = "price_fetch_failed"
 
     await _refresh_both_health(storage, health, poller)
@@ -56,3 +57,4 @@ async def test_refresh_both_health_requires_tick_ok() -> None:
     assert health.ok is False
     assert health.details.get("last_tick_ok") is False
     assert health.details.get("last_error") == "price_fetch_failed"
+    assert health.details.get("watched_missing") == []

@@ -60,6 +60,7 @@ async def _refresh_both_health(storage: Storage, health: HealthState, poller: Po
         price_poll_ok=poller.price_poll_ok,
         disclosure_poll_ok=poller.disclosure_poll_ok,
         lock_held_skip=poller.lock_held_skip,
+        watched_missing=list(poller.watched_missing),
         last_error=poller.last_error,
     )
 

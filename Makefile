@@ -1,7 +1,7 @@
 # Thin DX entrypoint for Chime local ops.
 PYTHON ?= python3
 
-.PHONY: help install lint typecheck test test-unit migrate up-db down-db up down
+.PHONY: help install lint typecheck test test-unit migrate up-db down-db up down factory-status factory-verify factory-scoreboard
 
 help:
 	@echo "Chime local targets:"
@@ -13,6 +13,9 @@ help:
 	@echo "  make up / up-db  Start local Postgres (docker compose --wait)"
 	@echo "  make down / down-db  Stop local Postgres"
 	@echo "  make migrate     Apply SQL migrations (waits for compose health)"
+	@echo "  make factory-status  Agentic loop board + scoreboard"
+	@echo "  make factory-verify  Canonical ruff/mypy/pytest proof"
+	@echo "  make factory-scoreboard  Refresh SCOREBOARD.json from board DONE counts"
 
 install:
 	$(PYTHON) -m pip install -e ".[dev]"
@@ -42,3 +45,12 @@ down-db:
 up: up-db
 
 down: down-db
+
+factory-status:
+	$(PYTHON) scripts/factory/loop_status.py
+
+factory-verify:
+	bash scripts/factory/verify.sh
+
+factory-scoreboard:
+	$(PYTHON) scripts/factory/update_scoreboard.py --write
