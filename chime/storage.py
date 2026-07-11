@@ -31,6 +31,11 @@ def _as_rows(rows: Any) -> list[dict[str, Any]]:
 
 class Storage:
     def __init__(self, database_url: str, *, min_size: int = 1, max_size: int = 4) -> None:
+        if max_size < 2:
+            raise ValueError(
+                "Storage max_size must be >= 2: advisory lock holds one pool connection "
+                "for the poll tick, so health checks and other queries need a free conn"
+            )
         self._pool = AsyncConnectionPool(
             conninfo=database_url,
             min_size=min_size,

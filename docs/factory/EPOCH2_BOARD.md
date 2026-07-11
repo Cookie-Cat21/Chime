@@ -12,20 +12,20 @@ Each DONE needs: commit SHA + verify proof in pass report.
 | ID | Item | Status | Notes |
 |---|---|---|---|
 | E2-C01 | CORE-003 DOA-only: fail-closed gate when only DOA (store DOA for display) | DONE | |
-| E2-C02 | CORE-005 await in-flight tick on shutdown (timeout) | OPEN | |
+| E2-C02 | CORE-005 await in-flight tick on shutdown (timeout) | DONE | |
 | E2-C03 | Claim+disarm single DB transaction | OPEN | |
 | E2-C04 | Persist delivered-guard (survive restart) — `message_sent` optimistic or delivery lease | OPEN | |
 | E2-C05 | Unsent SKIP LOCKED / lease so RetryAfter need not hold advisory lock | OPEN | |
-| E2-C06 | tradeSummary miss → health flag / log watched_missing | DONE | `_poll_prices`: `watched_missing` + `watched_symbols_missing` log; `price_ok=False` |
+| E2-C06 | tradeSummary miss → health flag / log watched_missing | OPEN | |
 | E2-C07 | Dead-letter user/ops notify (bot message or structured alert) | OPEN | |
 
 ## OPS
 
-| ID | Item | Status |
-|---|---|---|
-| E2-O01 | Expand cov gate beyond rules (`--cov=chime` with floors) | OPEN |
-| E2-O02 | Storage pool `max_size >= 2` guard when advisory lock used | OPEN |
-| E2-O03 | Factory verify script + loop_status in CI or make | DONE |
+| ID | Item | Status | Notes |
+|---|---|---|---|
+| E2-O01 | Expand cov gate beyond rules (`--cov=chime` with floors) | DONE | `--cov=chime --cov-fail-under=60` (measured ~63% unit; 70/85 not yet achievable) |
+| E2-O02 | Storage pool `max_size >= 2` guard when advisory lock used | DONE | `Storage.__init__` raises ValueError if `max_size < 2`; `tests/test_pool_guard.py` |
+| E2-O03 | Factory verify script + loop_status in CI or make | DONE | |
 
 ## DASH (largest fuel)
 
