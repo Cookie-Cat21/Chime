@@ -254,17 +254,16 @@ class Poller:
             for event in events:
                 if event.trigger == "rearm" and event.set_armed is True:
                     await self.storage.set_rule_armed(event.rule_id, True)
-            # Claim BEFORE disarm so a crash cannot lose the alert forever
+            # Price crosses: claim+disarm in one DB transaction (E2-C03).
+            # Conflict claim skips disarm. Telegram send stays outside the txn.
             for event in filter_fireable(events):
                 t0 = datetime.now(UTC)
-                claimed = await self._claim_and_send(event)
+                claimed = await self._claim_and_send(
+                    event,
+                    disarm=event.set_armed is False,
+                )
                 if not claimed:
                     continue
-                # Disarm after successful claim (even if Telegram send failed /
-                # left message_sent=False). Crossing is consumed; unsent retry
-                # delivers. Keeps armed state aligned with claim semantics.
-                if event.set_armed is False:
-                    await self.storage.set_rule_armed(event.rule_id, False)
                 latency_ms = (datetime.now(UTC) - t0).total_seconds() * 1000
                 log.info(
                     "alert_latency_ms",
@@ -360,10 +359,22 @@ class Poller:
                 attempts=attempts,
             )
 
-    async def _claim_only(self, event: AlertEvent) -> PendingSend | None:
-        """Claim the alert row; return a PendingSend or None on conflict."""
+    async def _claim_only(
+        self,
+        event: AlertEvent,
+        *,
+        disarm: bool = False,
+    ) -> PendingSend | None:
+        """Claim the alert row; return a PendingSend or None on conflict.
+
+        When ``disarm`` is True (price crosses), uses ``claim_and_disarm`` so
+        claim + armed=False commit together. Conflict → no disarm.
+        """
         message = format_alert_message(event)
-        log_id = await self.storage.claim_alert(event, message)
+        if disarm:
+            log_id = await self.storage.claim_and_disarm(event, message)
+        else:
+            log_id = await self.storage.claim_alert(event, message)
         if log_id is None:
             log.info("alert_already_claimed", event_key=event.event_key, rule_id=event.rule_id)
             return None
@@ -404,19 +415,19 @@ class Poller:
         for item in pending:
             await self._deliver_one(item)
 
-    async def _claim_and_send(self, event: AlertEvent) -> bool:
+    async def _claim_and_send(self, event: AlertEvent, *, disarm: bool = False) -> bool:
         """Claim the alert, then attempt Telegram send (or queue when locked).
 
         Returns True when the claim succeeded (row inserted), even if Telegram
-        send failed. Callers must treat True as “crossing consumed” so price
-        rules can disarm; delivery continues via ``message_sent=False`` retry /
-        dead-letter. Returns False only on claim conflict (already claimed).
+        send failed. With ``disarm=True``, claim and armed=False are one
+        transaction (E2-C03); delivery continues via ``message_sent=False``
+        retry / dead-letter. Returns False only on claim conflict.
 
         Under ``run_once`` (``_queue_sends=True``) the send is deferred until
         after advisory unlock (CORE-004). Direct callers (unit tests) still
         send inline.
         """
-        pending = await self._claim_only(event)
+        pending = await self._claim_only(event, disarm=disarm)
         if pending is None:
             return False
         if self._queue_sends:

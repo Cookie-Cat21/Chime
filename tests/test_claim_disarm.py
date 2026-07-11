@@ -26,7 +26,7 @@ async def test_price_cross_disarms_when_send_fails() -> None:
     )
 
     storage = AsyncMock()
-    storage.claim_alert = AsyncMock(return_value=501)
+    storage.claim_and_disarm = AsyncMock(return_value=501)
     storage.mark_alert_attempt = AsyncMock(return_value=1)
     storage.set_rule_armed = AsyncMock()
     storage.insert_snapshot = AsyncMock(side_effect=lambda s: s)
@@ -48,7 +48,7 @@ async def test_price_cross_disarms_when_send_fails() -> None:
     )
 
     assert len(fired) == 1
-    storage.claim_alert.assert_awaited_once()
-    storage.set_rule_armed.assert_any_await(rule.id, False)
+    storage.claim_and_disarm.assert_awaited_once()
+    storage.set_rule_armed.assert_not_awaited()
     storage.mark_alert_attempt.assert_awaited_once_with(501)
     storage.mark_alert_sent.assert_not_awaited()

@@ -542,6 +542,34 @@ class Storage:
             return None
         return int(_as_row(row)["id"])
 
+    async def claim_and_disarm(self, event: AlertEvent, message_text: str) -> int | None:
+        """Claim alert and disarm the rule in one transaction (E2-C03).
+
+        Returns alert_log id if newly claimed (rule disarmed). On claim conflict
+        (already claimed), skips disarm and returns None.
+        """
+        async with self._pool.connection() as conn, conn.transaction():
+            row = await (
+                await conn.execute(
+                    """
+                    INSERT INTO alert_log (
+                        rule_id, snapshot_id, event_key, message_sent, message_text
+                    )
+                    VALUES (%s, %s, %s, FALSE, %s)
+                    ON CONFLICT (rule_id, event_key) DO NOTHING
+                    RETURNING id
+                    """,
+                    (event.rule_id, event.snapshot_id, event.event_key, message_text),
+                )
+            ).fetchone()
+            if row is None:
+                return None
+            await conn.execute(
+                "UPDATE alert_rules SET armed = %s WHERE id = %s",
+                (False, event.rule_id),
+            )
+            return int(_as_row(row)["id"])
+
     async def mark_alert_sent(self, alert_log_id: int) -> None:
         async with self._pool.connection() as conn:
             await conn.execute(

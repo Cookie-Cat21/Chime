@@ -56,7 +56,7 @@ async def test_unlock_before_send_on_new_price_claim() -> None:
     storage.active_rules_for_symbols = AsyncMock(return_value=[rule])
     storage.insert_snapshot = AsyncMock(side_effect=lambda s: s)
     storage.get_previous_state = AsyncMock(return_value=PreviousPriceState(price=95.0))
-    storage.claim_alert = AsyncMock(return_value=501)
+    storage.claim_and_disarm = AsyncMock(return_value=501)
     storage.mark_alert_sent = AsyncMock()
     storage.set_rule_armed = AsyncMock()
     storage.unsent_alerts = AsyncMock(return_value=[])
@@ -70,8 +70,8 @@ async def test_unlock_before_send_on_new_price_claim() -> None:
     events = await poller.run_once(force=True)
 
     assert len(events) == 1
-    storage.claim_alert.assert_awaited_once()
-    storage.set_rule_armed.assert_any_await(rule.id, False)
+    storage.claim_and_disarm.assert_awaited_once()
+    storage.set_rule_armed.assert_not_awaited()
     # CSE unlock + empty unsent re-lock unlock
     assert storage.advisory_unlock.await_count == 2
     assert unlock_before_send == [True]
