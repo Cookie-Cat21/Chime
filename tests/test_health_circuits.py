@@ -39,6 +39,7 @@ def test_circuit_breaker_snapshot_shape() -> None:
     assert snap["failures"] == 1
     assert snap["fail_max"] == 2
     assert snap["reset_timeout_seconds"] == 30.0
+    assert snap["half_open_trial"] is False
 
 
 def test_cse_client_circuit_metrics_empty_then_populated() -> None:
@@ -93,3 +94,4 @@ async def test_refresh_both_health_exports_circuits() -> None:
             conn.close()
     assert resp.status == 200
     assert body["circuits"]["tradeSummary"]["failures"] == 5
+    assert body["circuits"]["tradeSummary"]["half_open_trial"] is False
