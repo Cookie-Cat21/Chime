@@ -36,6 +36,14 @@ CLAUDE.md FENCES:
 - Quality over count. One concern per commit; disjoint files across concurrent agents.
 
 CONVERGENCE: If this lane had 2 consecutive passes with zero findings above minor → STOP. Do not invent work.
+Also STOP if the pass is minors-only with no quality-bar movement (anti-churn).
+REFUTE ⇒ revert or fix in the same pass before any factory_score claim.
+
+OWNED_FILES: every implementer lists exact paths; intersecting paths across agents in one wave ⇒ fail the wave.
+VERIFY proof must include `git rev-parse HEAD` from the verify moment.
+
+factory_score = min(proper_commits, clusters_closed). Raw commit count is not a KPI.
+DASH: no second unbounded cse.lk client from web/; Postgres/API only. Auth must be server-side session (no client-supplied telegram_id impersonation).
 
 LANES: CORE=chime/,db/,tests/ (non-UI) | DASH=web/ + dash API | OPS=.github/, Docker, DX, factory docs.
 Parallelize within a lane; never conflict files across agents in one wave.

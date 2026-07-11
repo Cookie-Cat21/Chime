@@ -62,11 +62,14 @@ These may exist in git history if a human insists, but **score = 0**:
 **Formula (honest):**
 
 ```
-proper_commits(pass) = |commits that pass §1 COMMIT_FACTORY “proper commit”|
-factory_score(pass)  = proper_commits(pass)   # not raw git commit count
+proper_commits(pass) = |commits that pass COMMIT_FACTORY “proper commit”|
+clusters_closed(pass) = |distinct WS or BAR items closed with proof|
+factory_score(pass)  = min(proper_commits(pass), clusters_closed(pass))
 ```
 
+Raw `git rev-list --count` is **not** a KPI. Docs/ops commits score only with `closes: WS-###` or `closes: BAR-#` in the body.
 Rejected, refuted, or excluded commits do not enter the sum.
+Minors-only passes that close zero clusters score **0** even if commits exist.
 
 ---
 

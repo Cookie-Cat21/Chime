@@ -1,6 +1,6 @@
 # Chime — Commit Factory Master Plan
 
-**Status:** Planning phase (this document)  
+**Status:** Planning reviewed (Wave R1) — see [review/IMPROVEMENTS.md](review/IMPROVEMENTS.md)  
 **Branch intent:** Quality-gated agentic improvement of Chime only (Ceyfi merge deferred)  
 **Co-authors:** Human product owner + Cursor Cloud Agents  
 
@@ -11,18 +11,24 @@ Read and obey [CLAUDE.md](../CLAUDE.md). Hard fences:
 - Quality over count. A commit that exists only to inflate history is **rejected**.
 - One concern per commit; disjoint files across concurrent agents.
 - Compliance: NFA framing, polite cse.lk rate limits, never scrape competitors.
-- Concurrency: **8 preferred, hard max 16**. “100 planning workstreams” means a *catalog* executed in waves — never 100 simultaneous processes.
+- Dashboard reads **Postgres / Chime API only** — no second unbounded cse.lk client from `web/`.
+- Concurrency: **8 preferred, hard max 16**. “100 workstreams” = catalog in waves — never 100 simultaneous processes.
 - Convergence: two consecutive passes with zero findings above **minor** → STOP that lane.
+- **Also STOP** if a pass produces only minor fixes with no quality-bar movement (no infinite minor churn).
+- Adversarial **REFUTE** ⇒ revert or fix in the **same pass** before scoring.
 
 ### Defaults locked for this factory
 
 | Decision | Choice |
 |---|---|
 | Dashboard | **Unlock thin web** (watchlist / alerts / fire history / symbol+disclosures). Still **no** portfolio, screener, TA, payments. |
+| Dash data path | Postgres-backed API; CSE traffic stays in poller/bot adapters |
+| Auth (v1) | Server-side session after verified identity — **not** client-supplied `telegram_id` + shared secret alone |
 | PR style | One long-lived factory PR per epoch; pass reports in `docs/factory/` |
 | Intensity | Aggressive throughput of *proper* commits; gates mandatory |
 | Human role | Approve constitution/fence changes; orchestrator picks top findings within fences |
 | Merge with Ceyfi | **Deferred** |
+| Epoch 1 board | Fixed 16 WS in [review/IMPROVEMENTS.md](review/IMPROVEMENTS.md) — no feature flood |
 
 ## 1. What a “proper commit” is
 
