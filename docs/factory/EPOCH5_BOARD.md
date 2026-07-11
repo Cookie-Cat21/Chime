@@ -10,7 +10,7 @@
 | E5-O03 | Secret checklist (.env.example dash vars complete) | DONE |
 | E5-D01 | Watchlist empty-state + error toasts | DONE |
 | E5-D02 | Alerts empty-state + validation errors | DONE |
-| E5-C01 | migrate idempotent test | OPEN |
-| E5-C02 | `__main__` / migrate cov bump toward overall 85 | OPEN |
+| E5-C01 | migrate idempotent test | DONE |
+| E5-C02 | `__main__` / migrate cov bump toward overall 85 | DONE |
 
 Orchestrator: `make factory-status` → spawn ≤8 on OPEN. Never farm.
