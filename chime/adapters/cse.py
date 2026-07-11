@@ -43,6 +43,11 @@ TRADE_SUMMARY_ENDPOINT = "tradeSummary"
 TRADE_SUMMARY_PATH = "/tradeSummary"
 
 
+def _announcement_url(external_id: str) -> str:
+    """Public CSE announcement page anchor used in Telegram disclosure alerts."""
+    return f"{ANNOUNCEMENTS_PAGE}#{external_id}"
+
+
 class TradeSummaryRow(BaseModel):
     model_config = ConfigDict(extra="ignore")
 
@@ -239,7 +244,7 @@ def announcement_to_disclosure(
         company_name=row.company,
         title=title,
         category=row.announcementCategory,
-        url=f"{ANNOUNCEMENTS_PAGE}#{external}",
+        url=_announcement_url(str(external)),
         published_at=published,
         seen_at=seen_at or datetime.now(UTC),
         doa_display=doa,

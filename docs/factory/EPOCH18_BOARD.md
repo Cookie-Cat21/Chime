@@ -13,7 +13,7 @@ Activate via `make factory-refill` after Epoch 17.
 | E18-D01 | NfaFooter present on watchlist/alerts/health | DONE |
 | E18-D02 | Unwatch success toast stays Telegram-first | DONE |
 | E18-O01 | HANDOFF Epoch 17→18 | DONE |
-| E18-C01 | Adapter announcement URL uses announcements page anchor | OPEN |
+| E18-C01 | Adapter announcement URL uses announcements page anchor | DONE |
 | E18-A01 | SESSION_LOG Epoch 17 entry | OPEN |
 | E18-B01 | /watch upstream error reply is honest + NFA-safe | OPEN |
 

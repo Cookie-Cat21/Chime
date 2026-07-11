@@ -14,6 +14,7 @@ from chime.adapters.cse import (
     AnnouncementRow,
     CSEClient,
     TradeSummaryRow,
+    _announcement_url,
     announcement_to_disclosure,
     trade_row_to_snapshot,
 )
@@ -102,6 +103,13 @@ def test_announcement_to_disclosure_builds_url_and_title() -> None:
     assert disc.seen_at == seen
     assert disc.published_at == datetime.fromtimestamp(1_720_000_000_000 / 1000.0, tz=UTC)
     assert disc.doa_display is None
+
+
+def test_announcement_url_uses_public_announcements_anchor() -> None:
+    url = _announcement_url("12345")
+
+    assert url == f"{ANNOUNCEMENTS_PAGE}#12345"
+    assert "/api/" not in url
 
 
 def test_announcement_falls_back_to_id_field() -> None:
