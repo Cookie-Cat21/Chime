@@ -14,7 +14,7 @@ scrape / cse.lk from `web/`. Activate via `make factory-refill` after Epoch 13.
 | E14-D02 | Health page: poller unreachable vs degraded distinction | DONE |
 | E14-O01 | HANDOFF Epoch 13→14 + SCOREBOARD note | OPEN |
 | E14-C01 | Adapter: empty tradeSummary log includes endpoint name | DONE |
-| E14-A01 | API_CONTRACT note: health degrade when poll flags false | OPEN |
+| E14-A01 | API_CONTRACT note: health degrade when poll flags false | DONE |
 | E14-B01 | Bot rate-limit reply includes NFA-neutral tone (no advice) | OPEN |
 
 Never farm. One concern per commit.

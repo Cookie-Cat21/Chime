@@ -154,7 +154,7 @@ Requires authenticated session (v1). Prefer proxying poller health and/or DB pin
 }
 ```
 
-`status` is `"ok"` \| `"degraded"`. Omit or null `poller` when `HEALTH_URL` is unset and only DB liveness is available. When proxying poller loopback health, forward `watched_missing` (string[]) and `circuits` (endpoint → breaker snapshot) when present. Do not expose this payload anonymously without an explicit future public-liveness subset (`status` + `db_ok` only).
+`status` is `"ok"` \| `"degraded"`. Omit or null `poller` when `HEALTH_URL` is unset and only DB liveness is available. When proxying poller loopback health, any explicit poller failure flag (`last_tick_ok === false`, `price_poll_ok === false`, or `disclosure_poll_ok === false`) MUST make the response `503` with `status: "degraded"`, even if `db_ok` is true. Forward `watched_missing` (string[]) and `circuits` (endpoint → breaker snapshot) when present. Do not expose this payload anonymously without an explicit future public-liveness subset (`status` + `db_ok` only).
 
 ---
 
