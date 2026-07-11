@@ -1,9 +1,11 @@
-"""CSE adapter circuit-open must propagate, not look like empty success."""
+"""CSE adapter circuit-open / timeout / transport errors must propagate."""
 
 from __future__ import annotations
 
+import asyncio
 from unittest.mock import AsyncMock
 
+import httpx
 import pytest
 
 from chime.adapters.cse import CSEClient
@@ -30,3 +32,33 @@ async def test_fetch_approved_announcements_reraises_circuit_open() -> None:
 
     with pytest.raises(CircuitOpenError, match="circuit open"):
         await client.fetch_approved_announcements()
+
+
+@pytest.mark.asyncio
+async def test_fetch_company_info_propagates_timeout(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """E9-C02: httpx timeout after retries must surface (not None / soft-miss)."""
+    monkeypatch.setattr(asyncio, "sleep", AsyncMock())
+    http = AsyncMock()
+    http.request = AsyncMock(side_effect=httpx.ReadTimeout("timed out"))
+    client = CSEClient(fail_max=99, reset_timeout=60.0, client=http)
+
+    with pytest.raises(httpx.TimeoutException):
+        await client.fetch_company_info("JKH.N0000")
+    assert http.request.await_count == 3  # tenacity stop_after_attempt(3)
+
+
+@pytest.mark.asyncio
+async def test_fetch_trade_summary_propagates_connect_error(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """E9-C02: transport errors propagate after retries (poller must not treat as [])."""
+    monkeypatch.setattr(asyncio, "sleep", AsyncMock())
+    http = AsyncMock()
+    http.request = AsyncMock(side_effect=httpx.ConnectError("connection refused"))
+    client = CSEClient(fail_max=99, reset_timeout=60.0, client=http)
+
+    with pytest.raises(httpx.TransportError):
+        await client.fetch_trade_summary()
+    assert http.request.await_count == 3

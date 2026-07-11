@@ -104,7 +104,7 @@ START_TEXT = (
     f"{disclaimer()}"
 )
 
-# ≤12 lines (E7-B01).
+# ≤12 lines (E7-B01). /myalerts lists active rules only (E9-B01).
 HELP_TEXT = (
     "Commands:\n"
     "/watch SYMBOL\n"
@@ -114,7 +114,7 @@ HELP_TEXT = (
     "/alert SYMBOL move PERCENT\n"
     "/alert SYMBOL disclosure\n"
     "/cancel ALERT_ID\n"
-    "/myalerts\n"
+    "/myalerts — active only\n"
     "/mywatchlist\n"
     "/help"
 )

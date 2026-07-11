@@ -46,6 +46,9 @@ Bot and `both` start Telegram long-polling with `drop_pending_updates=True`, so
 queued messages from downtime are discarded on restart (avoids replaying stale
 `/watch` / `/alert` commands after a deploy).
 
+Telegram: `/watch`, `/unwatch`, `/alert …`, `/cancel ALERT_ID`, `/myalerts`
+(active alerts only — cancelled rules are omitted), `/mywatchlist`, `/help`.
+
 ## Latency SLO
 
 Alert **claim → Telegram send** is instrumented (`alert_latency_ms`) and targeted

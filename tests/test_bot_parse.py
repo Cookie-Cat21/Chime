@@ -90,4 +90,5 @@ def test_help_text_lists_commands_within_12_lines() -> None:
     assert "/watch SYMBOL" in HELP_TEXT
     assert "/alert SYMBOL disclosure" in HELP_TEXT
     assert "/cancel ALERT_ID" in HELP_TEXT
+    assert "/myalerts — active only" in HELP_TEXT
     assert "/help" in HELP_TEXT

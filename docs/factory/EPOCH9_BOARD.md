@@ -11,8 +11,8 @@
 | E9-Q02 | Session missing → 401 on mutate routes test | OPEN |
 | E9-O01 | PORTFOLIO_NODES + portfolio_sum.py stub | OPEN |
 | E9-O02 | Epoch 9→10 refill seed note in HANDOFF | OPEN |
-| E9-C01 | config.from_env unit tests (missing token) | OPEN |
-| E9-C02 | CSE adapter timeout path unit test | OPEN |
-| E9-B01 | /myalerts includes inactive? document active-only | OPEN |
+| E9-C01 | config.from_env unit tests (missing token) | DONE |
+| E9-C02 | CSE adapter timeout path unit test | DONE |
+| E9-B01 | /myalerts includes inactive? document active-only | DONE |
 
 Fence-legal only. Refill after Epoch 8 clear.
