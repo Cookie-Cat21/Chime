@@ -17,7 +17,7 @@ Telegram remains the push channel. The dashboard is for CRUD + inspection — no
 | `/alerts` | Active alert rules CRUD | user |
 | `/alerts/history` | Fire history (`alert_log`) | user |
 | `/symbols/[symbol]` | Symbol detail: last tick, sparkline, disclosures | user |
-| `/health` | Ops: poller liveness / last poll (read-only) | ops / demo open |
+| `/health` | Ops: poller liveness / last poll (read-only) | ops-gated (session; see ADR 001) |
 
 No nested app shell beyond a single top nav: Watchlist · Alerts · History · (Health).
 
@@ -66,32 +66,34 @@ No nested app shell beyond a single top nav: Watchlist · Alerts · History · (
 
 ## 3. API endpoints (REST)
 
-Base: `/api/v1`. JSON request/response. All user routes scoped by authenticated `user_id`. Errors: `{ "error": string, "code"?: string }`.
+**Canonical contract:** [API_CONTRACT_V1.md](API_CONTRACT_V1.md) (WS-024). Summary below — if anything conflicts, the contract wins.
+
+Base: `/api/v1`. JSON request/response. User routes scoped by **session** `user_id` ([ADR 001](../adr/001-dash-auth.md)). Errors: `{ "error": { "code": string, "message": string } }`. CSRF required on mutations. **No cse.lk from `web/`.**
 
 ### Auth
 
 | Method | Path | Request | Response |
 |---|---|---|---|
-| `POST` | `/api/v1/auth/demo` | `{ "telegram_id": number }` | `{ "token": string, "user": { "id", "telegram_id" } }` |
-| `POST` | `/api/v1/auth/telegram` *(future)* | Telegram Login Widget payload | same as demo |
+| `POST` | `/api/v1/auth/demo` | `{ "telegram_id": number }` (allowlisted) | `{ "user": { "id", "telegram_id" } }` + HttpOnly session cookie |
+| `POST` | `/api/v1/auth/telegram` *(future)* | Telegram Login Widget payload | same session shape as demo |
 | `POST` | `/api/v1/auth/logout` | — | `{ "ok": true }` |
-| `GET` | `/api/v1/me` | — | `{ "id", "telegram_id", "created_at" }` |
+| `GET` | `/api/v1/me` | — | `{ "id", "telegram_id", "created_at" }` (+ optional `csrf_token`) |
 
 ### Watchlist
 
 | Method | Path | Request | Response |
 |---|---|---|---|
 | `GET` | `/api/v1/watchlist` | — | `{ "items": [{ "symbol", "name", "sector", "price", "change", "change_pct", "ts" }] }` |
-| `POST` | `/api/v1/watchlist` | `{ "symbol": string }` | `{ "symbol", "name" }` (validates via CSE adapter; upserts `stocks`) |
+| `POST` | `/api/v1/watchlist` | `{ "symbol": string }` | `{ "symbol", "name" }` (Postgres `stocks` only — no CSE from dash) |
 | `DELETE` | `/api/v1/watchlist/{symbol}` | — | `{ "removed": bool, "deactivated_alerts": number }` |
 
 ### Alerts
 
 | Method | Path | Request | Response |
 |---|---|---|---|
-| `GET` | `/api/v1/alerts` | `?active=true` | `{ "rules": [{ "id", "symbol", "type", "threshold", "active", "armed", "created_at" }] }` |
-| `POST` | `/api/v1/alerts` | `{ "symbol", "type", "threshold"? }` | created rule object |
-| `DELETE` | `/api/v1/alerts/{id}` | — | `{ "cancelled": bool }` (soft: `active=false`) |
+| `GET` | `/api/v1/alerts` | `?active=true` (default) | `{ "rules": [{ "id", "symbol", "type", "threshold", "active", "armed", "created_at" }] }` |
+| `POST` | `/api/v1/alerts` | `{ "symbol", "type", "threshold"? }` | created rule object (auto-watch; soft-replace duplicates) |
+| `DELETE` | `/api/v1/alerts/{id}` | — | `{ "cancelled": bool }` (soft: `active=false`; bot `/cancel`) |
 | `GET` | `/api/v1/alerts/history` | `?symbol=&limit=50` | `{ "events": [{ "id", "rule_id", "symbol", "type", "fired_at", "message_sent", "message_text", "event_key" }] }` |
 
 `type` enum: `price_above` \| `price_below` \| `daily_move` \| `disclosure`  
@@ -101,35 +103,38 @@ Base: `/api/v1`. JSON request/response. All user routes scoped by authenticated 
 
 | Method | Path | Request | Response |
 |---|---|---|---|
-| `GET` | `/api/v1/symbols/{symbol}` | — | `{ "symbol", "name", "sector", "last": PriceSnapshotFields \| null }` |
+| `GET` | `/api/v1/symbols/{symbol}` | — | `{ "symbol", "name", "sector", "last": SlimLast \| null }` |
 | `GET` | `/api/v1/symbols/{symbol}/snapshots` | `?limit=60` | `{ "points": [{ "ts", "price", "change_pct" }] }` |
-| `GET` | `/api/v1/symbols/{symbol}/disclosures` | `?limit=20` | `{ "items": [{ "id", "title", "category", "url", "published_at", "company_name" }] }` |
+| `GET` | `/api/v1/symbols/{symbol}/disclosures` | `?limit=20` | `{ "items": [{ "id", "external_id", "title", "category", "url", "published_at", "company_name" }] }` |
 
-`PriceSnapshotFields`: `price`, `change`, `change_pct`, `previous_close`, `volume`, `high`, `low`, `open`, `market_cap`, `ts` (from `price_snapshots` / domain `PriceSnapshot`).
+`SlimLast` (v1 UI): `price`, `change`, `change_pct`, `volume`, `ts`. Do not render OHLC / market_cap as a quote board even if present in DB.
 
-### Health (ops)
+### Health (ops-gated)
 
 | Method | Path | Request | Response |
 |---|---|---|---|
-| `GET` | `/api/v1/health` | — | `{ "status": "ok"\|"degraded", "started_at", ...poller details }` |
+| `GET` | `/api/v1/health` | session required | `{ "status": "ok"\|"degraded", "db_ok", "started_at", "last_snapshot_at"?, "poller"? }` |
 
-Proxy or re-expose existing poller `/health` — do not invent a second source of truth.
+Proxy or re-expose existing poller `/health` — do not invent a second source of truth. Not anonymously public by default.
 
 ### Conventions
 - Symbol normalize: uppercase, same regex as bot (`SYMBOL_RE`).
-- Every price-bearing response may include `disclaimer: "Not financial advice — informational only."` or UI appends `disclaimer()` client-side.
-- No WebSocket in v1; pages refresh on navigation / short poll optional later.
+- NFA is **UI-only** (`disclaimer()` chrome) — not required on JSON bodies.
+- No WebSocket in v1; pages refresh on navigation only (no short-poll quote loop).
 
 ---
 
 ## 4. Auth recommendation
 
+**Canonical ADR:** [001-dash-auth.md](../adr/001-dash-auth.md) (WS-023).
+
 | Phase | Approach |
 |---|---|
-| **v1 local/demo** | Signed session cookie (or bearer) after `POST /auth/demo` with a known `telegram_id` that already exists in `users` (or auto-`ensure_user`). Env gate: `DASH_DEMO_AUTH=1`. Fine for single-operator / staging. |
-| **Future** | [Telegram Login Widget](https://core.telegram.org/widgets/login): verify `hash` with bot token; upsert `users.telegram_id`; issue same session shape. Drop demo endpoint in production. |
+| **v1 local/demo** | Env allowlist `DASH_DEMO_TELEGRAM_IDS` + `DASH_DEMO_AUTH=1` + non-empty `DASH_SESSION_SECRET`. `POST /auth/demo` mints a **signed HttpOnly session** bound to `users.id`. CSRF on mutating routes. |
+| **Banned** | Shared secret + client-supplied `telegram_id` / `X-Telegram-Id` as sole auth; secret-in-cookie; open-network demo without allowlist. |
+| **Future** | [Telegram Login Widget](https://core.telegram.org/widgets/login): verify `hash` with bot token; upsert `users.telegram_id`; same session shape. Drop demo endpoint in production. Stub must not accept forged hashes. |
 
-Do not introduce email/password, OAuth providers, or multi-tenant orgs in v1. Dashboard identity = Telegram user row.
+Do not introduce email/password, OAuth providers, or multi-tenant orgs in v1. Dashboard identity = Telegram user row. Dashboard reads Postgres only.
 
 ---
 
