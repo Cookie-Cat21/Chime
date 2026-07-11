@@ -107,6 +107,19 @@ def test_announcement_uses_date_of_announcement_when_created_date_null() -> None
     assert disc.published_at == datetime(2026, 6, 29, 18, 30, 0, tzinfo=UTC)
 
 
+def test_announcement_uses_date_of_announcement_when_created_date_non_positive() -> None:
+    """createdDate <= 0 is a null sentinel — fall through to dateOfAnnouncement."""
+    row = AnnouncementRow(
+        announcementId=45,
+        announcementCategory="Financial",
+        createdDate=0,
+        dateOfAnnouncement="30 Jun 2026",
+    )
+    disc = announcement_to_disclosure(row, symbol="JKH.N0000")
+    assert disc is not None
+    assert disc.published_at == datetime(2026, 6, 29, 18, 30, 0, tzinfo=UTC)
+
+
 def test_announcement_undated_still_epoch_fail_closed() -> None:
     """WS-001: neither createdDate nor parseable dateOfAnnouncement → epoch."""
     row = AnnouncementRow(

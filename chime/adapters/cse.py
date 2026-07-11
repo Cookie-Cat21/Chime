@@ -204,9 +204,9 @@ def announcement_to_disclosure(
     external = row.announcementId if row.announcementId is not None else row.id
     if external is None:
         return None
-    # Prefer createdDate (epoch ms). If missing, try dateOfAnnouncement before
-    # falling back to epoch 1970 — never "now", which would flood on backfill.
-    if row.createdDate is not None:
+    # Prefer createdDate (epoch ms). Treat <=0 as missing (null sentinel) so
+    # dateOfAnnouncement can run. If still unknown, epoch 1970 — never "now".
+    if row.createdDate is not None and row.createdDate > 0:
         published = _ms_to_dt(row.createdDate)
     else:
         published = _parse_date_of_announcement(row.dateOfAnnouncement) or datetime(
