@@ -171,3 +171,24 @@ def test_move_event_key_uses_colombo_calendar_day() -> None:
     assert len(events) == 1
     assert events[0].event_key == "move:7:2026-07-11"
     assert events[0].event_key != "move:7:2026-07-10"
+
+
+def test_move_event_key_stays_colombo_day_across_utc_midnight() -> None:
+    """E17-Q02: UTC midnight must not split one Colombo daily-move session."""
+    rule = make_rule(id=8, type=AlertType.DAILY_MOVE, threshold=1.0)
+    keys: list[str] = []
+
+    for ts in (
+        # Both are 2026-07-11 in Asia/Colombo, but different UTC dates.
+        datetime(2026, 7, 10, 23, 59, 0, tzinfo=UTC),
+        datetime(2026, 7, 11, 0, 1, 0, tzinfo=UTC),
+    ):
+        events = evaluate_price_rules(
+            snapshot=make_snapshot(price=101.0, change_pct=1.5, ts=ts, id=50),
+            previous=make_previous(price=100.0, change_pct=0.5),
+            rules=[rule],
+        )
+        assert len(events) == 1
+        keys.append(events[0].event_key)
+
+    assert keys == ["move:8:2026-07-11", "move:8:2026-07-11"]
