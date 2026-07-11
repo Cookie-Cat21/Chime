@@ -31,12 +31,12 @@ Each DONE needs: commit SHA + verify proof in pass report.
 
 | ID | Item | Status | Notes |
 |---|---|---|---|
-| E2-D01 | `web/` Next.js + Tailwind + shadcn scaffold | DONE | Next 16 App Router + Tailwind v4 + shadcn (radix) |
-| E2-D02 | Demo session auth per ADR 001 | DONE | `POST /api/v1/auth/demo`, `/login`, signed HttpOnly `chime_session` |
+| E2-D01 | `web/` Next.js + Tailwind + shadcn scaffold | DONE | `2934773` Next 16 App Router + Tailwind v4 + shadcn (radix) |
+| E2-D02 | Demo session auth per ADR 001 | DONE | `2934773` `POST /api/v1/auth/demo`, `/login`, signed HttpOnly `chime_session` |
 | E2-D03 | CSRF bootstrap; logout requires CSRF | OPEN | Login already issues CSRF cookie + `csrf_token`; logout gate still open |
 | E2-D04 | Read APIs: watchlist, alerts, fires, health (Postgres only) | OPEN | |
 | E2-D05 | Brand-first shell page (no fake trading terminal) | OPEN | |
-| E2-D06 | THIRD_PARTY.md + dash smoke script | OPEN | partial: `docs/THIRD_PARTY.md` (+ web deps); smoke script still open |
+| E2-D06 | THIRD_PARTY.md + dash smoke script | OPEN | partial: `2934773` `docs/THIRD_PARTY.md` (+ web deps); smoke script still open |
 
 ## Wave packing (≤8 agents)
 
