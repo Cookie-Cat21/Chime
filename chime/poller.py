@@ -11,11 +11,15 @@ from __future__ import annotations
 
 import asyncio
 import contextlib
+import hashlib
+import json
+import os
 import random
 import signal
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
 from datetime import UTC, datetime, time, timedelta
+from pathlib import Path
 from typing import Any
 from zoneinfo import ZoneInfo
 
@@ -51,6 +55,8 @@ MAX_DEFERRED_ATTEMPTS = 30
 MARK_DELIVERY_OK_ATTEMPTS = 3
 # Cap one-at-a-time unsent claims per drain (lease starts just before each send).
 RETRY_UNSENT_MAX = 50
+# Fsync'd local Telegram-OK ledger. Covers restart after total post-send DB write failure.
+DELIVERY_OK_LEDGER_ENV = "CHIME_DELIVERY_OK_LEDGER"
 # Max time shutdown waits for an in-flight scheduled tick (CORE-005 / E2-C02).
 SHUTDOWN_TICK_TIMEOUT_SECONDS = 30.0
 
@@ -82,6 +88,18 @@ def _symbol_from_alert_message(message: str) -> str | None:
         symbol = first.removeprefix("🔔").strip()
         return symbol or None
     return None
+
+
+def _delivery_ok_token(
+    *,
+    log_id: int,
+    rule_id: int | None,
+    telegram_id: int,
+    message: str,
+) -> str:
+    digest = hashlib.sha256(message.encode("utf-8")).hexdigest()
+    rule_part = "" if rule_id is None else str(rule_id)
+    return f"{log_id}:{rule_part}:{telegram_id}:{digest}"
 
 
 def parse_hhmm(value: str) -> time:
@@ -130,6 +148,11 @@ class Poller:
         # Process-lifetime: Telegram-OK alert_log ids. Survives ticks so a
         # mark_alert_sent outage cannot re-push every poll (L08-001).
         self._delivered_ok_ids: set[int] = set()
+        # Restart-lifetime: Telegram-OK signatures fsync'd before DB marks.
+        self._delivery_ok_ledger_path = self._delivery_ok_ledger_path_from_env()
+        self._delivered_ok_tokens: set[str] = set()
+        self._delivery_ok_records: dict[str, dict[str, Any]] = {}
+        self._load_delivery_ok_ledger()
 
     async def run_once(self, *, force: bool = False) -> list[AlertEvent]:
         """Single poll cycle. Returns events claimed (delivered after unlock)."""
@@ -214,6 +237,136 @@ class Poller:
             # Drop an arbitrary half (set pop is fine — ids are opaque).
             for _ in range(5_000):
                 self._delivered_ok_ids.pop()
+
+    def _delivery_ok_ledger_path_from_env(self) -> Path | None:
+        raw = os.getenv(DELIVERY_OK_LEDGER_ENV)
+        if raw is not None:
+            raw = raw.strip()
+            return Path(raw) if raw else None
+        digest = hashlib.sha256(self.settings.database_url.encode("utf-8")).hexdigest()[:16]
+        return Path("/tmp/chime") / f"delivery-ok-{digest}.jsonl"
+
+    def _load_delivery_ok_ledger(self) -> None:
+        path = self._delivery_ok_ledger_path
+        if path is None:
+            return
+        try:
+            text = path.read_text(encoding="utf-8")
+        except FileNotFoundError:
+            return
+        except Exception:
+            log.exception("delivery_ok_ledger_load_failed", path=str(path))
+            return
+        for line in text.splitlines():
+            if not line.strip():
+                continue
+            try:
+                record = json.loads(line)
+            except json.JSONDecodeError:
+                log.warning("delivery_ok_ledger_bad_line", path=str(path))
+                continue
+            token = record.get("token")
+            if not isinstance(token, str) or not token:
+                continue
+            if record.get("forget") is True:
+                self._delivered_ok_tokens.discard(token)
+                self._delivery_ok_records.pop(token, None)
+                continue
+            self._delivered_ok_tokens.add(token)
+            self._delivery_ok_records[token] = record
+
+    def _delivery_ok_token_for_pending(self, pending: PendingSend) -> str:
+        return _delivery_ok_token(
+            log_id=pending.log_id,
+            rule_id=pending.rule_id,
+            telegram_id=pending.telegram_id,
+            message=pending.message,
+        )
+
+    def _durably_remember_delivery_ok(
+        self,
+        pending: PendingSend,
+        *,
+        event_key: str | None,
+    ) -> str:
+        """Fsync Telegram-OK before DB marks so restart cannot re-send."""
+        token = self._delivery_ok_token_for_pending(pending)
+        self._delivered_ok_tokens.add(token)
+        if token in self._delivery_ok_records:
+            return token
+        record: dict[str, Any] = {
+            "token": token,
+            "id": pending.log_id,
+            "rule_id": pending.rule_id,
+            "telegram_id": pending.telegram_id,
+            "message_sha256": hashlib.sha256(pending.message.encode("utf-8")).hexdigest(),
+            "event_key": event_key,
+            "recorded_at": datetime.now(UTC).isoformat(),
+        }
+        path = self._delivery_ok_ledger_path
+        if path is None:
+            self._delivery_ok_records[token] = record
+            return token
+        try:
+            path.parent.mkdir(parents=True, exist_ok=True)
+            with path.open("a", encoding="utf-8") as fh:
+                fh.write(json.dumps(record, sort_keys=True, separators=(",", ":")))
+                fh.write("\n")
+                fh.flush()
+                os.fsync(fh.fileno())
+            self._delivery_ok_records[token] = record
+        except Exception:
+            log.exception(
+                "delivery_ok_ledger_write_failed",
+                alert_log_id=pending.log_id,
+                rule_id=pending.rule_id,
+                event_key=event_key,
+                path=str(path),
+            )
+        return token
+
+    def _forget_durable_delivery_ok(self, token: str) -> None:
+        self._delivered_ok_tokens.discard(token)
+        self._delivery_ok_records.pop(token, None)
+        path = self._delivery_ok_ledger_path
+        if path is None:
+            return
+        record: dict[str, Any] = {
+            "token": token,
+            "forget": True,
+            "recorded_at": datetime.now(UTC).isoformat(),
+        }
+        try:
+            path.parent.mkdir(parents=True, exist_ok=True)
+            with path.open("a", encoding="utf-8") as fh:
+                fh.write(json.dumps(record, sort_keys=True, separators=(",", ":")))
+                fh.write("\n")
+                fh.flush()
+                os.fsync(fh.fileno())
+        except Exception:
+            log.exception("delivery_ok_ledger_forget_failed", path=str(path))
+
+    def _delivery_ok_already_recorded(self, pending: PendingSend) -> bool:
+        return (
+            pending.log_id in self._delivered_ok_ids
+            or self._delivery_ok_token_for_pending(pending) in self._delivered_ok_tokens
+        )
+
+    async def _reconcile_delivery_ok(self, pending: PendingSend) -> None:
+        token = self._delivery_ok_token_for_pending(pending)
+        self._remember_delivered(pending.log_id)
+        delivery_marked = await self._mark_delivery_ok_best_effort(
+            pending.log_id,
+            rule_id=pending.rule_id,
+            event_key=None,
+        )
+        marked = await self._mark_sent_best_effort(
+            pending.log_id,
+            rule_id=pending.rule_id,
+            event_key=None,
+        )
+        if delivery_marked or marked:
+            self._forget_durable_delivery_ok(token)
 
     async def _poll_prices(self) -> tuple[list[AlertEvent], bool]:
         symbols = await self.storage.watched_symbols()
@@ -496,9 +649,13 @@ class Poller:
             # mark_alert_sent outage cannot re-push every poll interval.
             self._remember_delivered(pending.log_id)
             event_key = pending.event.event_key if pending.event is not None else None
+            # E12-C01: write a local durable OK marker before any DB marks. If
+            # all post-send DB writes fail and the process restarts, retry drain
+            # will reconcile this row without re-sending Telegram.
+            token = self._durably_remember_delivery_ok(pending, event_key=event_key)
             # Durable guard before message_sent (E2-C04): survives restart when
             # mark_alert_sent fails but this lighter UPDATE succeeds.
-            await self._mark_delivery_ok_best_effort(
+            delivery_marked = await self._mark_delivery_ok_best_effort(
                 pending.log_id,
                 rule_id=pending.rule_id,
                 event_key=event_key,
@@ -514,6 +671,8 @@ class Poller:
                     rule_id=pending.rule_id,
                     event_key=event_key,
                 )
+            if delivery_marked or marked:
+                self._forget_durable_delivery_ok(token)
         elif result is SendResult.FAILED:
             await self._record_send_failure(
                 pending.log_id,
@@ -639,8 +798,6 @@ class Poller:
                 break
             row = pending[0]
             log_id = int(row["id"])
-            if log_id in self._delivered_ok_ids:
-                continue
             text = row["message_text"] or ""
             item = PendingSend(
                 log_id=log_id,
@@ -651,6 +808,14 @@ class Poller:
                 event=None,
                 symbol=_symbol_from_alert_message(text),
             )
+            if self._delivery_ok_already_recorded(item):
+                log.warning(
+                    "alert_send_skipped_already_delivered_ok",
+                    alert_log_id=log_id,
+                    rule_id=item.rule_id,
+                )
+                await self._reconcile_delivery_ok(item)
+                continue
             await self._deliver_one(item)
 
     async def _scheduled_tick(self) -> None:

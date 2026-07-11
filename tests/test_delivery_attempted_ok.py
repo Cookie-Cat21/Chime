@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import os
 from datetime import UTC, datetime
+from pathlib import Path
 from unittest.mock import AsyncMock
 
 import pytest
@@ -12,7 +13,12 @@ from chime.config import Settings
 from chime.domain import AlertEvent, AlertType, PriceSnapshot
 from chime.migrate import apply_migrations
 from chime.notify import SendResult
-from chime.poller import MARK_DELIVERY_OK_ATTEMPTS, PendingSend, Poller
+from chime.poller import (
+    DELIVERY_OK_LEDGER_ENV,
+    MARK_DELIVERY_OK_ATTEMPTS,
+    PendingSend,
+    Poller,
+)
 from chime.storage import Storage
 from tests.conftest import claim_unsent_deque
 
@@ -88,12 +94,15 @@ async def test_mark_fail_still_sets_delivery_flag() -> None:
 
 
 @pytest.mark.asyncio
-async def test_all_persist_fail_keeps_delivered_ok_ids_retry_skips() -> None:
+async def test_all_persist_fail_keeps_delivered_ok_ids_retry_skips(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
     """Telegram OK + mark_delivery, mark_sent, and dead_letter all fail.
 
     Process must retain the id in ``_delivered_ok_ids`` so ``_retry_unsent``
     does not re-push.
     """
+    monkeypatch.setenv(DELIVERY_OK_LEDGER_ENV, str(tmp_path / "delivery-ok.jsonl"))
     storage = AsyncMock()
     storage.mark_delivery_attempted_ok = AsyncMock(
         side_effect=RuntimeError("delivery flag down")
@@ -134,6 +143,67 @@ async def test_all_persist_fail_keeps_delivered_ok_ids_retry_skips() -> None:
     send.reset_mock()
     await poller._retry_unsent()
     send.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_restart_skips_repush_after_total_post_send_db_write_failure(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """E12-C01: fsync'd Telegram-OK ledger bridges restart when DB marks all fail."""
+    ledger = tmp_path / "delivery-ok.jsonl"
+    monkeypatch.setenv(DELIVERY_OK_LEDGER_ENV, str(ledger))
+
+    storage = AsyncMock()
+    storage.mark_delivery_attempted_ok = AsyncMock(
+        side_effect=RuntimeError("delivery flag down")
+    )
+    storage.mark_alert_sent = AsyncMock(side_effect=RuntimeError("mark sent down"))
+    storage.dead_letter = AsyncMock(side_effect=RuntimeError("dead letter down"))
+    send = AsyncMock(return_value=SendResult.OK)
+
+    first = Poller(_settings(), storage, AsyncMock(), send)
+    await first._deliver_one(
+        PendingSend(
+            log_id=222,
+            telegram_id=9,
+            message="body after restart",
+            already_claimed_new=True,
+            rule_id=1,
+            event=None,
+        )
+    )
+
+    assert ledger.exists()
+    assert storage.mark_delivery_attempted_ok.await_count == MARK_DELIVERY_OK_ATTEMPTS
+    assert storage.mark_alert_sent.await_count == 2
+
+    restarted_storage = AsyncMock()
+    restarted_storage.claim_unsent_batch = claim_unsent_deque(
+        [
+            {
+                "id": 222,
+                "rule_id": 1,
+                "message_text": "body after restart",
+                "telegram_id": 9,
+                "attempt_count": 0,
+            }
+        ]
+    )
+    restarted_storage.mark_delivery_attempted_ok = AsyncMock()
+    restarted_storage.mark_alert_sent = AsyncMock()
+    restarted_storage.dead_letter = AsyncMock()
+    restarted_send = AsyncMock(return_value=SendResult.OK)
+
+    restarted = Poller(_settings(), restarted_storage, AsyncMock(), restarted_send)
+    assert restarted._delivered_ok_ids == set()
+    await restarted._retry_unsent()
+
+    restarted_send.assert_not_awaited()
+    restarted_storage.mark_delivery_attempted_ok.assert_awaited_once_with(222)
+    restarted_storage.mark_alert_sent.assert_awaited_once_with(222)
+    restarted_storage.dead_letter.assert_not_awaited()
+    reconciled = Poller(_settings(), AsyncMock(), AsyncMock(), restarted_send)
+    assert reconciled._delivered_ok_tokens == set()
 
 
 @pytest.mark.asyncio
