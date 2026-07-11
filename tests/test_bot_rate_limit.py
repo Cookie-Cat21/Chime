@@ -121,8 +121,9 @@ async def test_alert_over_limit_replies_slow_down_no_cse() -> None:
 
 @pytest.mark.asyncio
 async def test_watch_under_limit_still_hits_cse() -> None:
-    from chime.domain import PriceSnapshot
     from datetime import UTC, datetime
+
+    from chime.domain import PriceSnapshot
 
     storage = AsyncMock()
     storage.ensure_user = AsyncMock(return_value=42)
