@@ -42,7 +42,8 @@ ALERT_USAGE = (
     "/alert SYMBOL below PRICE\n"
     "/alert SYMBOL move PERCENT\n"
     "/alert SYMBOL disclosure\n"
-    "Example: /alert JKH.N0000 above 100"
+    "Example: /alert JKH.N0000 above 100\n"
+    f"{disclaimer()}"
 )
 CANCEL_USAGE = (
     "To cancel an alert, send its id from /myalerts.\n"
@@ -161,19 +162,19 @@ def parse_alert_args(args: list[str]) -> tuple[ParsedAlert | None, str | None]:
         if len(args) < 3:
             return None, (
                 f"Almost — need a number after {kind}. "
-                f"Example: /alert JKH.N0000 {kind} 5"
+                f"Example: /alert JKH.N0000 {kind} 5\n{ALERT_USAGE}"
             )
         try:
             threshold = float(args[2].replace(",", ""))
         except ValueError:
             return None, (
                 "The threshold must be a number. "
-                f"Example: /alert JKH.N0000 {kind} 100"
+                f"Example: /alert JKH.N0000 {kind} 100\n{ALERT_USAGE}"
             )
         if threshold <= 0:
             return None, (
                 "Threshold must be a positive number. "
-                f"Example: /alert JKH.N0000 {kind} 5"
+                f"Example: /alert JKH.N0000 {kind} 5\n{ALERT_USAGE}"
             )
         if kind == "above":
             return ParsedAlert(AlertType.PRICE_ABOVE, threshold), None
@@ -183,8 +184,8 @@ def parse_alert_args(args: list[str]) -> tuple[ParsedAlert | None, str | None]:
     if kind in ("disclosure", "announcement"):
         return ParsedAlert(AlertType.DISCLOSURE, None), None
     return None, (
-        "I didn't catch that alert type. Use above, below, move, or disclosure — "
-        "e.g. /alert JKH.N0000 above 100"
+        "I didn't catch that alert type.\n"
+        f"{ALERT_USAGE}"
     )
 
 

@@ -5,6 +5,7 @@ from __future__ import annotations
 import pytest
 
 from chime.bot import (
+    ALERT_USAGE,
     HELP_TEXT,
     START_TEXT,
     normalize_symbol,
@@ -73,6 +74,29 @@ def test_parse_alert_args_kind_errors(args: list[str], needle: str) -> None:
     assert parsed is None
     assert err is not None
     assert needle.lower() in err.lower()
+
+
+def test_alert_usage_lists_four_forms_and_nfa() -> None:
+    """E17-B01: /alert usage errors show every supported kind plus NFA."""
+    assert "/alert SYMBOL above PRICE" in ALERT_USAGE
+    assert "/alert SYMBOL below PRICE" in ALERT_USAGE
+    assert "/alert SYMBOL move PERCENT" in ALERT_USAGE
+    assert "/alert SYMBOL disclosure" in ALERT_USAGE
+    assert disclaimer() in ALERT_USAGE
+
+
+def test_alert_unknown_kind_error_includes_full_usage_and_nfa() -> None:
+    parsed, err = parse_alert_args(["JKH.N0000", "sideways", "1"])
+    assert parsed is None
+    assert err is not None
+    for needle in (
+        "/alert SYMBOL above PRICE",
+        "/alert SYMBOL below PRICE",
+        "/alert SYMBOL move PERCENT",
+        "/alert SYMBOL disclosure",
+        disclaimer(),
+    ):
+        assert needle in err
 
 
 def test_start_text_is_short_and_mentions_colombo_disclaimer() -> None:
