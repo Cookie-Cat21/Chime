@@ -113,6 +113,7 @@ Stack when implementing: **Next.js + Tailwind + shadcn/ui** only; free/MIT compo
 | Doc | Purpose |
 |---|---|
 | [COMMIT_FACTORY.md](COMMIT_FACTORY.md) | This master plan |
+| [ORCHESTRATOR_PROMPTS.md](ORCHESTRATOR_PROMPTS.md) | Copy-paste Cloud Agent prompts |
 | [METRICS.md](METRICS.md) | Proper-commit taxonomy, scorecards, KPIs |
 | [DASH_IA.md](DASH_IA.md) | Thin dashboard IA + API sketch |
 | [workstreams/INDEX.md](workstreams/INDEX.md) | WS-001…WS-100 catalog |
