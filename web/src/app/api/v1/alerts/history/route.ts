@@ -60,6 +60,9 @@ export async function GET(request: NextRequest) {
       type: string;
       fired_at: Date | string;
       message_sent: boolean;
+      dead_lettered: boolean;
+      attempt_count: string | number;
+      delivery_attempted_ok: boolean;
       message_text: string | null;
       event_key: string;
     }>(
@@ -70,6 +73,9 @@ export async function GET(request: NextRequest) {
          r.type,
          l.fired_at,
          l.message_sent,
+         l.dead_lettered,
+         l.attempt_count,
+         l.delivery_attempted_ok,
          l.message_text,
          l.event_key
        FROM alert_log l
@@ -87,6 +93,16 @@ export async function GET(request: NextRequest) {
       type: row.type,
       fired_at: toIso(row.fired_at),
       message_sent: Boolean(row.message_sent),
+      dead_lettered: Boolean(row.dead_lettered),
+      attempt_count: Number(row.attempt_count),
+      delivery_status:
+        row.message_sent
+          ? "sent"
+          : row.dead_lettered
+            ? "dead_lettered"
+            : row.delivery_attempted_ok
+              ? "sent"
+              : "retrying",
       message_text: row.message_text,
       event_key: row.event_key,
     }));

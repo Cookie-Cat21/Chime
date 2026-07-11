@@ -16,6 +16,8 @@ export const metadata = {
   description: "Alert fire history from your Chime rules.",
 };
 
+type DeliveryStatus = "sent" | "retrying" | "dead_lettered";
+
 type HistoryPayload = {
   events: {
     id: number;
@@ -24,12 +26,59 @@ type HistoryPayload = {
     type: string;
     fired_at: string | null;
     message_sent: boolean;
+    dead_lettered: boolean;
+    attempt_count: number;
+    delivery_status: DeliveryStatus;
     message_text: string | null;
     event_key: string;
   }[];
   limit: number;
   offset: number;
 };
+
+function pluralizeAttempts(count: number): string {
+  return `${count} ${count === 1 ? "attempt" : "attempts"}`;
+}
+
+function deliveryBadgeClassName(status: DeliveryStatus): string {
+  switch (status) {
+    case "sent":
+      return "border-emerald-500/30 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300";
+    case "retrying":
+      return "border-amber-500/30 bg-amber-500/10 text-amber-700 dark:text-amber-300";
+    case "dead_lettered":
+      return "border-destructive/30 bg-destructive/10 text-destructive";
+  }
+}
+
+function deliveryCopy(event: HistoryPayload["events"][number]): {
+  label: string;
+  description: string;
+} {
+  switch (event.delivery_status) {
+    case "sent":
+      return {
+        label: "Sent",
+        description: "Telegram delivery recorded.",
+      };
+    case "retrying":
+      return {
+        label: "Retrying",
+        description:
+          event.attempt_count > 0
+            ? `Telegram delivery is still retrying after ${pluralizeAttempts(event.attempt_count)}.`
+            : "Telegram delivery is queued for retry.",
+      };
+    case "dead_lettered":
+      return {
+        label: "Dead-lettered",
+        description:
+          event.attempt_count > 0
+            ? `Retries stopped after ${pluralizeAttempts(event.attempt_count)}.`
+            : "Retries stopped for this delivery row.",
+      };
+  }
+}
 
 export default async function AlertHistoryPage({
   searchParams,
@@ -149,33 +198,41 @@ export default async function AlertHistoryPage({
           />
         ) : (
           <ul className="mt-8 divide-y divide-border/60">
-            {payload.events.map((ev) => (
-              <li key={ev.id} className="flex flex-col gap-1 py-4 first:pt-0">
-                <div className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1">
-                  <Link
-                    href={`/symbols/${encodeURIComponent(ev.symbol)}`}
-                    className="font-mono text-sm font-medium underline-offset-4 hover:underline"
-                  >
-                    {ev.symbol}
-                  </Link>
-                  <time className="text-xs text-muted-foreground">
-                    {formatTs(ev.fired_at)}
-                  </time>
-                </div>
-                <p className="text-sm text-foreground">
-                  {alertTypeLabel(ev.type)}
-                  <span className="text-muted-foreground">
-                    {" · "}
-                    {ev.message_sent ? "Sent" : "Not sent"}
-                  </span>
-                </p>
-                {ev.message_text ? (
-                  <p className="text-sm text-muted-foreground line-clamp-3">
-                    {ev.message_text}
+            {payload.events.map((ev) => {
+              const delivery = deliveryCopy(ev);
+
+              return (
+                <li key={ev.id} className="flex flex-col gap-1 py-4 first:pt-0">
+                  <div className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1">
+                    <Link
+                      href={`/symbols/${encodeURIComponent(ev.symbol)}`}
+                      className="font-mono text-sm font-medium underline-offset-4 hover:underline"
+                    >
+                      {ev.symbol}
+                    </Link>
+                    <time className="text-xs text-muted-foreground">
+                      {formatTs(ev.fired_at)}
+                    </time>
+                  </div>
+                  <div className="flex flex-wrap items-center gap-2 text-sm text-foreground">
+                    <span>{alertTypeLabel(ev.type)}</span>
+                    <span
+                      className={`inline-flex items-center rounded-full border px-2 py-0.5 text-xs font-medium ${deliveryBadgeClassName(ev.delivery_status)}`}
+                    >
+                      {delivery.label}
+                    </span>
+                  </div>
+                  <p className="text-xs text-muted-foreground">
+                    {delivery.description}
                   </p>
-                ) : null}
-              </li>
-            ))}
+                  {ev.message_text ? (
+                    <p className="text-sm text-muted-foreground line-clamp-3">
+                      {ev.message_text}
+                    </p>
+                  ) : null}
+                </li>
+              );
+            })}
           </ul>
         )}
 
