@@ -437,10 +437,17 @@ class Storage:
             return False
         cm = self._pool.connection()
         conn = await cm.__aenter__()
-        row = await (
-            await conn.execute("SELECT pg_try_advisory_lock(%s) AS locked", (lock_id,))
-        ).fetchone()
-        locked = bool(row and _as_row(row)["locked"])
+        try:
+            row = await (
+                await conn.execute("SELECT pg_try_advisory_lock(%s) AS locked", (lock_id,))
+            ).fetchone()
+            locked = bool(row and _as_row(row)["locked"])
+        except Exception:
+            await cm.__aexit__(None, None, None)
+            self._lock_cm = None
+            self._lock_conn = None
+            self._lock_id = None
+            raise
         if not locked:
             await cm.__aexit__(None, None, None)
             return False
@@ -454,12 +461,17 @@ class Storage:
         if self._lock_conn is None or self._lock_cm is None:
             return
         lid = lock_id if lock_id is not None else self._lock_id
-        if lid is not None:
-            await self._lock_conn.execute("SELECT pg_advisory_unlock(%s)", (lid,))
-        await self._lock_cm.__aexit__(None, None, None)
-        self._lock_cm = None
-        self._lock_conn = None
-        self._lock_id = None
+        cm = self._lock_cm
+        try:
+            if lid is not None:
+                await self._lock_conn.execute("SELECT pg_advisory_unlock(%s)", (lid,))
+        finally:
+            try:
+                await cm.__aexit__(None, None, None)
+            finally:
+                self._lock_cm = None
+                self._lock_conn = None
+                self._lock_id = None
 
     async def claim_alert(self, event: AlertEvent, message_text: str) -> int | None:
         """Insert-first claim. Returns alert_log id if newly claimed, else None."""
