@@ -82,6 +82,7 @@ jobs:
             tests/test_poller_integration.py \
             tests/test_dual_poller_lock.py \
             tests/test_dead_letter_db.py \
+            tests/test_unsent_active.py \
             --no-cov -rs --maxfail=1 2>&1 | tee /dev/stderr)
           if echo "$out" | grep -Eiq 'skipped'; then
             echo "::error::DB integration tests skipped; DATABASE_URL required"

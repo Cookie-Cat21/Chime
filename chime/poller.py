@@ -34,6 +34,9 @@ SendFunc = Callable[[int, str], Awaitable[SendResult | bool]]
 POLL_LOCK_ID = 4_201_337
 # After this many failed Telegram sends, stop retrying (message_sent stays false).
 MAX_SEND_ATTEMPTS = 5
+# After this many deferred (RetryAfter) sends, stop retrying — same attempt_count
+# column, higher ceiling so transient flood-waits are not dead-lettered early.
+MAX_DEFERRED_ATTEMPTS = 30
 
 
 def _normalize_send_result(result: SendResult | bool) -> SendResult:
@@ -243,10 +246,31 @@ class Poller:
                 alert_log_id=alert_log_id,
                 rule_id=rule_id,
                 attempts=attempts,
+                reason="failed",
             )
         else:
             log.warning(
                 "alert_send_failed",
+                alert_log_id=alert_log_id,
+                rule_id=rule_id,
+                attempts=attempts,
+            )
+
+    async def _record_send_deferred(self, alert_log_id: int, *, rule_id: int | None = None) -> None:
+        """Bump attempt_count on RetryAfter defer; dead-letter at MAX_DEFERRED_ATTEMPTS."""
+        attempts = await self.storage.mark_alert_attempt(alert_log_id)
+        if attempts >= MAX_DEFERRED_ATTEMPTS:
+            await self.storage.dead_letter(alert_log_id)
+            log.warning(
+                "alert_dead_lettered",
+                alert_log_id=alert_log_id,
+                rule_id=rule_id,
+                attempts=attempts,
+                reason="deferred",
+            )
+        else:
+            log.info(
+                "alert_send_deferred",
                 alert_log_id=alert_log_id,
                 rule_id=rule_id,
                 attempts=attempts,
@@ -277,7 +301,8 @@ class Poller:
                 log.info("alert_sent", rule_id=event.rule_id, event_key=event.event_key)
         elif result is SendResult.FAILED:
             await self._record_send_failure(log_id, rule_id=event.rule_id)
-        # DEFERRED: leave message_sent=False, do not bump attempt_count
+        elif result is SendResult.DEFERRED:
+            await self._record_send_deferred(log_id, rule_id=event.rule_id)
         return True
 
     async def _mark_sent_best_effort(self, log_id: int, *, event: AlertEvent) -> bool:
@@ -319,6 +344,8 @@ class Poller:
                 await self.storage.mark_alert_sent(log_id)
             elif result is SendResult.FAILED:
                 await self._record_send_failure(log_id, rule_id=int(row["rule_id"]))
+            elif result is SendResult.DEFERRED:
+                await self._record_send_deferred(log_id, rule_id=int(row["rule_id"]))
 
     async def _scheduled_tick(self) -> None:
         jitter = random.uniform(0, self.settings.poll_jitter_seconds)

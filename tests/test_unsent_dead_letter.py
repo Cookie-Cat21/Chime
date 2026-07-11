@@ -1,4 +1,4 @@
-"""WS-006: dead-letter unsent alerts after MAX_SEND_ATTEMPTS failed sends."""
+"""WS-006 / M4: dead-letter unsent alerts after send or deferred ceilings."""
 
 from __future__ import annotations
 
@@ -9,7 +9,7 @@ import pytest
 from chime.config import Settings
 from chime.domain import AlertEvent, AlertType
 from chime.notify import SendResult
-from chime.poller import MAX_SEND_ATTEMPTS, Poller
+from chime.poller import MAX_DEFERRED_ATTEMPTS, MAX_SEND_ATTEMPTS, Poller
 
 
 def _settings() -> Settings:
@@ -167,8 +167,8 @@ async def test_retry_unsent_below_max_does_not_dead_letter() -> None:
 
 
 @pytest.mark.asyncio
-async def test_claim_and_send_deferred_does_not_increment_attempt() -> None:
-    """RetryAfter deferred must not count toward dead-letter."""
+async def test_claim_and_send_deferred_increments_attempt() -> None:
+    """RetryAfter deferred bumps attempt_count (M4 ceiling), not FAILED threshold."""
     storage = AsyncMock()
     storage.claim_alert = AsyncMock(return_value=99)
     storage.mark_alert_attempt = AsyncMock(return_value=1)
@@ -179,9 +179,42 @@ async def test_claim_and_send_deferred_does_not_increment_attempt() -> None:
     claimed = await poller._claim_and_send(_event())
 
     assert claimed is True
-    storage.mark_alert_attempt.assert_not_awaited()
+    storage.mark_alert_attempt.assert_awaited_once_with(99)
     storage.dead_letter.assert_not_awaited()
     storage.mark_alert_sent.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_claim_and_send_deferred_dead_letters_at_max() -> None:
+    storage = AsyncMock()
+    storage.claim_alert = AsyncMock(return_value=101)
+    storage.mark_alert_attempt = AsyncMock(return_value=MAX_DEFERRED_ATTEMPTS)
+    storage.dead_letter = AsyncMock()
+    send = AsyncMock(return_value=SendResult.DEFERRED)
+
+    poller = _poller(send=send, storage=storage)
+    claimed = await poller._claim_and_send(_event(rule_id=7))
+
+    assert claimed is True
+    storage.mark_alert_attempt.assert_awaited_once_with(101)
+    storage.dead_letter.assert_awaited_once_with(101)
+
+
+@pytest.mark.asyncio
+async def test_claim_and_send_deferred_below_max_does_not_dead_letter() -> None:
+    storage = AsyncMock()
+    storage.claim_alert = AsyncMock(return_value=102)
+    storage.mark_alert_attempt = AsyncMock(return_value=MAX_SEND_ATTEMPTS)
+    storage.dead_letter = AsyncMock()
+    send = AsyncMock(return_value=SendResult.DEFERRED)
+
+    poller = _poller(send=send, storage=storage)
+    claimed = await poller._claim_and_send(_event())
+
+    assert claimed is True
+    storage.mark_alert_attempt.assert_awaited_once_with(102)
+    # FAILED ceiling (5) must not dead-letter deferred path.
+    storage.dead_letter.assert_not_awaited()
 
 
 @pytest.mark.asyncio
@@ -202,7 +235,7 @@ async def test_claim_and_send_network_error_increments_attempt() -> None:
 
 
 @pytest.mark.asyncio
-async def test_retry_unsent_deferred_does_not_increment_attempt() -> None:
+async def test_retry_unsent_deferred_increments_attempt() -> None:
     storage = AsyncMock()
     storage.unsent_alerts = AsyncMock(
         return_value=[
@@ -223,10 +256,54 @@ async def test_retry_unsent_deferred_does_not_increment_attempt() -> None:
     await poller._retry_unsent()
 
     send.assert_awaited_once_with(4004, "wait")
-    storage.mark_alert_attempt.assert_not_awaited()
+    storage.mark_alert_attempt.assert_awaited_once_with(14)
     storage.dead_letter.assert_not_awaited()
     storage.mark_alert_sent.assert_not_awaited()
 
 
+@pytest.mark.asyncio
+async def test_retry_unsent_deferred_dead_letters_at_max() -> None:
+    storage = AsyncMock()
+    storage.unsent_alerts = AsyncMock(
+        return_value=[
+            {
+                "id": 15,
+                "rule_id": 6,
+                "message_text": "wait forever",
+                "telegram_id": 5005,
+                "attempt_count": 29,
+            }
+        ]
+    )
+    storage.mark_alert_attempt = AsyncMock(return_value=MAX_DEFERRED_ATTEMPTS)
+    storage.dead_letter = AsyncMock()
+    send = AsyncMock(return_value=SendResult.DEFERRED)
+
+    poller = _poller(send=send, storage=storage)
+    await poller._retry_unsent()
+
+    storage.mark_alert_attempt.assert_awaited_once_with(15)
+    storage.dead_letter.assert_awaited_once_with(15)
+    storage.mark_alert_sent.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_record_send_deferred_dead_letters_at_ceiling() -> None:
+    storage = AsyncMock()
+    storage.mark_alert_attempt = AsyncMock(return_value=MAX_DEFERRED_ATTEMPTS)
+    storage.dead_letter = AsyncMock()
+    send = AsyncMock()
+
+    poller = _poller(send=send, storage=storage)
+    await poller._record_send_deferred(44, rule_id=8)
+
+    storage.mark_alert_attempt.assert_awaited_once_with(44)
+    storage.dead_letter.assert_awaited_once_with(44)
+
+
 def test_max_send_attempts_is_five() -> None:
     assert MAX_SEND_ATTEMPTS == 5
+
+
+def test_max_deferred_attempts_is_thirty() -> None:
+    assert MAX_DEFERRED_ATTEMPTS == 30
