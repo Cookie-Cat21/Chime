@@ -1,0 +1,16 @@
+{
+  "aspiration": "maximize_lifetime_factory_score",
+  "literal_trillion_commits": false,
+  "farming_banned": true,
+  "concurrency_preferred": 8,
+  "concurrency_hard_max": 16,
+  "epoch": 2,
+  "branch": "cursor/epoch2-agentic-loop-cb19",
+  "clean_streak": 0,
+  "lifetime_factory_score": 0,
+  "lifetime_proper_commits": 0,
+  "lifetime_clusters_closed": 0,
+  "sessions": [],
+  "open_board": "docs/factory/EPOCH2_BOARD.md",
+  "loop_spec": "docs/factory/AGENTIC_LOOP.md"
+}
