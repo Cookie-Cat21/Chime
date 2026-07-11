@@ -78,22 +78,27 @@ jobs:
         run: python -m chime.migrate
 
       - name: Pytest (including DB tests)
-        run: pytest
+        run: |
+          set -euo pipefail
+          pytest --tb=line | tee /tmp/chime-db-pytest.txt
 
       - name: Require DB integration tests ran (not skipped)
         run: |
           set -euo pipefail
-          out=$(pytest \
-            tests/test_advisory_lock.py \
-            tests/test_poller_integration.py \
-            tests/test_dual_poller_lock.py \
-            tests/test_dead_letter_db.py \
-            tests/test_unsent_active.py \
-            --no-cov -rs --maxfail=1 2>&1 | tee /dev/stderr)
-          if echo "$out" | grep -Eiq 'skipped'; then
+          # Do not re-run against a warm DB — check the primary suite output instead.
+          if ! grep -Eiq 'test_poller_integration\.py|test_advisory_lock\.py' /tmp/chime-db-pytest.txt; then
+            echo "::error::Expected DB integration modules missing from pytest output"
+            exit 1
+          fi
+          if grep -Eiq 'SKIPPED \[.*\] test_crossing_fires_telegram_once|SKIPPED \[.*\] test_kill_restart' /tmp/chime-db-pytest.txt; then
             echo "::error::DB integration tests skipped; DATABASE_URL required"
             exit 1
           fi
+          if ! grep -Eq '[0-9]+ passed' /tmp/chime-db-pytest.txt; then
+            echo "::error::No passed count in pytest output"
+            exit 1
+          fi
+          echo "DB integration gate ok"
 
   web:
     name: web-lint-typecheck-smoke

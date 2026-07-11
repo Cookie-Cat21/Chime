@@ -6,6 +6,7 @@ Requires DATABASE_URL. Skips if unset.
 from __future__ import annotations
 
 import os
+import uuid
 from datetime import UTC, datetime
 
 import pytest
@@ -30,6 +31,11 @@ async def storage() -> Storage:
     await store.close()
 
 
+def _uniq(prefix: str) -> str:
+    """Unique CSE-ish symbol so parallel/re-runs do not collide on shared Postgres."""
+    return f"{prefix}{uuid.uuid4().hex[:6].upper()}.N0000"
+
+
 class FakeCSE:
     def __init__(self, snaps: list[PriceSnapshot]) -> None:
         self._snaps = snaps
@@ -45,16 +51,18 @@ class FakeCSE:
 
 @pytest.mark.asyncio
 async def test_crossing_fires_telegram_once(storage: Storage) -> None:
-    user_id = await storage.ensure_user(telegram_id=9_001_001)
-    await storage.upsert_stock("TEST.N0000", "TEST CO")
-    await storage.add_watch(user_id, "TEST.N0000")
+    symbol = _uniq("X")
+    tg_id = 9_100_000 + (uuid.uuid4().int % 90_000)
+    user_id = await storage.ensure_user(telegram_id=tg_id)
+    await storage.upsert_stock(symbol, "TEST CO")
+    await storage.add_watch(user_id, symbol)
     rule = await storage.create_alert_rule(
-        user_id, "TEST.N0000", AlertType.PRICE_ABOVE, 100.0
+        user_id, symbol, AlertType.PRICE_ABOVE, 100.0
     )
 
     # Baseline below threshold (no fire)
     baseline = PriceSnapshot(
-        symbol="TEST.N0000",
+        symbol=symbol,
         price=95.0,
         previous_close=94.0,
         change=1.0,
@@ -71,7 +79,7 @@ async def test_crossing_fires_telegram_once(storage: Storage) -> None:
 
     # Crossing snapshot
     cross = PriceSnapshot(
-        symbol="TEST.N0000",
+        symbol=symbol,
         price=105.0,
         previous_close=94.0,
         change=11.0,
@@ -93,8 +101,8 @@ async def test_crossing_fires_telegram_once(storage: Storage) -> None:
     assert len(events) == 1
     assert events[0].rule_id == rule.id
     assert len(sent) == 1
-    assert sent[0][0] == 9_001_001
-    assert "TEST.N0000" in sent[0][1]
+    assert sent[0][0] == tg_id
+    assert symbol in sent[0][1]
     assert "crossed above" in sent[0][1]
     assert "Not financial advice" in sent[0][1]
 
@@ -102,7 +110,7 @@ async def test_crossing_fires_telegram_once(storage: Storage) -> None:
     cse2 = FakeCSE(
         [
             PriceSnapshot(
-                symbol="TEST.N0000",
+                symbol=symbol,
                 price=106.0,
                 previous_close=94.0,
                 change=12.0,
@@ -120,15 +128,17 @@ async def test_crossing_fires_telegram_once(storage: Storage) -> None:
 @pytest.mark.asyncio
 async def test_kill_restart_no_double_send(storage: Storage) -> None:
     """CORE-001 / TEST-INT-001: claim+failed send still disarms; one eventual delivery."""
-    user_id = await storage.ensure_user(telegram_id=9_001_002)
-    await storage.upsert_stock("KILL.N0000", "KILL CO")
-    await storage.add_watch(user_id, "KILL.N0000")
+    symbol = _uniq("K")
+    tg_id = 9_200_000 + (uuid.uuid4().int % 90_000)
+    user_id = await storage.ensure_user(telegram_id=tg_id)
+    await storage.upsert_stock(symbol, "KILL CO")
+    await storage.add_watch(user_id, symbol)
     rule = await storage.create_alert_rule(
-        user_id, "KILL.N0000", AlertType.PRICE_BELOW, 50.0
+        user_id, symbol, AlertType.PRICE_BELOW, 50.0
     )
     await storage.insert_snapshot(
         PriceSnapshot(
-            symbol="KILL.N0000",
+            symbol=symbol,
             price=55.0,
             previous_close=54.0,
             ts=datetime(2026, 7, 11, 5, 0, tzinfo=UTC),
@@ -154,7 +164,7 @@ async def test_kill_restart_no_double_send(storage: Storage) -> None:
         poll_jitter_seconds=0,
     )
     cross = PriceSnapshot(
-        symbol="KILL.N0000",
+        symbol=symbol,
         price=45.0,
         previous_close=54.0,
         ts=datetime(2026, 7, 11, 5, 1, tzinfo=UTC),
