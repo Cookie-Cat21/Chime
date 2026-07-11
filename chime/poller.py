@@ -244,6 +244,13 @@ class Poller:
             )
 
     async def _claim_and_send(self, event: AlertEvent) -> bool:
+        """Claim the alert, then attempt Telegram send.
+
+        Returns True when the claim succeeded (row inserted), even if Telegram
+        send failed. Callers must treat True as “crossing consumed” so price
+        rules can disarm; delivery continues via ``message_sent=False`` retry /
+        dead-letter. Returns False only on claim conflict (already claimed).
+        """
         message = format_alert_message(event)
         log_id = await self.storage.claim_alert(event, message)
         if log_id is None:
@@ -253,9 +260,9 @@ class Poller:
         if ok:
             await self.storage.mark_alert_sent(log_id)
             log.info("alert_sent", rule_id=event.rule_id, event_key=event.event_key)
-            return True
-        await self._record_send_failure(log_id, rule_id=event.rule_id)
-        return False
+        else:
+            await self._record_send_failure(log_id, rule_id=event.rule_id)
+        return True
 
     async def _retry_unsent(self) -> None:
         pending = await self.storage.unsent_alerts()

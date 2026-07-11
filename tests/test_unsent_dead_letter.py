@@ -51,7 +51,8 @@ async def test_claim_and_send_failure_increments_attempt() -> None:
     poller = _poller(send=send, storage=storage)
     claimed = await poller._claim_and_send(_event())
 
-    assert claimed is False
+    # Claim succeeded — True even when Telegram send failed (disarm may proceed).
+    assert claimed is True
     storage.mark_alert_attempt.assert_awaited_once_with(77)
     storage.dead_letter.assert_not_awaited()
     storage.mark_alert_sent.assert_not_awaited()
@@ -68,9 +69,24 @@ async def test_claim_and_send_dead_letters_at_max_attempts() -> None:
     poller = _poller(send=send, storage=storage)
     claimed = await poller._claim_and_send(_event(rule_id=9))
 
-    assert claimed is False
+    assert claimed is True
     storage.mark_alert_attempt.assert_awaited_once_with(88)
     storage.dead_letter.assert_awaited_once_with(88)
+
+
+@pytest.mark.asyncio
+async def test_claim_conflict_returns_false() -> None:
+    storage = AsyncMock()
+    storage.claim_alert = AsyncMock(return_value=None)
+    send = AsyncMock(return_value=True)
+
+    poller = _poller(send=send, storage=storage)
+    claimed = await poller._claim_and_send(_event())
+
+    assert claimed is False
+    send.assert_not_awaited()
+    storage.mark_alert_sent.assert_not_awaited()
+    storage.mark_alert_attempt.assert_not_awaited()
 
 
 @pytest.mark.asyncio
