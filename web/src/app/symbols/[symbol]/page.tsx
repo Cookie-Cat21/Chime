@@ -243,22 +243,46 @@ export default async function SymbolDetailPage({
           Disclosures
         </h2>
         {discsFailed ? (
-          <p className="mt-3 text-sm text-muted-foreground" role="status">
-            Couldn’t load disclosures right now.
-          </p>
+          <EmptyState
+            className="mt-4"
+            title="Couldn’t load disclosures"
+            description={
+              <>
+                Chime couldn’t read stored filings for{" "}
+                <code className="font-mono text-xs">{data.symbol}</code> just
+                now. Check your connection, then try again — this is not an
+                empty list.
+              </>
+            }
+            action={
+              <Button asChild variant="outline" size="sm">
+                <Link href={`/symbols/${encoded}`}>Try again</Link>
+              </Button>
+            }
+          />
         ) : discs.items.length === 0 ? (
           <EmptyState
             className="mt-4"
             title="No disclosures yet"
             description={
               <>
-                Nothing stored for {data.symbol}. New CSE announcements the
-                poller sees will list here with a link to the source.
+                Nothing stored for{" "}
+                <code className="font-mono text-xs">{data.symbol}</code>. When
+                the poller sees a new CSE announcement, it lists here with a
+                link to the source. Or set{" "}
+                <code className="font-mono text-xs">
+                  /alert {data.symbol} disclosure
+                </code>{" "}
+                in Telegram to get pinged.
               </>
             }
             action={
               <Button asChild variant="outline" size="sm">
-                <Link href="/alerts">Alert on disclosures</Link>
+                <Link
+                  href={`/alerts?symbol=${encodeURIComponent(data.symbol)}`}
+                >
+                  Alert on disclosures
+                </Link>
               </Button>
             }
           />
