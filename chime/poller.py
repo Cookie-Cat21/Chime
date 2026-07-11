@@ -269,12 +269,44 @@ class Poller:
             return False
         result = _normalize_send_result(await self.send(event.telegram_id, message))
         if result is SendResult.OK:
-            await self.storage.mark_alert_sent(log_id)
-            log.info("alert_sent", rule_id=event.rule_id, event_key=event.event_key)
+            # Telegram already delivered. mark_alert_sent failure must not
+            # re-raise (disarm proceeds) or count as a send failure (would
+            # dead-letter / re-queue a message the user already got).
+            marked = await self._mark_sent_best_effort(log_id, event=event)
+            if marked:
+                log.info("alert_sent", rule_id=event.rule_id, event_key=event.event_key)
         elif result is SendResult.FAILED:
             await self._record_send_failure(log_id, rule_id=event.rule_id)
         # DEFERRED: leave message_sent=False, do not bump attempt_count
         return True
+
+    async def _mark_sent_best_effort(self, log_id: int, *, event: AlertEvent) -> bool:
+        """Mark message_sent; retry once on failure. Never raises.
+
+        Returns True if marked. If both attempts fail, dead-letters so
+        ``_retry_unsent`` cannot re-deliver to Telegram.
+        """
+        for attempt in (1, 2):
+            try:
+                await self.storage.mark_alert_sent(log_id)
+                return True
+            except Exception:
+                log.exception(
+                    "mark_alert_sent_failed",
+                    alert_log_id=log_id,
+                    rule_id=event.rule_id,
+                    event_key=event.event_key,
+                    attempt=attempt,
+                )
+        with contextlib.suppress(Exception):
+            await self.storage.dead_letter(log_id)
+        log.warning(
+            "mark_alert_sent_abandoned",
+            alert_log_id=log_id,
+            rule_id=event.rule_id,
+            event_key=event.event_key,
+        )
+        return False
 
     async def _retry_unsent(self) -> None:
         pending = await self.storage.unsent_alerts()
