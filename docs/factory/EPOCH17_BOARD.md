@@ -1,6 +1,6 @@
 # Epoch 17 Board — Thin polish (pre-seed)
 
-**Status:** STAGED
+**Status:** OPEN
 
 Fence-legal only. Theme: thin polish + residual units. No portfolio P&L /
 screener / TA / payments / native app / competitor scrape / cse.lk from `web/`.
