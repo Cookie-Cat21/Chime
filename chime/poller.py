@@ -41,6 +41,8 @@ MAX_SEND_ATTEMPTS = 5
 # After this many deferred (RetryAfter) sends, stop retrying — same attempt_count
 # column, higher ceiling so transient flood-waits are not dead-lettered early.
 MAX_DEFERRED_ATTEMPTS = 30
+# Max time shutdown waits for an in-flight scheduled tick (CORE-005 / E2-C02).
+SHUTDOWN_TICK_TIMEOUT_SECONDS = 30.0
 
 
 @dataclass(frozen=True)
@@ -103,6 +105,8 @@ class Poller:
         # (set for the locked section of run_once).
         self._queue_sends: bool = False
         self._pending_sends: list[PendingSend] = []
+        # In-flight scheduled tick (APScheduler job task). Awaited on shutdown.
+        self._tick_task: asyncio.Task[Any] | None = None
         # Process-lifetime: Telegram-OK alert_log ids. Survives ticks so a
         # mark_alert_sent outage cannot re-push every poll (L08-001).
         self._delivered_ok_ids: set[int] = set()
@@ -473,9 +477,15 @@ class Poller:
             await self._deliver_one(item)
 
     async def _scheduled_tick(self) -> None:
-        jitter = random.uniform(0, self.settings.poll_jitter_seconds)
-        await asyncio.sleep(jitter)
-        await self.run_once()
+        task = asyncio.current_task()
+        self._tick_task = task
+        try:
+            jitter = random.uniform(0, self.settings.poll_jitter_seconds)
+            await asyncio.sleep(jitter)
+            await self.run_once()
+        finally:
+            if self._tick_task is task:
+                self._tick_task = None
 
     def start_scheduler(self) -> AsyncIOScheduler:
         tz = ZoneInfo(self.settings.market_tz)
@@ -498,10 +508,31 @@ class Poller:
         return scheduler
 
     async def shutdown(self) -> None:
+        """Stop the scheduler, then await any in-flight tick (bounded).
+
+        ``scheduler.shutdown(wait=False)`` returns immediately; CORE-005 /
+        E2-C02 require waiting for the current ``_scheduled_tick`` /
+        ``run_once`` so ``storage.close()`` does not race the advisory lock.
+        """
         self._stopping.set()
         if self._scheduler is not None:
             self._scheduler.shutdown(wait=False)
             self._scheduler = None
+        tick = self._tick_task
+        if tick is not None and not tick.done():
+            try:
+                # shield: timeout must not cancel mid-tick (lock / pool borrow).
+                await asyncio.wait_for(
+                    asyncio.shield(tick),
+                    timeout=SHUTDOWN_TICK_TIMEOUT_SECONDS,
+                )
+            except TimeoutError:
+                log.warning(
+                    "poller_shutdown_tick_timeout",
+                    timeout_seconds=SHUTDOWN_TICK_TIMEOUT_SECONDS,
+                )
+            except Exception:
+                log.exception("poller_shutdown_tick_error")
         log.info("poller_stopped")
 
 
