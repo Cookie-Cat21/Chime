@@ -103,6 +103,14 @@ Structured JSON logs (structlog). Grep keys documented in
 - `watched_symbols_missing` + health `watched_missing` — trade-summary gaps
 - `cse_circuit_open` + health `circuits` — per-endpoint breaker state
 
+## Telegram-OK durable ledger
+
+After Telegram accepts an alert, Chime fsyncs a local OK marker before updating
+Postgres so a restart after a DB-write outage does not re-send the same alert.
+Default path: `/tmp/chime/delivery-ok-<database-hash>.jsonl`; override with
+`CHIME_DELIVERY_OK_LEDGER=/var/lib/chime/delivery-ok.jsonl` on hosts where
+`/tmp` is ephemeral. Keep the directory writable by the core process.
+
 ## Latency honesty
 
 Instrumented segment is **claim → Telegram send** (`alert_latency_ms`), target
