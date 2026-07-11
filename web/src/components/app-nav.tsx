@@ -34,6 +34,7 @@ export function AppNav({ active }: { active?: string }) {
               <Link
                 key={link.href}
                 href={link.href}
+                aria-current={isActive ? "page" : undefined}
                 className={
                   isActive
                     ? "rounded-sm font-medium text-foreground focus-visible:ring-2 focus-visible:ring-ring/50 focus-visible:outline-none"
@@ -86,6 +87,7 @@ export function AppNav({ active }: { active?: string }) {
                 <li key={link.href}>
                   <Link
                     href={link.href}
+                    aria-current={isActive ? "page" : undefined}
                     onClick={() => setOpen(false)}
                     className={`block rounded-sm py-3 text-base focus-visible:ring-2 focus-visible:ring-ring/50 focus-visible:outline-none ${
                       isActive
