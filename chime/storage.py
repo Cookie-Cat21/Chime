@@ -37,12 +37,18 @@ class Storage:
             open=False,
             kwargs={"row_factory": dict_row},
         )
+        # Session advisory locks must stay on the same connection for the hold duration.
+        self._lock_cm: Any | None = None
+        self._lock_conn: Any | None = None
+        self._lock_id: int | None = None
 
     async def open(self) -> None:
         await self._pool.open()
         await self._pool.wait()
 
     async def close(self) -> None:
+        if self._lock_conn is not None:
+            await self.advisory_unlock()
         await self._pool.close()
 
     @asynccontextmanager
@@ -386,17 +392,38 @@ class Storage:
         return len(_as_rows(rows))
 
     async def try_advisory_lock(self, lock_id: int = 4_201_337) -> bool:
-        """SELECT pg_try_advisory_lock(%s) — return bool."""
-        async with self._pool.connection() as conn:
-            row = await (
-                await conn.execute("SELECT pg_try_advisory_lock(%s) AS locked", (lock_id,))
-            ).fetchone()
-        return bool(row and _as_row(row)["locked"])
+        """Acquire a session advisory lock and HOLD the pooled connection.
 
-    async def advisory_unlock(self, lock_id: int = 4_201_337) -> None:
-        """SELECT pg_advisory_unlock(%s)"""
-        async with self._pool.connection() as conn:
-            await conn.execute("SELECT pg_advisory_unlock(%s)", (lock_id,))
+        Postgres session locks are connection-scoped. Returning the connection to
+        the pool before unlock would leak the lock or unlock a different session.
+        """
+        if self._lock_conn is not None:
+            return False
+        cm = self._pool.connection()
+        conn = await cm.__aenter__()
+        row = await (
+            await conn.execute("SELECT pg_try_advisory_lock(%s) AS locked", (lock_id,))
+        ).fetchone()
+        locked = bool(row and _as_row(row)["locked"])
+        if not locked:
+            await cm.__aexit__(None, None, None)
+            return False
+        self._lock_cm = cm
+        self._lock_conn = conn
+        self._lock_id = lock_id
+        return True
+
+    async def advisory_unlock(self, lock_id: int | None = None) -> None:
+        """Release the held session advisory lock and return the connection."""
+        if self._lock_conn is None or self._lock_cm is None:
+            return
+        lid = lock_id if lock_id is not None else self._lock_id
+        if lid is not None:
+            await self._lock_conn.execute("SELECT pg_advisory_unlock(%s)", (lid,))
+        await self._lock_cm.__aexit__(None, None, None)
+        self._lock_cm = None
+        self._lock_conn = None
+        self._lock_id = None
 
     async def claim_alert(self, event: AlertEvent, message_text: str) -> int | None:
         """Insert-first claim. Returns alert_log id if newly claimed, else None."""

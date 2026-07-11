@@ -174,6 +174,12 @@ def announcement_to_disclosure(
     external = row.announcementId if row.announcementId is not None else row.id
     if external is None:
         return None
+    # Missing createdDate must NOT become "now" — that would look newer than any
+    # rule.created_at and flood Telegram on backfill.
+    if row.createdDate is None:
+        published = datetime(1970, 1, 1, tzinfo=UTC)
+    else:
+        published = _ms_to_dt(row.createdDate)
     title = row.announcementCategory or "Announcement"
     if row.remarks:
         title = f"{title}: {row.remarks}"
@@ -184,7 +190,7 @@ def announcement_to_disclosure(
         title=title,
         category=row.announcementCategory,
         url=f"{ANNOUNCEMENTS_PAGE}#{external}",
-        published_at=_ms_to_dt(row.createdDate),
+        published_at=published,
         seen_at=seen_at or datetime.now(UTC),
     )
 

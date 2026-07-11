@@ -66,6 +66,7 @@ class Poller:
         self.last_error: str | None = None
         self.price_poll_ok: bool = True
         self.disclosure_poll_ok: bool = True
+        self.lock_held_skip: bool = False
 
     async def run_once(self, *, force: bool = False) -> list[AlertEvent]:
         """Single poll cycle. Returns fireable events that were claimed+sent."""
@@ -77,8 +78,13 @@ class Poller:
         locked = await self.storage.try_advisory_lock(POLL_LOCK_ID)
         if not locked:
             log.info("poll_skipped_lock_held")
+            self.lock_held_skip = True
+            self.last_tick_ok = False
+            self.last_error = "poll_lock_held"
+            self.last_tick_at = datetime.now(UTC)
             return []
 
+        self.lock_held_skip = False
         fired: list[AlertEvent] = []
         try:
             price_events, price_ok = await self._poll_prices()
@@ -89,8 +95,18 @@ class Poller:
             self.price_poll_ok = price_ok
             self.disclosure_poll_ok = disc_ok
             symbols = await self.storage.watched_symbols()
-            self.last_tick_ok = price_ok if symbols else True
-            self.last_error = None if self.last_tick_ok else "price_poll_failed"
+            rules = await self.storage.active_rules_for_symbols(symbols) if symbols else []
+            needs_disclosure = any(r.type.value == "disclosure" for r in rules)
+            ok = True
+            if symbols and not price_ok:
+                ok = False
+            if needs_disclosure and not disc_ok:
+                ok = False
+            self.last_tick_ok = ok
+            if not ok:
+                self.last_error = "poll_degraded"
+            else:
+                self.last_error = None
         except Exception as exc:
             self.last_tick_ok = False
             self.last_error = str(exc)
@@ -149,6 +165,9 @@ class Poller:
                 claimed = await self._claim_and_send(event)
                 if not claimed:
                     continue
+                # Disarm after successful claim (even if Telegram send failed /
+                # left message_sent=False). Crossing is consumed; unsent retry
+                # delivers. Keeps armed state aligned with claim semantics.
                 if event.set_armed is False:
                     await self.storage.set_rule_armed(event.rule_id, False)
                 latency_ms = (datetime.now(UTC) - t0).total_seconds() * 1000
@@ -292,6 +311,7 @@ async def run_poller_forever(
                 last_tick_ok=tick_ok,
                 price_poll_ok=poller.price_poll_ok,
                 disclosure_poll_ok=poller.disclosure_poll_ok,
+                lock_held_skip=poller.lock_held_skip,
                 last_error=poller.last_error,
             )
             with contextlib.suppress(TimeoutError):

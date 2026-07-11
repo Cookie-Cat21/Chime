@@ -67,6 +67,7 @@ async def _run_both(settings: Settings) -> None:
                 last_tick_ok=poller.last_tick_ok,
                 price_poll_ok=poller.price_poll_ok,
                 disclosure_poll_ok=poller.disclosure_poll_ok,
+                lock_held_skip=poller.lock_held_skip,
                 last_error=poller.last_error,
             )
             await asyncio.sleep(10)

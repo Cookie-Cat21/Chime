@@ -84,6 +84,8 @@ def test_announcement_falls_back_to_id_field() -> None:
     assert disc.external_id == "55"
     assert disc.title == "Other"
     assert disc.url == f"{ANNOUNCEMENTS_PAGE}#55"
+    # Missing createdDate → epoch (not "now") so backfill cannot flood
+    assert disc.published_at == datetime(1970, 1, 1, tzinfo=UTC)
 
 
 def test_announcement_with_no_ids_returns_none() -> None:
