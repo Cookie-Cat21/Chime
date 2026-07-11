@@ -182,7 +182,9 @@ def main(argv: list[str] | None = None) -> None:
             bot = Bot(settings.telegram_bot_token)
 
             async def send(chat_id: int, text: str) -> bool:
-                return await send_message(bot, chat_id, text)
+                return await send_message(
+                    bot, chat_id, text, block_on_retry_after=False
+                )
 
             poller = Poller(settings, storage, cse, send)
             events = await poller.run_once(force=args.force)
