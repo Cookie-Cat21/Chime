@@ -5,7 +5,7 @@ from __future__ import annotations
 from unittest.mock import AsyncMock, patch
 
 import pytest
-from telegram.error import RetryAfter
+from telegram.error import NetworkError, RetryAfter, TimedOut
 
 from chime.notify import send_message
 
@@ -23,10 +23,26 @@ async def test_send_message_retry_after_then_succeeds() -> None:
     assert ok is True
     assert bot.send_message.await_count == 2
     sleep.assert_awaited_once()
-    # first call includes disable_web_page_preview; retry is bare send
     first_kwargs = bot.send_message.await_args_list[0].kwargs
+    retry_kwargs = bot.send_message.await_args_list[1].kwargs
     assert first_kwargs["chat_id"] == 1001
     assert first_kwargs["text"] == "hello"
+    assert first_kwargs.get("disable_web_page_preview") is False
+    assert retry_kwargs.get("disable_web_page_preview") is False
+
+
+@pytest.mark.asyncio
+async def test_retry_after_sleep_is_capped() -> None:
+    bot = AsyncMock()
+    bot.send_message = AsyncMock(side_effect=[RetryAfter(999), None])
+
+    with patch("chime.notify.asyncio.sleep", new_callable=AsyncMock) as sleep:
+        ok = await send_message(bot, chat_id=1001, text="hello")
+
+    assert ok is True
+    sleep.assert_awaited_once()
+    # Cap 30s + 0.5 buffer — never sleep the full RetryAfter(999).
+    assert sleep.await_args.args[0] == pytest.approx(30.5)
 
 
 @pytest.mark.asyncio
@@ -42,3 +58,14 @@ async def test_retry_after_deferred_when_nonblocking() -> None:
     assert ok is False
     sleep.assert_not_awaited()
     assert bot.send_message.await_count == 1
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "exc",
+    [TimedOut("t"), NetworkError("n")],
+)
+async def test_transient_errors_return_false(exc: Exception) -> None:
+    bot = AsyncMock()
+    bot.send_message = AsyncMock(side_effect=exc)
+    assert await send_message(bot, chat_id=1, text="x") is False

@@ -4,12 +4,16 @@ from __future__ import annotations
 
 import asyncio
 from datetime import timedelta
+from typing import Any
 
-import structlog
 from telegram import Bot
 from telegram.error import NetworkError, RetryAfter, TelegramError, TimedOut
 
-log = structlog.get_logger(__name__)
+from chime.logging_setup import get_logger
+
+log = get_logger(__name__)
+
+_SEND_KWARGS: dict[str, Any] = {"disable_web_page_preview": False}
 
 
 def _retry_delay_seconds(retry_after: int | float | timedelta) -> float:
@@ -32,7 +36,7 @@ async def send_message(
     flood wait — ``alert_log.message_sent=False`` lets a later cycle retry.
     """
     try:
-        await bot.send_message(chat_id=chat_id, text=text, disable_web_page_preview=False)
+        await bot.send_message(chat_id=chat_id, text=text, **_SEND_KWARGS)
         return True
     except RetryAfter as exc:
         if not block_on_retry_after:
@@ -46,7 +50,7 @@ async def send_message(
         delay = min(_retry_delay_seconds(exc.retry_after), 30.0)
         await asyncio.sleep(delay + 0.5)
         try:
-            await bot.send_message(chat_id=chat_id, text=text)
+            await bot.send_message(chat_id=chat_id, text=text, **_SEND_KWARGS)
             return True
         except TelegramError as retry_exc:
             log.warning("telegram_retry_failed", error=str(retry_exc), chat_id=chat_id)
