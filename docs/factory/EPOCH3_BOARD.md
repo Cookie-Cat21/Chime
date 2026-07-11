@@ -8,8 +8,8 @@
 
 | ID | Item | Status |
 |---|---|---|
-| E3-D01 | POST/DELETE watchlist (parity bot; CSRF) | OPEN |
-| E3-D02 | POST alerts + cancel (idempotent create; CSRF) | OPEN |
+| E3-D01 | POST/DELETE watchlist (parity bot; CSRF) | DONE |
+| E3-D02 | POST alerts + cancel (idempotent create; CSRF) | DONE |
 | E3-D03 | Symbol detail page: last price + disclosures from Postgres | OPEN |
 | E3-D04 | Fire history UI page | OPEN |
 | E3-D05 | Health page (ops) from API | OPEN |

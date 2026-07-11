@@ -1,9 +1,10 @@
 import type { NextRequest } from "next/server";
 
 import { toIso } from "@/lib/api/time";
+import { isAlertType, normalizeSymbol } from "@/lib/api/symbol";
 import { jsonError, jsonOk } from "@/lib/auth/errors";
-import { requireSession } from "@/lib/auth/guard";
-import { getPool } from "@/lib/db";
+import { requireSession, requireSessionAndCsrf } from "@/lib/auth/guard";
+import { createAlertRule, getPool, getStock } from "@/lib/db";
 
 export const runtime = "nodejs";
 
@@ -55,6 +56,79 @@ export async function GET(request: NextRequest) {
     return jsonOk({ rules });
   } catch (err) {
     console.error("GET /alerts failed", err);
+    return jsonError(503, "degraded", "Database unavailable.");
+  }
+}
+
+/**
+ * POST /api/v1/alerts — create rule (CSRF). Auto-watch; idempotent return-existing.
+ */
+export async function POST(request: NextRequest) {
+  const gated = requireSessionAndCsrf(request);
+  if (!gated.ok) return gated.response;
+
+  let body: unknown;
+  try {
+    body = await request.json();
+  } catch {
+    return jsonError(400, "validation_error", "Invalid JSON body.");
+  }
+
+  if (typeof body !== "object" || body === null) {
+    return jsonError(400, "validation_error", "Invalid request body.");
+  }
+
+  const obj = body as Record<string, unknown>;
+  const symbol = normalizeSymbol(obj.symbol);
+  if (!symbol) {
+    return jsonError(400, "invalid_symbol", "Invalid CSE symbol.");
+  }
+
+  if (!isAlertType(obj.type)) {
+    return jsonError(
+      400,
+      "validation_error",
+      "type must be price_above, price_below, daily_move, or disclosure.",
+    );
+  }
+  const alertType = obj.type;
+
+  let threshold: number | null = null;
+  if (alertType === "disclosure") {
+    if (obj.threshold !== undefined && obj.threshold !== null) {
+      return jsonError(
+        400,
+        "validation_error",
+        "disclosure alerts must not include a threshold.",
+      );
+    }
+    threshold = null;
+  } else {
+    if (typeof obj.threshold !== "number" || !Number.isFinite(obj.threshold)) {
+      return jsonError(
+        400,
+        "validation_error",
+        "threshold must be a finite number.",
+      );
+    }
+    threshold = obj.threshold;
+  }
+
+  try {
+    const stock = await getStock(symbol);
+    if (!stock) {
+      return jsonError(404, "not_found", "Unknown symbol.");
+    }
+
+    const { rule, created } = await createAlertRule(
+      gated.session.user_id,
+      symbol,
+      alertType,
+      threshold,
+    );
+    return jsonOk(rule, created ? 201 : 200);
+  } catch (err) {
+    console.error("POST /alerts failed", err);
     return jsonError(503, "degraded", "Database unavailable.");
   }
 }

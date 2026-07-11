@@ -39,14 +39,19 @@ HttpOnly `chime_session` cookie bound to `users.id`, plus CSRF material
 mutations (including `POST /api/v1/auth/logout`) require matching
 `X-CSRF-Token`. See `docs/adr/001-dash-auth.md`.
 
-## Read APIs (session required)
+## APIs (session required)
 
-| Method | Path |
-|---|---|
-| `GET` | `/api/v1/me` |
-| `GET` | `/api/v1/watchlist` |
-| `GET` | `/api/v1/alerts` |
-| `GET` | `/api/v1/alerts/history` |
-| `GET` | `/api/v1/health` |
+| Method | Path | Notes |
+|---|---|---|
+| `GET` | `/api/v1/me` | |
+| `GET` | `/api/v1/watchlist` | |
+| `POST` | `/api/v1/watchlist` | CSRF; known `stocks` only |
+| `DELETE` | `/api/v1/watchlist/{symbol}` | CSRF; deactivates rules |
+| `GET` | `/api/v1/alerts` | |
+| `POST` | `/api/v1/alerts` | CSRF; auto-watch; idempotent |
+| `DELETE` | `/api/v1/alerts/{id}` | CSRF; soft cancel |
+| `GET` | `/api/v1/alerts/history` | |
+| `GET` | `/api/v1/health` | |
 
 Shapes follow `docs/factory/API_CONTRACT_V1.md`. Data from `DATABASE_URL` only.
+Mutations require matching `X-CSRF-Token`.

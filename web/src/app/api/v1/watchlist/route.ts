@@ -1,9 +1,10 @@
 import type { NextRequest } from "next/server";
 
 import { toIso } from "@/lib/api/time";
+import { normalizeSymbol } from "@/lib/api/symbol";
 import { jsonError, jsonOk } from "@/lib/auth/errors";
-import { requireSession } from "@/lib/auth/guard";
-import { getPool } from "@/lib/db";
+import { requireSession, requireSessionAndCsrf } from "@/lib/auth/guard";
+import { addWatch, getPool, getStock } from "@/lib/db";
 
 export const runtime = "nodejs";
 
@@ -61,6 +62,46 @@ export async function GET(request: NextRequest) {
     return jsonOk({ items });
   } catch (err) {
     console.error("GET /watchlist failed", err);
+    return jsonError(503, "degraded", "Database unavailable.");
+  }
+}
+
+/**
+ * POST /api/v1/watchlist — add symbol (CSRF). Postgres stocks only; no cse.lk.
+ */
+export async function POST(request: NextRequest) {
+  const gated = requireSessionAndCsrf(request);
+  if (!gated.ok) return gated.response;
+
+  let body: unknown;
+  try {
+    body = await request.json();
+  } catch {
+    return jsonError(400, "validation_error", "Invalid JSON body.");
+  }
+
+  const rawSymbol =
+    typeof body === "object" && body !== null && "symbol" in body
+      ? (body as { symbol: unknown }).symbol
+      : undefined;
+  const symbol = normalizeSymbol(rawSymbol);
+  if (!symbol) {
+    return jsonError(400, "invalid_symbol", "Invalid CSE symbol.");
+  }
+
+  try {
+    const stock = await getStock(symbol);
+    if (!stock) {
+      return jsonError(404, "not_found", "Unknown symbol.");
+    }
+
+    const inserted = await addWatch(gated.session.user_id, symbol);
+    return jsonOk(
+      { symbol: stock.symbol, name: stock.name },
+      inserted ? 201 : 200,
+    );
+  } catch (err) {
+    console.error("POST /watchlist failed", err);
     return jsonError(503, "degraded", "Database unavailable.");
   }
 }
