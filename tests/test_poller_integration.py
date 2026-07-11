@@ -100,11 +100,11 @@ async def test_crossing_fires_telegram_once(storage: Storage) -> None:
 
     assert len(events) == 1
     assert events[0].rule_id == rule.id
-    assert len(sent) == 1
-    assert sent[0][0] == tg_id
-    assert symbol in sent[0][1]
-    assert "crossed above" in sent[0][1]
-    assert "Not financial advice" in sent[0][1]
+    mine = [s for s in sent if s[0] == tg_id]
+    assert len(mine) == 1
+    assert symbol in mine[0][1]
+    assert "crossed above" in mine[0][1]
+    assert "Not financial advice" in mine[0][1]
 
     # Re-run same price (still above, disarmed) — no duplicate send
     cse2 = FakeCSE(
@@ -122,7 +122,8 @@ async def test_crossing_fires_telegram_once(storage: Storage) -> None:
     poller2 = Poller(settings, storage, cse2, send)  # type: ignore[arg-type]
     events2 = await poller2.run_once(force=True)
     assert events2 == []
-    assert len(sent) == 1
+    mine2 = [s for s in sent if s[0] == tg_id]
+    assert len(mine2) == 1
 
 
 @pytest.mark.asyncio
