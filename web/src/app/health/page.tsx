@@ -48,6 +48,16 @@ export default async function HealthPage() {
   const circuits = payload?.poller?.circuits ?? null;
   const snapshotAge = timestampAge(payload?.last_snapshot_at);
   const tickAge = timestampAge(payload?.poller?.last_tick_at);
+  const pollerUnreachable =
+    payload?.poller?.last_error === "health_url_unreachable";
+  const pollerDegraded =
+    payload?.poller != null &&
+    !pollerUnreachable &&
+    (payload.poller.last_tick_ok === false ||
+      payload.poller.price_poll_ok === false ||
+      payload.poller.disclosure_poll_ok === false ||
+      missing.length > 0);
+  const statusLabel = pollerUnreachable ? "poller unreachable" : status;
 
   return (
     <div className="flex min-h-full flex-1 flex-col bg-background">
@@ -69,18 +79,31 @@ export default async function HealthPage() {
           <>
             <div className="mt-8 flex flex-wrap items-center gap-3">
               <span
-                className={`inline-flex items-center rounded-md px-3 py-1 text-sm font-medium ${
-                  ok
-                    ? "bg-[oklch(0.92_0.04_165)] text-[oklch(0.35_0.08_165)]"
-                    : "bg-[oklch(0.93_0.04_40)] text-[oklch(0.4_0.1_40)]"
-                }`}
+                className={`inline-flex items-center rounded-md px-3 py-1 text-sm font-medium ${statusToneClass(
+                  ok,
+                  pollerUnreachable,
+                )}`}
               >
-                {status}
+                {statusLabel}
               </span>
               <span className="text-sm text-muted-foreground">
                 HTTP {res.status}
               </span>
             </div>
+
+            {pollerUnreachable ? (
+              <OpsNotice
+                tone="danger"
+                title="Poller health unreachable"
+                copy="HEALTH_URL is configured, but the dashboard could not reach the poller health endpoint. DB liveness is separate; check HEALTH_URL, routing, and the poller process before trusting alert freshness."
+              />
+            ) : pollerDegraded ? (
+              <OpsNotice
+                tone="warning"
+                title="Poller reachable but degraded"
+                copy="The poller health endpoint responded, but one or more poller checks reported unhealthy. Review tick flags, price/disclosure poll flags, watched-missing symbols, circuits, and recent poller logs."
+              />
+            ) : null}
 
             <dl className="mt-8 grid grid-cols-1 gap-5 sm:grid-cols-2">
               <Row label="Database" value={payload.db_ok ? "ok" : "down"} />
@@ -111,33 +134,46 @@ export default async function HealthPage() {
                   No poller detail (HEALTH_URL unset). DB liveness only.
                 </p>
               ) : (
-                <dl className="mt-4 grid grid-cols-1 gap-5 sm:grid-cols-2">
-                  <Row
-                    label="Last tick"
-                    value={formatTs(payload.poller.last_tick_at ?? null)}
-                  />
-                  <Row label="Last tick age" value={formatAge(tickAge)} />
-                  <Row
-                    label="Last tick ok"
-                    value={boolLabel(payload.poller.last_tick_ok)}
-                  />
-                  <Row
-                    label="Price poll"
-                    value={boolLabel(payload.poller.price_poll_ok)}
-                  />
-                  <Row
-                    label="Disclosure poll"
-                    value={boolLabel(payload.poller.disclosure_poll_ok)}
-                  />
-                  <Row
-                    label="Lock skip"
-                    value={boolLabel(payload.poller.lock_held_skip)}
-                  />
-                  <Row
-                    label="Last error"
-                    value={payload.poller.last_error ?? "—"}
-                  />
-                </dl>
+                <>
+                  {pollerUnreachable ? (
+                    <p className="mt-3 text-sm text-muted-foreground">
+                      The rows below are synthesized by the web proxy because
+                      the configured poller health URL did not respond.
+                    </p>
+                  ) : pollerDegraded ? (
+                    <p className="mt-3 text-sm text-muted-foreground">
+                      HEALTH_URL responded; degradation is coming from the
+                      poller fields below.
+                    </p>
+                  ) : null}
+                  <dl className="mt-4 grid grid-cols-1 gap-5 sm:grid-cols-2">
+                    <Row
+                      label="Last tick"
+                      value={formatTs(payload.poller.last_tick_at ?? null)}
+                    />
+                    <Row label="Last tick age" value={formatAge(tickAge)} />
+                    <Row
+                      label="Last tick ok"
+                      value={boolLabel(payload.poller.last_tick_ok)}
+                    />
+                    <Row
+                      label="Price poll"
+                      value={boolLabel(payload.poller.price_poll_ok)}
+                    />
+                    <Row
+                      label="Disclosure poll"
+                      value={boolLabel(payload.poller.disclosure_poll_ok)}
+                    />
+                    <Row
+                      label="Lock skip"
+                      value={boolLabel(payload.poller.lock_held_skip)}
+                    />
+                    <Row
+                      label="Last error"
+                      value={payload.poller.last_error ?? "—"}
+                    />
+                  </dl>
+                </>
               )}
               {tickAge?.stale ? (
                 <StaleOpsNotice
@@ -223,6 +259,46 @@ function formatAge(age: TimestampAge | null): string {
   if (days > 0) return `${days}d ${hours}h`;
   if (hours > 0) return `${hours}h ${minutes}m`;
   return `${minutes}m`;
+}
+
+function statusToneClass(ok: boolean, pollerUnreachable: boolean): string {
+  if (ok) {
+    return "bg-[oklch(0.92_0.04_165)] text-[oklch(0.35_0.08_165)]";
+  }
+  if (pollerUnreachable) {
+    return "bg-[oklch(0.94_0.04_25)] text-[oklch(0.38_0.12_25)]";
+  }
+  return "bg-[oklch(0.93_0.04_40)] text-[oklch(0.4_0.1_40)]";
+}
+
+function OpsNotice({
+  tone,
+  title,
+  copy,
+}: {
+  tone: "danger" | "warning";
+  title: string;
+  copy: string;
+}) {
+  const className =
+    tone === "danger"
+      ? "border-[oklch(0.72_0.12_25)] bg-[oklch(0.97_0.03_25)]"
+      : "border-[oklch(0.78_0.08_65)] bg-[oklch(0.97_0.03_80)]";
+  const titleClassName =
+    tone === "danger"
+      ? "text-[oklch(0.36_0.13_25)]"
+      : "text-[oklch(0.36_0.1_55)]";
+  const copyClassName =
+    tone === "danger"
+      ? "text-[oklch(0.32_0.09_25)]"
+      : "text-[oklch(0.32_0.07_55)]";
+
+  return (
+    <div className={`mt-5 rounded-lg border p-4 ${className}`}>
+      <p className={`text-sm font-medium ${titleClassName}`}>{title}</p>
+      <p className={`mt-1 text-sm ${copyClassName}`}>{copy}</p>
+    </div>
+  );
 }
 
 function Row({ label, value }: { label: string; value: string }) {
