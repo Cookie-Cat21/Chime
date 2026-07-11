@@ -73,3 +73,17 @@ jobs:
 
       - name: Pytest (including DB tests)
         run: pytest
+
+      - name: Require DB integration tests ran (not skipped)
+        run: |
+          set -euo pipefail
+          out=$(pytest \
+            tests/test_advisory_lock.py \
+            tests/test_poller_integration.py \
+            tests/test_dual_poller_lock.py \
+            tests/test_dead_letter_db.py \
+            --no-cov -rs --maxfail=1 2>&1 | tee /dev/stderr)
+          if echo "$out" | grep -Eiq 'skipped'; then
+            echo "::error::DB integration tests skipped; DATABASE_URL required"
+            exit 1
+          fi
