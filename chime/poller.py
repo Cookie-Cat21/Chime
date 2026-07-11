@@ -186,6 +186,11 @@ class Poller:
             return [], True
         rules = await self.storage.active_rules_for_symbols(symbols)
         disclosure_rules = [r for r in rules if r.type.value == "disclosure"]
+        # Only hit CSE announcements for symbols with active disclosure rules
+        # (price-only watchlist symbols skip this leg — rate-limit priority).
+        disclosure_symbols = sorted({r.symbol for r in disclosure_rules})
+        if not disclosure_symbols:
+            return [], True
 
         tz = ZoneInfo(self.settings.market_tz)
         today = datetime.now(tz).date()
@@ -194,7 +199,7 @@ class Poller:
         fired: list[AlertEvent] = []
         any_failure = False
 
-        for symbol in symbols:
+        for symbol in disclosure_symbols:
             try:
                 disclosures = await self.cse.fetch_announcements_for_symbol(
                     symbol, from_date=from_date, to_date=to_date

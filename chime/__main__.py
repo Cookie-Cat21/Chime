@@ -4,6 +4,8 @@ from __future__ import annotations
 
 import argparse
 import asyncio
+import contextlib
+import signal
 
 from telegram import Bot
 
@@ -47,14 +49,24 @@ async def _run_both(settings: Settings) -> None:
 
     app.post_init = _post_init
 
+    stop = asyncio.Event()
+
+    def _handle_sig(*_: object) -> None:
+        stop.set()
+
+    loop = asyncio.get_running_loop()
+    for sig in (signal.SIGINT, signal.SIGTERM):
+        with contextlib.suppress(NotImplementedError):
+            loop.add_signal_handler(sig, _handle_sig)
+
     try:
         await app.initialize()
         await app.start()
         assert app.updater is not None
         await app.updater.start_polling(drop_pending_updates=True)
 
-        # Keep health fresh
-        while True:
+        # Keep health fresh until SIGINT/SIGTERM
+        while not stop.is_set():
             db_ok = False
             try:
                 db_ok = await storage.health_check()
@@ -70,7 +82,8 @@ async def _run_both(settings: Settings) -> None:
                 lock_held_skip=poller.lock_held_skip,
                 last_error=poller.last_error,
             )
-            await asyncio.sleep(10)
+            with contextlib.suppress(TimeoutError):
+                await asyncio.wait_for(stop.wait(), timeout=10)
     finally:
         await poller.shutdown()
         if app.updater is not None:
@@ -170,7 +183,7 @@ def main(argv: list[str] | None = None) -> None:
                 return await send_message(bot, chat_id, text)
 
             poller = Poller(settings, storage, cse, send)
-            events = await poller.run_once(force=args.force or True)
+            events = await poller.run_once(force=args.force)
             print(f"Fired {len(events)} alert(s)")
             await cse.aclose()
             await storage.close()

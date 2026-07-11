@@ -7,6 +7,7 @@ from contextlib import asynccontextmanager
 from datetime import datetime
 from typing import Any, cast
 
+from psycopg.errors import UniqueViolation
 from psycopg.rows import dict_row
 from psycopg_pool import AsyncConnectionPool
 
@@ -284,16 +285,27 @@ class Storage:
                 """,
                 (user_id, symbol, alert_type.value, threshold),
             )
-            row = await (
-                await conn.execute(
-                    """
-                    INSERT INTO alert_rules (user_id, symbol, type, threshold, active, armed)
-                    VALUES (%s, %s, %s, %s, TRUE, TRUE)
-                    RETURNING id, user_id, symbol, type, threshold, active, armed, created_at
-                    """,
-                    (user_id, symbol, alert_type.value, threshold),
+            try:
+                row = await (
+                    await conn.execute(
+                        """
+                        INSERT INTO alert_rules (user_id, symbol, type, threshold, active, armed)
+                        VALUES (%s, %s, %s, %s, TRUE, TRUE)
+                        RETURNING id, user_id, symbol, type, threshold, active, armed, created_at
+                        """,
+                        (user_id, symbol, alert_type.value, threshold),
+                    )
+                ).fetchone()
+            except UniqueViolation:
+                # Concurrent identical insert won the partial unique index —
+                # roll back this txn and return the survivor's active rule.
+                await conn.rollback()
+                existing = await self._fetch_active_rule(
+                    conn, user_id, symbol, alert_type, threshold
                 )
-            ).fetchone()
+                if existing is not None:
+                    return existing
+                raise
             user = await (
                 await conn.execute(
                     "SELECT telegram_id FROM users WHERE id = %s",
@@ -317,6 +329,32 @@ class Storage:
             armed=bool(r["armed"]),
             created_at=created,
         )
+
+    async def _fetch_active_rule(
+        self,
+        conn: Any,
+        user_id: int,
+        symbol: str,
+        alert_type: AlertType,
+        threshold: float | None,
+    ) -> AlertRule | None:
+        row = await (
+            await conn.execute(
+                """
+                SELECT ar.*, u.telegram_id
+                FROM alert_rules ar
+                JOIN users u ON u.id = ar.user_id
+                WHERE ar.user_id = %s AND ar.symbol = %s AND ar.type = %s
+                  AND COALESCE(ar.threshold, -1) = COALESCE(%s, -1) AND ar.active
+                ORDER BY ar.id DESC
+                LIMIT 1
+                """,
+                (user_id, symbol, alert_type.value, threshold),
+            )
+        ).fetchone()
+        if row is None:
+            return None
+        return _row_to_rule(_as_row(row))
 
     async def list_alerts(self, user_id: int) -> list[AlertRule]:
         async with self._pool.connection() as conn:
