@@ -53,6 +53,14 @@ CANCEL_USAGE = (
 )
 
 
+def watch_upstream_error(symbol: str) -> str:
+    return (
+        f"I couldn't verify {symbol} because cse.lk is unreachable right now. "
+        f"Nothing was added; try /watch {symbol} again in a minute.\n"
+        f"{disclaimer()}"
+    )
+
+
 def reset_cmd_rate_limits() -> None:
     """Clear in-memory rate-limit state (tests)."""
     _cmd_timestamps.clear()
@@ -243,7 +251,7 @@ async def cmd_watch(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         return
     status, info = await _lookup_symbol(cse, symbol)
     if status == "upstream":
-        await update.effective_message.reply_text("cse.lk unreachable, try again.")
+        await update.effective_message.reply_text(watch_upstream_error(symbol))
         return
     if status == "not_found":
         await update.effective_message.reply_text(

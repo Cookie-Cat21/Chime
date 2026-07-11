@@ -19,6 +19,7 @@ from chime.bot import (
     cmd_unwatch,
     cmd_watch,
     reset_cmd_rate_limits,
+    watch_upstream_error,
 )
 from chime.domain import AlertRule, AlertType, PriceSnapshot, disclaimer
 
@@ -154,7 +155,13 @@ async def test_cmd_watch_upstream_and_not_found() -> None:
     cse.fetch_company_info = AsyncMock(side_effect=RuntimeError("down"))
     update, context = _make_update_context(args=["JKH.N0000"], storage=storage, cse=cse)
     await cmd_watch(update, context)
-    assert "unreachable" in update.effective_message.reply_text.await_args.args[0]
+    reply = update.effective_message.reply_text.await_args.args[0]
+    assert reply == watch_upstream_error("JKH.N0000")
+    assert "couldn't verify JKH.N0000" in reply
+    assert "Nothing was added" in reply
+    assert disclaimer() in reply
+    storage.upsert_stock.assert_not_called()
+    storage.add_watch.assert_not_called()
 
     cse2 = AsyncMock()
     cse2.fetch_company_info = AsyncMock(return_value=None)
