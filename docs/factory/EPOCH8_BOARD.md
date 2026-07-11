@@ -1,6 +1,6 @@
 # Epoch 8 Board — Observability + compose
 
-**Status:** STAGED (open after Epoch 7)  
+**Status:** OPEN
 
 | ID | Item | Status |
 |---|---|---|
