@@ -11,7 +11,7 @@ export function Sparkline({
   if (points.length < 2) {
     return (
       <p className="text-sm text-muted-foreground" role="status">
-        Not enough snapshots for a sparkline yet.
+        Not enough ticks yet. Chime needs at least two stored ticks for this sparkline.
       </p>
     );
   }
