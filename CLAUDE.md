@@ -18,12 +18,19 @@ reason to exist. Everything else is secondary.
 - No tax reports
 - No stock screener
 - No technical analysis charts
-- No web dashboard beyond the minimum needed to manage a watchlist
 - No native mobile app
 - No payment integration
 
+**Thin web dashboard (greenlit — secondary to Telegram):**
+A minimal management UI is allowed: watchlist, alerts, fire history, symbol
+detail (last price + disclosures), and poller health. It must not become a
+trading terminal or replace push as the primary experience. Stack when built:
+Next.js + Tailwind + shadcn/ui. See `docs/factory/COMMIT_FACTORY.md` and
+`docs/factory/DASH_IA.md`.
+
 If a feature isn't required to make "user sets an alert condition and gets
-pinged on Telegram when it fires" work end to end, it does not belong in v1.
+pinged on Telegram when it fires" work end to end — or to manage that setup
+in the thin dashboard — it does not belong in v1.
 
 ## Context / competitive landscape (for reasoning, not for building yet)
 
@@ -123,7 +130,8 @@ scrape HTML; use the JSON endpoints above.
   free hosting tier)
 - Simple cron / scheduled job for the poller (APScheduler or plain cron) —
   no need for Kafka/Flink-scale infra for this volume of data
-- No web framework needed for v1 unless the bot needs a companion webhook
+- Thin dashboard (when built): Next.js + Tailwind + shadcn; API over existing
+  Postgres / Chime domain — not a second CSE scraper
 
 ## Compliance notes (do not skip)
 
@@ -150,6 +158,7 @@ scrape HTML; use the JSON endpoints above.
 
 ## Current status
 
-Scaffold is done. Stage A implements the build order above (adapter, schema,
-poller, rules, bot, health). Keep non-goals and compliance intact; do not
-add web UI or out-of-scope features.
+Stage A (adapter, schema, poller, rules, bot, health) is implemented and
+hardened through Stage B Pass 4. Commit Factory planning lives under
+`docs/factory/` (100 workstreams). Keep non-goals and compliance intact;
+thin dashboard only within the fence above. Ceyfi merge is deferred.

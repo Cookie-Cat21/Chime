@@ -79,12 +79,12 @@ MAX_PASSES = 100 per lane epoch
 STOP if 2 consecutive passes have 0 findings > minor
 ```
 
-## 5. Planning phase (this run)
+## 5. Planning phase (done)
 
-- Catalog **100 planning workstreams** (WS-001…WS-100).  
-- Execute planning in **waves of ≤8 subagents**.  
-- Outputs land in `docs/factory/workstreams/` and roll up here.  
-- No production feature code in the planning PR except constitution amendments + empty `web/` scaffold placeholders if needed.
+- Catalog **100 planning workstreams** (WS-001…WS-100) — see [workstreams/INDEX.md](workstreams/INDEX.md).  
+- Executed by **8 concurrent planning subagents** (CORE, DASH, OPS, QUALITY, ADVERSARIAL, IA, prompts, metrics) — concurrency capped; not 100 parallel processes.  
+- Supporting docs: [DASH_IA.md](DASH_IA.md), [ORCHESTRATOR_PROMPTS.md](ORCHESTRATOR_PROMPTS.md), [METRICS.md](METRICS.md).  
+- Planning PR: constitution amendment for thin dashboard + factory docs only (no feature flood).
 
 ## 6. Throughput model (honest)
 
