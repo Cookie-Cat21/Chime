@@ -23,15 +23,24 @@ from chime.circuit import CircuitOpenError
 from chime.config import Settings
 from chime.domain import AlertEvent, PriceSnapshot, format_alert_message
 from chime.logging_setup import get_logger
+from chime.notify import SendResult
 from chime.rules import evaluate_disclosure_rules, evaluate_price_rules, filter_fireable
 from chime.storage import Storage
 
 log = get_logger(__name__)
 
-SendFunc = Callable[[int, str], Awaitable[bool]]
+# bool kept for test AsyncMocks; production send returns SendResult.
+SendFunc = Callable[[int, str], Awaitable[SendResult | bool]]
 POLL_LOCK_ID = 4_201_337
 # After this many failed Telegram sends, stop retrying (message_sent stays false).
 MAX_SEND_ATTEMPTS = 5
+
+
+def _normalize_send_result(result: SendResult | bool) -> SendResult:
+    """Map legacy bool send callbacks onto SendResult (False → failed)."""
+    if isinstance(result, bool):
+        return SendResult.OK if result else SendResult.FAILED
+    return result
 
 
 def parse_hhmm(value: str) -> time:
@@ -250,18 +259,21 @@ class Poller:
         send failed. Callers must treat True as “crossing consumed” so price
         rules can disarm; delivery continues via ``message_sent=False`` retry /
         dead-letter. Returns False only on claim conflict (already claimed).
+
+        CORE-004 deferred: advisory lock is still held across this send.
         """
         message = format_alert_message(event)
         log_id = await self.storage.claim_alert(event, message)
         if log_id is None:
             log.info("alert_already_claimed", event_key=event.event_key, rule_id=event.rule_id)
             return False
-        ok = await self.send(event.telegram_id, message)
-        if ok:
+        result = _normalize_send_result(await self.send(event.telegram_id, message))
+        if result is SendResult.OK:
             await self.storage.mark_alert_sent(log_id)
             log.info("alert_sent", rule_id=event.rule_id, event_key=event.event_key)
-        else:
+        elif result is SendResult.FAILED:
             await self._record_send_failure(log_id, rule_id=event.rule_id)
+        # DEFERRED: leave message_sent=False, do not bump attempt_count
         return True
 
     async def _retry_unsent(self) -> None:
@@ -269,10 +281,11 @@ class Poller:
         for row in pending:
             text = row["message_text"] or ""
             log_id = int(row["id"])
-            ok = await self.send(int(row["telegram_id"]), text)
-            if ok:
+            # CORE-004 deferred: lock still held during send / RetryAfter defer.
+            result = _normalize_send_result(await self.send(int(row["telegram_id"]), text))
+            if result is SendResult.OK:
                 await self.storage.mark_alert_sent(log_id)
-            else:
+            elif result is SendResult.FAILED:
                 await self._record_send_failure(log_id, rule_id=int(row["rule_id"]))
 
     async def _scheduled_tick(self) -> None:

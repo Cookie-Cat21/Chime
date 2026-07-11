@@ -7,7 +7,7 @@ from unittest.mock import AsyncMock, patch
 import pytest
 from telegram.error import NetworkError, RetryAfter, TimedOut
 
-from chime.notify import send_message
+from chime.notify import SendResult, send_message
 
 
 @pytest.mark.asyncio
@@ -18,9 +18,9 @@ async def test_send_message_retry_after_then_succeeds() -> None:
     )
 
     with patch("chime.notify.asyncio.sleep", new_callable=AsyncMock) as sleep:
-        ok = await send_message(bot, chat_id=1001, text="hello")
+        result = await send_message(bot, chat_id=1001, text="hello")
 
-    assert ok is True
+    assert result is SendResult.OK
     assert bot.send_message.await_count == 2
     sleep.assert_awaited_once()
     first_kwargs = bot.send_message.await_args_list[0].kwargs
@@ -37,9 +37,9 @@ async def test_retry_after_sleep_is_capped() -> None:
     bot.send_message = AsyncMock(side_effect=[RetryAfter(999), None])
 
     with patch("chime.notify.asyncio.sleep", new_callable=AsyncMock) as sleep:
-        ok = await send_message(bot, chat_id=1001, text="hello")
+        result = await send_message(bot, chat_id=1001, text="hello")
 
-    assert ok is True
+    assert result is SendResult.OK
     sleep.assert_awaited_once()
     # Cap 30s + 0.5 buffer — never sleep the full RetryAfter(999).
     assert sleep.await_args.args[0] == pytest.approx(30.5)
@@ -51,11 +51,9 @@ async def test_retry_after_deferred_when_nonblocking() -> None:
     bot.send_message = AsyncMock(side_effect=RetryAfter(60))
 
     with patch("chime.notify.asyncio.sleep", new_callable=AsyncMock) as sleep:
-        ok = await send_message(
-            bot, chat_id=1001, text="hello", block_on_retry_after=False
-        )
+        result = await send_message(bot, chat_id=1001, text="hello", block_on_retry_after=False)
 
-    assert ok is False
+    assert result is SendResult.DEFERRED
     sleep.assert_not_awaited()
     assert bot.send_message.await_count == 1
 
@@ -65,7 +63,7 @@ async def test_retry_after_deferred_when_nonblocking() -> None:
     "exc",
     [TimedOut("t"), NetworkError("n")],
 )
-async def test_transient_errors_return_false(exc: Exception) -> None:
+async def test_transient_errors_return_failed(exc: Exception) -> None:
     bot = AsyncMock()
     bot.send_message = AsyncMock(side_effect=exc)
-    assert await send_message(bot, chat_id=1, text="x") is False
+    assert await send_message(bot, chat_id=1, text="x") is SendResult.FAILED

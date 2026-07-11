@@ -15,7 +15,7 @@ from chime.config import Settings
 from chime.health import HealthState, start_health_server
 from chime.logging_setup import configure_logging, get_logger
 from chime.migrate import apply_migrations
-from chime.notify import send_message
+from chime.notify import SendResult, send_message
 from chime.poller import Poller, run_poller_forever
 from chime.storage import Storage
 
@@ -46,9 +46,7 @@ async def _refresh_bot_health(storage: Storage, health: HealthState) -> None:
     health.update(ok=db_ok, db_ok=db_ok, last_error=last_error)
 
 
-async def _refresh_both_health(
-    storage: Storage, health: HealthState, poller: Poller
-) -> None:
+async def _refresh_both_health(storage: Storage, health: HealthState, poller: Poller) -> None:
     db_ok = False
     try:
         db_ok = await storage.health_check()
@@ -77,7 +75,7 @@ async def _run_both(settings: Settings) -> None:
     )
     bot = Bot(settings.telegram_bot_token)
 
-    async def send(chat_id: int, text: str) -> bool:
+    async def send(chat_id: int, text: str) -> SendResult:
         # Never sleep on RetryAfter while holding the poll advisory lock.
         return await send_message(bot, chat_id, text, block_on_retry_after=False)
 
@@ -135,7 +133,7 @@ async def _run_poller(settings: Settings) -> None:
     )
     bot = Bot(settings.telegram_bot_token)
 
-    async def send(chat_id: int, text: str) -> bool:
+    async def send(chat_id: int, text: str) -> SendResult:
         # Never sleep on RetryAfter while holding the poll advisory lock.
         return await send_message(bot, chat_id, text, block_on_retry_after=False)
 
@@ -218,16 +216,15 @@ def main(argv: list[str] | None = None) -> None:
     elif args.command == "both":
         asyncio.run(_run_both(settings))
     elif args.command == "tick":
+
         async def _tick() -> None:
             storage = Storage(settings.database_url)
             await storage.open()
             cse = CSEClient(base_url=settings.cse_base_url)
             bot = Bot(settings.telegram_bot_token)
 
-            async def send(chat_id: int, text: str) -> bool:
-                return await send_message(
-                    bot, chat_id, text, block_on_retry_after=False
-                )
+            async def send(chat_id: int, text: str) -> SendResult:
+                return await send_message(bot, chat_id, text, block_on_retry_after=False)
 
             poller = Poller(settings, storage, cse, send)
             try:
