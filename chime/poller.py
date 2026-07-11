@@ -492,6 +492,13 @@ class Poller:
             # mark_alert_sent outage cannot re-push every poll interval.
             self._remember_delivered(pending.log_id)
             event_key = pending.event.event_key if pending.event is not None else None
+            # Durable guard before message_sent (E2-C04): survives restart when
+            # mark_alert_sent fails but this lighter UPDATE succeeds.
+            await self._mark_delivery_ok_best_effort(
+                pending.log_id,
+                rule_id=pending.rule_id,
+                event_key=event_key,
+            )
             marked = await self._mark_sent_best_effort(
                 pending.log_id,
                 rule_id=pending.rule_id,
@@ -542,6 +549,29 @@ class Poller:
             return True
         await self._deliver_one(pending)
         return True
+
+    async def _mark_delivery_ok_best_effort(
+        self,
+        log_id: int,
+        *,
+        rule_id: int | None = None,
+        event_key: str | None = None,
+    ) -> bool:
+        """Persist delivery_attempted_ok so restart cannot re-push (E2-C04).
+
+        Never raises. Returns True if the durable flag was written.
+        """
+        try:
+            await self.storage.mark_delivery_attempted_ok(log_id)
+            return True
+        except Exception:
+            log.exception(
+                "mark_delivery_attempted_ok_failed",
+                alert_log_id=log_id,
+                rule_id=rule_id,
+                event_key=event_key,
+            )
+            return False
 
     async def _mark_sent_best_effort(
         self,

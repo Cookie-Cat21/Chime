@@ -1,0 +1,169 @@
+"""E2-C04: durable delivery_attempted_ok survives restart after Telegram OK + mark fail."""
+
+from __future__ import annotations
+
+import os
+from datetime import UTC, datetime
+from unittest.mock import AsyncMock
+
+import pytest
+
+from chime.config import Settings
+from chime.domain import AlertEvent, AlertType, PriceSnapshot
+from chime.migrate import apply_migrations
+from chime.notify import SendResult
+from chime.poller import PendingSend, Poller
+from chime.storage import Storage
+
+DATABASE_URL = os.getenv("DATABASE_URL", "").strip()
+
+
+def _settings() -> Settings:
+    return Settings(
+        telegram_bot_token="x",
+        database_url="postgresql://x",
+        poll_jitter_seconds=0,
+    )
+
+
+@pytest.mark.asyncio
+async def test_deliver_ok_sets_delivery_flag_before_mark_sent() -> None:
+    """On SendResult.OK, durable flag is written before mark_alert_sent."""
+    order: list[str] = []
+
+    async def track_delivery(log_id: int) -> None:
+        order.append("delivery")
+
+    async def track_mark(log_id: int) -> None:
+        order.append("mark")
+
+    storage = AsyncMock()
+    storage.mark_delivery_attempted_ok = AsyncMock(side_effect=track_delivery)
+    storage.mark_alert_sent = AsyncMock(side_effect=track_mark)
+    storage.dead_letter = AsyncMock()
+    send = AsyncMock(return_value=SendResult.OK)
+
+    poller = Poller(_settings(), storage, AsyncMock(), send)
+    await poller._deliver_one(
+        PendingSend(
+            log_id=101,
+            telegram_id=9,
+            message="body",
+            already_claimed_new=True,
+            rule_id=1,
+            event=None,
+        )
+    )
+
+    storage.mark_delivery_attempted_ok.assert_awaited_once_with(101)
+    storage.mark_alert_sent.assert_awaited_once_with(101)
+    assert order == ["delivery", "mark"]
+
+
+@pytest.mark.asyncio
+async def test_mark_fail_still_sets_delivery_flag() -> None:
+    """Telegram OK + mark_alert_sent fail → delivery_attempted_ok still written."""
+    storage = AsyncMock()
+    storage.mark_delivery_attempted_ok = AsyncMock()
+    storage.mark_alert_sent = AsyncMock(side_effect=RuntimeError("db down"))
+    storage.dead_letter = AsyncMock()
+    send = AsyncMock(return_value=SendResult.OK)
+
+    poller = Poller(_settings(), storage, AsyncMock(), send)
+    await poller._deliver_one(
+        PendingSend(
+            log_id=102,
+            telegram_id=9,
+            message="body",
+            already_claimed_new=True,
+            rule_id=1,
+            event=None,
+        )
+    )
+
+    storage.mark_delivery_attempted_ok.assert_awaited_once_with(102)
+    assert storage.mark_alert_sent.await_count == 2
+    storage.dead_letter.assert_awaited_once_with(102)
+
+
+@pytest.mark.asyncio
+async def test_restart_skips_repush_when_delivery_flag_set() -> None:
+    """New Poller (empty in-memory set) must not re-send if claim excludes flag."""
+    storage = AsyncMock()
+    # After restart, durable flag keeps the row out of claim_unsent_batch.
+    storage.claim_unsent_batch = AsyncMock(return_value=[])
+    storage.unsent_alerts = AsyncMock(return_value=[])
+    storage.mark_delivery_attempted_ok = AsyncMock()
+    storage.mark_alert_sent = AsyncMock()
+    send = AsyncMock(return_value=SendResult.OK)
+
+    restarted = Poller(_settings(), storage, AsyncMock(), send)
+    assert restarted._delivered_ok_ids == set()
+    await restarted._retry_unsent()
+    send.assert_not_awaited()
+
+
+@pytest.mark.skipif(not DATABASE_URL, reason="DATABASE_URL not set")
+@pytest.mark.asyncio
+async def test_delivery_attempted_ok_excludes_from_unsent_db() -> None:
+    """Postgres: delivery_attempted_ok=TRUE excluded from unsent/claim (E2-C04)."""
+    assert DATABASE_URL
+    apply_migrations(DATABASE_URL)
+    store = Storage(DATABASE_URL, min_size=1, max_size=2)
+    await store.open()
+    try:
+        user_id = await store.ensure_user(telegram_id=9_005_001)
+        await store.upsert_stock("DLOK.N0000", "DLOK CO")
+        rule = await store.create_alert_rule(
+            user_id, "DLOK.N0000", AlertType.PRICE_ABOVE, 100.0
+        )
+        snap = await store.insert_snapshot(
+            PriceSnapshot(
+                symbol="DLOK.N0000",
+                price=105.0,
+                previous_close=94.0,
+                ts=datetime(2026, 7, 11, 9, 0, tzinfo=UTC),
+            )
+        )
+        assert snap.id is not None
+        event = AlertEvent(
+            rule_id=rule.id,
+            user_id=user_id,
+            telegram_id=9_005_001,
+            symbol="DLOK.N0000",
+            type=AlertType.PRICE_ABOVE,
+            trigger="cross_above",
+            threshold=100.0,
+            current_price=105.0,
+            event_key=f"dlok:above:100.0:s{snap.id}",
+            snapshot_id=snap.id,
+        )
+        log_id = await store.claim_alert(event, "telegram ok mark pending")
+        assert log_id is not None
+        assert any(int(r["id"]) == log_id for r in await store.unsent_alerts())
+
+        await store.mark_delivery_attempted_ok(log_id)
+        pending = await store.unsent_alerts()
+        assert all(int(r["id"]) != log_id for r in pending)
+
+        if hasattr(store, "claim_unsent_batch"):
+            claimed = await store.claim_unsent_batch()
+            assert all(int(r["id"]) != log_id for r in claimed)
+
+        # Simulate restart: fresh Poller, empty _delivered_ok_ids, no re-send.
+        send = AsyncMock(return_value=SendResult.OK)
+        poller = Poller(
+            Settings(
+                telegram_bot_token="dummy",
+                database_url=DATABASE_URL,
+                poll_jitter_seconds=0,
+            ),
+            store,
+            AsyncMock(),
+            send,
+        )
+        assert poller._delivered_ok_ids == set()
+        await poller._retry_unsent()
+        send.assert_not_awaited()
+    finally:
+        await store.close()
