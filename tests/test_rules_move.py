@@ -1,12 +1,11 @@
-"""Daily % move rule evaluation — crossing semantics on |change_pct|."""
-
-from __future__ import annotations
-
 from datetime import UTC, datetime
+from zoneinfo import ZoneInfo
 
 from chime.domain import AlertType
 from chime.rules import evaluate_price_rules, filter_fireable
 from tests.conftest import make_previous, make_rule, make_snapshot
+
+_COLOMBO = ZoneInfo("Asia/Colombo")
 
 
 def test_cross_above_threshold_fires() -> None:
@@ -21,7 +20,8 @@ def test_cross_above_threshold_fires() -> None:
     fireable = filter_fireable(events)
     assert len(fireable) == 1
     assert "up" in fireable[0].trigger
-    assert fireable[0].event_key == f"move:{rule.id}:{snap.ts.date().isoformat()}"
+    day = snap.ts.astimezone(_COLOMBO).date().isoformat()
+    assert fireable[0].event_key == f"move:{rule.id}:{day}"
 
 
 def test_cross_below_threshold_down_fires() -> None:
@@ -78,7 +78,7 @@ def test_computes_pct_from_previous_close_when_change_pct_none() -> None:
 def test_does_not_fire_when_move_fired_keys_has_day_key() -> None:
     rule = make_rule(id=9, type=AlertType.DAILY_MOVE, threshold=3.0)
     ts = datetime(2026, 7, 11, 8, 0, 0, tzinfo=UTC)
-    day_key = f"move:9:{ts.date().isoformat()}"
+    day_key = f"move:9:{ts.astimezone(_COLOMBO).date().isoformat()}"
     snap = make_snapshot(price=110.0, change_pct=8.0, ts=ts)
     events = evaluate_price_rules(
         snapshot=snap,
@@ -132,3 +132,19 @@ def test_event_key_pattern_once_per_day() -> None:
     )
     assert len(events) == 1
     assert events[0].event_key == "move:5:2026-07-11"
+
+
+def test_move_event_key_uses_colombo_calendar_day() -> None:
+    """UTC evening can still be next Colombo morning — key must use SLT date."""
+    rule = make_rule(id=7, type=AlertType.DAILY_MOVE, threshold=1.0)
+    # 2026-07-10 20:00 UTC == 2026-07-11 01:30 Asia/Colombo
+    ts = datetime(2026, 7, 10, 20, 0, 0, tzinfo=UTC)
+    snap = make_snapshot(price=101.0, change_pct=1.5, ts=ts, id=50)
+    events = evaluate_price_rules(
+        snapshot=snap,
+        previous=make_previous(price=100.0, change_pct=0.5),
+        rules=[rule],
+    )
+    assert len(events) == 1
+    assert events[0].event_key == "move:7:2026-07-11"
+    assert events[0].event_key != "move:7:2026-07-10"

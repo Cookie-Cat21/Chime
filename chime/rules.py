@@ -7,6 +7,7 @@ No I/O inside evaluation.
 from __future__ import annotations
 
 from datetime import UTC, datetime
+from zoneinfo import ZoneInfo
 
 from chime.domain import (
     AlertEvent,
@@ -16,6 +17,8 @@ from chime.domain import (
     PreviousPriceState,
     PriceSnapshot,
 )
+
+_COLOMBO = ZoneInfo("Asia/Colombo")
 
 
 def _as_utc_aware(dt: datetime) -> datetime:
@@ -59,7 +62,8 @@ def _event_key_price(rule: AlertRule, snapshot: PriceSnapshot) -> str:
 
 
 def _event_key_move(rule: AlertRule, snapshot: PriceSnapshot) -> str:
-    day = snapshot.ts.date().isoformat()
+    """One daily-move fire per Colombo calendar day (not UTC midnight)."""
+    day = snapshot.ts.astimezone(_COLOMBO).date().isoformat()
     return f"move:{rule.id}:{day}"
 
 
