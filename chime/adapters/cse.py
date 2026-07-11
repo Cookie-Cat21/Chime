@@ -124,8 +124,13 @@ def _retryable(exc: BaseException) -> bool:
 
 
 def _ms_to_dt(ms: int | None) -> datetime:
+    """Convert CSE millisecond epoch to aware UTC datetime.
+
+    ``None`` is treated as the Unix epoch — never ``datetime.now()`` — so a
+    missing timestamp cannot look "fresh" and bypass disclosure backfill gates.
+    """
     if ms is None:
-        return datetime.now(UTC)
+        return datetime(1970, 1, 1, tzinfo=UTC)
     return datetime.fromtimestamp(ms / 1000.0, tz=UTC)
 
 
