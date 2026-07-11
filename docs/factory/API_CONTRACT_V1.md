@@ -388,6 +388,20 @@ Query: `limit` (default `20`, max `100`).
 
 Both DB `id` and `external_id` are required in the payload (resolves IA↔WAVE naming drift).
 
+### Disclosure alert gating (bot / poller — E11-A01)
+
+Telegram `/alert SYMBOL disclosure` and the poller’s rule engine **fail closed**
+on publish time:
+
+- Prefer CSE `createdDate` (epoch ms) as `published_at` for gating.
+- Missing / non-positive `createdDate` → `published_at` forced to Unix epoch
+  (1970-01-01) so the filing is treated as stale and does **not** fire.
+- Rules also skip when `published_at <= rule.created_at` (no historical backfill
+  flood). Missing `rule.created_at` → no fire.
+
+Dash `GET .../disclosures` still returns stored rows for display; gating above
+applies only to alert fire paths.
+
 ---
 
 ## Route index (frozen)
