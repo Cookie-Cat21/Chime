@@ -72,3 +72,31 @@ async def test_claim_mark_fail_retry_succeeds_treats_as_sent() -> None:
     assert storage.mark_alert_sent.await_count == 2
     storage.dead_letter.assert_not_awaited()
     storage.mark_alert_attempt.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_retry_unsent_mark_fail_dead_letters_no_attempt() -> None:
+    """Retry path must use best-effort mark (H3 parity) — no bare mark_alert_sent."""
+    storage = AsyncMock()
+    storage.unsent_alerts = AsyncMock(
+        return_value=[
+            {
+                "id": 91,
+                "rule_id": 3,
+                "message_text": "retry body",
+                "telegram_id": 1001,
+                "attempt_count": 1,
+            }
+        ]
+    )
+    storage.mark_alert_sent = AsyncMock(side_effect=RuntimeError("db down"))
+    storage.mark_alert_attempt = AsyncMock()
+    storage.dead_letter = AsyncMock()
+    send = AsyncMock(return_value=True)
+
+    poller = Poller(_settings(), storage, AsyncMock(), send)
+    await poller._retry_unsent()
+
+    assert storage.mark_alert_sent.await_count == 2
+    storage.dead_letter.assert_awaited_once_with(91)
+    storage.mark_alert_attempt.assert_not_awaited()

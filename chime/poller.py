@@ -330,19 +330,20 @@ class Poller:
         """Send one claimed alert and update alert_log (OK / FAILED / DEFERRED)."""
         result = _normalize_send_result(await self.send(pending.telegram_id, pending.message))
         if result is SendResult.OK:
-            if pending.event is not None:
-                # Telegram already delivered. mark_alert_sent failure must not
-                # re-raise (disarm proceeds) or count as a send failure (would
-                # dead-letter / re-queue a message the user already got).
-                marked = await self._mark_sent_best_effort(pending.log_id, event=pending.event)
-                if marked:
-                    log.info(
-                        "alert_sent",
-                        rule_id=pending.rule_id,
-                        event_key=pending.event.event_key,
-                    )
-            else:
-                await self.storage.mark_alert_sent(pending.log_id)
+            # Telegram already delivered. mark_alert_sent failure must not
+            # re-raise or leave the row retryable (duplicate push).
+            event_key = pending.event.event_key if pending.event is not None else None
+            marked = await self._mark_sent_best_effort(
+                pending.log_id,
+                rule_id=pending.rule_id,
+                event_key=event_key,
+            )
+            if marked:
+                log.info(
+                    "alert_sent",
+                    rule_id=pending.rule_id,
+                    event_key=event_key,
+                )
         elif result is SendResult.FAILED:
             await self._record_send_failure(pending.log_id, rule_id=pending.rule_id)
         elif result is SendResult.DEFERRED:
@@ -373,7 +374,13 @@ class Poller:
         await self._deliver_one(pending)
         return True
 
-    async def _mark_sent_best_effort(self, log_id: int, *, event: AlertEvent) -> bool:
+    async def _mark_sent_best_effort(
+        self,
+        log_id: int,
+        *,
+        rule_id: int | None = None,
+        event_key: str | None = None,
+    ) -> bool:
         """Mark message_sent; retry once on failure. Never raises.
 
         Returns True if marked. If both attempts fail, dead-letters so
@@ -387,8 +394,8 @@ class Poller:
                 log.exception(
                     "mark_alert_sent_failed",
                     alert_log_id=log_id,
-                    rule_id=event.rule_id,
-                    event_key=event.event_key,
+                    rule_id=rule_id,
+                    event_key=event_key,
                     attempt=attempt,
                 )
         with contextlib.suppress(Exception):
@@ -396,8 +403,8 @@ class Poller:
         log.warning(
             "mark_alert_sent_abandoned",
             alert_log_id=log_id,
-            rule_id=event.rule_id,
-            event_key=event.event_key,
+            rule_id=rule_id,
+            event_key=event_key,
         )
         return False
 
