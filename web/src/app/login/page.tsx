@@ -1,4 +1,7 @@
+import Link from "next/link";
+
 import { LoginForm } from "@/components/login-form";
+import { NfaFooter } from "@/components/nfa-footer";
 import {
   getDashAuthConfig,
   publicDemoAllowlist,
@@ -18,24 +21,28 @@ export default function LoginPage() {
       : null;
 
   return (
-    <main className="flex flex-1 flex-col items-center justify-center px-6 py-16">
-      <div className="flex w-full max-w-md flex-col gap-8">
-        <header className="flex flex-col gap-2">
-          <p className="text-3xl font-semibold tracking-tight">Chime</p>
-          <h1 className="text-lg text-muted-foreground">
-            Sign in to manage watchlists and alerts
-          </h1>
-          <p className="text-sm text-muted-foreground">
-            Telegram-first CSE alerts. Dashboard reads Postgres only — not
-            investment advice.
-          </p>
-        </header>
-        <LoginForm
-          allowlist={allowlist}
-          defaultTelegramId={defaultId}
-          demoEnabled={cfg.demoAuthEnabled}
-        />
+    <main className="chime-atmosphere flex min-h-full flex-1 flex-col">
+      <div className="mx-auto flex w-full max-w-md flex-1 flex-col justify-center px-6 py-16">
+        <p className="chime-rise font-display text-5xl font-semibold tracking-tight text-foreground sm:text-6xl">
+          <Link href="/" className="transition-opacity hover:opacity-80">
+            Chime
+          </Link>
+        </p>
+        <h1 className="chime-rise chime-rise-delay-1 mt-5 text-xl font-medium text-foreground sm:text-2xl">
+          Manage watchlists and alerts
+        </h1>
+        <p className="chime-rise chime-rise-delay-2 mt-3 text-sm text-muted-foreground sm:text-base">
+          Telegram still delivers the push. This dashboard only reads Postgres.
+        </p>
+        <div className="chime-rise chime-rise-delay-3 mt-8">
+          <LoginForm
+            allowlist={allowlist}
+            defaultTelegramId={defaultId}
+            demoEnabled={cfg.demoAuthEnabled}
+          />
+        </div>
       </div>
+      <NfaFooter />
     </main>
   );
 }

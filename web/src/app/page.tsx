@@ -1,6 +1,8 @@
-import { redirect } from "next/navigation";
+import Link from "next/link";
 import { cookies } from "next/headers";
 
+import { NfaFooter } from "@/components/nfa-footer";
+import { Button } from "@/components/ui/button";
 import { getDashAuthConfig, SESSION_COOKIE } from "@/lib/auth/config";
 import { verifySessionToken } from "@/lib/auth/session";
 
@@ -13,18 +15,39 @@ export default async function HomePage() {
       ? verifySessionToken(raw, cfg.sessionSecret)
       : null;
 
-  if (!session) {
-    redirect("/login");
-  }
+  const signedIn = Boolean(session);
 
-  // Watchlist UI lands in a later ticket (E2-D05). Authenticated home is a stub.
   return (
-    <main className="flex flex-1 flex-col items-center justify-center gap-4 px-6 py-16">
-      <p className="text-3xl font-semibold tracking-tight">Chime</p>
-      <p className="text-sm text-muted-foreground">
-        Signed in (user_id {session.user_id}). Watchlist UI coming next.
-      </p>
-      <p className="text-xs text-muted-foreground">Not financial advice.</p>
+    <main className="chime-atmosphere flex min-h-full flex-1 flex-col">
+      <div className="mx-auto flex w-full max-w-3xl flex-1 flex-col justify-center px-6 py-16 sm:py-24">
+        <p className="chime-rise font-display text-6xl font-semibold tracking-tight text-foreground sm:text-7xl md:text-8xl">
+          Chime
+        </p>
+        <h1 className="chime-rise chime-rise-delay-1 mt-6 max-w-xl text-2xl font-medium leading-snug text-foreground sm:text-3xl">
+          CSE alerts that reach you on Telegram
+        </h1>
+        <p className="chime-rise chime-rise-delay-2 mt-4 max-w-md text-base text-muted-foreground sm:text-lg">
+          Set price and disclosure watches here; pushes fire when conditions
+          match — no terminal left open.
+        </p>
+        <div className="chime-rise chime-rise-delay-3 mt-10 flex flex-wrap items-center gap-3">
+          {signedIn ? (
+            <Button asChild size="lg" className="min-w-36 transition-transform hover:-translate-y-0.5">
+              <Link href="/watchlist">Open watchlist</Link>
+            </Button>
+          ) : (
+            <Button asChild size="lg" className="min-w-36 transition-transform hover:-translate-y-0.5">
+              <Link href="/login">Sign in</Link>
+            </Button>
+          )}
+          {!signedIn ? (
+            <Button asChild variant="outline" size="lg">
+              <Link href="/login">Manage alerts</Link>
+            </Button>
+          ) : null}
+        </div>
+      </div>
+      <NfaFooter />
     </main>
   );
 }

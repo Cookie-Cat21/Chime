@@ -28,12 +28,22 @@ A shorter copy also lives at repo-root [`THIRD_PARTY.md`](../THIRD_PARTY.md)
 | [next](https://github.com/vercel/next.js) | MIT | App Router UI + Route Handlers |
 | [react](https://github.com/facebook/react) / react-dom | MIT | UI |
 | [tailwindcss](https://github.com/tailwindlabs/tailwindcss) | MIT | Styling |
+| [@tailwindcss/postcss](https://github.com/tailwindlabs/tailwindcss) | MIT | PostCSS integration (dev) |
+| [tw-animate-css](https://github.com/Wombosvideo/tw-animate-css) | MIT | Animation utilities used by shadcn |
 | [pg](https://github.com/brianc/node-postgres) | MIT | Postgres client (no cse.lk from `web/`) |
 | [shadcn/ui](https://ui.shadcn.com/) (copied components + CLI) | MIT | Button / Input / Label primitives |
 | [radix-ui](https://www.radix-ui.com/) | MIT | Accessible primitives (via shadcn) |
 | [class-variance-authority](https://github.com/joe-bell/cva) | Apache-2.0 | Variant helpers |
 | [clsx](https://github.com/lukeed/clsx) / [tailwind-merge](https://github.com/dcastil/tailwind-merge) | MIT | className utilities |
 | [lucide-react](https://github.com/lucide-icons/lucide) | ISC | Icons |
+
+### Fonts (served via `next/font/google`, not npm packages)
+
+| Face | License | Role |
+|---|---|---|
+| [Fraunces](https://fonts.google.com/specimen/Fraunces) | OFL-1.1 | Display / brand wordmark |
+| [Sora](https://fonts.google.com/specimen/Sora) | OFL-1.1 | UI body |
+| [JetBrains Mono](https://fonts.google.com/specimen/JetBrains+Mono) | OFL-1.1 | Code / IDs |
 
 Exact versions: see `web/package-lock.json`. ESLint / TypeScript tooling is
 dev-only.
