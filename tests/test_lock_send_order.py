@@ -10,7 +10,7 @@ import pytest
 from chime.config import Settings
 from chime.domain import AlertType, PreviousPriceState, PriceSnapshot
 from chime.notify import SendResult
-from chime.poller import Poller
+from chime.poller import PendingSend, Poller
 from tests.conftest import claim_unsent_deque, make_disclosure, make_rule
 
 
@@ -20,6 +20,35 @@ def _settings() -> Settings:
         database_url="postgresql://x",
         poll_jitter_seconds=0,
     )
+
+
+@pytest.mark.asyncio
+async def test_deferred_send_result_does_not_mark_message_sent() -> None:
+    """E17-Q01: RetryAfter/deferred sends remain retryable, not message_sent."""
+
+    async def send(_chat_id: int, _text: str) -> SendResult:
+        return SendResult.DEFERRED
+
+    storage = AsyncMock()
+    storage.mark_alert_attempt = AsyncMock(return_value=1)
+    storage.mark_alert_sent = AsyncMock()
+    storage.mark_delivery_attempted_ok = AsyncMock()
+
+    poller = Poller(_settings(), storage, AsyncMock(), send)
+    await poller._deliver_one(
+        PendingSend(
+            log_id=701,
+            telegram_id=1001,
+            message="retry later",
+            already_claimed_new=True,
+            rule_id=3,
+            symbol="JKH.N0000",
+        )
+    )
+
+    storage.mark_alert_attempt.assert_awaited_once_with(701)
+    storage.mark_alert_sent.assert_not_awaited()
+    storage.mark_delivery_attempted_ok.assert_not_awaited()
 
 
 @pytest.mark.asyncio
