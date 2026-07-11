@@ -176,7 +176,11 @@ export function AlertCreateForm() {
           className="border-input bg-background h-10 rounded-lg border px-3 text-sm outline-none focus-visible:border-ring focus-visible:ring-2 focus-visible:ring-ring/40"
           value={type}
           onChange={(e) => {
-            setType(e.target.value as AlertType);
+            const nextType = e.target.value as AlertType;
+            setType(nextType);
+            if (nextType === "disclosure") {
+              setThreshold("");
+            }
             clearField("type");
             clearField("threshold");
           }}
