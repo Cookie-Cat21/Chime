@@ -18,7 +18,7 @@ export function AppNav({ active }: { active?: string }) {
       <div className="mx-auto flex max-w-3xl items-center justify-between gap-3 px-4 py-3 sm:px-6">
         <Link
           href="/"
-          className="font-display text-xl font-semibold tracking-tight text-foreground"
+          className="rounded-sm font-display text-xl font-semibold tracking-tight text-foreground focus-visible:ring-2 focus-visible:ring-ring/50 focus-visible:outline-none"
           onClick={() => setOpen(false)}
         >
           Chime
@@ -34,8 +34,8 @@ export function AppNav({ active }: { active?: string }) {
                 href={link.href}
                 className={
                   isActive
-                    ? "font-medium text-foreground"
-                    : "text-muted-foreground transition-colors hover:text-foreground"
+                    ? "rounded-sm font-medium text-foreground focus-visible:ring-2 focus-visible:ring-ring/50 focus-visible:outline-none"
+                    : "rounded-sm text-muted-foreground transition-colors hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring/50 focus-visible:outline-none"
                 }
               >
                 {link.label}
@@ -47,7 +47,7 @@ export function AppNav({ active }: { active?: string }) {
         {/* Mobile menu toggle */}
         <button
           type="button"
-          className="inline-flex h-10 w-10 items-center justify-center rounded-md text-foreground sm:hidden"
+          className="inline-flex h-10 w-10 items-center justify-center rounded-md text-foreground focus-visible:ring-2 focus-visible:ring-ring/50 focus-visible:outline-none sm:hidden"
           aria-expanded={open}
           aria-controls="chime-mobile-nav"
           aria-label={open ? "Close menu" : "Open menu"}
@@ -81,7 +81,7 @@ export function AppNav({ active }: { active?: string }) {
                   <Link
                     href={link.href}
                     onClick={() => setOpen(false)}
-                    className={`block py-3 text-base ${
+                    className={`block rounded-sm py-3 text-base focus-visible:ring-2 focus-visible:ring-ring/50 focus-visible:outline-none ${
                       isActive
                         ? "font-medium text-foreground"
                         : "text-muted-foreground"

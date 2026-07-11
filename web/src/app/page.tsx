@@ -25,7 +25,7 @@ export default async function HomePage() {
   }
 
   return (
-    <main className="chime-atmosphere flex min-h-full flex-1 flex-col">
+    <main id="main-content" tabIndex={-1} className="chime-atmosphere flex min-h-full flex-1 flex-col">
       <div className="mx-auto flex w-full max-w-3xl flex-1 flex-col justify-center px-6 py-16 sm:py-24">
         <p className="chime-rise font-display text-6xl font-semibold tracking-tight text-foreground sm:text-7xl md:text-8xl">
           Chime

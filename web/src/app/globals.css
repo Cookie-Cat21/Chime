@@ -95,6 +95,46 @@
   html {
     @apply font-sans;
   }
+  /* Visible keyboard focus — teal ring, 3px for WCAG non-text contrast */
+  :focus-visible {
+    outline: 2px solid var(--ring);
+    outline-offset: 2px;
+  }
+  /* Buttons/inputs already use ring utilities; keep outline for links/nav */
+  a:focus-visible,
+  button:focus-visible,
+  [role="button"]:focus-visible,
+  summary:focus-visible {
+    outline: 2px solid var(--ring);
+    outline-offset: 2px;
+  }
+}
+
+/* Skip link: off-screen until focused (E6-D02) */
+.chime-skip-link {
+  position: absolute;
+  left: 1rem;
+  top: 0;
+  z-index: 100;
+  padding: 0.5rem 1rem;
+  border-radius: var(--radius);
+  background: var(--primary);
+  color: var(--primary-foreground);
+  font-size: 0.875rem;
+  font-weight: 500;
+  text-decoration: none;
+  transform: translateY(-120%);
+  transition: transform 0.15s ease;
+}
+
+.chime-skip-link:focus {
+  transform: translateY(0.75rem);
+  outline: 2px solid var(--ring);
+  outline-offset: 2px;
+}
+
+.chime-skip-link:focus-visible {
+  transform: translateY(0.75rem);
 }
 
 /* Full-bleed atmospheric plane for brand surfaces */
