@@ -17,17 +17,21 @@ make factory-verify   # clears DATABASE_URL (unit path)
 ## State
 
 - See `SCOREBOARD.json` for lifetime score  
-- Active board: `EPOCH12_BOARD.md` (CLEAR) — refill activates `EPOCH13_BOARD.md`  
+- Active board: `EPOCH13_BOARD.md` (refilled after Epoch 12 CLEAR)  
 - Loop: `AGENTIC_LOOP.md` + `PORTFOLIO_PLAN.md` + `LONG_RUN_OPS.md`
 - Prior: Epochs 10–11 cleared on this lineage; Epoch 12 residual reliability drained
 
-## E11-O01 / E12 refill path
+## E12 -> E13 refill path
 
-Epoch 11 CLEAR → staged Epoch 12 → `make factory-refill` → drained 8 items
-(durable TG-OK ledger, DOA display log, pool contention health, web health
-degrade, alerts history delivery badges, stale health copy, web regression
-tests, alert_log contract). Epoch 13 is STAGED for anti-idle.
+Epoch 12 CLEAR -> `make factory-refill` -> Epoch 13 active. Epoch 12 drained
+8 residual reliability / ops polish items: durable TG-OK ledger, DOA display
+log, pool contention health, web health degrade, alerts history delivery
+badges, stale health copy, web regression tests, and alert_log contract docs.
+
+Canonical factory verification is `make factory-verify`, which runs the unit
+path with `DATABASE_URL=` via `scripts/factory/verify.sh`:
+`DATABASE_URL= pytest -q --tb=line`.
 
 ## Next wave hint
 
-`make factory-refill` then drain Epoch 13 OPEN rows. Do not invent out-of-fence fuel.
+Drain Epoch 13 OPEN rows only. Do not invent out-of-fence fuel.

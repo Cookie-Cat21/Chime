@@ -110,7 +110,7 @@ def test_missing_rule_created_at_fail_closed() -> None:
         threshold=None,
         created_at=None,
     )
-    disc = make_disclosure()
+    disc = make_disclosure(published_at=datetime(2026, 7, 12, 6, 0, 0, tzinfo=UTC))
     assert evaluate_disclosure_rules(disclosure=disc, rules=[rule]) == []
 
 

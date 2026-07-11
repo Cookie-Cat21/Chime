@@ -378,7 +378,14 @@ async def cmd_myalerts(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
     assert user_id is not None
     rules = await storage.list_alerts(user_id)
     if not rules:
-        await update.effective_message.reply_text("No active alerts. Set one with /alert.")
+        await update.effective_message.reply_text(
+            "No active alerts yet. Try:\n"
+            "/alert JKH.N0000 above 100\n"
+            "/alert JKH.N0000 below 90\n"
+            "/alert JKH.N0000 move 5\n"
+            "/alert JKH.N0000 disclosure\n"
+            f"{disclaimer()}"
+        )
         return
     lines = ["Your alerts:"]
     for r in rules:
@@ -405,7 +412,10 @@ async def cmd_mywatchlist(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
     assert user_id is not None
     symbols = await storage.list_watchlist(user_id)
     if not symbols:
-        await update.effective_message.reply_text("Watchlist empty. Add with /watch SYMBOL.")
+        await update.effective_message.reply_text(
+            "Watchlist empty. Add a CSE symbol with /watch SYMBOL.\n"
+            "Example: /watch JKH.N0000"
+        )
         return
     await update.effective_message.reply_text("Watchlist:\n" + "\n".join(symbols))
 

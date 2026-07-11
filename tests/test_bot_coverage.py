@@ -273,7 +273,13 @@ async def test_cmd_myalerts_empty_and_formatted() -> None:
     storage.list_alerts = AsyncMock(return_value=[])
     update, context = _make_update_context(storage=storage)
     await cmd_myalerts(update, context)
-    assert "No active alerts" in update.effective_message.reply_text.await_args.args[0]
+    empty_reply = update.effective_message.reply_text.await_args.args[0]
+    assert "No active alerts" in empty_reply
+    assert "/alert JKH.N0000 above 100" in empty_reply
+    assert "/alert JKH.N0000 below 90" in empty_reply
+    assert "/alert JKH.N0000 move 5" in empty_reply
+    assert "/alert JKH.N0000 disclosure" in empty_reply
+    assert disclaimer() in empty_reply
 
     rules = [
         AlertRule(
@@ -327,7 +333,10 @@ async def test_cmd_mywatchlist_empty_and_list() -> None:
     storage.list_watchlist = AsyncMock(return_value=[])
     update, context = _make_update_context(storage=storage)
     await cmd_mywatchlist(update, context)
-    assert "Watchlist empty" in update.effective_message.reply_text.await_args.args[0]
+    empty_reply = update.effective_message.reply_text.await_args.args[0]
+    assert "Watchlist empty" in empty_reply
+    assert "/watch SYMBOL" in empty_reply
+    assert "Example: /watch JKH.N0000" in empty_reply
 
     storage.list_watchlist = AsyncMock(return_value=["COMB.N0000", "JKH.N0000"])
     update2, context2 = _make_update_context(storage=storage)
