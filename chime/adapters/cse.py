@@ -126,6 +126,28 @@ def _ms_to_dt(ms: int | None) -> datetime:
     return datetime.fromtimestamp(ms / 1000.0, tz=UTC)
 
 
+_DATE_OF_ANNOUNCEMENT_FORMATS = (
+    "%d %b %Y",  # "30 Jun 2026" — primary CSE portal format
+    "%d %B %Y",  # "30 June 2026"
+    "%Y-%m-%d",
+)
+
+
+def _parse_date_of_announcement(value: str | None) -> datetime | None:
+    """Parse CSE dateOfAnnouncement strings to UTC midnight; None if unparseable."""
+    if value is None:
+        return None
+    text = value.strip()
+    if not text:
+        return None
+    for fmt in _DATE_OF_ANNOUNCEMENT_FORMATS:
+        try:
+            return datetime.strptime(text, fmt).replace(tzinfo=UTC)
+        except ValueError:
+            continue
+    return None
+
+
 def trade_row_to_snapshot(row: TradeSummaryRow, *, now: datetime | None = None) -> PriceSnapshot:
     ts = _ms_to_dt(row.lastTradedTime) if row.lastTradedTime else (now or datetime.now(UTC))
     return PriceSnapshot(
@@ -174,12 +196,14 @@ def announcement_to_disclosure(
     external = row.announcementId if row.announcementId is not None else row.id
     if external is None:
         return None
-    # Missing createdDate must NOT become "now" — that would look newer than any
-    # rule.created_at and flood Telegram on backfill.
-    if row.createdDate is None:
-        published = datetime(1970, 1, 1, tzinfo=UTC)
-    else:
+    # Prefer createdDate (epoch ms). If missing, try dateOfAnnouncement before
+    # falling back to epoch 1970 — never "now", which would flood on backfill.
+    if row.createdDate is not None:
         published = _ms_to_dt(row.createdDate)
+    else:
+        published = _parse_date_of_announcement(row.dateOfAnnouncement) or datetime(
+            1970, 1, 1, tzinfo=UTC
+        )
     title = row.announcementCategory or "Announcement"
     if row.remarks:
         title = f"{title}: {row.remarks}"
@@ -387,10 +411,8 @@ class CSEClient:
                     out.append(disc)
             return out
 
-        try:
-            return cast(list[Disclosure], await self._guarded("getAnnouncementByCompany", _call))
-        except CircuitOpenError:
-            return []
+        # CircuitOpenError propagates (do not swallow as [] — empty means HTTP OK)
+        return cast(list[Disclosure], await self._guarded("getAnnouncementByCompany", _call))
 
     async def fetch_approved_announcements(self) -> list[AnnouncementRow]:
         async def _call() -> list[AnnouncementRow]:
@@ -402,10 +424,8 @@ class CSEClient:
                 raise
             return list(parsed.approvedAnnouncements)
 
-        try:
-            return cast(list[AnnouncementRow], await self._guarded("approvedAnnouncement", _call))
-        except CircuitOpenError:
-            return []
+        # CircuitOpenError propagates (do not swallow as [] — empty means HTTP OK)
+        return cast(list[AnnouncementRow], await self._guarded("approvedAnnouncement", _call))
 
     async def symbol_exists(self, symbol: str) -> bool:
         snap = await self.fetch_company_info(symbol)

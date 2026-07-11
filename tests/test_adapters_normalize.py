@@ -84,7 +84,44 @@ def test_announcement_falls_back_to_id_field() -> None:
     assert disc.external_id == "55"
     assert disc.title == "Other"
     assert disc.url == f"{ANNOUNCEMENTS_PAGE}#55"
-    # Missing createdDate → epoch (not "now") so backfill cannot flood
+    # Missing createdDate and dateOfAnnouncement → epoch (not "now")
+    assert disc.published_at == datetime(1970, 1, 1, tzinfo=UTC)
+
+
+def test_announcement_uses_date_of_announcement_when_created_date_null() -> None:
+    """WS-001: parse dateOfAnnouncement like '30 Jun 2026' when createdDate is null."""
+    row = AnnouncementRow(
+        announcementId=42,
+        announcementCategory="Financial",
+        createdDate=None,
+        dateOfAnnouncement="30 Jun 2026",
+    )
+    disc = announcement_to_disclosure(row, symbol="JKH.N0000")
+    assert disc is not None
+    assert disc.published_at == datetime(2026, 6, 30, 0, 0, 0, tzinfo=UTC)
+
+
+def test_announcement_undated_still_epoch_fail_closed() -> None:
+    """WS-001: neither createdDate nor parseable dateOfAnnouncement → epoch."""
+    row = AnnouncementRow(
+        announcementId=43,
+        announcementCategory="Other",
+        createdDate=None,
+        dateOfAnnouncement=None,
+    )
+    disc = announcement_to_disclosure(row, symbol="COMB.N0000")
+    assert disc is not None
+    assert disc.published_at == datetime(1970, 1, 1, tzinfo=UTC)
+
+
+def test_announcement_unparseable_date_of_announcement_epoch() -> None:
+    row = AnnouncementRow(
+        announcementId=44,
+        createdDate=None,
+        dateOfAnnouncement="not-a-date",
+    )
+    disc = announcement_to_disclosure(row, symbol="COMB.N0000")
+    assert disc is not None
     assert disc.published_at == datetime(1970, 1, 1, tzinfo=UTC)
 
 

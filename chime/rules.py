@@ -6,6 +6,8 @@ No I/O inside evaluation.
 
 from __future__ import annotations
 
+from datetime import UTC, datetime
+
 from chime.domain import (
     AlertEvent,
     AlertRule,
@@ -14,6 +16,13 @@ from chime.domain import (
     PreviousPriceState,
     PriceSnapshot,
 )
+
+
+def _as_utc_aware(dt: datetime) -> datetime:
+    """Normalize naive or aware datetimes to UTC-aware for safe comparison."""
+    if dt.tzinfo is None:
+        return dt.replace(tzinfo=UTC)
+    return dt.astimezone(UTC)
 
 
 def crossed_above(prev: float | None, curr: float, threshold: float) -> bool:
@@ -187,9 +196,10 @@ def evaluate_disclosure_rules(
     """Fire disclosure rules for newly seen announcements on watched symbols.
 
     Skips announcements published at or before the rule's created_at so historical
-    backfill never floods Telegram.
+    backfill never floods Telegram. Missing rule.created_at fails closed (no fire).
     """
     events: list[AlertEvent] = []
+    published = _as_utc_aware(disclosure.published_at)
     for rule in rules:
         if not rule.active:
             continue
@@ -197,7 +207,11 @@ def evaluate_disclosure_rules(
             continue
         if rule.symbol != disclosure.symbol:
             continue
-        if rule.created_at is not None and disclosure.published_at <= rule.created_at:
+        # Fail-closed: without created_at we cannot gate backfill safely.
+        if rule.created_at is None:
+            continue
+        created = _as_utc_aware(rule.created_at)
+        if published <= created:
             continue
         events.append(
             AlertEvent(
