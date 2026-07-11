@@ -73,7 +73,7 @@ class Poller:
         self._scheduler: AsyncIOScheduler | None = None
         self._stopping = asyncio.Event()
         self.last_tick_at: datetime | None = None
-        self.last_tick_ok: bool = True
+        self.last_tick_ok: bool = False
         self.last_error: str | None = None
         self.price_poll_ok: bool = True
         self.disclosure_poll_ok: bool = True

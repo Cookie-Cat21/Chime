@@ -19,6 +19,13 @@ def _settings() -> Settings:
     )
 
 
+def test_fresh_poller_last_tick_ok_false() -> None:
+    """M7: cold start must not report last_tick_ok until a tick succeeds."""
+    poller = Poller(_settings(), AsyncMock(), AsyncMock(), AsyncMock())
+    assert poller.last_tick_ok is False
+    assert poller.last_tick_at is None
+
+
 @pytest.mark.asyncio
 async def test_circuit_open_with_watchlist_sets_last_tick_ok_false() -> None:
     storage = AsyncMock()
