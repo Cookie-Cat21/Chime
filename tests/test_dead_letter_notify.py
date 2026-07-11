@@ -90,6 +90,30 @@ async def test_record_send_deferred_notifies_once_at_ceiling() -> None:
 
 
 @pytest.mark.asyncio
+async def test_dead_letter_notify_path_attempted_once_per_alert_log_id() -> None:
+    storage = AsyncMock()
+    storage.mark_alert_attempt = AsyncMock(
+        side_effect=[MAX_SEND_ATTEMPTS, MAX_SEND_ATTEMPTS + 1]
+    )
+    storage.dead_letter = AsyncMock()
+    send = AsyncMock(return_value=SendResult.OK)
+
+    poller = _poller(send=send, storage=storage)
+    for _ in range(2):
+        await poller._record_send_failure(
+            55,
+            rule_id=3,
+            telegram_id=1001,
+            symbol="JKH.N0000",
+        )
+
+    assert storage.dead_letter.await_count == 2
+    send.assert_awaited_once_with(
+        1001, format_dead_letter_notify("JKH.N0000", MAX_SEND_ATTEMPTS)
+    )
+
+
+@pytest.mark.asyncio
 async def test_dead_letter_notify_failure_is_log_only_no_attempt_bump() -> None:
     """Notify send failure must not call mark_alert_attempt / dead_letter again."""
     storage = AsyncMock()

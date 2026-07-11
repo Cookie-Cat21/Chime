@@ -157,6 +157,8 @@ class Poller:
         self._delivered_ok_tokens: set[str] = set()
         self._delivery_ok_records: dict[str, dict[str, Any]] = {}
         self._load_delivery_ok_ledger()
+        # Dead-letter user notification is best-effort and one-shot per process.
+        self._dead_letter_notify_attempted_ids: set[int] = set()
 
     async def run_once(self, *, force: bool = False) -> list[AlertEvent]:
         """Single poll cycle. Returns events claimed (delivered after unlock)."""
@@ -528,6 +530,16 @@ class Poller:
                 has_symbol=bool(symbol),
             )
             return
+        if alert_log_id in self._dead_letter_notify_attempted_ids:
+            log.info(
+                "dead_letter_notify_already_attempted",
+                alert_log_id=alert_log_id,
+                rule_id=rule_id,
+                symbol=symbol,
+                attempts=attempts,
+            )
+            return
+        self._dead_letter_notify_attempted_ids.add(alert_log_id)
         text = format_dead_letter_notify(symbol, attempts)
         try:
             result = _normalize_send_result(await self.send(telegram_id, text))
