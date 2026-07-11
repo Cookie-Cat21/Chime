@@ -551,7 +551,9 @@ class Storage:
                     FROM alert_log al
                     JOIN alert_rules ar ON ar.id = al.rule_id
                     JOIN users u ON u.id = ar.user_id
-                    WHERE al.message_sent = FALSE AND al.dead_lettered = FALSE
+                    WHERE al.message_sent = FALSE
+                      AND al.dead_lettered = FALSE
+                      AND ar.active = TRUE
                     ORDER BY al.fired_at
                     LIMIT %s
                     """,
