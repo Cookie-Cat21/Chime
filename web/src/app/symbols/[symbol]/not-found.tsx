@@ -18,15 +18,16 @@ export default function SymbolNotFound() {
           title="Symbol not found"
           description={
             <>
-              That ticker isn’t in Chime’s known stocks list. Add a symbol from
-              your watchlist only after the poller has seen it, or use{" "}
+              Chime only opens symbol pages for CSE tickers the poller has
+              already seen. Add it to your watchlist first, or use{" "}
               <code className="font-mono text-xs">/watch SYMBOL</code> in
-              Telegram.
+              Telegram, and Chime will keep watching in the background. Not
+              financial advice.
             </>
           }
           action={
             <Button asChild variant="outline">
-              <Link href="/watchlist">← Back to watchlist</Link>
+              <Link href="/watchlist">Go to watchlist</Link>
             </Button>
           }
         />
