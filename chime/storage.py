@@ -1,4 +1,431 @@
-"""Postgres persistence layer (snapshots, disclosures, users, rules, alert log).
+"""Postgres persistence layer (snapshots, disclosures, users, rules, alert log)."""
 
-Not implemented yet — see CLAUDE.md build order and suggested schema.
-"""
+from __future__ import annotations
+
+from collections.abc import AsyncIterator, Sequence
+from contextlib import asynccontextmanager
+from datetime import datetime
+from typing import Any, cast
+
+from psycopg.rows import dict_row
+from psycopg_pool import AsyncConnectionPool
+
+from chime.domain import (
+    AlertEvent,
+    AlertRule,
+    AlertType,
+    Disclosure,
+    PreviousPriceState,
+    PriceSnapshot,
+)
+
+
+def _as_row(row: Any) -> dict[str, Any]:
+    return cast(dict[str, Any], row)
+
+
+def _as_rows(rows: Any) -> list[dict[str, Any]]:
+    return [cast(dict[str, Any], r) for r in rows]
+
+
+class Storage:
+    def __init__(self, database_url: str, *, min_size: int = 1, max_size: int = 4) -> None:
+        self._pool = AsyncConnectionPool(
+            conninfo=database_url,
+            min_size=min_size,
+            max_size=max_size,
+            open=False,
+            kwargs={"row_factory": dict_row},
+        )
+
+    async def open(self) -> None:
+        await self._pool.open()
+        await self._pool.wait()
+
+    async def close(self) -> None:
+        await self._pool.close()
+
+    @asynccontextmanager
+    async def connection(self) -> AsyncIterator[Any]:
+        async with self._pool.connection() as conn:
+            yield conn
+
+    async def upsert_stock(
+        self, symbol: str, name: str | None = None, sector: str | None = None
+    ) -> None:
+        symbol = symbol.strip().upper()
+        async with self._pool.connection() as conn:
+            await conn.execute(
+                """
+                INSERT INTO stocks (symbol, name, sector)
+                VALUES (%s, %s, %s)
+                ON CONFLICT (symbol) DO UPDATE SET
+                    name = COALESCE(EXCLUDED.name, stocks.name),
+                    sector = COALESCE(EXCLUDED.sector, stocks.sector),
+                    updated_at = now()
+                """,
+                (symbol, name, sector),
+            )
+
+    async def insert_snapshot(self, snap: PriceSnapshot) -> PriceSnapshot:
+        await self.upsert_stock(snap.symbol, snap.name)
+        async with self._pool.connection() as conn:
+            row = await (
+                await conn.execute(
+                    """
+                    INSERT INTO price_snapshots (
+                        symbol, price, change, change_pct, previous_close,
+                        volume, trade_count, turnover, high, low, open, market_cap, ts
+                    ) VALUES (
+                        %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s
+                    )
+                    RETURNING id
+                    """,
+                    (
+                        snap.symbol,
+                        snap.price,
+                        snap.change,
+                        snap.change_pct,
+                        snap.previous_close,
+                        snap.volume,
+                        snap.trade_count,
+                        snap.turnover,
+                        snap.high,
+                        snap.low,
+                        snap.open,
+                        snap.market_cap,
+                        snap.ts,
+                    ),
+                )
+            ).fetchone()
+        assert row is not None
+        return snap.model_copy(update={"id": int(_as_row(row)["id"])})
+
+    async def latest_snapshot(self, symbol: str) -> PriceSnapshot | None:
+        symbol = symbol.strip().upper()
+        async with self._pool.connection() as conn:
+            row = await (
+                await conn.execute(
+                    """
+                    SELECT * FROM price_snapshots
+                    WHERE symbol = %s
+                    ORDER BY ts DESC, id DESC
+                    LIMIT 1
+                    """,
+                    (symbol,),
+                )
+            ).fetchone()
+        if not row:
+            return None
+        return _row_to_snapshot(_as_row(row))
+
+    async def previous_snapshot(self, symbol: str, *, before_id: int) -> PriceSnapshot | None:
+        symbol = symbol.strip().upper()
+        async with self._pool.connection() as conn:
+            row = await (
+                await conn.execute(
+                    """
+                    SELECT * FROM price_snapshots
+                    WHERE symbol = %s AND id < %s
+                    ORDER BY id DESC
+                    LIMIT 1
+                    """,
+                    (symbol, before_id),
+                )
+            ).fetchone()
+        if not row:
+            return None
+        return _row_to_snapshot(_as_row(row))
+
+    async def get_previous_state(self, symbol: str, *, before_id: int) -> PreviousPriceState:
+        prev = await self.previous_snapshot(symbol, before_id=before_id)
+        async with self._pool.connection() as conn:
+            rows = await (
+                await conn.execute(
+                    """
+                    SELECT al.event_key
+                    FROM alert_log al
+                    JOIN alert_rules ar ON ar.id = al.rule_id
+                    WHERE ar.symbol = %s AND al.event_key LIKE 'move:%%'
+                    """,
+                    (symbol.strip().upper(),),
+                )
+            ).fetchall()
+            move_keys = {r["event_key"] for r in _as_rows(rows)}
+        if prev is None:
+            return PreviousPriceState(price=None, change_pct=None, move_fired_keys=move_keys)
+        return PreviousPriceState(
+            price=prev.price,
+            change_pct=prev.change_pct,
+            move_fired_keys=move_keys,
+        )
+
+    async def insert_disclosure_if_new(self, disc: Disclosure) -> Disclosure | None:
+        """Insert disclosure; return it with id if newly inserted, else None."""
+        await self.upsert_stock(disc.symbol, disc.company_name)
+        async with self._pool.connection() as conn:
+            row = await (
+                await conn.execute(
+                    """
+                    INSERT INTO disclosures (
+                        external_id, symbol, title, category, url, company_name,
+                        published_at, seen_at
+                    ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
+                    ON CONFLICT (external_id, symbol) DO NOTHING
+                    RETURNING id
+                    """,
+                    (
+                        disc.external_id,
+                        disc.symbol,
+                        disc.title,
+                        disc.category,
+                        disc.url,
+                        disc.company_name,
+                        disc.published_at,
+                        disc.seen_at,
+                    ),
+                )
+            ).fetchone()
+        if row is None:
+            return None
+        return disc.model_copy(update={"id": int(_as_row(row)["id"])})
+
+    async def ensure_user(self, telegram_id: int) -> int:
+        async with self._pool.connection() as conn:
+            row = await (
+                await conn.execute(
+                    """
+                    INSERT INTO users (telegram_id)
+                    VALUES (%s)
+                    ON CONFLICT (telegram_id) DO UPDATE SET telegram_id = EXCLUDED.telegram_id
+                    RETURNING id
+                    """,
+                    (telegram_id,),
+                )
+            ).fetchone()
+        assert row is not None
+        return int(_as_row(row)["id"])
+
+    async def add_watch(self, user_id: int, symbol: str) -> None:
+        symbol = symbol.strip().upper()
+        await self.upsert_stock(symbol)
+        async with self._pool.connection() as conn:
+            await conn.execute(
+                """
+                INSERT INTO watchlist_items (user_id, symbol)
+                VALUES (%s, %s)
+                ON CONFLICT DO NOTHING
+                """,
+                (user_id, symbol),
+            )
+
+    async def remove_watch(self, user_id: int, symbol: str) -> bool:
+        symbol = symbol.strip().upper()
+        async with self._pool.connection() as conn:
+            row = await (
+                await conn.execute(
+                    """
+                    DELETE FROM watchlist_items
+                    WHERE user_id = %s AND symbol = %s
+                    RETURNING symbol
+                    """,
+                    (user_id, symbol),
+                )
+            ).fetchone()
+        return row is not None
+
+    async def list_watchlist(self, user_id: int) -> list[str]:
+        async with self._pool.connection() as conn:
+            rows = await (
+                await conn.execute(
+                    """
+                    SELECT symbol FROM watchlist_items
+                    WHERE user_id = %s
+                    ORDER BY symbol
+                    """,
+                    (user_id,),
+                )
+            ).fetchall()
+        return [r["symbol"] for r in _as_rows(rows)]
+
+    async def watched_symbols(self) -> list[str]:
+        async with self._pool.connection() as conn:
+            rows = await (
+                await conn.execute(
+                    "SELECT DISTINCT symbol FROM watchlist_items ORDER BY symbol"
+                )
+            ).fetchall()
+        return [r["symbol"] for r in _as_rows(rows)]
+
+    async def create_alert_rule(
+        self,
+        user_id: int,
+        symbol: str,
+        alert_type: AlertType,
+        threshold: float | None,
+    ) -> AlertRule:
+        symbol = symbol.strip().upper()
+        await self.upsert_stock(symbol)
+        await self.add_watch(user_id, symbol)
+        async with self._pool.connection() as conn:
+            # Deactivate any existing identical active rule first
+            await conn.execute(
+                """
+                UPDATE alert_rules
+                SET active = FALSE
+                WHERE user_id = %s AND symbol = %s AND type = %s
+                  AND COALESCE(threshold, -1) = COALESCE(%s, -1) AND active
+                """,
+                (user_id, symbol, alert_type.value, threshold),
+            )
+            row = await (
+                await conn.execute(
+                    """
+                    INSERT INTO alert_rules (user_id, symbol, type, threshold, active, armed)
+                    VALUES (%s, %s, %s, %s, TRUE, TRUE)
+                    RETURNING id, user_id, symbol, type, threshold, active, armed
+                    """,
+                    (user_id, symbol, alert_type.value, threshold),
+                )
+            ).fetchone()
+            user = await (
+                await conn.execute(
+                    "SELECT telegram_id FROM users WHERE id = %s",
+                    (user_id,),
+                )
+            ).fetchone()
+        assert row is not None and user is not None
+        r = _as_row(row)
+        u = _as_row(user)
+        return AlertRule(
+            id=int(r["id"]),
+            user_id=int(r["user_id"]),
+            telegram_id=int(u["telegram_id"]),
+            symbol=r["symbol"],
+            type=AlertType(r["type"]),
+            threshold=r["threshold"],
+            active=bool(r["active"]),
+            armed=bool(r["armed"]),
+        )
+
+    async def list_alerts(self, user_id: int) -> list[AlertRule]:
+        async with self._pool.connection() as conn:
+            rows = await (
+                await conn.execute(
+                    """
+                    SELECT ar.*, u.telegram_id
+                    FROM alert_rules ar
+                    JOIN users u ON u.id = ar.user_id
+                    WHERE ar.user_id = %s AND ar.active
+                    ORDER BY ar.created_at
+                    """,
+                    (user_id,),
+                )
+            ).fetchall()
+        return [_row_to_rule(_as_row(r)) for r in rows]
+
+    async def active_rules_for_symbols(self, symbols: Sequence[str]) -> list[AlertRule]:
+        if not symbols:
+            return []
+        async with self._pool.connection() as conn:
+            rows = await (
+                await conn.execute(
+                    """
+                    SELECT ar.*, u.telegram_id
+                    FROM alert_rules ar
+                    JOIN users u ON u.id = ar.user_id
+                    WHERE ar.active AND ar.symbol = ANY(%s)
+                    """,
+                    (list(symbols),),
+                )
+            ).fetchall()
+        return [_row_to_rule(_as_row(r)) for r in rows]
+
+    async def set_rule_armed(self, rule_id: int, armed: bool) -> None:
+        async with self._pool.connection() as conn:
+            await conn.execute(
+                "UPDATE alert_rules SET armed = %s WHERE id = %s",
+                (armed, rule_id),
+            )
+
+    async def claim_alert(self, event: AlertEvent, message_text: str) -> int | None:
+        """Insert-first claim. Returns alert_log id if newly claimed, else None."""
+        async with self._pool.connection() as conn:
+            row = await (
+                await conn.execute(
+                    """
+                    INSERT INTO alert_log (
+                        rule_id, snapshot_id, event_key, message_sent, message_text
+                    )
+                    VALUES (%s, %s, %s, FALSE, %s)
+                    ON CONFLICT (rule_id, event_key) DO NOTHING
+                    RETURNING id
+                    """,
+                    (event.rule_id, event.snapshot_id, event.event_key, message_text),
+                )
+            ).fetchone()
+        if row is None:
+            return None
+        return int(_as_row(row)["id"])
+
+    async def mark_alert_sent(self, alert_log_id: int) -> None:
+        async with self._pool.connection() as conn:
+            await conn.execute(
+                "UPDATE alert_log SET message_sent = TRUE WHERE id = %s",
+                (alert_log_id,),
+            )
+
+    async def unsent_alerts(self, *, limit: int = 50) -> list[dict[str, Any]]:
+        async with self._pool.connection() as conn:
+            rows = await (
+                await conn.execute(
+                    """
+                    SELECT al.id, al.rule_id, al.message_text, u.telegram_id
+                    FROM alert_log al
+                    JOIN alert_rules ar ON ar.id = al.rule_id
+                    JOIN users u ON u.id = ar.user_id
+                    WHERE al.message_sent = FALSE
+                    ORDER BY al.fired_at
+                    LIMIT %s
+                    """,
+                    (limit,),
+                )
+            ).fetchall()
+        return _as_rows(rows)
+
+    async def health_check(self) -> bool:
+        async with self._pool.connection() as conn:
+            row = await (await conn.execute("SELECT 1 AS ok")).fetchone()
+        return bool(row and _as_row(row)["ok"] == 1)
+
+
+def _row_to_snapshot(row: dict[str, Any]) -> PriceSnapshot:
+    return PriceSnapshot(
+        id=int(row["id"]),
+        symbol=row["symbol"],
+        price=float(row["price"]),
+        previous_close=row.get("previous_close"),
+        change=row.get("change"),
+        change_pct=row.get("change_pct"),
+        volume=row.get("volume"),
+        trade_count=row.get("trade_count"),
+        turnover=row.get("turnover"),
+        high=row.get("high"),
+        low=row.get("low"),
+        open=row.get("open"),
+        market_cap=row.get("market_cap"),
+        ts=row["ts"] if isinstance(row["ts"], datetime) else datetime.fromisoformat(str(row["ts"])),
+    )
+
+
+def _row_to_rule(row: dict[str, Any]) -> AlertRule:
+    return AlertRule(
+        id=int(row["id"]),
+        user_id=int(row["user_id"]),
+        telegram_id=int(row["telegram_id"]),
+        symbol=row["symbol"],
+        type=AlertType(row["type"]),
+        threshold=row.get("threshold"),
+        active=bool(row["active"]),
+        armed=bool(row.get("armed", True)),
+    )
