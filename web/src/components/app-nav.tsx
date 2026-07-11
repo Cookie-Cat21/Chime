@@ -3,6 +3,8 @@
 import Link from "next/link";
 import { useState } from "react";
 
+import { NavSession } from "@/components/nav-session";
+
 const links = [
   { href: "/watchlist", label: "Watchlist" },
   { href: "/alerts", label: "Alerts" },
@@ -44,28 +46,32 @@ export function AppNav({ active }: { active?: string }) {
           })}
         </nav>
 
-        {/* Mobile menu toggle */}
-        <button
-          type="button"
-          className="inline-flex h-10 w-10 items-center justify-center rounded-md text-foreground focus-visible:ring-2 focus-visible:ring-ring/50 focus-visible:outline-none sm:hidden"
-          aria-expanded={open}
-          aria-controls="chime-mobile-nav"
-          aria-label={open ? "Close menu" : "Open menu"}
-          onClick={() => setOpen((v) => !v)}
-        >
-          <span className="sr-only">{open ? "Close" : "Menu"}</span>
-          <span className="flex w-5 flex-col gap-1.5" aria-hidden>
-            <span
-              className={`h-0.5 w-full bg-foreground motion-safe:transition-transform ${open ? "translate-y-2 rotate-45" : ""}`}
-            />
-            <span
-              className={`h-0.5 w-full bg-foreground motion-safe:transition-opacity ${open ? "opacity-0" : ""}`}
-            />
-            <span
-              className={`h-0.5 w-full bg-foreground motion-safe:transition-transform ${open ? "-translate-y-2 -rotate-45" : ""}`}
-            />
-          </span>
-        </button>
+        <div className="flex items-center gap-2">
+          <NavSession />
+
+          {/* Mobile menu toggle */}
+          <button
+            type="button"
+            className="inline-flex h-10 w-10 items-center justify-center rounded-md text-foreground focus-visible:ring-2 focus-visible:ring-ring/50 focus-visible:outline-none sm:hidden"
+            aria-expanded={open}
+            aria-controls="chime-mobile-nav"
+            aria-label={open ? "Close menu" : "Open menu"}
+            onClick={() => setOpen((v) => !v)}
+          >
+            <span className="sr-only">{open ? "Close" : "Menu"}</span>
+            <span className="flex w-5 flex-col gap-1.5" aria-hidden>
+              <span
+                className={`h-0.5 w-full bg-foreground motion-safe:transition-transform ${open ? "translate-y-2 rotate-45" : ""}`}
+              />
+              <span
+                className={`h-0.5 w-full bg-foreground motion-safe:transition-opacity ${open ? "opacity-0" : ""}`}
+              />
+              <span
+                className={`h-0.5 w-full bg-foreground motion-safe:transition-transform ${open ? "-translate-y-2 -rotate-45" : ""}`}
+              />
+            </span>
+          </button>
+        </div>
       </div>
 
       {open ? (
@@ -93,6 +99,9 @@ export function AppNav({ active }: { active?: string }) {
               );
             })}
           </ul>
+          <div className="border-t border-border/60 py-3">
+            <NavSession compact />
+          </div>
         </nav>
       ) : null}
     </header>

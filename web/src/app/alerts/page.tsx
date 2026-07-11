@@ -32,10 +32,21 @@ type AlertsPayload = {
   }[];
 };
 
-export default async function AlertsPage() {
+export default async function AlertsPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ symbol?: string }>;
+}) {
   await requirePageSession();
+  const sp = await searchParams;
+  const symbolFilter = sp.symbol?.trim().toUpperCase() || "";
 
-  const res = await serverApiGet("/api/v1/alerts");
+  const qs = new URLSearchParams();
+  if (symbolFilter) qs.set("symbol", symbolFilter);
+  const path =
+    qs.size > 0 ? `/api/v1/alerts?${qs.toString()}` : "/api/v1/alerts";
+
+  const res = await serverApiGet(path);
   const payload: AlertsPayload | null = res.ok
     ? ((await res.json()) as AlertsPayload)
     : null;
@@ -51,6 +62,32 @@ export default async function AlertsPage() {
           Active rules. Creating an alert also adds the symbol to your
           watchlist. Pushes still go to Telegram.
         </p>
+
+        <form
+          method="get"
+          className="mt-6 flex flex-col gap-3 sm:flex-row sm:items-end"
+        >
+          <label className="flex min-w-0 flex-1 flex-col gap-1.5 text-sm">
+            <span className="text-muted-foreground">Symbol filter</span>
+            <input
+              name="symbol"
+              defaultValue={symbolFilter}
+              placeholder="e.g. JKH.N0000"
+              className="h-10 w-full rounded-md border border-input bg-background px-3 font-mono text-sm outline-none focus-visible:border-ring focus-visible:ring-2 focus-visible:ring-ring/40"
+            />
+          </label>
+          <button
+            type="submit"
+            className="inline-flex h-10 shrink-0 items-center justify-center rounded-md bg-primary px-4 text-sm font-medium text-primary-foreground transition-colors hover:bg-primary/90"
+          >
+            Apply
+          </button>
+          {symbolFilter ? (
+            <Button asChild variant="outline" className="h-10 shrink-0">
+              <Link href="/alerts">Clear</Link>
+            </Button>
+          ) : null}
+        </form>
 
         <AlertCreateForm />
 
@@ -75,21 +112,39 @@ export default async function AlertsPage() {
           />
         ) : payload.rules.length === 0 ? (
           <EmptyState
-            title="No active alerts"
+            title={
+              symbolFilter
+                ? `No active alerts for ${symbolFilter}`
+                : "No active alerts"
+            }
             description={
-              <>
-                Create a rule above — price cross, daily move, or new
-                disclosure. Same as{" "}
-                <code className="font-mono text-xs">
-                  /alert SYMBOL above PRICE
-                </code>{" "}
-                in Telegram; Chime pings you when it fires.
-              </>
+              symbolFilter ? (
+                <>
+                  No matching rules for{" "}
+                  <code className="font-mono text-xs">{symbolFilter}</code>.
+                  Clear the filter or create a new alert above.
+                </>
+              ) : (
+                <>
+                  Create a rule above — price cross, daily move, or new
+                  disclosure. Same as{" "}
+                  <code className="font-mono text-xs">
+                    /alert SYMBOL above PRICE
+                  </code>{" "}
+                  in Telegram; Chime pings you when it fires.
+                </>
+              )
             }
             action={
-              <Button asChild variant="outline">
-                <a href="#alert_symbol">Create an alert</a>
-              </Button>
+              symbolFilter ? (
+                <Button asChild variant="outline">
+                  <Link href="/alerts">Clear filter</Link>
+                </Button>
+              ) : (
+                <Button asChild variant="outline">
+                  <a href="#alert_symbol">Create an alert</a>
+                </Button>
+              )
             }
           />
         ) : (

@@ -10,6 +10,7 @@ export const runtime = "nodejs";
 
 /**
  * GET /api/v1/alerts — session user's alert rules (active=true by default).
+ * Optional `?symbol=` filters to one CSE symbol (case-insensitive normalize).
  */
 export async function GET(request: NextRequest) {
   const gated = requireSession(request);
@@ -20,8 +21,27 @@ export async function GET(request: NextRequest) {
   // Default true; ?active=false lists cancelled; omit / true → active only.
   const activeOnly = activeParam === null || activeParam === "true";
 
+  const symbolRaw = url.searchParams.get("symbol");
+  let symbol: string | null = null;
+  if (symbolRaw != null && symbolRaw.trim()) {
+    symbol = normalizeSymbol(symbolRaw);
+    if (!symbol) {
+      return jsonError(400, "invalid_symbol", "Invalid CSE symbol.");
+    }
+  }
+
   try {
     const pool = getPool();
+    const params: unknown[] = [gated.session.user_id];
+    const clauses = ["user_id = $1"];
+    if (activeOnly) {
+      clauses.push("active = TRUE");
+    }
+    if (symbol) {
+      params.push(symbol);
+      clauses.push(`symbol = $${params.length}`);
+    }
+
     const result = await pool.query<{
       id: string | number;
       symbol: string;
@@ -31,16 +51,11 @@ export async function GET(request: NextRequest) {
       armed: boolean;
       created_at: Date | string;
     }>(
-      activeOnly
-        ? `SELECT id, symbol, type, threshold, active, armed, created_at
-           FROM alert_rules
-           WHERE user_id = $1 AND active = TRUE
-           ORDER BY id ASC`
-        : `SELECT id, symbol, type, threshold, active, armed, created_at
-           FROM alert_rules
-           WHERE user_id = $1
-           ORDER BY id ASC`,
-      [gated.session.user_id],
+      `SELECT id, symbol, type, threshold, active, armed, created_at
+       FROM alert_rules
+       WHERE ${clauses.join(" AND ")}
+       ORDER BY id ASC`,
+      params,
     );
 
     const rules = result.rows.map((row) => ({

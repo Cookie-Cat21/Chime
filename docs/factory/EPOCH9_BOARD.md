@@ -4,9 +4,9 @@
 
 | ID | Item | Status |
 |---|---|---|
-| E9-D01 | GET /api/v1/me used by shell for user chip | OPEN |
-| E9-D02 | Logout button (CSRF) in nav | OPEN |
-| E9-D03 | Alerts filter by symbol query param | OPEN |
+| E9-D01 | GET /api/v1/me used by shell for user chip | DONE |
+| E9-D02 | Logout button (CSRF) in nav | DONE |
+| E9-D03 | Alerts filter by symbol query param | DONE |
 | E9-Q01 | CSRF unit/integration test for logout without token → 400 | OPEN |
 | E9-Q02 | Session missing → 401 on mutate routes test | OPEN |
 | E9-O01 | PORTFOLIO_NODES + portfolio_sum.py stub | OPEN |
