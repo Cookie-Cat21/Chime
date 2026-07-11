@@ -67,13 +67,14 @@ Flow:
 
 Until then: widget is a **disabled stub** — must not call verify endpoints or accept `hash` params.
 
-### CSRF
+### CSRF (canonical bootstrap)
 
-Cookie sessions are automatically attached by the browser. Mutating methods (`POST`, `PATCH`, `PUT`, `DELETE`) under `/api/v1/*` (except login itself) **must** require a CSRF token:
+Cookie sessions are automatically attached by the browser. CSRF is frozen as follows (API contract mirrors this; do not re-invent):
 
-- Double-submit cookie **or** synchronizer token issued at login / `GET /api/v1/me` (or a dedicated `GET /api/v1/auth/csrf`).
-- Reject cross-origin requests by default (deny-by-default CORS; same-origin dashboard only in v1).
-- `SameSite` alone is not sufficient documentation — CSRF check is mandatory on writes.
+1. **Login** (`POST /auth/demo`, later `/auth/telegram`) is the only mutating route **exempt** from CSRF. On success it sets the HttpOnly session cookie **and** issues CSRF material: a non-HttpOnly CSRF cookie (double-submit) **and/or** `csrf_token` in the JSON body for the client to send as a header.
+2. **All other mutating methods** (`POST`, `PATCH`, `PUT`, `DELETE`) under `/api/v1/*` — **including `POST /auth/logout`** — **must** require a matching `X-CSRF-Token` header (value equals the CSRF cookie / issued token). No logout exemption.
+3. Reject cross-origin requests by default (deny-by-default CORS; same-origin dashboard only in v1). `SameSite` alone is not sufficient — CSRF check is mandatory on writes.
+4. Optional refresh: `GET /api/v1/me` (or `GET /api/v1/auth/csrf`) may re-issue CSRF material; login remains the primary bootstrap.
 
 ### Health / ops gating
 

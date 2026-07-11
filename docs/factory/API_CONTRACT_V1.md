@@ -17,7 +17,7 @@ This document is the single source of truth for dash REST shapes. WAVE1_DASH `/a
 |---|---|
 | Content type | `application/json; charset=utf-8` |
 | Auth | Signed HttpOnly session cookie after login ([ADR 001](../adr/001-dash-auth.md)). `user_id` is taken from the session only. |
-| CSRF | Required on all mutating methods except `POST /auth/demo` and `POST /auth/logout` (logout should still be same-site / CSRF-safe preferred). Header e.g. `X-CSRF-Token`. |
+| CSRF | Bootstrap at login: session cookie + CSRF cookie and/or `csrf_token` in JSON. All mutating methods require matching `X-CSRF-Token` **except** login (`POST /auth/demo`, later `/auth/telegram`). **`POST /auth/logout` requires CSRF** (no exemption). See [ADR 001 § CSRF](../adr/001-dash-auth.md). |
 | Symbols | Uppercase; same regex as bot (`SYMBOL_RE`). Invalid → `400` `invalid_symbol`. |
 | Timestamps | ISO-8601 UTC strings. |
 | NFA | **UI-only.** API returns raw facts; clients render `disclaimer()` chrome. |
@@ -51,7 +51,8 @@ All non-2xx JSON errors:
 
 | Route class | Requirement |
 |---|---|
-| `POST /auth/demo`, `POST /auth/logout` | Public (demo gated by env) |
+| `POST /auth/demo` | Public (demo gated by env); CSRF-exempt |
+| `POST /auth/logout` | Valid session + CSRF |
 | `GET /me`, watchlist, alerts, symbols, disclosures, history | Valid session |
 | Mutating watchlist/alerts | Valid session + CSRF |
 | `GET /health` | **Ops-gated** (valid session in v1 demo; not anonymously public by default) |
@@ -81,7 +82,7 @@ Demo only (`DASH_DEMO_AUTH=1` + allowlist). See ADR 001.
 }
 ```
 
-Sets `Set-Cookie: chime_session=…; HttpOnly; Secure; SameSite=Lax; Path=/`.
+Sets `Set-Cookie: chime_session=…; HttpOnly; Secure; SameSite=Lax; Path=/` **and** CSRF material (non-HttpOnly CSRF cookie and/or `csrf_token` in the JSON body). See ADR 001 § CSRF.
 
 **Errors:** `403 demo_auth_disabled` · `403 telegram_id_not_allowlisted` · `400 validation_error`
 
@@ -91,13 +92,15 @@ Telegram Login Widget payload verified server-side; response same shape as demo.
 
 ### `POST /api/v1/auth/logout`
 
+Requires valid session + matching `X-CSRF-Token` (no CSRF exemption).
+
 **Response** `200`
 
 ```json
 { "ok": true }
 ```
 
-Clears session cookie.
+Clears session cookie (and CSRF cookie if used).
 
 ### `GET /api/v1/me`
 
@@ -391,7 +394,7 @@ Both DB `id` and `external_id` are required in the payload (resolves IA↔WAVE n
 |---|---|---|
 | `POST` | `/api/v1/auth/demo` | Allowlist demo login |
 | `POST` | `/api/v1/auth/telegram` | Future |
-| `POST` | `/api/v1/auth/logout` | Clear session |
+| `POST` | `/api/v1/auth/logout` | Clear session (session + CSRF) |
 | `GET` | `/api/v1/me` | Current user (+ optional CSRF) |
 | `GET` | `/api/v1/health` | Ops-gated |
 | `GET` | `/api/v1/watchlist` | |
