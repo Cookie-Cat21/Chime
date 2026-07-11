@@ -12,8 +12,8 @@ tests, thin dash polish. No portfolio P&L / screener / TA / payments.
 | E10-Q03 | Contract order: missing session → 401 before CSRF check (doc+test) | DONE |
 | E10-D01 | Empty disclosures state on symbol detail | DONE |
 | E10-D02 | Alerts history empty copy when no fires | DONE |
-| E10-O01 | Makefile/factory-verify smoke for portfolio_sum.py | OPEN |
+| E10-O01 | Makefile/factory-verify smoke for portfolio_sum.py | DONE |
 | E10-A01 | API_CONTRACT note: 401 beats csrf_failed when both would apply | DONE |
-| E10-C01 | Adapter polite backoff / timeout error logged (unit) | OPEN |
+| E10-C01 | Adapter polite backoff / timeout error logged (unit) | DONE |
 
 Never farm. One concern per commit.
