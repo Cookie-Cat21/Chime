@@ -7,6 +7,7 @@ from unittest.mock import AsyncMock, MagicMock
 import pytest
 
 from chime.bot import cmd_cancel, cmd_unwatch
+from chime.domain import disclaimer
 
 
 def _make_update_context(
@@ -32,6 +33,21 @@ def _make_update_context(
     context.args = args
     context.application = application
     return update, context
+
+
+@pytest.mark.asyncio
+async def test_cancel_missing_id_reply_actionable_and_nfa_safe() -> None:
+    storage = AsyncMock()
+
+    update, context = _make_update_context(args=[], storage=storage)
+    await cmd_cancel(update, context)
+
+    storage.deactivate_alert.assert_not_awaited()
+    reply = update.effective_message.reply_text.await_args.args[0]
+    assert "/myalerts" in reply
+    assert "Usage: /cancel ALERT_ID" in reply
+    assert "Example: /cancel 7" in reply
+    assert disclaimer() in reply
 
 
 @pytest.mark.asyncio

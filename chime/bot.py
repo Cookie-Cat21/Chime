@@ -44,6 +44,12 @@ ALERT_USAGE = (
     "/alert SYMBOL disclosure\n"
     "Example: /alert JKH.N0000 above 100"
 )
+CANCEL_USAGE = (
+    "To cancel an alert, send its id from /myalerts.\n"
+    "Usage: /cancel ALERT_ID\n"
+    "Example: /cancel 7\n"
+    f"{disclaimer()}"
+)
 
 
 def reset_cmd_rate_limits() -> None:
@@ -343,7 +349,7 @@ async def cmd_cancel(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None
     if not update.effective_message:
         return
     if not context.args:
-        await update.effective_message.reply_text("Usage: /cancel ALERT_ID")
+        await update.effective_message.reply_text(CANCEL_USAGE)
         return
     raw = context.args[0].lstrip("#")
     try:
