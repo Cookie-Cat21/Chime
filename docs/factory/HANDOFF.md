@@ -1,8 +1,8 @@
 # Factory HANDOFF
 
 **Updated:** 2026-07-11  
-**Branch:** `cursor/epoch11-drain-cb19` (from `cursor/epoch2-agentic-loop-cb19`)  
-**PR:** see open PR for this branch / https://github.com/Cookie-Cat21/Chime/pull/5  
+**Branch:** `cursor/epoch11-drain-cb19`  
+**PR:** open for this branch (base `main`)  
 **KPI:** Portfolio Plan A — `factory_score` (not raw commits)
 
 ## Resume
@@ -11,24 +11,23 @@
 git pull origin cursor/epoch11-drain-cb19
 make factory-status
 # Continue OPEN items; refill when empty
+make factory-verify   # clears DATABASE_URL (unit path)
 ```
 
 ## State
 
 - See `SCOREBOARD.json` for lifetime score  
-- Active board: `EPOCH11_BOARD.md` (Epoch 10 CLEAR)  
+- Active board: `EPOCH12_BOARD.md` (CLEAR) — refill activates `EPOCH13_BOARD.md`  
 - Loop: `AGENTIC_LOOP.md` + `PORTFOLIO_PLAN.md` + `LONG_RUN_OPS.md`
-- Portfolio stub: `scripts/factory/portfolio_sum.py` + `PORTFOLIO_NODES.json` (chime node)
-- `make factory-verify` clears `DATABASE_URL` (unit path)
+- Prior: Epochs 10–11 cleared on this lineage; Epoch 12 residual reliability drained
 
-## E10-O01 — Epoch 10→11 refill (E11-O01)
+## E11-O01 / E12 refill path
 
-Epoch 10 is **CLEAR** (`DONE=8`). `EPOCH11_BOARD.md` was staged then activated
-via `make factory-refill` with 8 fence-legal OPEN items: bot /help+/start NFA,
-watchlist/symbol empty copy, daily-move boundary unit, circuit half-open
-stampede unit, disclosure fail-closed docs, HANDOFF. Do not invent out-of-fence
-fuel. Prefer lowest non-STAGED epoch with OPEN; refill activates lowest STAGED.
+Epoch 11 CLEAR → staged Epoch 12 → `make factory-refill` → drained 8 items
+(durable TG-OK ledger, DOA display log, pool contention health, web health
+degrade, alerts history delivery badges, stale health copy, web regression
+tests, alert_log contract). Epoch 13 is STAGED for anti-idle.
 
 ## Next wave hint
 
-Run `make factory-status` — drain Epoch 11 OPEN rows; do not re-plan from scratch.
+`make factory-refill` then drain Epoch 13 OPEN rows. Do not invent out-of-fence fuel.
