@@ -58,7 +58,7 @@ export function LoginForm({ allowlist, defaultTelegramId, demoEnabled }: Props) 
         setError(data?.error?.message ?? `Sign-in failed (${res.status}).`);
         return;
       }
-      router.push("/");
+      router.push("/watchlist");
       router.refresh();
     } catch {
       setError("Network error. Try again.");

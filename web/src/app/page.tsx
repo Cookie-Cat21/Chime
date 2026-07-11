@@ -1,11 +1,16 @@
 import Link from "next/link";
 import { cookies } from "next/headers";
+import { redirect } from "next/navigation";
 
 import { NfaFooter } from "@/components/nfa-footer";
 import { Button } from "@/components/ui/button";
 import { getDashAuthConfig, SESSION_COOKIE } from "@/lib/auth/config";
 import { verifySessionToken } from "@/lib/auth/session";
 
+/**
+ * Brand entry. Signed-in users land on watchlist (DASH_IA sitemap).
+ * Unauthenticated keep the hero; CTA → /login.
+ */
 export default async function HomePage() {
   const cfg = getDashAuthConfig();
   const jar = await cookies();
@@ -15,7 +20,9 @@ export default async function HomePage() {
       ? verifySessionToken(raw, cfg.sessionSecret)
       : null;
 
-  const signedIn = Boolean(session);
+  if (session) {
+    redirect("/watchlist");
+  }
 
   return (
     <main className="chime-atmosphere flex min-h-full flex-1 flex-col">
@@ -31,20 +38,16 @@ export default async function HomePage() {
           match — no terminal left open.
         </p>
         <div className="chime-rise chime-rise-delay-3 mt-10 flex flex-wrap items-center gap-3">
-          {signedIn ? (
-            <Button asChild size="lg" className="min-w-36 transition-transform hover:-translate-y-0.5">
-              <Link href="/watchlist">Open watchlist</Link>
-            </Button>
-          ) : (
-            <Button asChild size="lg" className="min-w-36 transition-transform hover:-translate-y-0.5">
-              <Link href="/login">Sign in</Link>
-            </Button>
-          )}
-          {!signedIn ? (
-            <Button asChild variant="outline" size="lg">
-              <Link href="/login">Manage alerts</Link>
-            </Button>
-          ) : null}
+          <Button
+            asChild
+            size="lg"
+            className="min-w-36 transition-transform hover:-translate-y-0.5"
+          >
+            <Link href="/login">Sign in</Link>
+          </Button>
+          <Button asChild variant="outline" size="lg">
+            <Link href="/login">Manage alerts</Link>
+          </Button>
         </div>
       </div>
       <NfaFooter />

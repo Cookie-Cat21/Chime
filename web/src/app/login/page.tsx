@@ -1,19 +1,33 @@
 import Link from "next/link";
+import { redirect } from "next/navigation";
+import { cookies } from "next/headers";
 
 import { LoginForm } from "@/components/login-form";
 import { NfaFooter } from "@/components/nfa-footer";
 import {
   getDashAuthConfig,
   publicDemoAllowlist,
+  SESSION_COOKIE,
 } from "@/lib/auth/config";
+import { verifySessionToken } from "@/lib/auth/session";
 
 export const metadata = {
   title: "Sign in · Chime",
   description: "Demo sign-in for the Chime CSE alert dashboard.",
 };
 
-export default function LoginPage() {
+export default async function LoginPage() {
   const cfg = getDashAuthConfig();
+  const jar = await cookies();
+  const raw = jar.get(SESSION_COOKIE)?.value;
+  const session =
+    raw && cfg.sessionSecret
+      ? verifySessionToken(raw, cfg.sessionSecret)
+      : null;
+  if (session) {
+    redirect("/watchlist");
+  }
+
   const allowlist = publicDemoAllowlist(cfg);
   const defaultId =
     cfg.defaultTelegramId && cfg.allowlist.has(cfg.defaultTelegramId)

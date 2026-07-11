@@ -7,10 +7,10 @@
 
 | ID | Item | Status |
 |---|---|---|
-| E4-D01 | Watchlist page: add/remove via CSRF APIs | OPEN |
-| E4-D02 | Alerts page: create/cancel via CSRF APIs | OPEN |
-| E4-D03 | NFA disclaimer chrome on price surfaces | OPEN |
-| E4-D04 | Login → redirect to watchlist; session gate on pages | OPEN |
+| E4-D01 | Watchlist page: add/remove via CSRF APIs | DONE |
+| E4-D02 | Alerts page: create/cancel via CSRF APIs | DONE |
+| E4-D03 | NFA disclaimer chrome on price surfaces | DONE |
+| E4-D04 | Login → redirect to watchlist; session gate on pages | DONE |
 
 ## CORE / QUALITY
 

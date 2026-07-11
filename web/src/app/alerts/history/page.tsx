@@ -2,6 +2,7 @@ import Link from "next/link";
 
 import { AppNav } from "@/components/app-nav";
 import { NfaFooter } from "@/components/nfa-footer";
+import { NfaInline } from "@/components/nfa-inline";
 import { serverApiGet } from "@/lib/api/server-fetch";
 import { requirePageSession } from "@/lib/auth/page-session";
 import { alertTypeLabel, formatTs } from "@/lib/format";
@@ -125,6 +126,8 @@ export default async function AlertHistoryPage({
             ))}
           </ul>
         )}
+
+        <NfaInline className="mt-8" />
       </main>
       <NfaFooter />
     </div>

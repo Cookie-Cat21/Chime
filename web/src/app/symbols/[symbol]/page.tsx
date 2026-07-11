@@ -3,6 +3,7 @@ import { notFound } from "next/navigation";
 
 import { AppNav } from "@/components/app-nav";
 import { NfaFooter } from "@/components/nfa-footer";
+import { NfaInline } from "@/components/nfa-inline";
 import { Sparkline } from "@/components/sparkline";
 import { serverApiGet } from "@/lib/api/server-fetch";
 import { normalizeSymbol } from "@/lib/api/symbol";
@@ -173,9 +174,7 @@ export default async function SymbolDetailPage({
             As of {formatTs(data.last.ts)} (SLT)
           </p>
         ) : null}
-        <p className="mt-2 text-xs text-muted-foreground">
-          Information only — not financial advice.
-        </p>
+        <NfaInline className="mt-2" />
       </section>
 
       <section className="mt-8 border-t border-border/60 pt-6">

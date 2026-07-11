@@ -1,7 +1,12 @@
 import Link from "next/link";
 
+import {
+  AlertCreateForm,
+  CancelAlertButton,
+} from "@/components/alert-controls";
 import { AppNav } from "@/components/app-nav";
 import { NfaFooter } from "@/components/nfa-footer";
+import { NfaInline } from "@/components/nfa-inline";
 import { serverApiGet } from "@/lib/api/server-fetch";
 import { requirePageSession } from "@/lib/auth/page-session";
 import { alertTypeLabel, formatNumber, formatTs } from "@/lib/format";
@@ -41,10 +46,11 @@ export default async function AlertsPage() {
           Alerts
         </h1>
         <p className="mt-2 max-w-lg text-sm text-muted-foreground">
-          Active rules. Create and cancel from Telegram for now (
-          <code className="font-mono text-xs">/alert</code>,{" "}
-          <code className="font-mono text-xs">/cancel</code>).
+          Active rules. Creating an alert also adds the symbol to your
+          watchlist. Pushes still go to Telegram.
         </p>
+
+        <AlertCreateForm />
 
         {!payload ? (
           <p className="mt-8 text-sm text-muted-foreground">
@@ -52,7 +58,7 @@ export default async function AlertsPage() {
           </p>
         ) : payload.rules.length === 0 ? (
           <p className="mt-8 text-sm text-muted-foreground">
-            No active alerts. Set one with{" "}
+            No active alerts. Create one above, or use{" "}
             <code className="font-mono text-xs">/alert SYMBOL above PRICE</code>{" "}
             in Telegram.
           </p>
@@ -61,9 +67,9 @@ export default async function AlertsPage() {
             {payload.rules.map((rule) => (
               <li
                 key={rule.id}
-                className="flex flex-col gap-1 py-4 first:pt-0 sm:flex-row sm:items-baseline sm:justify-between sm:gap-4"
+                className="flex flex-col gap-3 py-4 first:pt-0 sm:flex-row sm:items-center sm:justify-between sm:gap-4"
               >
-                <div className="min-w-0">
+                <div className="min-w-0 flex-1">
                   <Link
                     href={`/symbols/${encodeURIComponent(rule.symbol)}`}
                     className="font-mono text-sm font-medium underline-offset-4 hover:underline"
@@ -76,19 +82,18 @@ export default async function AlertsPage() {
                       ? ` · ${formatNumber(rule.threshold)}`
                       : ""}
                   </p>
+                  <p className="mt-1 text-xs text-muted-foreground">
+                    {rule.armed ? "Armed" : "Disarmed"} ·{" "}
+                    {formatTs(rule.created_at)}
+                  </p>
                 </div>
-                <div className="flex flex-wrap gap-2 text-xs text-muted-foreground">
-                  <span>{rule.armed ? "Armed" : "Disarmed"}</span>
-                  <span>·</span>
-                  <span>{formatTs(rule.created_at)}</span>
-                </div>
+                <CancelAlertButton ruleId={rule.id} />
               </li>
             ))}
           </ul>
         )}
-        <p className="mt-8 text-xs text-muted-foreground">
-          Information only — not financial advice.
-        </p>
+
+        <NfaInline className="mt-8" />
       </main>
       <NfaFooter />
     </div>

@@ -2,6 +2,11 @@ import Link from "next/link";
 
 import { AppNav } from "@/components/app-nav";
 import { NfaFooter } from "@/components/nfa-footer";
+import { NfaInline } from "@/components/nfa-inline";
+import {
+  UnwatchButton,
+  WatchlistAddForm,
+} from "@/components/watchlist-controls";
 import { serverApiGet } from "@/lib/api/server-fetch";
 import { requirePageSession } from "@/lib/auth/page-session";
 import { formatNumber, formatPct, formatTs } from "@/lib/format";
@@ -45,15 +50,16 @@ export default async function WatchlistPage() {
           Telegram.
         </p>
 
+        <WatchlistAddForm />
+
         {!payload ? (
           <p className="mt-8 text-sm text-muted-foreground">
             Could not load watchlist right now.
           </p>
         ) : payload.items.length === 0 ? (
           <p className="mt-8 text-sm text-muted-foreground">
-            No symbols yet — use{" "}
-            <code className="font-mono text-xs">/watch</code> in Telegram, or
-            add from Alerts once create lands.
+            No symbols yet — add one above, or use{" "}
+            <code className="font-mono text-xs">/watch</code> in Telegram.
           </p>
         ) : (
           <ul className="mt-8 divide-y divide-border/60">
@@ -68,38 +74,46 @@ export default async function WatchlistPage() {
                       ? "text-destructive"
                       : "text-muted-foreground";
               return (
-                <li key={item.symbol} className="py-4 first:pt-0">
+                <li
+                  key={item.symbol}
+                  className="flex flex-col gap-3 py-4 first:pt-0 sm:flex-row sm:items-center sm:justify-between sm:gap-4"
+                >
                   <Link
                     href={`/symbols/${encodeURIComponent(item.symbol)}`}
-                    className="group flex flex-col gap-1 sm:flex-row sm:items-baseline sm:justify-between sm:gap-4"
+                    className="group min-w-0 flex-1"
                   >
-                    <div className="min-w-0">
-                      <p className="font-mono text-sm font-medium group-hover:underline group-hover:underline-offset-4">
-                        {item.symbol}
-                      </p>
-                      {item.name ? (
-                        <p className="truncate text-xs text-muted-foreground">
-                          {item.name}
+                    <div className="flex flex-col gap-1 sm:flex-row sm:items-baseline sm:justify-between sm:gap-4">
+                      <div className="min-w-0">
+                        <p className="font-mono text-sm font-medium group-hover:underline group-hover:underline-offset-4">
+                          {item.symbol}
                         </p>
-                      ) : null}
-                    </div>
-                    <div className="flex flex-wrap items-baseline gap-x-3 gap-y-0.5 sm:justify-end">
-                      <span className="font-mono text-sm">
-                        {formatNumber(item.price)}
-                      </span>
-                      <span className={`font-mono text-sm ${tone}`}>
-                        {formatPct(item.change_pct)}
-                      </span>
-                      <span className="w-full text-xs text-muted-foreground sm:w-auto">
-                        {formatTs(item.ts)}
-                      </span>
+                        {item.name ? (
+                          <p className="truncate text-xs text-muted-foreground">
+                            {item.name}
+                          </p>
+                        ) : null}
+                      </div>
+                      <div className="flex flex-wrap items-baseline gap-x-3 gap-y-0.5 sm:justify-end">
+                        <span className="font-mono text-sm">
+                          {formatNumber(item.price)}
+                        </span>
+                        <span className={`font-mono text-sm ${tone}`}>
+                          {formatPct(item.change_pct)}
+                        </span>
+                        <span className="w-full text-xs text-muted-foreground sm:w-auto">
+                          {formatTs(item.ts)}
+                        </span>
+                      </div>
                     </div>
                   </Link>
+                  <UnwatchButton symbol={item.symbol} />
                 </li>
               );
             })}
           </ul>
         )}
+
+        <NfaInline className="mt-8" />
       </main>
       <NfaFooter />
     </div>
