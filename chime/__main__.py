@@ -114,6 +114,13 @@ def _trade_summary_count_for_health(poller: Poller) -> int | None:
     return value if isinstance(value, int) else None
 
 
+def _trade_summary_for_health(poller: Poller) -> dict[str, object]:
+    return {
+        "empty_ok": _trade_summary_empty_ok_for_health(poller),
+        "count": _trade_summary_count_for_health(poller),
+    }
+
+
 async def _refresh_both_health(storage: Storage, health: HealthState, poller: Poller) -> None:
     db_ok = False
     try:
@@ -121,8 +128,9 @@ async def _refresh_both_health(storage: Storage, health: HealthState, poller: Po
     except Exception as exc:
         log.warning("health_db_failed", error=str(exc))
     missing = list(poller.watched_missing)
-    trade_summary_empty_ok = _trade_summary_empty_ok_for_health(poller)
-    trade_summary_count = _trade_summary_count_for_health(poller)
+    trade_summary = _trade_summary_for_health(poller)
+    trade_summary_empty_ok = bool(trade_summary["empty_ok"])
+    trade_summary_count = trade_summary["count"]
     pool = _pool_for_health(storage)
     pool_contention = bool(pool.get("contention"))
     # E8-Q02: non-empty watched_missing is always degraded (not only via last_tick_ok).
@@ -143,6 +151,7 @@ async def _refresh_both_health(storage: Storage, health: HealthState, poller: Po
         watched_missing=missing,
         trade_summary_empty_ok=trade_summary_empty_ok,
         trade_summary_count=trade_summary_count,
+        tradeSummary=trade_summary,
         circuits=_circuits_for_health(poller),
         last_error=poller.last_error,
     )

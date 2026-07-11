@@ -958,6 +958,10 @@ async def run_poller_forever(
                 watched_missing=missing,
                 trade_summary_empty_ok=poller.trade_summary_empty_ok,
                 trade_summary_count=poller.trade_summary_count,
+                tradeSummary={
+                    "empty_ok": poller.trade_summary_empty_ok,
+                    "count": poller.trade_summary_count,
+                },
                 circuits=circuits,
                 last_error=poller.last_error,
             )

@@ -173,4 +173,5 @@ async def test_trade_summary_empty_ok_logs_and_surfaces_health_detail(
     assert health.ok is False
     assert health.details["trade_summary_empty_ok"] is True
     assert health.details["trade_summary_count"] == 0
+    assert health.details["tradeSummary"] == {"empty_ok": True, "count": 0}
     assert health.details["watched_missing"] == ["COMB.N0000", "JKH.N0000"]

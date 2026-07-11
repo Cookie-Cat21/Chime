@@ -13,7 +13,7 @@ P&L / screener / TA / payments / native app / competitor scrape / cse.lk from
 | E15-D01 | Watchlist load-error empty state retry affordance polish | DONE |
 | E15-D02 | Alerts history empty vs error distinction copy | DONE |
 | E15-O01 | HANDOFF Epoch 14→15 + SESSION_LOG append | OPEN |
-| E15-C01 | Health details include tradeSummary empty_ok flag when set | OPEN |
+| E15-C01 | Health details include tradeSummary empty_ok flag when set | DONE |
 | E15-A01 | Document TG-OK durable ledger path in ops runbook briefly | OPEN |
 | E15-B01 | /cancel missing-id reply stays actionable + NFA-safe | OPEN |
 
