@@ -3,6 +3,8 @@
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 
+import { InlineError } from "@/components/inline-error";
+import { useToast } from "@/components/toast";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -10,6 +12,7 @@ import { apiErrorMessage, apiMutate } from "@/lib/api/client-fetch";
 
 export function WatchlistAddForm() {
   const router = useRouter();
+  const toast = useToast();
   const [symbol, setSymbol] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [pending, setPending] = useState(false);
@@ -29,13 +32,18 @@ export function WatchlistAddForm() {
         body: { symbol: trimmed },
       });
       if (!ok) {
-        setError(apiErrorMessage(data, `Could not add (${status}).`));
+        const msg = apiErrorMessage(data, `Could not add (${status}).`);
+        setError(msg);
+        toast.error(msg);
         return;
       }
       setSymbol("");
+      toast.success(`Watching ${trimmed}. Pushes still go to Telegram.`);
       router.refresh();
     } catch {
-      setError("Network error. Try again.");
+      const msg = "Network error. Try again.";
+      setError(msg);
+      toast.error(msg);
     } finally {
       setPending(false);
     }
@@ -45,6 +53,7 @@ export function WatchlistAddForm() {
     <form
       onSubmit={onSubmit}
       className="mt-6 flex flex-col gap-3 sm:flex-row sm:items-end"
+      noValidate
     >
       <div className="flex min-w-0 flex-1 flex-col gap-1.5">
         <Label htmlFor="watch_symbol">Add symbol</Label>
@@ -54,25 +63,31 @@ export function WatchlistAddForm() {
           className="h-10 font-mono"
           placeholder="e.g. JKH.N0000"
           value={symbol}
-          onChange={(e) => setSymbol(e.target.value)}
+          onChange={(e) => {
+            setSymbol(e.target.value);
+            if (error) setError(null);
+          }}
           autoComplete="off"
+          aria-invalid={error ? true : undefined}
+          aria-describedby={error ? "watch_symbol_error" : undefined}
           required
         />
       </div>
       <Button type="submit" disabled={pending} className="h-10 shrink-0">
         {pending ? "Adding…" : "Add"}
       </Button>
-      {error ? (
-        <p className="w-full text-sm text-destructive sm:basis-full" role="alert">
-          {error}
-        </p>
-      ) : null}
+      <InlineError
+        id="watch_symbol_error"
+        message={error}
+        className="w-full sm:basis-full"
+      />
     </form>
   );
 }
 
 export function UnwatchButton({ symbol }: { symbol: string }) {
   const router = useRouter();
+  const toast = useToast();
   const [error, setError] = useState<string | null>(null);
   const [pending, setPending] = useState(false);
 
@@ -85,12 +100,17 @@ export function UnwatchButton({ symbol }: { symbol: string }) {
         { method: "DELETE" },
       );
       if (!ok) {
-        setError(apiErrorMessage(data, `Could not unwatch (${status}).`));
+        const msg = apiErrorMessage(data, `Could not unwatch (${status}).`);
+        setError(msg);
+        toast.error(msg);
         return;
       }
+      toast.success(`Removed ${symbol} from watchlist.`);
       router.refresh();
     } catch {
-      setError("Network error.");
+      const msg = "Network error.";
+      setError(msg);
+      toast.error(msg);
     } finally {
       setPending(false);
     }
@@ -107,11 +127,10 @@ export function UnwatchButton({ symbol }: { symbol: string }) {
       >
         {pending ? "…" : "Unwatch"}
       </Button>
-      {error ? (
-        <p className="max-w-[12rem] text-right text-xs text-destructive" role="alert">
-          {error}
-        </p>
-      ) : null}
+      <InlineError
+        message={error}
+        className="max-w-[12rem] px-2 py-1 text-right text-xs"
+      />
     </div>
   );
 }

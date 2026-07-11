@@ -8,8 +8,8 @@
 | E5-O01 | Production runbook: bot+poller+web compose profile | DONE |
 | E5-O02 | Structured alert_latency dashboard note / log field docs | DONE |
 | E5-O03 | Secret checklist (.env.example dash vars complete) | DONE |
-| E5-D01 | Watchlist empty-state + error toasts | OPEN |
-| E5-D02 | Alerts empty-state + validation errors | OPEN |
+| E5-D01 | Watchlist empty-state + error toasts | DONE |
+| E5-D02 | Alerts empty-state + validation errors | DONE |
 | E5-C01 | migrate idempotent test | OPEN |
 | E5-C02 | `__main__` / migrate cov bump toward overall 85 | OPEN |
 

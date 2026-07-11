@@ -5,8 +5,10 @@ import {
   CancelAlertButton,
 } from "@/components/alert-controls";
 import { AppNav } from "@/components/app-nav";
+import { EmptyState } from "@/components/empty-state";
 import { NfaFooter } from "@/components/nfa-footer";
 import { NfaInline } from "@/components/nfa-inline";
+import { Button } from "@/components/ui/button";
 import { serverApiGet } from "@/lib/api/server-fetch";
 import { requirePageSession } from "@/lib/auth/page-session";
 import { alertTypeLabel, formatNumber, formatTs } from "@/lib/format";
@@ -53,15 +55,43 @@ export default async function AlertsPage() {
         <AlertCreateForm />
 
         {!payload ? (
-          <p className="mt-8 text-sm text-muted-foreground">
-            Could not load alerts right now.
-          </p>
+          <EmptyState
+            title="Couldn’t load alerts"
+            description={
+              <>
+                Chime couldn’t fetch your rules right now. Refresh in a moment,
+                or set alerts with{" "}
+                <code className="font-mono text-xs">
+                  /alert SYMBOL above PRICE
+                </code>{" "}
+                in Telegram.
+              </>
+            }
+            action={
+              <Button asChild variant="outline">
+                <Link href="/alerts">Try again</Link>
+              </Button>
+            }
+          />
         ) : payload.rules.length === 0 ? (
-          <p className="mt-8 text-sm text-muted-foreground">
-            No active alerts. Create one above, or use{" "}
-            <code className="font-mono text-xs">/alert SYMBOL above PRICE</code>{" "}
-            in Telegram.
-          </p>
+          <EmptyState
+            title="No active alerts"
+            description={
+              <>
+                Create a rule above — price cross, daily move, or new
+                disclosure. Same as{" "}
+                <code className="font-mono text-xs">
+                  /alert SYMBOL above PRICE
+                </code>{" "}
+                in Telegram; Chime pings you when it fires.
+              </>
+            }
+            action={
+              <Button asChild variant="outline">
+                <a href="#alert_symbol">Create an alert</a>
+              </Button>
+            }
+          />
         ) : (
           <ul className="mt-8 divide-y divide-border/60">
             {payload.rules.map((rule) => (

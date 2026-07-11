@@ -1,8 +1,10 @@
 import Link from "next/link";
 
 import { AppNav } from "@/components/app-nav";
+import { EmptyState } from "@/components/empty-state";
 import { NfaFooter } from "@/components/nfa-footer";
 import { NfaInline } from "@/components/nfa-inline";
+import { Button } from "@/components/ui/button";
 import {
   UnwatchButton,
   WatchlistAddForm,
@@ -53,14 +55,37 @@ export default async function WatchlistPage() {
         <WatchlistAddForm />
 
         {!payload ? (
-          <p className="mt-8 text-sm text-muted-foreground">
-            Could not load watchlist right now.
-          </p>
+          <EmptyState
+            title="Couldn’t load watchlist"
+            description={
+              <>
+                The dashboard couldn’t reach Chime’s API just now. Check your
+                connection, then refresh — or manage symbols with{" "}
+                <code className="font-mono text-xs">/watch</code> in Telegram.
+              </>
+            }
+            action={
+              <Button asChild variant="outline">
+                <Link href="/watchlist">Try again</Link>
+              </Button>
+            }
+          />
         ) : payload.items.length === 0 ? (
-          <p className="mt-8 text-sm text-muted-foreground">
-            No symbols yet — add one above, or use{" "}
-            <code className="font-mono text-xs">/watch</code> in Telegram.
-          </p>
+          <EmptyState
+            title="No symbols yet"
+            description={
+              <>
+                Add a CSE symbol above to start watching. Or use{" "}
+                <code className="font-mono text-xs">/watch SYMBOL</code> in
+                Telegram — the list stays in sync either way.
+              </>
+            }
+            action={
+              <Button asChild variant="outline">
+                <a href="#watch_symbol">Add a symbol</a>
+              </Button>
+            }
+          />
         ) : (
           <ul className="mt-8 divide-y divide-border/60">
             {payload.items.map((item) => {

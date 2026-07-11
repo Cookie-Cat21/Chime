@@ -1,5 +1,7 @@
 import type { Metadata } from "next";
 import { Fraunces, Sora, JetBrains_Mono } from "next/font/google";
+
+import { Providers } from "@/components/providers";
 import "./globals.css";
 
 const fraunces = Fraunces({
@@ -36,7 +38,9 @@ export default function RootLayout({
       lang="en"
       className={`${fraunces.variable} ${sora.variable} ${jetbrains.variable} h-full antialiased`}
     >
-      <body className="flex min-h-full flex-col font-sans">{children}</body>
+      <body className="flex min-h-full flex-col font-sans">
+        <Providers>{children}</Providers>
+      </body>
     </html>
   );
 }
