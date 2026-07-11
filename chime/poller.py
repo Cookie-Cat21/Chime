@@ -139,6 +139,10 @@ class Poller:
         self.lock_held_skip: bool = False
         # Watched symbols absent from the latest tradeSummary (E2-C06).
         self.watched_missing: list[str] = []
+        # Last tradeSummary shape: empty HTTP-OK with a non-empty watchlist is
+        # operationally different from a partial symbol miss.
+        self.trade_summary_count: int | None = None
+        self.trade_summary_empty_ok: bool = False
         # When True, _claim_and_send queues PendingSend instead of sending inline
         # (set for the locked section of run_once).
         self._queue_sends: bool = False
@@ -372,17 +376,32 @@ class Poller:
         symbols = await self.storage.watched_symbols()
         if not symbols:
             self.watched_missing = []
+            self.trade_summary_count = None
+            self.trade_summary_empty_ok = False
             log.info("poll_no_watchlist")
             return [], True
 
         try:
             all_snaps = await self.cse.fetch_trade_summary()
         except CircuitOpenError:
+            self.trade_summary_count = None
+            self.trade_summary_empty_ok = False
             log.error("price_poll_circuit_open")
             return [], False
         except Exception as exc:
+            self.trade_summary_count = None
+            self.trade_summary_empty_ok = False
             log.exception("price_poll_failed", error=str(exc))
             return [], False
+
+        self.trade_summary_count = len(all_snaps)
+        self.trade_summary_empty_ok = len(all_snaps) == 0
+        if self.trade_summary_empty_ok:
+            log.warning(
+                "trade_summary_empty_ok",
+                watched_count=len(symbols),
+                symbols=sorted(symbols),
+            )
 
         wanted = set(symbols)
         snaps = [s for s in all_snaps if s.symbol in wanted]
@@ -917,7 +936,7 @@ async def run_poller_forever(
                 if isinstance(raw, dict):
                     circuits = raw
             health.update(
-                ok=db_ok and tick_ok and not missing,
+                ok=db_ok and tick_ok and not missing and not poller.trade_summary_empty_ok,
                 db_ok=db_ok,
                 last_tick_at=poller.last_tick_at.isoformat() if poller.last_tick_at else None,
                 last_tick_ok=tick_ok,
@@ -925,6 +944,8 @@ async def run_poller_forever(
                 disclosure_poll_ok=poller.disclosure_poll_ok,
                 lock_held_skip=poller.lock_held_skip,
                 watched_missing=missing,
+                trade_summary_empty_ok=poller.trade_summary_empty_ok,
+                trade_summary_count=poller.trade_summary_count,
                 circuits=circuits,
                 last_error=poller.last_error,
             )

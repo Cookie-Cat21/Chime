@@ -14,7 +14,7 @@ scrape / cse.lk from `web/`. Activate via `make factory-refill` after Epoch 12.
 | E13-D02 | Alerts page empty active-rules copy + create affordance | DONE |
 | E13-Q01 | Unit: disclosure rule missing created_at fails closed | OPEN |
 | E13-O01 | HANDOFF note Epoch 12→13 refill + verify unit path | OPEN |
-| E13-C01 | tradeSummary miss ops signal (log + health detail when empty-OK contrast) | OPEN |
+| E13-C01 | tradeSummary miss ops signal (log + health detail when empty-OK contrast) | DONE |
 | E13-A01 | SESSION_LOG entry for Epoch 11–12 drain | OPEN |
 
 Never farm. One concern per commit.

@@ -7,8 +7,10 @@ from unittest.mock import AsyncMock
 
 import pytest
 
+from chime.__main__ import _refresh_both_health
 from chime.config import Settings
 from chime.domain import PriceSnapshot
+from chime.health import HealthState
 from chime.poller import Poller
 
 
@@ -136,3 +138,39 @@ async def test_poll_prices_missing_still_evaluates_present() -> None:
     assert poller.watched_missing == ["COMB.N0000"]
     storage.insert_snapshot.assert_awaited_once()
     assert storage.insert_snapshot.await_args.args[0].symbol == "JKH.N0000"
+
+
+@pytest.mark.asyncio
+async def test_trade_summary_empty_ok_logs_and_surfaces_health_detail(
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    storage = AsyncMock()
+    storage.watched_symbols = AsyncMock(return_value=["JKH.N0000", "COMB.N0000"])
+    storage.active_rules_for_symbols = AsyncMock(return_value=[])
+    storage.health_check = AsyncMock(return_value=True)
+
+    cse = AsyncMock()
+    cse.fetch_trade_summary = AsyncMock(return_value=[])
+    cse.circuit_metrics = lambda: {}
+
+    poller = Poller(_settings(), storage, cse, AsyncMock(return_value=True))
+    events, price_ok = await poller._poll_prices()
+
+    assert events == []
+    assert price_ok is False
+    assert poller.trade_summary_count == 0
+    assert poller.trade_summary_empty_ok is True
+    assert poller.watched_missing == ["COMB.N0000", "JKH.N0000"]
+    out = capsys.readouterr().out
+    assert "trade_summary_empty_ok" in out
+    assert "watched_symbols_missing" in out
+
+    health = HealthState()
+    poller.last_tick_ok = False
+    poller.last_error = "poll_degraded"
+    await _refresh_both_health(storage, health, poller)
+
+    assert health.ok is False
+    assert health.details["trade_summary_empty_ok"] is True
+    assert health.details["trade_summary_count"] == 0
+    assert health.details["watched_missing"] == ["COMB.N0000", "JKH.N0000"]

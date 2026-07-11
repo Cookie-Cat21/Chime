@@ -102,6 +102,18 @@ def _pool_for_health(storage: Storage) -> dict[str, object]:
     return snapshot
 
 
+def _trade_summary_empty_ok_for_health(poller: Poller) -> bool:
+    value = getattr(poller, "trade_summary_empty_ok", False)
+    return value if isinstance(value, bool) else False
+
+
+def _trade_summary_count_for_health(poller: Poller) -> int | None:
+    value = getattr(poller, "trade_summary_count", None)
+    if isinstance(value, bool):
+        return None
+    return value if isinstance(value, int) else None
+
+
 async def _refresh_both_health(storage: Storage, health: HealthState, poller: Poller) -> None:
     db_ok = False
     try:
@@ -109,11 +121,19 @@ async def _refresh_both_health(storage: Storage, health: HealthState, poller: Po
     except Exception as exc:
         log.warning("health_db_failed", error=str(exc))
     missing = list(poller.watched_missing)
+    trade_summary_empty_ok = _trade_summary_empty_ok_for_health(poller)
+    trade_summary_count = _trade_summary_count_for_health(poller)
     pool = _pool_for_health(storage)
     pool_contention = bool(pool.get("contention"))
     # E8-Q02: non-empty watched_missing is always degraded (not only via last_tick_ok).
     details: dict[str, object] = dict(
-        ok=db_ok and poller.last_tick_ok and not missing and not pool_contention,
+        ok=(
+            db_ok
+            and poller.last_tick_ok
+            and not missing
+            and not trade_summary_empty_ok
+            and not pool_contention
+        ),
         db_ok=db_ok,
         last_tick_at=poller.last_tick_at.isoformat() if poller.last_tick_at else None,
         last_tick_ok=poller.last_tick_ok,
@@ -121,6 +141,8 @@ async def _refresh_both_health(storage: Storage, health: HealthState, poller: Po
         disclosure_poll_ok=poller.disclosure_poll_ok,
         lock_held_skip=poller.lock_held_skip,
         watched_missing=missing,
+        trade_summary_empty_ok=trade_summary_empty_ok,
+        trade_summary_count=trade_summary_count,
         circuits=_circuits_for_health(poller),
         last_error=poller.last_error,
     )

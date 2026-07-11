@@ -363,6 +363,12 @@ class CSEClient:
                     error="reqTradeSummery not a list",
                 )
                 raise ValueError("tradeSummary: reqTradeSummery not a list")
+            if not rows_raw:
+                log.warning(
+                    "cse_trade_summary_empty_ok",
+                    endpoint="tradeSummary",
+                    response_keys=sorted(str(key) for key in raw),
+                )
             now = datetime.now(UTC)
             out: list[PriceSnapshot] = []
             for item in rows_raw:
