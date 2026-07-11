@@ -1,0 +1,15 @@
+[project]
+name = "chime"
+version = "0.1.0"
+description = "Telegram-first alerting layer for the Colombo Stock Exchange (CSE)"
+requires-python = ">=3.11"
+dependencies = [
+    "python-telegram-bot",
+    "httpx",
+    "apscheduler",
+    "psycopg[binary]",
+    "python-dotenv",
+]
+
+[tool.setuptools.packages.find]
+include = ["chime*"]
