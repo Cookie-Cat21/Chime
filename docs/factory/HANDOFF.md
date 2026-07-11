@@ -10,15 +10,14 @@
 ```bash
 git pull origin cursor/epoch11-drain-cb19
 make factory-status
-make factory-refill   # after E16 CLEAR, activates EPOCH17_BOARD.md
 make factory-wave
 make factory-verify   # clears DATABASE_URL (unit path)
 ```
 
 ## State
 
-- Lifetime `factory_score` ≈ 132 (`SCOREBOARD.json`)
-- Epochs **11–16 CLEAR**; **Epoch 17 ACTIVE** for thin polish / residual units
+- Lifetime `factory_score` ≈ 140 (`SCOREBOARD.json`)
+- Epochs **11–17 CLEAR**; **Epoch 18 ACTIVE** for thin polish / pre-seed cleanup
 - Loop docs: `AGENTIC_LOOP.md`, `PORTFOLIO_PLAN.md`, `LONG_RUN_OPS.md`
 
 ## Note
