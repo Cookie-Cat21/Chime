@@ -1,6 +1,6 @@
 """Telegram bot — the only user-facing surface for v1.
 
-Commands: /start, /watch, /unwatch, /alert, /myalerts, /mywatchlist.
+Commands: /start, /watch, /unwatch, /alert, /cancel, /myalerts, /mywatchlist.
 Alert dispatch happens from the poller via notify.send_message.
 """
 
@@ -13,7 +13,7 @@ from telegram import Update
 from telegram.ext import Application, CommandHandler, ContextTypes
 
 from chime.adapters.cse import CSEClient
-from chime.domain import AlertType, disclaimer
+from chime.domain import AlertType, PriceSnapshot, disclaimer
 from chime.logging_setup import get_logger
 from chime.storage import Storage
 
@@ -23,8 +23,8 @@ SYMBOL_RE = re.compile(r"^[A-Za-z0-9]{1,12}(\.[A-Za-z0-9]{1,8})?$")
 
 START_TEXT = (
     "Chime watches the Colombo Stock Exchange and pings you on Telegram "
-    "when a price crosses your threshold, a daily move hits your %, or a "
-    "new company disclosure drops — no app or browser tab required.\n\n"
+    "when a price or daily-move alert fires — no app or browser tab required.\n\n"
+    "Disclosures need an explicit /alert SYMBOL disclosure.\n\n"
     f"{disclaimer()}"
 )
 
@@ -36,6 +36,7 @@ HELP_HINT = (
     "/alert SYMBOL below PRICE\n"
     "/alert SYMBOL move PERCENT\n"
     "/alert SYMBOL disclosure\n"
+    "/cancel ALERT_ID\n"
     "/myalerts\n"
     "/mywatchlist"
 )
@@ -53,6 +54,20 @@ async def _user_id(storage: Storage, update: Update) -> int | None:
     if update.effective_user is None:
         return None
     return await storage.ensure_user(update.effective_user.id)
+
+
+async def _lookup_symbol(
+    cse: CSEClient, symbol: str
+) -> tuple[str, PriceSnapshot | None]:
+    """Return ('ok', snap) | ('not_found', None) | ('upstream', None)."""
+    try:
+        info = await cse.fetch_company_info(symbol)
+    except Exception:
+        log.warning("cse_lookup_upstream", symbol=symbol)
+        return ("upstream", None)
+    if info is None:
+        return ("not_found", None)
+    return ("ok", info)
 
 
 async def cmd_start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -76,16 +91,19 @@ async def cmd_watch(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
             "That doesn't look like a CSE symbol. Try e.g. JKH.N0000 or COMB.N0000."
         )
         return
-    exists = await cse.symbol_exists(symbol)
-    if not exists:
+    status, info = await _lookup_symbol(cse, symbol)
+    if status == "upstream":
+        await update.effective_message.reply_text("cse.lk unreachable, try again.")
+        return
+    if status == "not_found":
         await update.effective_message.reply_text(
             f"Couldn't find {symbol} on cse.lk. Check the ticker and try again."
         )
         return
+    assert info is not None
     user_id = await _user_id(storage, update)
     assert user_id is not None
-    info = await cse.fetch_company_info(symbol)
-    await storage.upsert_stock(symbol, info.name if info else None)
+    await storage.upsert_stock(symbol, info.name)
     await storage.add_watch(user_id, symbol)
     await update.effective_message.reply_text(
         f"Watching {symbol}. Set an alert with /alert.\n{disclaimer()}"
@@ -106,8 +124,12 @@ async def cmd_unwatch(update: Update, context: ContextTypes.DEFAULT_TYPE) -> Non
     user_id = await _user_id(storage, update)
     assert user_id is not None
     removed = await storage.remove_watch(user_id, symbol)
+    deactivated = await storage.deactivate_rules_for_symbol(user_id, symbol)
     if removed:
-        await update.effective_message.reply_text(f"Removed {symbol} from your watchlist.")
+        msg = f"Removed {symbol} from your watchlist."
+        if deactivated:
+            msg += f" Deactivated {deactivated} alert(s)."
+        await update.effective_message.reply_text(msg)
     else:
         await update.effective_message.reply_text(f"{symbol} wasn't on your watchlist.")
 
@@ -161,17 +183,20 @@ async def cmd_alert(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         )
         return
 
-    exists = await cse.symbol_exists(symbol)
-    if not exists:
+    status, info = await _lookup_symbol(cse, symbol)
+    if status == "upstream":
+        await update.effective_message.reply_text("cse.lk unreachable, try again.")
+        return
+    if status == "not_found":
         await update.effective_message.reply_text(
             f"Couldn't find {symbol} on cse.lk. Check the ticker and try again."
         )
         return
+    assert info is not None
 
     user_id = await _user_id(storage, update)
     assert user_id is not None
-    info = await cse.fetch_company_info(symbol)
-    await storage.upsert_stock(symbol, info.name if info else None)
+    await storage.upsert_stock(symbol, info.name)
     rule = await storage.create_alert_rule(user_id, symbol, alert_type, threshold)
 
     if alert_type == AlertType.DISCLOSURE:
@@ -186,6 +211,37 @@ async def cmd_alert(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     await update.effective_message.reply_text(
         f"Alert #{rule.id} set: {desc}.\n{disclaimer()}"
     )
+
+
+async def cmd_cancel(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    storage: Storage = context.application.bot_data["storage"]
+    if not update.effective_message:
+        return
+    if not context.args:
+        await update.effective_message.reply_text("Usage: /cancel ALERT_ID")
+        return
+    raw = context.args[0].lstrip("#")
+    try:
+        rule_id = int(raw)
+    except ValueError:
+        await update.effective_message.reply_text(
+            "Alert id must be a number. Usage: /cancel ALERT_ID"
+        )
+        return
+    if rule_id <= 0:
+        await update.effective_message.reply_text(
+            "Alert id must be a positive number. Usage: /cancel ALERT_ID"
+        )
+        return
+    user_id = await _user_id(storage, update)
+    assert user_id is not None
+    ok = await storage.deactivate_alert(user_id, rule_id)
+    if ok:
+        await update.effective_message.reply_text(f"Cancelled alert #{rule_id}.")
+    else:
+        await update.effective_message.reply_text(
+            f"No active alert #{rule_id} found. Check /myalerts."
+        )
 
 
 async def cmd_myalerts(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -248,6 +304,7 @@ def build_application(
     app.add_handler(CommandHandler("watch", cmd_watch))
     app.add_handler(CommandHandler("unwatch", cmd_unwatch))
     app.add_handler(CommandHandler("alert", cmd_alert))
+    app.add_handler(CommandHandler("cancel", cmd_cancel))
     app.add_handler(CommandHandler("myalerts", cmd_myalerts))
     app.add_handler(CommandHandler("mywatchlist", cmd_mywatchlist))
     app.add_error_handler(on_error)

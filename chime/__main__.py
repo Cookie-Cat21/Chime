@@ -61,10 +61,12 @@ async def _run_both(settings: Settings) -> None:
             except Exception as exc:
                 log.warning("health_db_failed", error=str(exc))
             health.update(
-                ok=db_ok,
+                ok=db_ok and poller.last_tick_ok,
                 db_ok=db_ok,
                 last_tick_at=poller.last_tick_at.isoformat() if poller.last_tick_at else None,
                 last_tick_ok=poller.last_tick_ok,
+                price_poll_ok=poller.price_poll_ok,
+                disclosure_poll_ok=poller.disclosure_poll_ok,
                 last_error=poller.last_error,
             )
             await asyncio.sleep(10)
@@ -96,7 +98,7 @@ async def _run_poller(settings: Settings) -> None:
     health = HealthState()
     server = start_health_server(settings.health_host, settings.health_port, health)
     try:
-        await run_poller_forever(settings, storage, cse, send)
+        await run_poller_forever(settings, storage, cse, send, health=health)
     finally:
         await cse.aclose()
         await storage.close()

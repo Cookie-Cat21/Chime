@@ -35,6 +35,8 @@ def test_market_hours_weekday_boundaries() -> None:
 @pytest.mark.asyncio
 async def test_poller_survives_circuit_open() -> None:
     storage = AsyncMock()
+    storage.try_advisory_lock = AsyncMock(return_value=True)
+    storage.advisory_unlock = AsyncMock()
     storage.watched_symbols = AsyncMock(return_value=["JKH.N0000"])
     storage.active_rules_for_symbols = AsyncMock(return_value=[])
     storage.unsent_alerts = AsyncMock(return_value=[])
@@ -57,12 +59,14 @@ async def test_poller_survives_circuit_open() -> None:
     poller = Poller(settings, storage, cse, send)
     events = await poller.run_once(force=True)
     assert events == []
-    assert poller.last_tick_ok is True  # degraded path handled, no crash
+    assert poller.last_tick_ok is False  # watchlist present + price fetch failed
 
 
 @pytest.mark.asyncio
 async def test_poller_survives_junk_then_ok() -> None:
     storage = AsyncMock()
+    storage.try_advisory_lock = AsyncMock(return_value=True)
+    storage.advisory_unlock = AsyncMock()
     storage.watched_symbols = AsyncMock(return_value=["JKH.N0000"])
     storage.active_rules_for_symbols = AsyncMock(return_value=[])
     storage.insert_snapshot = AsyncMock(

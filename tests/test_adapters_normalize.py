@@ -71,7 +71,7 @@ def test_announcement_to_disclosure_builds_url_and_title() -> None:
     assert disc.symbol == "JKH.N0000"
     assert disc.title == "Financial: Q1 Results"
     assert disc.category == "Financial"
-    assert disc.url == f"{ANNOUNCEMENTS_PAGE}?id=99"
+    assert disc.url == f"{ANNOUNCEMENTS_PAGE}#99"
     assert disc.company_name == "John Keells Holdings PLC"
     assert disc.seen_at == seen
     assert disc.published_at == datetime.fromtimestamp(1_720_000_000_000 / 1000.0, tz=UTC)
@@ -83,7 +83,7 @@ def test_announcement_falls_back_to_id_field() -> None:
     assert disc is not None
     assert disc.external_id == "55"
     assert disc.title == "Other"
-    assert disc.url == f"{ANNOUNCEMENTS_PAGE}?id=55"
+    assert disc.url == f"{ANNOUNCEMENTS_PAGE}#55"
 
 
 def test_announcement_with_no_ids_returns_none() -> None:

@@ -28,7 +28,12 @@ python -m chime both   # or: bot | poller | tick --force
 | `python -m chime both` | Bot + poller in one process |
 | `python -m chime tick --force` | One poll cycle (ignores market hours) |
 
-## Health check
+## Latency SLO
+
+Alert **claim → Telegram send** is instrumented (`alert_latency_ms`) and targeted
+at p95 &lt; 5s. End-to-end CSE print → Telegram is bounded by
+`POLL_INTERVAL_SECONDS` (default 60s, with jitter) — the honest product SLO is
+“within one poll cycle during market hours,” not sub-5s from the exchange tick.
 
 When `bot`, `poller`, or `both` is running:
 

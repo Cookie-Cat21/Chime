@@ -31,8 +31,17 @@ def crossed_below(prev: float | None, curr: float, threshold: float) -> bool:
 
 
 def _event_key_price(rule: AlertRule, snapshot: PriceSnapshot) -> str:
-    snap_id = snapshot.id if snapshot.id is not None else int(snapshot.ts.timestamp() * 1000)
-    return f"price:{rule.id}:{snap_id}"
+    """Stable across dual-poller duplicate snapshots for the same crossing.
+
+    Uses rule + side + threshold + minute + price so two processes inserting
+    different snapshot rows for the same tick still collide on
+    alert_log UNIQUE(rule_id, event_key). Combined with armed=False after claim,
+    legitimate re-crosses after re-arm get a new minute/price fingerprint.
+    """
+    minute = snapshot.ts.strftime("%Y%m%d%H%M")
+    side = "above" if rule.type == AlertType.PRICE_ABOVE else "below"
+    thr = rule.threshold if rule.threshold is not None else 0.0
+    return f"price:{rule.id}:{side}:{thr:g}:{minute}:{snapshot.price:g}"
 
 
 def _event_key_move(rule: AlertRule, snapshot: PriceSnapshot) -> str:
@@ -80,7 +89,6 @@ def evaluate_price_rules(
                     )
                 )
             elif not rule.armed and curr < thr:
-                # Re-arm after price falls back below threshold (no fire).
                 events.append(
                     AlertEvent(
                         rule_id=rule.id,
@@ -146,7 +154,12 @@ def evaluate_price_rules(
             key = _event_key_move(rule, snapshot)
             if key in previous.move_fired_keys:
                 continue
-            if abs(pct) >= thr:
+            # Crossing semantics on |pct|: require previous |pct| below threshold
+            prev_pct = previous.change_pct
+            if prev_pct is None:
+                # Baseline only — do not fire on first observation / already-exceeded
+                continue
+            if abs(prev_pct) < thr <= abs(pct):
                 direction = "up" if pct >= 0 else "down"
                 events.append(
                     AlertEvent(
@@ -171,7 +184,11 @@ def evaluate_disclosure_rules(
     disclosure: Disclosure,
     rules: list[AlertRule],
 ) -> list[AlertEvent]:
-    """Fire disclosure rules for newly seen announcements on watched symbols."""
+    """Fire disclosure rules for newly seen announcements on watched symbols.
+
+    Skips announcements published at or before the rule's created_at so historical
+    backfill never floods Telegram.
+    """
     events: list[AlertEvent] = []
     for rule in rules:
         if not rule.active:
@@ -179,6 +196,8 @@ def evaluate_disclosure_rules(
         if rule.type != AlertType.DISCLOSURE:
             continue
         if rule.symbol != disclosure.symbol:
+            continue
+        if rule.created_at is not None and disclosure.published_at <= rule.created_at:
             continue
         events.append(
             AlertEvent(

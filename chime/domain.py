@@ -68,6 +68,7 @@ class AlertRule(BaseModel):
     threshold: float | None = None
     active: bool = True
     armed: bool = True
+    created_at: datetime | None = None
 
 
 class AlertEvent(BaseModel):

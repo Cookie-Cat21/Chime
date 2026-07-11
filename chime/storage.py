@@ -283,7 +283,7 @@ class Storage:
                     """
                     INSERT INTO alert_rules (user_id, symbol, type, threshold, active, armed)
                     VALUES (%s, %s, %s, %s, TRUE, TRUE)
-                    RETURNING id, user_id, symbol, type, threshold, active, armed
+                    RETURNING id, user_id, symbol, type, threshold, active, armed, created_at
                     """,
                     (user_id, symbol, alert_type.value, threshold),
                 )
@@ -297,6 +297,9 @@ class Storage:
         assert row is not None and user is not None
         r = _as_row(row)
         u = _as_row(user)
+        created = r.get("created_at")
+        if created is not None and not isinstance(created, datetime):
+            created = datetime.fromisoformat(str(created))
         return AlertRule(
             id=int(r["id"]),
             user_id=int(r["user_id"]),
@@ -306,6 +309,7 @@ class Storage:
             threshold=r["threshold"],
             active=bool(r["active"]),
             armed=bool(r["armed"]),
+            created_at=created,
         )
 
     async def list_alerts(self, user_id: int) -> list[AlertRule]:
@@ -347,6 +351,52 @@ class Storage:
                 "UPDATE alert_rules SET armed = %s WHERE id = %s",
                 (armed, rule_id),
             )
+
+    async def deactivate_alert(self, user_id: int, rule_id: int) -> bool:
+        """Set active=FALSE for user's rule. Return True if a row was updated."""
+        async with self._pool.connection() as conn:
+            row = await (
+                await conn.execute(
+                    """
+                    UPDATE alert_rules
+                    SET active = FALSE
+                    WHERE id = %s AND user_id = %s AND active
+                    RETURNING id
+                    """,
+                    (rule_id, user_id),
+                )
+            ).fetchone()
+        return row is not None
+
+    async def deactivate_rules_for_symbol(self, user_id: int, symbol: str) -> int:
+        """Deactivate all active rules for user+symbol. Return count."""
+        symbol = symbol.strip().upper()
+        async with self._pool.connection() as conn:
+            rows = await (
+                await conn.execute(
+                    """
+                    UPDATE alert_rules
+                    SET active = FALSE
+                    WHERE user_id = %s AND symbol = %s AND active
+                    RETURNING id
+                    """,
+                    (user_id, symbol),
+                )
+            ).fetchall()
+        return len(_as_rows(rows))
+
+    async def try_advisory_lock(self, lock_id: int = 4_201_337) -> bool:
+        """SELECT pg_try_advisory_lock(%s) — return bool."""
+        async with self._pool.connection() as conn:
+            row = await (
+                await conn.execute("SELECT pg_try_advisory_lock(%s) AS locked", (lock_id,))
+            ).fetchone()
+        return bool(row and _as_row(row)["locked"])
+
+    async def advisory_unlock(self, lock_id: int = 4_201_337) -> None:
+        """SELECT pg_advisory_unlock(%s)"""
+        async with self._pool.connection() as conn:
+            await conn.execute("SELECT pg_advisory_unlock(%s)", (lock_id,))
 
     async def claim_alert(self, event: AlertEvent, message_text: str) -> int | None:
         """Insert-first claim. Returns alert_log id if newly claimed, else None."""
@@ -419,6 +469,9 @@ def _row_to_snapshot(row: dict[str, Any]) -> PriceSnapshot:
 
 
 def _row_to_rule(row: dict[str, Any]) -> AlertRule:
+    created = row.get("created_at")
+    if created is not None and not isinstance(created, datetime):
+        created = datetime.fromisoformat(str(created))
     return AlertRule(
         id=int(row["id"]),
         user_id=int(row["user_id"]),
@@ -428,4 +481,5 @@ def _row_to_rule(row: dict[str, Any]) -> AlertRule:
         threshold=row.get("threshold"),
         active=bool(row["active"]),
         armed=bool(row.get("armed", True)),
+        created_at=created,
     )

@@ -183,7 +183,7 @@ def announcement_to_disclosure(
         company_name=row.company,
         title=title,
         category=row.announcementCategory,
-        url=f"{ANNOUNCEMENTS_PAGE}?id={external}",
+        url=f"{ANNOUNCEMENTS_PAGE}#{external}",
         published_at=_ms_to_dt(row.createdDate),
         seen_at=seen_at or datetime.now(UTC),
     )
@@ -289,13 +289,32 @@ class CSEClient:
     async def fetch_trade_summary(self) -> list[PriceSnapshot]:
         async def _call() -> list[PriceSnapshot]:
             raw = await self._request("POST", "/tradeSummary", json_body={})
-            try:
-                parsed = TradeSummaryResponse.model_validate(raw)
-            except ValidationError as exc:
-                log.error("cse_schema_error", endpoint="tradeSummary", error=str(exc))
-                raise
+            if not isinstance(raw, dict):
+                log.error("cse_schema_error", endpoint="tradeSummary", error="expected object")
+                raise ValueError("tradeSummary: expected JSON object")
+            rows_raw = raw.get("reqTradeSummery") or []
+            if not isinstance(rows_raw, list):
+                log.error(
+                    "cse_schema_error",
+                    endpoint="tradeSummary",
+                    error="reqTradeSummery not a list",
+                )
+                raise ValueError("tradeSummary: reqTradeSummery not a list")
             now = datetime.now(UTC)
-            return [trade_row_to_snapshot(row, now=now) for row in parsed.reqTradeSummery]
+            out: list[PriceSnapshot] = []
+            for item in rows_raw:
+                try:
+                    row = TradeSummaryRow.model_validate(item)
+                except ValidationError as exc:
+                    log.warning(
+                        "cse_trade_row_skipped",
+                        endpoint="tradeSummary",
+                        error=str(exc),
+                        row=str(item)[:200],
+                    )
+                    continue
+                out.append(trade_row_to_snapshot(row, now=now))
+            return out
 
         return cast(list[PriceSnapshot], await self._guarded("tradeSummary", _call))
 
@@ -317,13 +336,12 @@ class CSEClient:
                     symbol=symbol,
                     error=str(exc),
                 )
-                raise
+                # Invalid / missing symbol payloads fail validation — treat as not found
+                return None
             return symbol_info_to_snapshot(parsed.reqSymbolInfo)
 
-        try:
-            return cast(PriceSnapshot | None, await self._guarded("companyInfoSummery", _call))
-        except CircuitOpenError:
-            return None
+        # CircuitOpenError and transport errors propagate (do not swallow)
+        return cast(PriceSnapshot | None, await self._guarded("companyInfoSummery", _call))
 
     async def fetch_announcements_for_symbol(
         self,
@@ -384,8 +402,5 @@ class CSEClient:
             return []
 
     async def symbol_exists(self, symbol: str) -> bool:
-        try:
-            snap = await self.fetch_company_info(symbol)
-            return snap is not None
-        except Exception:
-            return False
+        snap = await self.fetch_company_info(symbol)
+        return snap is not None

@@ -30,6 +30,7 @@ def make_rule(
     threshold: float | None = 100.0,
     active: bool = True,
     armed: bool = True,
+    created_at: datetime | None = None,
 ) -> AlertRule:
     return AlertRule(
         id=id,
@@ -40,6 +41,7 @@ def make_rule(
         threshold=threshold,
         active=active,
         armed=armed,
+        created_at=created_at,
     )
 
 
@@ -84,7 +86,7 @@ def make_disclosure(
     external_id: str = "ann-99",
     symbol: str = "JKH.N0000",
     title: str = "Quarterly Results",
-    url: str = "https://www.cse.lk/announcements?id=99",
+    url: str = "https://www.cse.lk/announcements#99",
     published_at: datetime | None = None,
     seen_at: datetime | None = None,
 ) -> Disclosure:

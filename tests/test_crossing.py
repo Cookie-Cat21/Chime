@@ -60,7 +60,7 @@ class TestGapOpen:
         assert len(fireable) == 1
         assert fireable[0].set_armed is False
         assert "above" in fireable[0].trigger
-        assert fireable[0].event_key == "price:1:7"
+        assert fireable[0].event_key == "price:1:above:100:202607110600:105"
 
     def test_gap_open_under_threshold_fires_below(self) -> None:
         rule = make_rule(type=AlertType.PRICE_BELOW, threshold=100.0, armed=True)

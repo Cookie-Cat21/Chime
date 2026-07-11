@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from datetime import UTC, datetime, timedelta
+
 from chime.domain import AlertType
 from chime.rules import evaluate_disclosure_rules
 from tests.conftest import make_disclosure, make_rule
@@ -42,3 +44,26 @@ def test_non_disclosure_rule_type_ignored() -> None:
     rule = make_rule(type=AlertType.PRICE_ABOVE, threshold=100.0)
     disc = make_disclosure()
     assert evaluate_disclosure_rules(disclosure=disc, rules=[rule]) == []
+
+
+def test_disclosure_before_rule_created_at_no_fire() -> None:
+    created = datetime(2026, 7, 11, 12, 0, 0, tzinfo=UTC)
+    rule = make_rule(
+        type=AlertType.DISCLOSURE,
+        threshold=None,
+        created_at=created,
+    )
+    disc = make_disclosure(published_at=created - timedelta(hours=1))
+    assert evaluate_disclosure_rules(disclosure=disc, rules=[rule]) == []
+
+
+def test_disclosure_after_rule_created_at_fires() -> None:
+    created = datetime(2026, 7, 11, 12, 0, 0, tzinfo=UTC)
+    rule = make_rule(
+        type=AlertType.DISCLOSURE,
+        threshold=None,
+        created_at=created,
+    )
+    disc = make_disclosure(published_at=created + timedelta(minutes=5))
+    events = evaluate_disclosure_rules(disclosure=disc, rules=[rule])
+    assert len(events) == 1

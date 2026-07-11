@@ -11,7 +11,7 @@ import contextlib
 import random
 import signal
 from collections.abc import Awaitable, Callable
-from datetime import UTC, date, datetime, time
+from datetime import UTC, datetime, time, timedelta
 from typing import Any
 from zoneinfo import ZoneInfo
 
@@ -21,7 +21,7 @@ from apscheduler.triggers.interval import IntervalTrigger
 from chime.adapters.cse import CSEClient
 from chime.circuit import CircuitOpenError
 from chime.config import Settings
-from chime.domain import AlertEvent, format_alert_message
+from chime.domain import AlertEvent, PriceSnapshot, format_alert_message
 from chime.logging_setup import get_logger
 from chime.rules import evaluate_disclosure_rules, evaluate_price_rules, filter_fireable
 from chime.storage import Storage
@@ -29,6 +29,7 @@ from chime.storage import Storage
 log = get_logger(__name__)
 
 SendFunc = Callable[[int, str], Awaitable[bool]]
+POLL_LOCK_ID = 4_201_337
 
 
 def parse_hhmm(value: str) -> time:
@@ -63,43 +64,56 @@ class Poller:
         self.last_tick_at: datetime | None = None
         self.last_tick_ok: bool = True
         self.last_error: str | None = None
+        self.price_poll_ok: bool = True
+        self.disclosure_poll_ok: bool = True
 
     async def run_once(self, *, force: bool = False) -> list[AlertEvent]:
-        """Single poll cycle. Returns fireable events that were claimed."""
+        """Single poll cycle. Returns fireable events that were claimed+sent."""
         now = datetime.now(UTC)
         if not force and not is_market_open(now, self.settings):
             log.info("poll_skipped_outside_hours", now=now.isoformat())
             return []
 
+        locked = await self.storage.try_advisory_lock(POLL_LOCK_ID)
+        if not locked:
+            log.info("poll_skipped_lock_held")
+            return []
+
         fired: list[AlertEvent] = []
         try:
-            fired.extend(await self._poll_prices())
-            fired.extend(await self._poll_disclosures())
+            price_events, price_ok = await self._poll_prices()
+            disc_events, disc_ok = await self._poll_disclosures()
+            fired.extend(price_events)
+            fired.extend(disc_events)
             await self._retry_unsent()
-            self.last_tick_ok = True
-            self.last_error = None
+            self.price_poll_ok = price_ok
+            self.disclosure_poll_ok = disc_ok
+            symbols = await self.storage.watched_symbols()
+            self.last_tick_ok = price_ok if symbols else True
+            self.last_error = None if self.last_tick_ok else "price_poll_failed"
         except Exception as exc:
             self.last_tick_ok = False
             self.last_error = str(exc)
             log.exception("poll_cycle_failed", error=str(exc))
         finally:
             self.last_tick_at = datetime.now(UTC)
+            await self.storage.advisory_unlock(POLL_LOCK_ID)
         return fired
 
-    async def _poll_prices(self) -> list[AlertEvent]:
+    async def _poll_prices(self) -> tuple[list[AlertEvent], bool]:
         symbols = await self.storage.watched_symbols()
         if not symbols:
             log.info("poll_no_watchlist")
-            return []
+            return [], True
 
         try:
             all_snaps = await self.cse.fetch_trade_summary()
         except CircuitOpenError:
             log.error("price_poll_circuit_open")
-            return []
+            return [], False
         except Exception as exc:
             log.exception("price_poll_failed", error=str(exc))
-            return []
+            return [], False
 
         wanted = set(symbols)
         snaps = [s for s in all_snaps if s.symbol in wanted]
@@ -108,6 +122,13 @@ class Poller:
         for rule in rules:
             rules_by_symbol.setdefault(rule.symbol, []).append(rule)
 
+        return await self._evaluate_price_snaps(snaps, rules_by_symbol), True
+
+    async def _evaluate_price_snaps(
+        self,
+        snaps: list[PriceSnapshot],
+        rules_by_symbol: dict[str, list[Any]],
+    ) -> list[AlertEvent]:
         fired: list[AlertEvent] = []
         for snap in snaps:
             stored = await self.storage.insert_snapshot(snap)
@@ -120,31 +141,39 @@ class Poller:
                 rules=symbol_rules,
             )
             for event in events:
-                if event.set_armed is not None and event.trigger == "rearm":
+                if event.trigger == "rearm" and event.set_armed is True:
                     await self.storage.set_rule_armed(event.rule_id, True)
+            # Claim BEFORE disarm so a crash cannot lose the alert forever
+            for event in filter_fireable(events):
+                t0 = datetime.now(UTC)
+                claimed = await self._claim_and_send(event)
+                if not claimed:
                     continue
                 if event.set_armed is False:
                     await self.storage.set_rule_armed(event.rule_id, False)
-            for event in filter_fireable(events):
-                claimed = await self._claim_and_send(event)
-                if claimed:
-                    fired.append(event)
+                latency_ms = (datetime.now(UTC) - t0).total_seconds() * 1000
+                log.info(
+                    "alert_latency_ms",
+                    rule_id=event.rule_id,
+                    latency_ms=round(latency_ms, 1),
+                    event_key=event.event_key,
+                )
+                fired.append(event)
         return fired
 
-    async def _poll_disclosures(self) -> list[AlertEvent]:
+    async def _poll_disclosures(self) -> tuple[list[AlertEvent], bool]:
         symbols = await self.storage.watched_symbols()
         if not symbols:
-            return []
+            return [], True
         rules = await self.storage.active_rules_for_symbols(symbols)
         disclosure_rules = [r for r in rules if r.type.value == "disclosure"]
-        if not disclosure_rules:
-            # Still ingest disclosures for watched symbols (history asset)
-            pass
 
-        today = date.today()
-        from_date = date(today.year - 1, today.month, today.day).isoformat()
+        tz = ZoneInfo(self.settings.market_tz)
+        today = datetime.now(tz).date()
+        from_date = (today - timedelta(days=365)).isoformat()
         to_date = today.isoformat()
         fired: list[AlertEvent] = []
+        any_failure = False
 
         for symbol in symbols:
             try:
@@ -152,6 +181,7 @@ class Poller:
                     symbol, from_date=from_date, to_date=to_date
                 )
             except Exception as exc:
+                any_failure = True
                 log.warning("disclosure_poll_failed", symbol=symbol, error=str(exc))
                 continue
 
@@ -160,14 +190,14 @@ class Poller:
                 inserted = await self.storage.insert_disclosure_if_new(disc)
                 if inserted is None:
                     continue
+                # Historical rows are filtered by rule.created_at in the engine
                 events = evaluate_disclosure_rules(disclosure=inserted, rules=symbol_rules)
-                for event in events:
+                for event in filter_fireable(events):
                     claimed = await self._claim_and_send(event)
                     if claimed:
                         fired.append(event)
-            # Polite pacing between symbols
-            await asyncio.sleep(0.2 + random.random() * 0.3)
-        return fired
+            await asyncio.sleep(0.15 + random.random() * 0.2)
+        return fired, not any_failure
 
     async def _claim_and_send(self, event: AlertEvent) -> bool:
         message = format_alert_message(event)
@@ -192,7 +222,6 @@ class Poller:
                 await self.storage.mark_alert_sent(int(row["id"]))
 
     async def _scheduled_tick(self) -> None:
-        # Jitter so we don't stampede cse.lk on the wall clock
         jitter = random.uniform(0, self.settings.poll_jitter_seconds)
         await asyncio.sleep(jitter)
         await self.run_once()
@@ -226,7 +255,12 @@ class Poller:
 
 
 async def run_poller_forever(
-    settings: Settings, storage: Storage, cse: CSEClient, send: SendFunc
+    settings: Settings,
+    storage: Storage,
+    cse: CSEClient,
+    send: SendFunc,
+    *,
+    health: Any | None = None,
 ) -> None:
     poller = Poller(settings, storage, cse, send)
     poller.start_scheduler()
@@ -241,5 +275,33 @@ async def run_poller_forever(
         with contextlib.suppress(NotImplementedError):
             loop.add_signal_handler(sig, _handle_sig)
 
-    await stop.wait()
-    await poller.shutdown()
+    async def _health_loop() -> None:
+        if health is None:
+            return
+        while not stop.is_set():
+            db_ok = False
+            try:
+                db_ok = await storage.health_check()
+            except Exception as exc:
+                log.warning("health_db_failed", error=str(exc))
+            tick_ok = poller.last_tick_ok
+            health.update(
+                ok=db_ok and tick_ok,
+                db_ok=db_ok,
+                last_tick_at=poller.last_tick_at.isoformat() if poller.last_tick_at else None,
+                last_tick_ok=tick_ok,
+                price_poll_ok=poller.price_poll_ok,
+                disclosure_poll_ok=poller.disclosure_poll_ok,
+                last_error=poller.last_error,
+            )
+            with contextlib.suppress(TimeoutError):
+                await asyncio.wait_for(stop.wait(), timeout=10)
+
+    health_task = asyncio.create_task(_health_loop())
+    try:
+        await stop.wait()
+    finally:
+        health_task.cancel()
+        with contextlib.suppress(asyncio.CancelledError):
+            await health_task
+        await poller.shutdown()
