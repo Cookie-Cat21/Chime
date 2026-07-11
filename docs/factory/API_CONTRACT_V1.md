@@ -317,6 +317,36 @@ Query: `symbol` (optional), `limit` (default `50`, max `200`), `offset` (default
 
 Join `alert_log` → `alert_rules` scoped to session `user_id`. Path is **`/alerts/history`**, not `/alerts/fires`.
 
+### `alert_log` delivery-state contract (ops/debugging)
+
+Storage does **not** have a `delivery_state` enum column. For dashboards,
+runbooks, and ad-hoc SQL, derive state from the real `alert_log` columns in
+`db/migrations/001_initial.sql` through `004_delivery_lease.sql`:
+
+| Column | Meaning |
+|---|---|
+| `message_sent` | Final UI/audit flag: the normal Telegram success path completed `mark_alert_sent`. |
+| `attempt_count` | Count of failed or deferred Telegram attempts recorded by `mark_alert_attempt`. |
+| `dead_lettered` | Terminal abandon flag. Excluded from future unsent claims. |
+| `delivery_attempted_ok` | Telegram accepted delivery before `message_sent` was durably marked. Excluded from unsent claims to prevent duplicate pushes after restart. |
+| `delivery_lease_until` | Short in-flight claim lease. Claimers skip the row until this is null or expired. |
+
+Derived states, in precedence order:
+
+| State | Predicate | Retry / claim behavior | Ops note |
+|---|---|---|---|
+| `sent` | `message_sent = TRUE` | Terminal; not claimable. | Normal success. `mark_alert_sent` also sets `delivery_attempted_ok = TRUE` and clears any lease. |
+| `dead-letter` | `message_sent = FALSE AND dead_lettered = TRUE` | Terminal; not claimable. | Attempts exhausted or final send-mark persistence was abandoned. The reason is in logs (`alert_dead_lettered.reason = failed \| deferred`), not a DB column. If `delivery_attempted_ok = TRUE`, Telegram may already have accepted the message; do not manually resend. |
+| `delivered-unmarked` | `message_sent = FALSE AND dead_lettered = FALSE AND delivery_attempted_ok = TRUE` | Not claimable. | Telegram returned OK, but the later `message_sent` update did not complete. Treat as delivered for duplicate-prevention; investigate `mark_alert_sent_failed` / `mark_alert_sent_abandoned`. |
+| `leased` | `message_sent = FALSE AND dead_lettered = FALSE AND delivery_attempted_ok = FALSE AND delivery_lease_until >= now()` | Temporarily not claimable. | A poller has claimed the row for Telegram I/O. Lease clears on success/failure/defer, or naturally expires. |
+| `deferred` | Same predicate as `unsent` after a `RetryAfter` path incremented `attempt_count`; usually `attempt_count > 0` and recent logs show `alert_send_deferred`. | Claimable when no active lease. Dead-letters at `MAX_DEFERRED_ATTEMPTS` (30). | There is no DB column that distinguishes defer vs hard failure; use logs for the last outcome. |
+| `unsent` | `message_sent = FALSE AND dead_lettered = FALSE AND delivery_attempted_ok = FALSE AND (delivery_lease_until IS NULL OR delivery_lease_until < now())` | Claimable by `claim_unsent_batch` while the rule remains active. | Includes never-attempted rows (`attempt_count = 0`) and retryable failures (`attempt_count > 0`). Hard failures dead-letter at `MAX_SEND_ATTEMPTS` (5). |
+
+`claim_unsent_batch` additionally requires the joined `alert_rules.active = TRUE`
+and uses `FOR UPDATE SKIP LOCKED` before setting a new `delivery_lease_until`.
+The dashboard history API may continue returning raw `message_sent` for v1; if
+it adds a label for ops, it must use the derived states above.
+
 ---
 
 ## Symbols / market data (read, Postgres)
