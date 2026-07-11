@@ -56,13 +56,13 @@ export function AppNav({ active }: { active?: string }) {
           <span className="sr-only">{open ? "Close" : "Menu"}</span>
           <span className="flex w-5 flex-col gap-1.5" aria-hidden>
             <span
-              className={`h-0.5 w-full bg-foreground transition-transform ${open ? "translate-y-2 rotate-45" : ""}`}
+              className={`h-0.5 w-full bg-foreground motion-safe:transition-transform ${open ? "translate-y-2 rotate-45" : ""}`}
             />
             <span
-              className={`h-0.5 w-full bg-foreground transition-opacity ${open ? "opacity-0" : ""}`}
+              className={`h-0.5 w-full bg-foreground motion-safe:transition-opacity ${open ? "opacity-0" : ""}`}
             />
             <span
-              className={`h-0.5 w-full bg-foreground transition-transform ${open ? "-translate-y-2 -rotate-45" : ""}`}
+              className={`h-0.5 w-full bg-foreground motion-safe:transition-transform ${open ? "-translate-y-2 -rotate-45" : ""}`}
             />
           </span>
         </button>

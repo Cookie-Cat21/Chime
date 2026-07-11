@@ -214,11 +214,33 @@
 @media (prefers-reduced-motion: reduce) {
   .chime-atmosphere {
     animation: none;
+    background-size: 100% 100%, 100% 100%, 100% 100%;
   }
   .chime-rise,
   .chime-rise-delay-1,
   .chime-rise-delay-2,
   .chime-rise-delay-3 {
     animation: none;
+    opacity: 1;
+    transform: none;
+  }
+  .chime-skip-link {
+    transition: none;
+  }
+  /* Shell chrome: nav hamburger, buttons, skeleton pulse, hover lifts */
+  .animate-pulse {
+    animation: none;
+    opacity: 0.7;
+  }
+  header span[aria-hidden] span,
+  [data-slot="button"],
+  a,
+  button {
+    transition: none !important;
+  }
+  [data-slot="button"]:active,
+  a:hover,
+  button:hover {
+    transform: none !important;
   }
 }

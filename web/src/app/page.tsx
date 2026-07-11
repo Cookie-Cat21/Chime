@@ -41,7 +41,7 @@ export default async function HomePage() {
           <Button
             asChild
             size="lg"
-            className="min-w-36 transition-transform hover:-translate-y-0.5"
+            className="min-w-36 motion-safe:transition-transform motion-safe:hover:-translate-y-0.5"
           >
             <Link href="/login">Sign in</Link>
           </Button>
