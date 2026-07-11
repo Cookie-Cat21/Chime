@@ -20,8 +20,8 @@ _SEND_KWARGS: dict[str, Any] = {"disable_web_page_preview": False}
 class SendResult(StrEnum):
     """Outcome of a Telegram send attempt.
 
-    ``deferred`` is a transient RetryAfter when the caller asked not to block
-    (poller holds the DB advisory lock) — do not count toward dead-letter.
+    ``deferred`` is a transient RetryAfter when the caller asked not to block.
+    Callers may still bump attempt_count toward a deferred dead-letter ceiling.
     """
 
     OK = "ok"

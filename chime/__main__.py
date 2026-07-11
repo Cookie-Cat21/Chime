@@ -76,8 +76,8 @@ async def _run_both(settings: Settings) -> None:
     bot = Bot(settings.telegram_bot_token)
 
     async def send(chat_id: int, text: str) -> SendResult:
-        # Never sleep on RetryAfter while holding the poll advisory lock.
-        return await send_message(bot, chat_id, text, block_on_retry_after=False)
+        # Lock is released before Telegram I/O (CORE-004) — honor RetryAfter.
+        return await send_message(bot, chat_id, text, block_on_retry_after=True)
 
     health = HealthState()
     server = start_health_server(settings.health_host, settings.health_port, health)
@@ -134,8 +134,8 @@ async def _run_poller(settings: Settings) -> None:
     bot = Bot(settings.telegram_bot_token)
 
     async def send(chat_id: int, text: str) -> SendResult:
-        # Never sleep on RetryAfter while holding the poll advisory lock.
-        return await send_message(bot, chat_id, text, block_on_retry_after=False)
+        # Lock is released before Telegram I/O (CORE-004) — honor RetryAfter.
+        return await send_message(bot, chat_id, text, block_on_retry_after=True)
 
     health = HealthState()
     server = start_health_server(settings.health_host, settings.health_port, health)
@@ -224,7 +224,7 @@ def main(argv: list[str] | None = None) -> None:
             bot = Bot(settings.telegram_bot_token)
 
             async def send(chat_id: int, text: str) -> SendResult:
-                return await send_message(bot, chat_id, text, block_on_retry_after=False)
+                return await send_message(bot, chat_id, text, block_on_retry_after=True)
 
             poller = Poller(settings, storage, cse, send)
             try:

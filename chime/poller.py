@@ -101,12 +101,17 @@ class Poller:
         # (set for the locked section of run_once).
         self._queue_sends: bool = False
         self._pending_sends: list[PendingSend] = []
+        self._delivered_ok_ids: set[int] = set()
 
     async def run_once(self, *, force: bool = False) -> list[AlertEvent]:
         """Single poll cycle. Returns events claimed (delivered after unlock)."""
         now = datetime.now(UTC)
         if not force and not is_market_open(now, self.settings):
             log.info("poll_skipped_outside_hours", now=now.isoformat())
+            # Delivery is independent of market hours — retry unsent backlog
+            # so Telegram failures overnight/weekend still drain.
+            await self._retry_unsent_with_lock()
+            self.last_tick_at = datetime.now(UTC)
             return []
 
         locked = await self.storage.try_advisory_lock(POLL_LOCK_ID)
@@ -123,6 +128,7 @@ class Poller:
         pending: list[PendingSend] = []
         self._queue_sends = True
         self._pending_sends = pending
+        self._delivered_ok_ids = set()
         try:
             price_events, price_ok = await self._poll_prices()
             disc_events, disc_ok = await self._poll_disclosures()
@@ -160,6 +166,23 @@ class Poller:
         except Exception as exc:
             log.exception("poll_deliver_failed", error=str(exc))
         return fired
+
+    async def _retry_unsent_with_lock(self) -> None:
+        """Off-hours path: drain unsent under advisory lock (no CSE work)."""
+        locked = await self.storage.try_advisory_lock(POLL_LOCK_ID)
+        if not locked:
+            self.lock_held_skip = True
+            return
+        self.lock_held_skip = False
+        self._delivered_ok_ids = set()
+        try:
+            # Hold lock for the whole off-hours drain so two processes cannot
+            # both read the same unsent rows and double-send.
+            await self._retry_unsent()
+        except Exception as exc:
+            log.exception("offhours_retry_failed", error=str(exc))
+        finally:
+            await self.storage.advisory_unlock(POLL_LOCK_ID)
 
     async def _poll_prices(self) -> tuple[list[AlertEvent], bool]:
         symbols = await self.storage.watched_symbols()
@@ -330,8 +353,9 @@ class Poller:
         """Send one claimed alert and update alert_log (OK / FAILED / DEFERRED)."""
         result = _normalize_send_result(await self.send(pending.telegram_id, pending.message))
         if result is SendResult.OK:
-            # Telegram already delivered. mark_alert_sent failure must not
-            # re-raise or leave the row retryable (duplicate push).
+            # Telegram already delivered. Track id so same-tick _retry_unsent
+            # cannot re-send even if mark_alert_sent / dead_letter both fail.
+            self._delivered_ok_ids.add(pending.log_id)
             event_key = pending.event.event_key if pending.event is not None else None
             marked = await self._mark_sent_best_effort(
                 pending.log_id,
@@ -411,8 +435,10 @@ class Poller:
     async def _retry_unsent(self) -> None:
         pending = await self.storage.unsent_alerts()
         for row in pending:
-            text = row["message_text"] or ""
             log_id = int(row["id"])
+            if log_id in self._delivered_ok_ids:
+                continue
+            text = row["message_text"] or ""
             item = PendingSend(
                 log_id=log_id,
                 telegram_id=int(row["telegram_id"]),
