@@ -16,9 +16,17 @@ make factory-status
 ## State
 
 - See `SCOREBOARD.json` for lifetime score  
-- Active board: newest `EPOCH*_BOARD.md` with OPEN rows  
+- Active board: `EPOCH10_BOARD.md` (Epoch 9 CLEAR)  
 - Loop: `AGENTIC_LOOP.md` + `PORTFOLIO_PLAN.md` + `LONG_RUN_OPS.md`
+- Portfolio stub: `scripts/factory/portfolio_sum.py` + `PORTFOLIO_NODES.json` (chime node)
+
+## E9-O02 — Epoch 9→10 refill
+
+Epoch 9 is **CLEAR**. `EPOCH10_BOARD.md` was staged then activated (`make
+factory-refill`) with ~8 fence-legal OPEN items: CSRF audit, contract
+401-before-CSRF note, dash empty states, `portfolio_sum` verify smoke,
+adapter timeout unit. Do not invent out-of-fence fuel.
 
 ## Next wave hint
 
-Run `make factory-status` — do not re-plan from scratch.
+Run `make factory-status` — drain Epoch 10 OPEN rows; do not re-plan from scratch.
