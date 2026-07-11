@@ -22,6 +22,50 @@ from chime.storage import Storage
 log = get_logger(__name__)
 
 
+def _install_stop_handler(stop: asyncio.Event) -> None:
+    def _handle_sig(*_: object) -> None:
+        stop.set()
+
+    loop = asyncio.get_running_loop()
+    for sig in (signal.SIGINT, signal.SIGTERM):
+        with contextlib.suppress(NotImplementedError):
+            loop.add_signal_handler(sig, _handle_sig)
+
+
+async def _refresh_bot_health(storage: Storage, health: HealthState) -> None:
+    """Bot-only health: DB reachability (no poller tick fields)."""
+    db_ok = False
+    last_error: str | None = None
+    try:
+        db_ok = await storage.health_check()
+        if not db_ok:
+            last_error = "db_unhealthy"
+    except Exception as exc:
+        last_error = str(exc)
+        log.warning("health_db_failed", error=str(exc))
+    health.update(ok=db_ok, db_ok=db_ok, last_error=last_error)
+
+
+async def _refresh_both_health(
+    storage: Storage, health: HealthState, poller: Poller
+) -> None:
+    db_ok = False
+    try:
+        db_ok = await storage.health_check()
+    except Exception as exc:
+        log.warning("health_db_failed", error=str(exc))
+    health.update(
+        ok=db_ok and poller.last_tick_ok,
+        db_ok=db_ok,
+        last_tick_at=poller.last_tick_at.isoformat() if poller.last_tick_at else None,
+        last_tick_ok=poller.last_tick_ok,
+        price_poll_ok=poller.price_poll_ok,
+        disclosure_poll_ok=poller.disclosure_poll_ok,
+        lock_held_skip=poller.lock_held_skip,
+        last_error=poller.last_error,
+    )
+
+
 async def _run_both(settings: Settings) -> None:
     storage = Storage(settings.database_url)
     await storage.open()
@@ -43,7 +87,12 @@ async def _run_both(settings: Settings) -> None:
     poller = Poller(settings, storage, cse, send)
     poller.start_scheduler()
 
-    app = build_application(settings.telegram_bot_token, storage, cse)
+    app = build_application(
+        settings.telegram_bot_token,
+        storage,
+        cse,
+        cmd_rate_per_minute=settings.bot_cmd_rate_per_minute,
+    )
 
     async def _post_init(application: object) -> None:
         log.info("bot_started")
@@ -51,14 +100,7 @@ async def _run_both(settings: Settings) -> None:
     app.post_init = _post_init
 
     stop = asyncio.Event()
-
-    def _handle_sig(*_: object) -> None:
-        stop.set()
-
-    loop = asyncio.get_running_loop()
-    for sig in (signal.SIGINT, signal.SIGTERM):
-        with contextlib.suppress(NotImplementedError):
-            loop.add_signal_handler(sig, _handle_sig)
+    _install_stop_handler(stop)
 
     try:
         await app.initialize()
@@ -68,21 +110,7 @@ async def _run_both(settings: Settings) -> None:
 
         # Keep health fresh until SIGINT/SIGTERM
         while not stop.is_set():
-            db_ok = False
-            try:
-                db_ok = await storage.health_check()
-            except Exception as exc:
-                log.warning("health_db_failed", error=str(exc))
-            health.update(
-                ok=db_ok and poller.last_tick_ok,
-                db_ok=db_ok,
-                last_tick_at=poller.last_tick_at.isoformat() if poller.last_tick_at else None,
-                last_tick_ok=poller.last_tick_ok,
-                price_poll_ok=poller.price_poll_ok,
-                disclosure_poll_ok=poller.disclosure_poll_ok,
-                lock_held_skip=poller.lock_held_skip,
-                last_error=poller.last_error,
-            )
+            await _refresh_both_health(storage, health, poller)
             with contextlib.suppress(TimeoutError):
                 await asyncio.wait_for(stop.wait(), timeout=10)
     finally:
@@ -121,30 +149,45 @@ async def _run_poller(settings: Settings) -> None:
         server.shutdown()
 
 
-def _run_bot(settings: Settings) -> None:
+async def _run_bot(settings: Settings) -> None:
     storage = Storage(settings.database_url)
-
-    async def _setup(app: object) -> None:
-        await storage.open()
-
-    async def _shutdown(app: object) -> None:
-        await storage.close()
-        await cse.aclose()
-
+    await storage.open()
     cse = CSEClient(
         base_url=settings.cse_base_url,
         timeout=settings.http_timeout_seconds,
         fail_max=settings.circuit_fail_max,
         reset_timeout=settings.circuit_reset_seconds,
     )
-    app = build_application(settings.telegram_bot_token, storage, cse)
-    app.post_init = _setup
-    app.post_shutdown = _shutdown
     health = HealthState()
     server = start_health_server(settings.health_host, settings.health_port, health)
+    app = build_application(
+        settings.telegram_bot_token,
+        storage,
+        cse,
+        cmd_rate_per_minute=settings.bot_cmd_rate_per_minute,
+    )
+
+    stop = asyncio.Event()
+    _install_stop_handler(stop)
+
     try:
-        app.run_polling(drop_pending_updates=True)
+        await app.initialize()
+        await app.start()
+        assert app.updater is not None
+        await app.updater.start_polling(drop_pending_updates=True)
+        log.info("bot_started")
+
+        while not stop.is_set():
+            await _refresh_bot_health(storage, health)
+            with contextlib.suppress(TimeoutError):
+                await asyncio.wait_for(stop.wait(), timeout=10)
     finally:
+        if app.updater is not None:
+            await app.updater.stop()
+        await app.stop()
+        await app.shutdown()
+        await cse.aclose()
+        await storage.close()
         server.shutdown()
 
 
@@ -169,7 +212,7 @@ def main(argv: list[str] | None = None) -> None:
     configure_logging(settings.log_level)
 
     if args.command == "bot":
-        _run_bot(settings)
+        asyncio.run(_run_bot(settings))
     elif args.command == "poller":
         asyncio.run(_run_poller(settings))
     elif args.command == "both":
@@ -187,10 +230,12 @@ def main(argv: list[str] | None = None) -> None:
                 )
 
             poller = Poller(settings, storage, cse, send)
-            events = await poller.run_once(force=args.force)
-            print(f"Fired {len(events)} alert(s)")
-            await cse.aclose()
-            await storage.close()
+            try:
+                events = await poller.run_once(force=args.force)
+                print(f"Fired {len(events)} alert(s)")
+            finally:
+                await cse.aclose()
+                await storage.close()
 
         asyncio.run(_tick())
 
