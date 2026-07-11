@@ -4,7 +4,7 @@
   "farming_banned": true,
   "concurrency_preferred": 8,
   "concurrency_hard_max": 16,
-  "epoch": 17,
+  "epoch": 18,
   "branch": "cursor/epoch11-drain-cb19",
   "clean_streak": 0,
   "lifetime_factory_score": 140,
@@ -12,7 +12,7 @@
   "lifetime_clusters_closed": 140,
   "epoch2_done": 16,
   "epoch3_done": 10,
-  "open_board": "docs/factory/EPOCH17_BOARD.md",
+  "open_board": "docs/factory/EPOCH18_BOARD.md",
   "loop_spec": "docs/factory/AGENTIC_LOOP.md",
   "note": "Literal 5T git commits rejected; portfolio_score == chime node while Chime is the only enrolled factory",
   "epoch4_done": 9,
@@ -28,5 +28,6 @@
   "epoch14_done": 8,
   "epoch15_done": 8,
   "epoch16_done": 8,
-  "epoch17_done": 8
+  "epoch17_done": 8,
+  "epoch18_done": 0
 }
