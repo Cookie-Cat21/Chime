@@ -39,6 +39,8 @@ DEFAULT_HEADERS = {
 }
 
 ANNOUNCEMENTS_PAGE = "https://www.cse.lk/announcements"
+TRADE_SUMMARY_ENDPOINT = "tradeSummary"
+TRADE_SUMMARY_PATH = "/tradeSummary"
 
 
 class TradeSummaryRow(BaseModel):
@@ -351,22 +353,26 @@ class CSEClient:
 
     async def fetch_trade_summary(self) -> list[PriceSnapshot]:
         async def _call() -> list[PriceSnapshot]:
-            raw = await self._request("POST", "/tradeSummary", json_body={})
+            raw = await self._request("POST", TRADE_SUMMARY_PATH, json_body={})
             if not isinstance(raw, dict):
-                log.error("cse_schema_error", endpoint="tradeSummary", error="expected object")
-                raise ValueError("tradeSummary: expected JSON object")
+                log.error(
+                    "cse_schema_error",
+                    endpoint=TRADE_SUMMARY_ENDPOINT,
+                    error="expected object",
+                )
+                raise ValueError(f"{TRADE_SUMMARY_ENDPOINT}: expected JSON object")
             rows_raw = raw.get("reqTradeSummery") or []
             if not isinstance(rows_raw, list):
                 log.error(
                     "cse_schema_error",
-                    endpoint="tradeSummary",
+                    endpoint=TRADE_SUMMARY_ENDPOINT,
                     error="reqTradeSummery not a list",
                 )
-                raise ValueError("tradeSummary: reqTradeSummery not a list")
+                raise ValueError(f"{TRADE_SUMMARY_ENDPOINT}: reqTradeSummery not a list")
             if not rows_raw:
                 log.warning(
                     "cse_trade_summary_empty_ok",
-                    endpoint="tradeSummary",
+                    endpoint=TRADE_SUMMARY_ENDPOINT,
                     response_keys=sorted(str(key) for key in raw),
                 )
             now = datetime.now(UTC)
@@ -377,7 +383,7 @@ class CSEClient:
                 except ValidationError as exc:
                     log.warning(
                         "cse_trade_row_skipped",
-                        endpoint="tradeSummary",
+                        endpoint=TRADE_SUMMARY_ENDPOINT,
                         error=str(exc),
                         row=str(item)[:200],
                     )
@@ -385,7 +391,7 @@ class CSEClient:
                 out.append(trade_row_to_snapshot(row, now=now))
             return out
 
-        return cast(list[PriceSnapshot], await self._guarded("tradeSummary", _call))
+        return cast(list[PriceSnapshot], await self._guarded(TRADE_SUMMARY_ENDPOINT, _call))
 
     async def fetch_company_info(self, symbol: str) -> PriceSnapshot | None:
         symbol = symbol.strip().upper()

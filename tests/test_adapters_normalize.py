@@ -3,13 +3,16 @@
 from __future__ import annotations
 
 from datetime import UTC, datetime
+from unittest.mock import AsyncMock
 from zoneinfo import ZoneInfo
 
+import pytest
 from structlog.testing import capture_logs
 
 from chime.adapters.cse import (
     ANNOUNCEMENTS_PAGE,
     AnnouncementRow,
+    CSEClient,
     TradeSummaryRow,
     announcement_to_disclosure,
     trade_row_to_snapshot,
@@ -58,6 +61,24 @@ def test_trade_row_uses_now_when_no_last_traded_time() -> None:
     snap = trade_row_to_snapshot(row, now=now)
     assert snap.ts == now
     assert snap.symbol == "COMB.N0000"
+
+
+@pytest.mark.asyncio
+async def test_fetch_trade_summary_empty_ok_log_includes_endpoint_name() -> None:
+    client = CSEClient(client=AsyncMock())
+    client._request = AsyncMock(  # type: ignore[method-assign]
+        return_value={"reqTradeSummery": [], "serverTime": "2026-07-11T09:30:00+05:30"}
+    )
+
+    with capture_logs() as logs:
+        assert await client.fetch_trade_summary() == []
+
+    assert {
+        "event": "cse_trade_summary_empty_ok",
+        "log_level": "warning",
+        "endpoint": "tradeSummary",
+        "response_keys": ["reqTradeSummery", "serverTime"],
+    } in logs
 
 
 def test_announcement_to_disclosure_builds_url_and_title() -> None:
