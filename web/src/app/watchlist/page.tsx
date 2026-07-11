@@ -59,14 +59,16 @@ export default async function WatchlistPage() {
             title="Couldn’t load watchlist"
             description={
               <>
-                The dashboard couldn’t reach Chime’s API just now. Check your
-                connection, then refresh — or manage symbols with{" "}
-                <code className="font-mono text-xs">/watch</code> in Telegram.
+                Chime couldn’t fetch your saved symbols just now. This is a
+                load error, not an empty watchlist. Retry the request, or manage
+                symbols with{" "}
+                <code className="font-mono text-xs">/watch SYMBOL</code> in
+                Telegram.
               </>
             }
             action={
               <Button asChild variant="outline">
-                <Link href="/watchlist">Try again</Link>
+                <a href="/watchlist">Retry loading watchlist</a>
               </Button>
             }
           />
