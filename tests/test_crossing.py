@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from datetime import UTC, datetime
+
 from chime.domain import AlertType
 from chime.rules import crossed_above, crossed_below, evaluate_price_rules, filter_fireable
 from tests.conftest import make_previous, make_rule, make_snapshot
@@ -60,7 +62,7 @@ class TestGapOpen:
         assert len(fireable) == 1
         assert fireable[0].set_armed is False
         assert "above" in fireable[0].trigger
-        assert fireable[0].event_key == "price:1:above:100:202607110600:105"
+        assert fireable[0].event_key == "price:1:above:100:s7"
 
     def test_gap_open_under_threshold_fires_below(self) -> None:
         rule = make_rule(type=AlertType.PRICE_BELOW, threshold=100.0, armed=True)
@@ -113,6 +115,34 @@ class TestStickyAndRecross:
         fireable = filter_fireable(fire_events)
         assert len(fireable) == 1
         assert fireable[0].set_armed is False
+        assert fireable[0].event_key == "price:1:above:100:s11"
+
+    def test_same_minute_same_price_recross_distinct_keys(self) -> None:
+        """CORE-002: re-cross after re-arm at same minute+price gets a new key."""
+        ts = datetime(2026, 7, 11, 6, 0, 0, tzinfo=UTC)
+        first = make_rule(type=AlertType.PRICE_ABOVE, threshold=100.0, armed=True)
+        snap1 = make_snapshot(price=105.0, id=30, ts=ts)
+        key1 = filter_fireable(
+            evaluate_price_rules(
+                snapshot=snap1,
+                previous=make_previous(price=95.0),
+                rules=[first],
+            )
+        )[0].event_key
+
+        rearmed = make_rule(type=AlertType.PRICE_ABOVE, threshold=100.0, armed=True)
+        snap2 = make_snapshot(price=105.0, id=31, ts=ts)
+        key2 = filter_fireable(
+            evaluate_price_rules(
+                snapshot=snap2,
+                previous=make_previous(price=98.0),
+                rules=[rearmed],
+            )
+        )[0].event_key
+
+        assert key1 == "price:1:above:100:s30"
+        assert key2 == "price:1:above:100:s31"
+        assert key1 != key2
 
 
 class TestExactTouch:

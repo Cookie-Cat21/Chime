@@ -40,16 +40,21 @@ def crossed_below(prev: float | None, curr: float, threshold: float) -> bool:
 
 
 def _event_key_price(rule: AlertRule, snapshot: PriceSnapshot) -> str:
-    """Stable across dual-poller duplicate snapshots for the same crossing.
+    """Idempotency key for a claimed price crossing.
 
-    Uses rule + side + threshold + minute + price so two processes inserting
-    different snapshot rows for the same tick still collide on
-    alert_log UNIQUE(rule_id, event_key). Combined with armed=False after claim,
-    legitimate re-crosses after re-arm get a new minute/price fingerprint.
+    Preferred form includes snapshot.id so a same-minute re-cross after re-arm
+    (new snapshot row) can fire. Dual-poller duplicate ticks are prevented by
+    the session advisory lock, not by collapsing keys across snap ids.
+
+    When snapshot.id is None (pre-persist / synthetic), fall back to a
+    minute+price fingerprint so dual evaluation of the same tick still
+    collides on alert_log UNIQUE(rule_id, event_key).
     """
-    minute = snapshot.ts.strftime("%Y%m%d%H%M")
     side = "above" if rule.type == AlertType.PRICE_ABOVE else "below"
     thr = rule.threshold if rule.threshold is not None else 0.0
+    if snapshot.id is not None:
+        return f"price:{rule.id}:{side}:{thr:g}:s{snapshot.id}"
+    minute = snapshot.ts.strftime("%Y%m%d%H%M")
     return f"price:{rule.id}:{side}:{thr:g}:{minute}:{snapshot.price:g}"
 
 
