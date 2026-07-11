@@ -1,7 +1,8 @@
-"""E9-Q01 / E9-Q02 — CSRF + session contract tests.
+"""E9-Q01 / E9-Q02 / E10-Q01 / E10-Q02 / E10-Q03 — CSRF + session contract tests.
 
 Default: pure unit path via Node/tsx against exported dash auth helpers
-(``csrfTokensMatch``, ``requireSessionAndCsrf``). No live web server.
+(``csrfTokensMatch``, ``requireSessionAndCsrf``) and the logout route
+handler (cookie clear). No live web server required for CI.
 
 Integration (optional): set ``RUN_WEB=1`` and ``DASH_BASE_URL`` to hit a
 running Next instance with documented curl expectations in
@@ -34,7 +35,7 @@ def _npx() -> str:
 
 
 def test_csrf_helper_and_guard_unit() -> None:
-    """Logout without CSRF → 400 csrf_failed; mutate without session → 401."""
+    """E10: header≠cookie→400; logout clears cookies; no session→401 before CSRF."""
     assert UNIT_MTS.is_file(), f"missing {UNIT_MTS}"
     assert (WEB / "src" / "lib" / "auth" / "csrf.ts").is_file()
     npx = _npx()
@@ -66,6 +67,12 @@ def test_csrf_contract_doc_exists() -> None:
     assert "401" in text
     assert "X-CSRF-Token" in text
     assert "/api/v1/auth/logout" in text
+    assert "401 beats csrf_failed" in text or "E10-A01" in text
+    contract = (ROOT / "docs" / "factory" / "API_CONTRACT_V1.md").read_text(
+        encoding="utf-8"
+    )
+    assert "E10-A01" in contract
+    assert "401 unauthorized" in contract
 
 
 @pytest.mark.skipif(os.environ.get("RUN_WEB") != "1", reason="set RUN_WEB=1")

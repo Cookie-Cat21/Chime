@@ -1,8 +1,9 @@
-# CSRF / session contract (E9-Q01, E9-Q02)
+# CSRF / session contract (E9-Q01/Q02, E10-Q01/Q02/Q03)
 
 Companion to `tests/test_csrf_session_contract.py` and
 `tests/csrf_session_unit.mts`. Unit coverage runs in CI without a live
-server (tsx imports `csrfTokensMatch` + `requireSessionAndCsrf`).
+server (tsx imports `csrfTokensMatch` + `requireSessionAndCsrf` +
+logout handler for cookie clear).
 
 Live checks: `RUN_WEB=1 DASH_BASE_URL=http://127.0.0.1:3000 pytest
 tests/test_csrf_session_contract.py -k live`.
@@ -12,10 +13,13 @@ tests/test_csrf_session_contract.py -k live`.
 | Case | Expect |
 |---|---|
 | Mutate with no session | `401` + `error.code=unauthorized` (503 if secret unset) |
+| No session + bad CSRF material | `401` `unauthorized` (**not** `csrf_failed`) — E10-Q03 / E10-A01 |
 | Logout with session, **no** `X-CSRF-Token` | `400` + `error.code=csrf_failed` |
-| Logout with session + matching CSRF | `200` `{ "ok": true }` |
+| Logout with session, header ≠ cookie | `400` + `error.code=csrf_failed` — E10-Q01 |
+| Logout with session + matching CSRF | `200` `{ "ok": true }`; clears `chime_session` + `chime_csrf` — E10-Q02 |
 
 Session is checked **before** CSRF: missing session never returns `csrf_failed`.
+When both would apply, **401 beats csrf_failed** (E10-A01).
 
 ## Curl — mutate without session (E9-Q02)
 

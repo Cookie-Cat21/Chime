@@ -17,7 +17,7 @@ This document is the single source of truth for dash REST shapes. WAVE1_DASH `/a
 |---|---|
 | Content type | `application/json; charset=utf-8` |
 | Auth | Signed HttpOnly session cookie after login ([ADR 001](../adr/001-dash-auth.md)). `user_id` is taken from the session only. |
-| CSRF | Bootstrap at login: session cookie + CSRF cookie and/or `csrf_token` in JSON. All mutating methods require matching `X-CSRF-Token` **except** login (`POST /auth/demo`, later `/auth/telegram`). **`POST /auth/logout` requires CSRF** (no exemption). See [ADR 001 § CSRF](../adr/001-dash-auth.md). |
+| CSRF | Bootstrap at login: session cookie + CSRF cookie and/or `csrf_token` in JSON. All mutating methods require matching `X-CSRF-Token` **except** login (`POST /auth/demo`, later `/auth/telegram`). **`POST /auth/logout` requires CSRF** (no exemption). See [ADR 001 § CSRF](../adr/001-dash-auth.md). **Check order (E10-A01):** session is validated **before** CSRF. If both would fail (no/invalid session **and** missing/mismatched `X-CSRF-Token`), respond **`401 unauthorized`** — never `400 csrf_failed` without a valid session. |
 | Symbols | Uppercase; same regex as bot (`SYMBOL_RE`). Invalid → `400` `invalid_symbol`. |
 | Timestamps | ISO-8601 UTC strings. |
 | NFA | **UI-only.** API returns raw facts; clients render `disclaimer()` chrome. |

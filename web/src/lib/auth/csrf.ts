@@ -8,6 +8,7 @@ export const CSRF_HEADER = "x-csrf-token";
 /**
  * Double-submit CSRF: `X-CSRF-Token` must equal the non-HttpOnly `chime_csrf` cookie.
  * Login (`POST /auth/demo`) is exempt; logout and all other mutations are not.
+ * Returns false when either side is missing or when header ≠ cookie (length or value).
  */
 export function csrfTokensMatch(
   headerToken: string | null,

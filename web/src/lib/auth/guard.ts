@@ -46,6 +46,10 @@ export function requireSession(request: NextRequest): SessionResult {
 /**
  * Session + CSRF for POST/PATCH/PUT/DELETE under /api/v1 (including logout).
  * Login (`POST /auth/demo`) is the only CSRF-exempt mutation.
+ *
+ * Order: session first, then CSRF. Missing/invalid session → 401
+ * `unauthorized` even when CSRF would also fail (never `csrf_failed`
+ * without a valid session). Header≠cookie CSRF → 400 `csrf_failed`.
  */
 export function requireSessionAndCsrf(request: NextRequest): SessionResult {
   const session = requireSession(request);
