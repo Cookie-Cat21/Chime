@@ -122,9 +122,12 @@ export async function GET(request: NextRequest) {
     poller != null && Array.isArray(poller.watched_missing)
       ? poller.watched_missing
       : [];
+  // Fail closed for ops when the proxied poller reports any component failure.
   const pollerDegraded =
     poller != null &&
     (poller.last_tick_ok === false ||
+      poller.price_poll_ok === false ||
+      poller.disclosure_poll_ok === false ||
       poller.last_error === "health_url_unreachable" ||
       missing.length > 0);
   const status = dbOk && !pollerDegraded ? "ok" : "degraded";
