@@ -2,6 +2,9 @@
 
 Fetches price + disclosure data via adapters, stores every snapshot, evaluates
 rules, claims alerts idempotently, and dispatches Telegram sends.
+
+CORE-004: advisory lock covers fetch/store/evaluate/claim/disarm only.
+Telegram sends and disclosure inter-symbol sleeps run after unlock.
 """
 
 from __future__ import annotations
@@ -11,6 +14,7 @@ import contextlib
 import random
 import signal
 from collections.abc import Awaitable, Callable
+from dataclasses import dataclass
 from datetime import UTC, datetime, time, timedelta
 from typing import Any
 from zoneinfo import ZoneInfo
@@ -21,7 +25,7 @@ from apscheduler.triggers.interval import IntervalTrigger
 from chime.adapters.cse import CSEClient
 from chime.circuit import CircuitOpenError
 from chime.config import Settings
-from chime.domain import AlertEvent, PriceSnapshot, format_alert_message
+from chime.domain import AlertEvent, Disclosure, PriceSnapshot, format_alert_message
 from chime.logging_setup import get_logger
 from chime.notify import SendResult
 from chime.rules import evaluate_disclosure_rules, evaluate_price_rules, filter_fireable
@@ -37,6 +41,18 @@ MAX_SEND_ATTEMPTS = 5
 # After this many deferred (RetryAfter) sends, stop retrying — same attempt_count
 # column, higher ceiling so transient flood-waits are not dead-lettered early.
 MAX_DEFERRED_ATTEMPTS = 30
+
+
+@dataclass(frozen=True)
+class PendingSend:
+    """Claimed alert awaiting Telegram delivery (outside the advisory lock)."""
+
+    log_id: int
+    telegram_id: int
+    message: str
+    already_claimed_new: bool
+    rule_id: int | None = None
+    event: AlertEvent | None = None
 
 
 def _normalize_send_result(result: SendResult | bool) -> SendResult:
@@ -81,9 +97,13 @@ class Poller:
         self.price_poll_ok: bool = True
         self.disclosure_poll_ok: bool = True
         self.lock_held_skip: bool = False
+        # When True, _claim_and_send queues PendingSend instead of sending inline
+        # (set for the locked section of run_once).
+        self._queue_sends: bool = False
+        self._pending_sends: list[PendingSend] = []
 
     async def run_once(self, *, force: bool = False) -> list[AlertEvent]:
-        """Single poll cycle. Returns fireable events that were claimed+sent."""
+        """Single poll cycle. Returns events claimed (delivered after unlock)."""
         now = datetime.now(UTC)
         if not force and not is_market_open(now, self.settings):
             log.info("poll_skipped_outside_hours", now=now.isoformat())
@@ -100,12 +120,14 @@ class Poller:
 
         self.lock_held_skip = False
         fired: list[AlertEvent] = []
+        pending: list[PendingSend] = []
+        self._queue_sends = True
+        self._pending_sends = pending
         try:
             price_events, price_ok = await self._poll_prices()
             disc_events, disc_ok = await self._poll_disclosures()
             fired.extend(price_events)
             fired.extend(disc_events)
-            await self._retry_unsent()
             self.price_poll_ok = price_ok
             self.disclosure_poll_ok = disc_ok
             symbols = await self.storage.watched_symbols()
@@ -126,8 +148,17 @@ class Poller:
             self.last_error = str(exc)
             log.exception("poll_cycle_failed", error=str(exc))
         finally:
+            self._queue_sends = False
             self.last_tick_at = datetime.now(UTC)
             await self.storage.advisory_unlock(POLL_LOCK_ID)
+
+        # CORE-004: Telegram I/O + unsent retry after unlock. Claim uniqueness
+        # protects against duplicate delivery if another poller races.
+        try:
+            await self._deliver_pending(pending)
+            await self._retry_unsent()
+        except Exception as exc:
+            log.exception("poll_deliver_failed", error=str(exc))
         return fired
 
     async def _poll_prices(self) -> tuple[list[AlertEvent], bool]:
@@ -210,19 +241,23 @@ class Poller:
         today = datetime.now(tz).date()
         from_date = (today - timedelta(days=365)).isoformat()
         to_date = today.isoformat()
-        fired: list[AlertEvent] = []
         any_failure = False
 
+        # Fetch all first (no inter-symbol sleep under lock — CORE-004).
+        # Sequential HTTP provides natural spacing; rate-limit sleeps belong
+        # outside the advisory lock if reintroduced.
+        fetched: dict[str, list[Disclosure]] = {}
         for symbol in disclosure_symbols:
             try:
-                disclosures = await self.cse.fetch_announcements_for_symbol(
+                fetched[symbol] = await self.cse.fetch_announcements_for_symbol(
                     symbol, from_date=from_date, to_date=to_date
                 )
             except Exception as exc:
                 any_failure = True
                 log.warning("disclosure_poll_failed", symbol=symbol, error=str(exc))
-                continue
 
+        fired: list[AlertEvent] = []
+        for symbol, disclosures in fetched.items():
             symbol_rules = [r for r in disclosure_rules if r.symbol == symbol]
             for disc in disclosures:
                 # Always upsert + evaluate. Crash between insert and claim used to
@@ -234,7 +269,6 @@ class Poller:
                     claimed = await self._claim_and_send(event)
                     if claimed:
                         fired.append(event)
-            await asyncio.sleep(0.15 + random.random() * 0.2)
         return fired, not any_failure
 
     async def _record_send_failure(self, alert_log_id: int, *, rule_id: int | None = None) -> None:
@@ -276,33 +310,67 @@ class Poller:
                 attempts=attempts,
             )
 
+    async def _claim_only(self, event: AlertEvent) -> PendingSend | None:
+        """Claim the alert row; return a PendingSend or None on conflict."""
+        message = format_alert_message(event)
+        log_id = await self.storage.claim_alert(event, message)
+        if log_id is None:
+            log.info("alert_already_claimed", event_key=event.event_key, rule_id=event.rule_id)
+            return None
+        return PendingSend(
+            log_id=log_id,
+            telegram_id=event.telegram_id,
+            message=message,
+            already_claimed_new=True,
+            rule_id=event.rule_id,
+            event=event,
+        )
+
+    async def _deliver_one(self, pending: PendingSend) -> None:
+        """Send one claimed alert and update alert_log (OK / FAILED / DEFERRED)."""
+        result = _normalize_send_result(await self.send(pending.telegram_id, pending.message))
+        if result is SendResult.OK:
+            if pending.event is not None:
+                # Telegram already delivered. mark_alert_sent failure must not
+                # re-raise (disarm proceeds) or count as a send failure (would
+                # dead-letter / re-queue a message the user already got).
+                marked = await self._mark_sent_best_effort(pending.log_id, event=pending.event)
+                if marked:
+                    log.info(
+                        "alert_sent",
+                        rule_id=pending.rule_id,
+                        event_key=pending.event.event_key,
+                    )
+            else:
+                await self.storage.mark_alert_sent(pending.log_id)
+        elif result is SendResult.FAILED:
+            await self._record_send_failure(pending.log_id, rule_id=pending.rule_id)
+        elif result is SendResult.DEFERRED:
+            await self._record_send_deferred(pending.log_id, rule_id=pending.rule_id)
+
+    async def _deliver_pending(self, pending: list[PendingSend]) -> None:
+        for item in pending:
+            await self._deliver_one(item)
+
     async def _claim_and_send(self, event: AlertEvent) -> bool:
-        """Claim the alert, then attempt Telegram send.
+        """Claim the alert, then attempt Telegram send (or queue when locked).
 
         Returns True when the claim succeeded (row inserted), even if Telegram
         send failed. Callers must treat True as “crossing consumed” so price
         rules can disarm; delivery continues via ``message_sent=False`` retry /
         dead-letter. Returns False only on claim conflict (already claimed).
 
-        CORE-004 deferred: advisory lock is still held across this send.
+        Under ``run_once`` (``_queue_sends=True``) the send is deferred until
+        after advisory unlock (CORE-004). Direct callers (unit tests) still
+        send inline.
         """
-        message = format_alert_message(event)
-        log_id = await self.storage.claim_alert(event, message)
-        if log_id is None:
-            log.info("alert_already_claimed", event_key=event.event_key, rule_id=event.rule_id)
+        pending = await self._claim_only(event)
+        if pending is None:
             return False
-        result = _normalize_send_result(await self.send(event.telegram_id, message))
-        if result is SendResult.OK:
-            # Telegram already delivered. mark_alert_sent failure must not
-            # re-raise (disarm proceeds) or count as a send failure (would
-            # dead-letter / re-queue a message the user already got).
-            marked = await self._mark_sent_best_effort(log_id, event=event)
-            if marked:
-                log.info("alert_sent", rule_id=event.rule_id, event_key=event.event_key)
-        elif result is SendResult.FAILED:
-            await self._record_send_failure(log_id, rule_id=event.rule_id)
-        elif result is SendResult.DEFERRED:
-            await self._record_send_deferred(log_id, rule_id=event.rule_id)
+        if self._queue_sends:
+            self._pending_sends.append(pending)
+            return True
+        await self._deliver_one(pending)
         return True
 
     async def _mark_sent_best_effort(self, log_id: int, *, event: AlertEvent) -> bool:
@@ -338,14 +406,15 @@ class Poller:
         for row in pending:
             text = row["message_text"] or ""
             log_id = int(row["id"])
-            # CORE-004 deferred: lock still held during send / RetryAfter defer.
-            result = _normalize_send_result(await self.send(int(row["telegram_id"]), text))
-            if result is SendResult.OK:
-                await self.storage.mark_alert_sent(log_id)
-            elif result is SendResult.FAILED:
-                await self._record_send_failure(log_id, rule_id=int(row["rule_id"]))
-            elif result is SendResult.DEFERRED:
-                await self._record_send_deferred(log_id, rule_id=int(row["rule_id"]))
+            item = PendingSend(
+                log_id=log_id,
+                telegram_id=int(row["telegram_id"]),
+                message=text,
+                already_claimed_new=False,
+                rule_id=int(row["rule_id"]),
+                event=None,
+            )
+            await self._deliver_one(item)
 
     async def _scheduled_tick(self) -> None:
         jitter = random.uniform(0, self.settings.poll_jitter_seconds)
