@@ -92,7 +92,7 @@ Base: `/api/v1`. JSON request/response. User routes scoped by **session** `user_
 | Method | Path | Request | Response |
 |---|---|---|---|
 | `GET` | `/api/v1/alerts` | `?active=true` (default) | `{ "rules": [{ "id", "symbol", "type", "threshold", "active", "armed", "created_at" }] }` |
-| `POST` | `/api/v1/alerts` | `{ "symbol", "type", "threshold"? }` | created rule object (auto-watch; soft-replace duplicates) |
+| `POST` | `/api/v1/alerts` | `{ "symbol", "type", "threshold"? }` | created/existing rule object (auto-watch; idempotent) |
 | `DELETE` | `/api/v1/alerts/{id}` | — | `{ "cancelled": bool }` (soft: `active=false`; bot `/cancel`) |
 | `GET` | `/api/v1/alerts/history` | `?symbol=&limit=50` | `{ "events": [{ "id", "rule_id", "symbol", "type", "fired_at", "message_sent", "message_text", "event_key" }] }` |
 
@@ -169,7 +169,11 @@ Global bans (every page): tax reports, screener, payments, native-app CTAs, comp
 | `/mywatchlist` | `/watchlist` list |
 | *(push on fire)* | Telegram only; History is read-only audit of `alert_log` |
 
-Parity rule: any mutation available in the UI must use the same storage semantics as the bot (validate symbol via CSE, upsert stock, deactivate rules on unwatch, unique active rule constraints).
+Parity rule: any mutation available in the UI must use the same storage
+semantics as the bot for watchlist/alerts **via Postgres** (upsert known
+`stocks` rows, deactivate rules on unwatch, unique active rule constraints).
+Never call cse.lk from `web/` — symbol validation is against known `stocks` /
+poller data (404 if unknown).
 
 ---
 

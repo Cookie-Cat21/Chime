@@ -30,14 +30,15 @@ async def test_send_message_retry_after_then_succeeds() -> None:
 
 
 @pytest.mark.asyncio
-async def test_retry_after_sleep_is_capped() -> None:
+async def test_retry_after_deferred_when_nonblocking() -> None:
     bot = AsyncMock()
-    bot.send_message = AsyncMock(side_effect=[RetryAfter(999), None])
+    bot.send_message = AsyncMock(side_effect=RetryAfter(60))
 
     with patch("chime.notify.asyncio.sleep", new_callable=AsyncMock) as sleep:
-        ok = await send_message(bot, chat_id=1001, text="hello")
+        ok = await send_message(
+            bot, chat_id=1001, text="hello", block_on_retry_after=False
+        )
 
-    assert ok is True
-    # Cap is 30s + 0.5 buffer — must not sleep ~999s
-    slept = sleep.await_args.args[0]
-    assert slept <= 30.5 + 0.01
+    assert ok is False
+    sleep.assert_not_awaited()
+    assert bot.send_message.await_count == 1

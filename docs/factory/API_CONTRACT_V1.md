@@ -23,7 +23,7 @@ This document is the single source of truth for dash REST shapes. WAVE1_DASH `/a
 | NFA | **UI-only.** API returns raw facts; clients render `disclaimer()` chrome. |
 | Pagination | Query `limit` (default documented per route, max 200) and optional `cursor` / `offset` where noted. |
 | No WebSocket | v1 is request/response; pages refresh on navigation. |
-| Storage parity | Mutations mirror `chime.storage` / bot: auto-watch on alert create; unwatch deactivates rules for that symbol; cancel = soft `active=false`; duplicate active rules → deactivate-then-insert (not hard 409). |
+| Storage parity | Mutations mirror `chime.storage` / bot: auto-watch on alert create; unwatch deactivates rules for that symbol; cancel = soft `active=false`; duplicate active alerts → **idempotent return existing** (not deactivate-then-insert; not hard 409). |
 
 ### Error envelope
 
@@ -44,7 +44,7 @@ All non-2xx JSON errors:
 | 401 | `unauthorized` |
 | 403 | `forbidden`, `demo_auth_disabled`, `telegram_id_not_allowlisted` |
 | 404 | `not_found` |
-| 409 | reserved; prefer storage soft-replace over conflict for duplicate alerts |
+| 409 | reserved; prefer idempotent return-existing over conflict for duplicate alerts |
 | 503 | `degraded` (health when DB/poller unhealthy) |
 
 ### Authz matrix
@@ -265,7 +265,7 @@ Disclosure example:
 
 **Response** `201` — created rule object (same fields as list item).
 
-**Semantics (mirror `Storage.create_alert_rule`):** upsert/ensure stock row without CSE from web if already known; **auto-add watchlist**; deactivate any identical active rule then insert; `armed=true`.
+**Semantics (mirror `Storage.create_alert_rule`):** ensure stock row from Postgres (404 if unknown — no CSE from web); **auto-add watchlist**; if an identical active rule exists, **return it**; else insert `armed=true`. Concurrent inserts: loser catches unique violation and returns the survivor.
 
 ### `DELETE /api/v1/alerts/{id}` — cancel by id
 
@@ -398,7 +398,7 @@ Both DB `id` and `external_id` are required in the payload (resolves IA↔WAVE n
 | `POST` | `/api/v1/watchlist` | No cse.lk |
 | `DELETE` | `/api/v1/watchlist/{symbol}` | Returns `deactivated_alerts` |
 | `GET` | `/api/v1/alerts` | Default active only |
-| `POST` | `/api/v1/alerts` | Auto-watch; soft-replace duplicates |
+| `POST` | `/api/v1/alerts` | Auto-watch; idempotent return-existing on duplicates |
 | `DELETE` | `/api/v1/alerts/{id}` | Soft cancel by id |
 | `GET` | `/api/v1/alerts/history` | Not `/fires` |
 | `GET` | `/api/v1/symbols/{symbol}` | Slim `last` |
