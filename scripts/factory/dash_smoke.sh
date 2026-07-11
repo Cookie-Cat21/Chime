@@ -1,5 +1,13 @@
 #!/usr/bin/env bash
-# Dashboard smoke — /login + /api health OR auth demo-disabled.
+# Dashboard smoke (E6-Q01) — curl: GET /login + GET /api/v1/health.
+#
+# Mutate happy path (POST/DELETE watchlist|alerts) needs a signed
+# chime_session cookie + matching X-CSRF-Token (ADR 001). This smoke does
+# NOT mint a session: CI runs with DASH_DEMO_AUTH=0 and no DB user seed.
+# Instead it asserts unauthenticated mutate is rejected (401/503), proving
+# the gate is live. Full mutate: enable demo auth, POST /api/v1/auth/demo,
+# then replay Set-Cookie + csrf_token on POST /api/v1/watchlist.
+#
 # Usage:
 #   DASH_BASE_URL=http://127.0.0.1:3000 ./scripts/factory/dash_smoke.sh
 # Or omit DASH_BASE_URL to build + start Next on an ephemeral port (demo auth off).
@@ -89,6 +97,20 @@ else
     cat /tmp/chime-dash-demo.body || true
     exit 1
   fi
+fi
+
+# Mutate without session must fail closed (session required; CSRF checked after).
+# 401 = no/invalid session; 503 = DASH_SESSION_SECRET unset (fail-closed).
+mutate_code="$(curl -sS -o /tmp/chime-dash-mutate.body -w '%{http_code}' \
+  -X POST "${BASE}/api/v1/watchlist" \
+  -H 'Content-Type: application/json' \
+  -d '{"symbol":"JKH.N0000"}' || true)"
+if [[ "${mutate_code}" == "401" || "${mutate_code}" == "503" ]]; then
+  echo "dash_smoke: OK POST /api/v1/watchlist (no session) → ${mutate_code} (mutate needs session+CSRF)"
+else
+  echo "dash_smoke: FAIL unauthenticated mutate → ${mutate_code} (expected 401 or 503)"
+  cat /tmp/chime-dash-mutate.body || true
+  exit 1
 fi
 
 echo "DASH_SMOKE_OK BASE=${BASE} HEAD=$(cd "$ROOT" && git rev-parse HEAD)"
