@@ -49,6 +49,7 @@ class Settings:
     market_tz: str = "Asia/Colombo"
     market_open: str = "09:30"
     market_close: str = "14:30"
+    bot_cmd_rate_per_minute: int = 20
 
     @classmethod
     def from_env(cls, *, require_token: bool = True) -> Settings:
@@ -70,6 +71,7 @@ class Settings:
             market_tz=os.getenv("MARKET_TZ", "Asia/Colombo"),
             market_open=os.getenv("MARKET_OPEN", "09:30"),
             market_close=os.getenv("MARKET_CLOSE", "14:30"),
+            bot_cmd_rate_per_minute=_int("BOT_CMD_RATE_PER_MINUTE", 20),
         )
 
 

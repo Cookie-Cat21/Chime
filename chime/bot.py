@@ -6,7 +6,10 @@ Alert dispatch happens from the poller via notify.send_message.
 
 from __future__ import annotations
 
+import os
 import re
+import time
+from collections import defaultdict, deque
 from typing import Any
 
 from telegram import Update
@@ -20,6 +23,62 @@ from chime.storage import Storage
 log = get_logger(__name__)
 
 SYMBOL_RE = re.compile(r"^[A-Za-z0-9]{1,12}(\.[A-Za-z0-9]{1,8})?$")
+
+# Per telegram_id sliding-window timestamps (monotonic seconds). No DB.
+_cmd_timestamps: dict[int, deque[float]] = defaultdict(deque)
+_RATE_WINDOW_SECONDS = 60.0
+RATE_LIMIT_REPLY = "Slow down — try again in a minute."
+
+
+def reset_cmd_rate_limits() -> None:
+    """Clear in-memory rate-limit state (tests)."""
+    _cmd_timestamps.clear()
+
+
+def allow_command(
+    telegram_id: int,
+    limit: int,
+    *,
+    now: float | None = None,
+    window: float = _RATE_WINDOW_SECONDS,
+) -> bool:
+    """Return True if this command is within the per-user sliding window budget."""
+    if limit <= 0:
+        return True
+    t = time.monotonic() if now is None else now
+    q = _cmd_timestamps[telegram_id]
+    while q and t - q[0] >= window:
+        q.popleft()
+    if len(q) >= limit:
+        return False
+    q.append(t)
+    return True
+
+
+def _cmd_rate_limit(context: ContextTypes.DEFAULT_TYPE) -> int:
+    raw = context.application.bot_data.get("cmd_rate_per_minute")
+    if raw is not None:
+        return int(raw)
+    return 20
+
+
+async def _rate_limited(update: Update, context: ContextTypes.DEFAULT_TYPE) -> bool:
+    """If over limit, reply and return True (caller should return)."""
+    user = update.effective_user
+    if user is None:
+        return False
+    if allow_command(user.id, _cmd_rate_limit(context)):
+        return False
+    if update.effective_message:
+        await update.effective_message.reply_text(RATE_LIMIT_REPLY)
+    return True
+
+
+def _env_cmd_rate_per_minute() -> int:
+    raw = os.getenv("BOT_CMD_RATE_PER_MINUTE", "").strip()
+    if not raw:
+        return 20
+    return int(raw)
 
 START_TEXT = (
     "Chime watches the Colombo Stock Exchange and pings you on Telegram "
@@ -71,6 +130,8 @@ async def _lookup_symbol(
 
 
 async def cmd_start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    if await _rate_limited(update, context):
+        return
     storage: Storage = context.application.bot_data["storage"]
     await _user_id(storage, update)
     if update.effective_message:
@@ -78,6 +139,8 @@ async def cmd_start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
 
 
 async def cmd_watch(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    if await _rate_limited(update, context):
+        return
     storage: Storage = context.application.bot_data["storage"]
     cse: CSEClient = context.application.bot_data["cse"]
     if not update.effective_message:
@@ -111,6 +174,8 @@ async def cmd_watch(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
 
 
 async def cmd_unwatch(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    if await _rate_limited(update, context):
+        return
     storage: Storage = context.application.bot_data["storage"]
     if not update.effective_message:
         return
@@ -139,6 +204,8 @@ async def cmd_unwatch(update: Update, context: ContextTypes.DEFAULT_TYPE) -> Non
 
 
 async def cmd_alert(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    if await _rate_limited(update, context):
+        return
     storage: Storage = context.application.bot_data["storage"]
     cse: CSEClient = context.application.bot_data["cse"]
     if not update.effective_message:
@@ -218,6 +285,8 @@ async def cmd_alert(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
 
 
 async def cmd_cancel(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    if await _rate_limited(update, context):
+        return
     storage: Storage = context.application.bot_data["storage"]
     if not update.effective_message:
         return
@@ -249,6 +318,8 @@ async def cmd_cancel(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None
 
 
 async def cmd_myalerts(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    if await _rate_limited(update, context):
+        return
     storage: Storage = context.application.bot_data["storage"]
     if not update.effective_message:
         return
@@ -274,6 +345,8 @@ async def cmd_myalerts(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
 
 
 async def cmd_mywatchlist(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    if await _rate_limited(update, context):
+        return
     storage: Storage = context.application.bot_data["storage"]
     if not update.effective_message:
         return
@@ -291,7 +364,11 @@ async def on_error(update: object, context: ContextTypes.DEFAULT_TYPE) -> None:
 
 
 def build_application(
-    token: str, storage: Storage, cse: CSEClient
+    token: str,
+    storage: Storage,
+    cse: CSEClient,
+    *,
+    cmd_rate_per_minute: int | None = None,
 ) -> Application[Any, Any, Any, Any, Any, Any]:
     app = (
         Application.builder()
@@ -304,6 +381,9 @@ def build_application(
     )
     app.bot_data["storage"] = storage
     app.bot_data["cse"] = cse
+    app.bot_data["cmd_rate_per_minute"] = (
+        cmd_rate_per_minute if cmd_rate_per_minute is not None else _env_cmd_rate_per_minute()
+    )
     app.add_handler(CommandHandler("start", cmd_start))
     app.add_handler(CommandHandler("watch", cmd_watch))
     app.add_handler(CommandHandler("unwatch", cmd_unwatch))
