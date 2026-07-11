@@ -1,6 +1,6 @@
 # Epoch 3 Board — Dash CRUD + ratchet (loop continues)
 
-**Status:** OPEN  
+**Status:** CLEAR (10/10 DONE) — ready adversarial / Epoch 4 fuel  
 **Parent:** Epoch 2 board empty (16/16 DONE)  
 **Rule:** Do not idle. Fuel = thin dash mutations + quality.
 
@@ -17,12 +17,12 @@
 
 ## QUALITY / CORE ratchet
 
-| ID | Item | Status |
-|---|---|---|
-| E3-Q01 | Raise `--cov-fail-under` toward 70 with new tests | OPEN |
-| E3-Q02 | Integration: claim_unsent_batch dual-poller no double send | OPEN |
-| E3-Q03 | web typecheck/lint in CI | OPEN |
-| E3-Q04 | dash_smoke in CI (node) | OPEN |
+| ID | Item | Status | Notes |
+|---|---|---|---|
+| E3-Q01 | Raise `--cov-fail-under` toward 70 with new tests | DONE | Floor 60→63; unit ~65%. Further →70 DEFER: needs storage/bot/`__main__` unit coverage (storage 39% without DB). |
+| E3-Q02 | Integration: claim_unsent_batch dual-poller no double send | DONE | `tests/test_dual_claim_unsent.py` mock dual `run_once` + SKIP LOCKED partition; DB SKIP LOCKED already in `test_claim_unsent_lease.py`. |
+| E3-Q03 | web typecheck/lint in CI | DONE | `web` job: `npm run lint` + `npm run typecheck` (`tsc --noEmit` script). |
+| E3-Q04 | dash_smoke in CI (node) | DONE | Same `web` job: `next build` then `scripts/factory/dash_smoke.sh`. |
 
 ## Wave packing
 

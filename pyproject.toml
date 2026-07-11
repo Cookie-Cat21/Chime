@@ -36,9 +36,9 @@ include = ["chime*"]
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
 testpaths = ["tests"]
-# Package-wide gate (was chime.rules-only @ 85). Measured ~60–63% under DATABASE_URL=
-# unit runs; floor 60 (70/85 not yet achievable) without breaking CI.
-addopts = "-q --cov=chime --cov-report=term-missing --cov-fail-under=60"
+# Package-wide gate (was chime.rules-only @ 85). Unit (DATABASE_URL=) ~64–65%;
+# floor 63 toward 70 — remaining gap is mostly storage.py / __main__ / bot without DB.
+addopts = "-q --cov=chime --cov-report=term-missing --cov-fail-under=63"
 
 [tool.ruff]
 line-length = 100

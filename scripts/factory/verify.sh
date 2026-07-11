@@ -5,9 +5,12 @@ cd "$(dirname "$0")/../.."
 echo "HEAD=$(git rev-parse HEAD)"
 ruff check chime tests
 mypy chime
-if [[ -d web ]]; then
-  if [[ -f web/package.json ]]; then
-    echo "web/ present — dash smoke: scripts/factory/dash_smoke.sh"
+if [[ -f web/package.json ]]; then
+  if [[ -d web/node_modules ]]; then
+    (cd web && npm run lint && npm run typecheck)
+    echo "web lint/typecheck ok — dash smoke: scripts/factory/dash_smoke.sh"
+  else
+    echo "web/ present (no node_modules) — CI runs lint/typecheck/dash_smoke"
   fi
 fi
 DATABASE_URL="${DATABASE_URL:-}" pytest -q --tb=line

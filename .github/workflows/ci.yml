@@ -94,3 +94,41 @@ jobs:
             echo "::error::DB integration tests skipped; DATABASE_URL required"
             exit 1
           fi
+
+  web:
+    name: web-lint-typecheck-smoke
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: web
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+
+      - name: Install web deps
+        run: npm ci
+
+      - name: ESLint
+        run: npm run lint
+
+      - name: Typecheck
+        run: npm run typecheck
+
+      - name: Next build
+        run: npm run build
+        env:
+          # Build-time: session secret optional; smoke sets runtime env.
+          DASH_SESSION_SECRET: ci-smoke-secret-not-for-prod
+          DASH_DEMO_AUTH: "0"
+
+      - name: Dash smoke (next start + curl)
+        working-directory: .
+        run: bash scripts/factory/dash_smoke.sh
+        env:
+          DASH_DEMO_AUTH: "0"
+          DASH_SESSION_SECRET: ci-smoke-secret-not-for-prod
