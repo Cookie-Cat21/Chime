@@ -15,7 +15,7 @@ calls from `web/`.
 | E12-O02 | Web health proxy degrades on `price_poll_ok=false` / `disclosure_poll_ok=false` | DONE |
 | E12-D01 | Alerts history distinguishes retrying vs dead-lettered delivery rows | DONE |
 | E12-D02 | Health page shows stale tick/snapshot age as explicit ops copy | DONE |
-| E12-Q01 | Route/page regression tests for health degradation and no web CSE calls | OPEN |
+| E12-Q01 | Route/page regression tests for health degradation and no web CSE calls | DONE |
 | E12-A01 | Document `alert_log` delivery-state contract for ops/debugging | DONE |
 
 Never farm. One concern per row.
