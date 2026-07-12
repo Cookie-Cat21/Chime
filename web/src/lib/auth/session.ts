@@ -16,6 +16,12 @@ export type SessionPayload = {
 /** Cap hostile sid strings in forged cookies (mint uses 32 hex chars). */
 export const MAX_SESSION_SID_LENGTH = 64;
 
+/**
+ * Cap forged session cookies before HMAC / JSON.parse.
+ * Minted tokens are well under 256 chars (body + sig).
+ */
+export const MAX_SESSION_TOKEN_LENGTH = 512;
+
 function b64url(buf: Buffer | string): string {
   const b = typeof buf === "string" ? Buffer.from(buf, "utf8") : buf;
   return b.toString("base64url");
@@ -49,10 +55,15 @@ export function verifySessionToken(
   token: string,
   secret: string,
 ): SessionPayload | null {
+  // Fail closed — overlong forged cookies must not burn HMAC / JSON.parse.
+  if (!token || token.length > MAX_SESSION_TOKEN_LENGTH) return null;
   const parts = token.split(".");
   if (parts.length !== 2) return null;
   const [body, sig] = parts;
   if (!body || !sig) return null;
+  // Cap parts individually — a short total can still hide a huge body segment
+  // if the other side is empty (already rejected) or tiny.
+  if (body.length > MAX_SESSION_TOKEN_LENGTH || sig.length > 128) return null;
 
   const expected = sign(body, secret);
   const a = Buffer.from(sig);

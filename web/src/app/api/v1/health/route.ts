@@ -57,6 +57,8 @@ export const HEALTH_STRING_MAX = 512;
 export const HEALTH_WATCHED_MISSING_MAX = 64;
 /** Bound circuit map size from a hostile HEALTH_URL body. */
 export const HEALTH_CIRCUITS_MAX = 32;
+/** Bound HEALTH_URL JSON body bytes before parse (ops payload is tiny). */
+export const HEALTH_PROXY_BODY_MAX_BYTES = 64_000;
 
 const CIRCUIT_STATES = new Set(["closed", "open", "half_open"]);
 
@@ -250,11 +252,20 @@ export async function GET(request: NextRequest) {
         signal: ctrl.signal,
         headers: { Accept: "application/json" },
       });
-      // Keep abort armed through body parse — hung JSON must not outlive budget.
-      const body = (await res.json().catch(() => null)) as Record<
-        string,
-        unknown
-      > | null;
+      // Keep abort armed through body read — hung / huge JSON must not OOM.
+      const rawText = await res.text().catch(() => "");
+      if (rawText.length > HEALTH_PROXY_BODY_MAX_BYTES) {
+        throw new Error("health_url_body_too_large");
+      }
+      let body: Record<string, unknown> | null = null;
+      try {
+        const parsed: unknown = rawText ? JSON.parse(rawText) : null;
+        if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) {
+          body = parsed as Record<string, unknown>;
+        }
+      } catch {
+        body = null;
+      }
       if (body && typeof body === "object") {
         const startedClean = sanitizeHealthString(body.started_at);
         const started = startedClean ? toIso(startedClean) : null;
