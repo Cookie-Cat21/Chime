@@ -1,6 +1,7 @@
 import type { NextRequest } from "next/server";
 
 import { toIso } from "@/lib/api/time";
+import { toSafePositiveInt } from "@/lib/api/safe-int";
 import { jsonOk } from "@/lib/auth/errors";
 import { requireSession } from "@/lib/auth/guard";
 import { getPool } from "@/lib/db";
@@ -17,8 +18,9 @@ export const HEALTH_PROXY_TIMEOUT_MS_DEFAULT = 3000;
 export function healthProxyTimeoutMs(): number {
   const raw = (process.env.HEALTH_PROXY_TIMEOUT_MS ?? "").trim();
   if (!raw) return HEALTH_PROXY_TIMEOUT_MS_DEFAULT;
-  const n = Number(raw);
-  if (!Number.isFinite(n) || n <= 0 || n > 30_000) {
+  // Digits-only SafeInteger — Number("3e3") / floats must not soft-accept.
+  const n = toSafePositiveInt(raw);
+  if (n == null || n > 30_000) {
     return HEALTH_PROXY_TIMEOUT_MS_DEFAULT;
   }
   return n;

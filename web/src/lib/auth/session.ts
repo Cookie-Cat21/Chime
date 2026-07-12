@@ -61,9 +61,14 @@ export function verifySessionToken(
     // Digits-only SafeInteger — reject float / oversized aliases.
     const user_id = toSafePositiveInt(json.user_id);
     if (user_id == null) return null;
-    if (typeof json.exp !== "number" || !Number.isFinite(json.exp)) return null;
+    // Unix seconds must be SafeInteger — float exp used to skew expiry checks.
+    if (typeof json.exp !== "number" || !Number.isSafeInteger(json.exp)) {
+      return null;
+    }
     if (typeof json.sid !== "string" || !json.sid) return null;
     if (json.sid.length > MAX_SESSION_SID_LENGTH) return null;
+    // Mint emits hex; reject control / non-hex forged sid bodies.
+    if (!/^[a-f0-9]+$/i.test(json.sid)) return null;
     if (json.exp < Math.floor(Date.now() / 1000)) return null;
     return { user_id, exp: json.exp, sid: json.sid, v: 1 };
   } catch {

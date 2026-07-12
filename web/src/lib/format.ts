@@ -45,6 +45,7 @@ export function alertTypeLabel(type: string): string {
     case "disclosure":
       return "Disclosure";
     default:
-      return type;
+      // Fail closed — never echo unknown / hostile type strings into the UI.
+      return "Unknown";
   }
 }

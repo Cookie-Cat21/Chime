@@ -61,11 +61,9 @@ async function readJsonPayload<T>(
   }
 }
 
-/** Coerce JSON numerics to finite numbers; strings/NaN/±Infinity → null. */
+/** Accept finite number primitives only — no string Number() coercion. */
 function finiteOrNull(value: unknown): number | null {
-  if (value == null) return null;
-  const n = typeof value === "number" ? value : Number(value);
-  return Number.isFinite(n) ? n : null;
+  return typeof value === "number" && Number.isFinite(value) ? value : null;
 }
 
 /**
