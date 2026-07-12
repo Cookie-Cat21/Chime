@@ -257,9 +257,10 @@ def test_symbols_list_query_validation_static() -> None:
     assert "const DEFAULT_LIMIT = 50;" in source
     assert "const MAX_LIMIT = 200;" in source
     assert "Math.min(limit, MAX_LIMIT)" in source
-    assert "limit < 1) limit = DEFAULT_LIMIT" in source or (
-        "limit < 1" in source and "DEFAULT_LIMIT" in source
-    )
+    # Digits-only SafeInteger — invalid / missing limit → DEFAULT_LIMIT.
+    assert "toSafePositiveInt" in source
+    assert "limitParsed == null ? DEFAULT_LIMIT" in source
+    assert "Number.parseInt" not in source
     # Sort whitelist: only symbol|change_pct; anything else → change_pct.
     assert 'sortRaw === "symbol" ? "symbol" : "change_pct"' in source
     assert "queryMarketBrowse" in source
