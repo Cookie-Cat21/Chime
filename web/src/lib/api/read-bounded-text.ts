@@ -24,7 +24,13 @@ export async function readBoundedResponseText(
   res: Response,
   maxBytes: number,
 ): Promise<BoundedTextResult> {
-  const cap = Math.max(1, maxBytes);
+  // Fail closed — Math.max(1, NaN)===NaN disables total>cap stream gate.
+  const cap =
+    typeof maxBytes === "number" &&
+    Number.isInteger(maxBytes) &&
+    maxBytes >= 1
+      ? maxBytes
+      : 1;
   const lenHeader = res.headers.get("content-length");
   if (lenHeader != null && lenHeader.trim()) {
     const claimed = toNonNegativeSafeInt(lenHeader.trim(), -1);

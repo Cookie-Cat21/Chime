@@ -24,7 +24,13 @@ export async function readJsonBody(
   request: Request,
   maxBytes: number = MAX_JSON_BODY_BYTES,
 ): Promise<ReadJsonResult> {
-  const cap = Math.max(1, maxBytes);
+  // Fail closed — Math.max(1, NaN)===NaN disables total>cap stream gate.
+  const cap =
+    typeof maxBytes === "number" &&
+    Number.isInteger(maxBytes) &&
+    maxBytes >= 1
+      ? maxBytes
+      : 1;
   const lenHeader = request.headers.get("content-length");
   if (lenHeader != null && lenHeader.trim()) {
     const claimed = toNonNegativeSafeInt(lenHeader.trim(), -1);
