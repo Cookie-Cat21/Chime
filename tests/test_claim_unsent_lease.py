@@ -186,6 +186,7 @@ async def test_market_hours_unsent_no_advisory_rehold() -> None:
 
 
 @pytest.mark.asyncio
+@pytest.mark.integration
 @pytest.mark.skipif(not DATABASE_URL, reason="DATABASE_URL not set")
 async def test_claim_unsent_batch_leases_and_excludes() -> None:
     assert DATABASE_URL
@@ -243,6 +244,7 @@ async def test_claim_unsent_batch_leases_and_excludes() -> None:
 
 
 @pytest.mark.asyncio
+@pytest.mark.integration
 @pytest.mark.skipif(not DATABASE_URL, reason="DATABASE_URL not set")
 async def test_claim_alert_lease_blocks_claim_unsent_until_ok_or_expiry() -> None:
     """claim_alert lease: claim_unsent_batch empty until delivery_attempted_ok / expiry."""
@@ -318,6 +320,7 @@ async def test_claim_alert_lease_blocks_claim_unsent_until_ok_or_expiry() -> Non
 
 
 @pytest.mark.asyncio
+@pytest.mark.integration
 @pytest.mark.skipif(not DATABASE_URL, reason="DATABASE_URL not set")
 async def test_claim_unsent_batch_skip_locked_concurrent() -> None:
     """Two concurrent claimers get disjoint rows (SKIP LOCKED)."""

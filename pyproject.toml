@@ -42,6 +42,10 @@ testpaths = ["tests"]
 # Package-wide gate (was chime.rules-only @ 85). Unit (DATABASE_URL=) ~88% after
 # E5-C01/C02 migrate + __main__ coverage; floor 85 toward ratchet.
 addopts = "-q --cov=chime --cov-report=term-missing --cov-fail-under=85"
+markers = [
+    "integration: requires DATABASE_URL / real Postgres (skipped in unit CI)",
+    "slow: optional slow harness (excluded from default local loops when selected)",
+]
 
 [tool.ruff]
 line-length = 100

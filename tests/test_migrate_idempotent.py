@@ -79,6 +79,7 @@ def test_migration_filenames_ordered_and_wave3_presence() -> None:
     assert "sector_id" in sectors_sql
 
 
+@pytest.mark.integration
 @pytest.mark.skipif(not DATABASE_URL, reason="DATABASE_URL not set")
 def test_apply_migrations_twice_idempotent() -> None:
     assert DATABASE_URL

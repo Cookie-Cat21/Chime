@@ -219,6 +219,7 @@ async def test_restart_skips_repush_when_delivery_flag_set() -> None:
     send.assert_not_awaited()
 
 
+@pytest.mark.integration
 @pytest.mark.skipif(not DATABASE_URL, reason="DATABASE_URL not set")
 @pytest.mark.asyncio
 async def test_delivery_attempted_ok_excludes_from_unsent_db() -> None:

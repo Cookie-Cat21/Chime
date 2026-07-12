@@ -191,6 +191,7 @@ def test_migration_sql_parse_helpers_roundtrip() -> None:
     assert "a;b" in stmts[0]
 
 
+@pytest.mark.integration
 @pytest.mark.skipif(not DATABASE_URL, reason="DATABASE_URL not set")
 def test_apply_migrations_twice_when_database_url() -> None:
     """Live DB path: migrate twice; second apply is empty (idempotent)."""
