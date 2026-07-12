@@ -30,6 +30,11 @@ export const metadata = {
     "Thin CSE symbol browse from Chime snapshots — not a trading terminal.",
 };
 
+/** Cap market/movers rows parse — parity with symbols API max limit. */
+const MAX_PAGE_MARKET_ITEMS = 200;
+/** Cap sectors parse — parity with sectors API ``MAX_SECTORS``. */
+const MAX_PAGE_SECTOR_ITEMS = 100;
+
 type MarketItem = {
   symbol: string;
   name: string | null;
@@ -78,6 +83,7 @@ function asMarketItems(body: unknown): MarketItem[] | null {
   if (!Array.isArray(items)) return null;
   const out: MarketItem[] = [];
   for (const row of items) {
+    if (out.length >= MAX_PAGE_MARKET_ITEMS) break;
     if (row == null || typeof row !== "object" || Array.isArray(row)) continue;
     const r = row as Record<string, unknown>;
     // Fail closed — only CSE SYMBOL_RE (no sanitize length-cap fallback).
@@ -111,6 +117,7 @@ function asSectorItems(body: unknown): SectorItem[] | null {
   if (!Array.isArray(items)) return null;
   const out: SectorItem[] = [];
   for (const row of items) {
+    if (out.length >= MAX_PAGE_SECTOR_ITEMS) break;
     if (row == null || typeof row !== "object" || Array.isArray(row)) continue;
     const r = row as Record<string, unknown>;
     const name =

@@ -98,6 +98,31 @@ export function safeFilingHref(
 }
 
 /**
+ * Absolute ceiling for sanitize caps — hostile / ``Infinity`` maxLen must
+ * not disable the length gate.
+ */
+export const MAX_SANITIZE_TEXT_CAP = 65_536;
+
+/**
+ * Resolve a fail-closed text cap.
+ *
+ * Medium: ``Math.max(1, NaN) === NaN`` and ``length > NaN`` is always false,
+ * so a non-integer / non-finite / oversized ``maxLen`` used to skip the
+ * length gate entirely (uncapped egress).
+ */
+export function resolveSanitizeTextCap(maxLen: unknown): number {
+  if (
+    typeof maxLen !== "number" ||
+    !Number.isInteger(maxLen) ||
+    !Number.isFinite(maxLen) ||
+    maxLen < 1
+  ) {
+    return 1;
+  }
+  return maxLen > MAX_SANITIZE_TEXT_CAP ? MAX_SANITIZE_TEXT_CAP : maxLen;
+}
+
+/**
  * Strip C0/C1 controls and cap length for disclosure text egress.
  * Returns ``null`` when empty after sanitize.
  */
@@ -106,9 +131,10 @@ export function sanitizeDisclosureText(
   maxLen: number,
 ): string | null {
   if (raw == null) return null;
+  if (typeof raw !== "string") return null;
   const cleaned = raw.replace(/[\u0000-\u001F\u007F-\u009F]/g, "").trim();
   if (!cleaned) return null;
-  const cap = Math.max(1, maxLen);
+  const cap = resolveSanitizeTextCap(maxLen);
   return cleaned.length > cap ? cleaned.slice(0, cap).trimEnd() : cleaned;
 }
 

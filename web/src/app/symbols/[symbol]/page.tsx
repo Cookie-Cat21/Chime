@@ -33,6 +33,10 @@ export const dynamic = "force-dynamic";
 
 /** Snapshots older than this are treated as stale for empty-copy (E11-D02). */
 const STALE_MS = 24 * 60 * 60 * 1000;
+/** Cap sparkline points parse — parity with snapshots API max / sparkline bound. */
+const MAX_PAGE_SNAPSHOT_POINTS = 200;
+/** Cap disclosures parse — parity with disclosures API max 100. */
+const MAX_PAGE_DISCLOSURES = 100;
 
 function isStaleTs(ts: string | null | undefined): boolean {
   if (!ts) return false;
@@ -145,6 +149,8 @@ function parseSnapshotsPayload(body: unknown): SnapshotsPayload {
   if (!Array.isArray(pointsRaw)) return { points: [] };
   const points: SnapshotsPayload["points"] = [];
   for (const row of pointsRaw) {
+    // Cap at API / sparkline max — unbounded points used to allocate before SVG.
+    if (points.length >= MAX_PAGE_SNAPSHOT_POINTS) break;
     if (row == null || typeof row !== "object" || Array.isArray(row)) continue;
     const r = row as Record<string, unknown>;
     points.push({
@@ -166,6 +172,7 @@ function parseDisclosuresPayload(body: unknown): DisclosuresPayload {
   if (!Array.isArray(itemsRaw)) return { items: [] };
   const items: DisclosuresPayload["items"] = [];
   for (const row of itemsRaw) {
+    if (items.length >= MAX_PAGE_DISCLOSURES) break;
     if (row == null || typeof row !== "object" || Array.isArray(row)) continue;
     const r = row as Record<string, unknown>;
     const id = toSafePositiveInt(r.id);
@@ -372,7 +379,7 @@ export default async function SymbolDetailPage({
               value={
                 data.last.volume == null
                   ? "—"
-                  : Math.round(data.last.volume).toLocaleString("en-LK")
+                  : formatNumber(Math.round(data.last.volume), 0)
               }
               mono
             />

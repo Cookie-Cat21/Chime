@@ -18,6 +18,8 @@ import { alertTypeLabel, formatTs } from "@/lib/format";
 
 /** Soft-cap OFFSET — keep in sync with history API ``MAX_HISTORY_OFFSET``. */
 const MAX_HISTORY_OFFSET = 10_000;
+/** Parity with history API max page size. */
+const MAX_PAGE_HISTORY_EVENTS = 200;
 
 export const dynamic = "force-dynamic";
 
@@ -137,6 +139,7 @@ export default async function AlertHistoryPage({
       if (Array.isArray(eventsRaw)) {
         const events: HistoryPayload["events"] = [];
         for (const row of eventsRaw) {
+          if (events.length >= MAX_PAGE_HISTORY_EVENTS) break;
           if (row == null || typeof row !== "object" || Array.isArray(row)) {
             continue;
           }
