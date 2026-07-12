@@ -113,17 +113,23 @@ def test_web_runtime_sources_do_not_import_or_call_cse_lk() -> None:
 
 
 def test_dashboard_pages_render_nfa_footer() -> None:
-    """Watchlist, alerts, browse, health, and scenarios keep the global NFA footer."""
+    """Every dash page keeps sitewide NFA footer chrome (WS-028)."""
     page_paths = [
+        WEB / "src" / "app" / "page.tsx",
+        WEB / "src" / "app" / "login" / "page.tsx",
         WEB / "src" / "app" / "watchlist" / "page.tsx",
         WEB / "src" / "app" / "market" / "page.tsx",
         WEB / "src" / "app" / "alerts" / "page.tsx",
+        WEB / "src" / "app" / "alerts" / "history" / "page.tsx",
+        WEB / "src" / "app" / "symbols" / "[symbol]" / "page.tsx",
+        WEB / "src" / "app" / "symbols" / "[symbol]" / "not-found.tsx",
         WEB / "src" / "app" / "health" / "page.tsx",
         WEB / "src" / "app" / "scenarios" / "page.tsx",
     ]
 
     missing: list[str] = []
     for path in page_paths:
+        assert path.is_file(), f"missing dash page {path.relative_to(ROOT)}"
         source = path.read_text(encoding="utf-8")
         if 'import { NfaFooter } from "@/components/nfa-footer";' not in source:
             missing.append(f"{path.relative_to(ROOT)} missing import")
@@ -131,6 +137,40 @@ def test_dashboard_pages_render_nfa_footer() -> None:
             missing.append(f"{path.relative_to(ROOT)} missing render")
 
     assert missing == []
+
+
+def test_dashboard_price_surfaces_render_nfa_inline() -> None:
+    """Price-adjacent / explainer surfaces keep NfaInline near copy (WS-028)."""
+    page_paths = [
+        WEB / "src" / "app" / "page.tsx",
+        WEB / "src" / "app" / "login" / "page.tsx",
+        WEB / "src" / "app" / "watchlist" / "page.tsx",
+        WEB / "src" / "app" / "market" / "page.tsx",
+        WEB / "src" / "app" / "alerts" / "page.tsx",
+        WEB / "src" / "app" / "alerts" / "history" / "page.tsx",
+        WEB / "src" / "app" / "symbols" / "[symbol]" / "page.tsx",
+        WEB / "src" / "app" / "scenarios" / "page.tsx",
+    ]
+
+    missing: list[str] = []
+    for path in page_paths:
+        assert path.is_file(), f"missing dash page {path.relative_to(ROOT)}"
+        source = path.read_text(encoding="utf-8")
+        if 'import { NfaInline } from "@/components/nfa-inline";' not in source:
+            missing.append(f"{path.relative_to(ROOT)} missing import")
+        if "<NfaInline" not in source:
+            missing.append(f"{path.relative_to(ROOT)} missing render")
+
+    assert missing == []
+
+
+def test_list_loading_skeleton_keeps_nfa_footer() -> None:
+    """Watchlist/alerts loading shells keep NFA footer while content pulses."""
+    skeleton = WEB / "src" / "components" / "skeleton.tsx"
+    source = skeleton.read_text(encoding="utf-8")
+    assert 'import { NfaFooter } from "@/components/nfa-footer";' in source
+    assert "<NfaFooter />" in source
+    assert "ListPageSkeleton" in source
 
 
 def test_symbols_list_route_requires_snapshots_and_session() -> None:

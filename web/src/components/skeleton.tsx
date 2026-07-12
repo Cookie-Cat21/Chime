@@ -1,3 +1,4 @@
+import { NfaFooter } from "@/components/nfa-footer";
 import { cn } from "@/lib/utils";
 
 /** Pulse placeholder bar — teal-tinted muted, not purple. */
@@ -64,6 +65,7 @@ export function ListPageSkeleton({
         </ul>
         <span className="sr-only">Loading…</span>
       </div>
+      <NfaFooter />
     </div>
   );
 }

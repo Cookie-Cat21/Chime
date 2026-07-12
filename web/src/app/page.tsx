@@ -3,6 +3,7 @@ import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 
 import { NfaFooter } from "@/components/nfa-footer";
+import { NfaInline } from "@/components/nfa-inline";
 import { Button } from "@/components/ui/button";
 import { getDashAuthConfig, SESSION_COOKIE } from "@/lib/auth/config";
 import { verifySessionToken } from "@/lib/auth/session";
@@ -37,6 +38,7 @@ export default async function HomePage() {
           Set price and disclosure watches here; pushes fire when conditions
           match — no terminal left open.
         </p>
+        <NfaInline className="chime-rise chime-rise-delay-2 mt-4" />
         <div className="chime-rise chime-rise-delay-3 mt-10 flex flex-wrap items-center gap-3">
           <Button
             asChild
