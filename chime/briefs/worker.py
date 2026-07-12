@@ -13,6 +13,7 @@ ready) and promotes recent ``skipped`` rows when AI is newly enabled.
 
 from __future__ import annotations
 
+import asyncio
 import inspect
 from collections.abc import Awaitable, Callable
 from typing import Any, Protocol
@@ -373,6 +374,8 @@ async def claim_pending_briefs(
     ``PDF_MAX_BYTES`` cap) and extracts text for the prompt. Claim SQL applies a
     PDF grace window so title-only summarize waits for legacy enrich when possible.
     No-op (returns 0) when briefs are disabled. Honours ``max_briefs_per_day``.
+    Paces consecutive LLM calls with ``AI_BRIEF_SLEEP_SECONDS`` (default 0.5;
+    ``0`` disables). Sleep runs between briefs, not before the first.
 
     When ``notify`` is provided: (1) after each successful ``mark_brief_ready``,
     and (2) via a ready-brief sweep covering late primary delivery, claims and
@@ -410,8 +413,11 @@ async def claim_pending_briefs(
             http = http_client or httpx.AsyncClient(
                 timeout=float(cfg.http_timeout_seconds or 30.0)
             )
+            sleep_s = max(0.0, float(cfg.sleep_seconds))
             try:
-                for row in rows:
+                for i, row in enumerate(rows):
+                    if i > 0 and sleep_s > 0:
+                        await asyncio.sleep(sleep_s)
                     disclosure_id = int(row["disclosure_id"])
                     text = await _input_text_for_row(row, cfg=cfg, client=http)
                     try:

@@ -61,6 +61,8 @@ class BriefSettings:
     - ``AI_MAX_BRIEFS_PER_DAY`` — default ``50``
     - ``AI_MAX_INPUT_CHARS`` — default ``12000``
     - ``AI_HTTP_TIMEOUT_SECONDS`` — provider HTTP timeout (default ``30``)
+    - ``AI_BRIEF_SLEEP_SECONDS`` — pause between LLM calls while draining
+      pending briefs (default ``0.5``; ``0`` = no pacing)
     - ``PDF_MAX_BYTES`` — max PDF download size (default ``5242880``)
     - ``BRIEF_PDF_GRACE_SECONDS`` — wait for ``pdf_url`` before title-only
       summarize (default ``120``; ``0`` = claim immediately)
@@ -76,6 +78,7 @@ class BriefSettings:
     max_input_chars: int = 12_000
     pdf_max_bytes: int = 5_242_880
     http_timeout_seconds: float = 30.0
+    sleep_seconds: float = 0.5
     pdf_grace_seconds: int = 120
     skipped_promote_hours: int = 24
 
@@ -90,6 +93,7 @@ class BriefSettings:
             max_input_chars=max(1, _env_int("AI_MAX_INPUT_CHARS", 12_000)),
             pdf_max_bytes=max(1, _env_int("PDF_MAX_BYTES", 5_242_880)),
             http_timeout_seconds=max(1.0, _env_float("AI_HTTP_TIMEOUT_SECONDS", 30.0)),
+            sleep_seconds=max(0.0, _env_float("AI_BRIEF_SLEEP_SECONDS", 0.5)),
             pdf_grace_seconds=max(0, _env_int("BRIEF_PDF_GRACE_SECONDS", 120)),
             skipped_promote_hours=max(0, _env_int("BRIEF_SKIPPED_PROMOTE_HOURS", 24)),
         )
