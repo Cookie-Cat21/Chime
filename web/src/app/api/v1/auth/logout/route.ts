@@ -3,6 +3,7 @@ import type { NextRequest } from "next/server";
 import { CSRF_COOKIE, SESSION_COOKIE } from "@/lib/auth/config";
 import { jsonOk } from "@/lib/auth/errors";
 import { requireSessionAndCsrf } from "@/lib/auth/guard";
+import { clearAuthCookieOptions } from "@/lib/auth/session";
 
 export const runtime = "nodejs";
 
@@ -15,16 +16,7 @@ export async function POST(request: NextRequest) {
   if (!gated.ok) return gated.response;
 
   const res = jsonOk({ ok: true });
-  const secure = process.env.NODE_ENV === "production";
-  const expired = new Date(0);
-  const clear = {
-    secure,
-    sameSite: "lax" as const,
-    path: "/",
-    maxAge: 0,
-    expires: expired,
-  };
-  res.cookies.set(SESSION_COOKIE, "", { ...clear, httpOnly: true });
-  res.cookies.set(CSRF_COOKIE, "", { ...clear, httpOnly: false });
+  res.cookies.set(SESSION_COOKIE, "", clearAuthCookieOptions(true));
+  res.cookies.set(CSRF_COOKIE, "", clearAuthCookieOptions(false));
   return res;
 }

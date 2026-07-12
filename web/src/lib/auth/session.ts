@@ -1,7 +1,12 @@
 import { createHmac, randomBytes, timingSafeEqual } from "node:crypto";
 
 import { toSafePositiveInt } from "@/lib/api/safe-int";
-import { SESSION_TTL_SECONDS, type DashAuthConfig } from "./config";
+import {
+  COOKIE_SAME_SITE,
+  SESSION_TTL_SECONDS,
+  cookieSecure,
+  type DashAuthConfig,
+} from "./config";
 
 export type SessionPayload = {
   /** Internal users.id — sole trust anchor after login. */
@@ -101,23 +106,33 @@ export function mintCsrfToken(): string {
 
 export function sessionCookieOptions(cfg: DashAuthConfig) {
   void cfg;
-  const secure = process.env.NODE_ENV === "production";
   return {
     httpOnly: true,
-    secure,
-    sameSite: "lax" as const,
+    secure: cookieSecure(),
+    sameSite: COOKIE_SAME_SITE,
     path: "/",
     maxAge: SESSION_TTL_SECONDS,
   };
 }
 
 export function csrfCookieOptions() {
-  const secure = process.env.NODE_ENV === "production";
   return {
     httpOnly: false,
-    secure,
-    sameSite: "lax" as const,
+    secure: cookieSecure(),
+    sameSite: COOKIE_SAME_SITE,
     path: "/",
     maxAge: SESSION_TTL_SECONDS,
+  };
+}
+
+/** Clear attrs must match set (Secure/SameSite/Path) or browsers keep the cookie. */
+export function clearAuthCookieOptions(httpOnly: boolean) {
+  return {
+    httpOnly,
+    secure: cookieSecure(),
+    sameSite: COOKIE_SAME_SITE,
+    path: "/",
+    maxAge: 0,
+    expires: new Date(0),
   };
 }

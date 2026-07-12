@@ -15,6 +15,18 @@ export const SESSION_TTL_SECONDS = 12 * 60 * 60; // 12h
  */
 export const MAX_CSRF_TOKEN_LENGTH = 128;
 
+/**
+ * Cookie Secure/SameSite (ADR 001 / API contract).
+ * Secure only in production so local HTTP can still set cookies;
+ * SameSite=Lax for same-site dashboard + Telegram-first CSRF story.
+ * Keep set + clear paths in lockstep (browser clear must match attrs).
+ */
+export const COOKIE_SAME_SITE = "lax" as const;
+
+export function cookieSecure(): boolean {
+  return process.env.NODE_ENV === "production";
+}
+
 export type DashAuthConfig = {
   demoAuthEnabled: boolean;
   allowlist: ReadonlySet<number>;
