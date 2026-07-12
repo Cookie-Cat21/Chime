@@ -99,6 +99,84 @@ async def test_empty_watchlist_persist_failure_degrades_tick() -> None:
 
 
 @pytest.mark.asyncio
+async def test_watchlist_persist_failure_price_ok_false(
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """Persist failure with a non-empty watchlist returns price_ok False (fail closed)."""
+    storage = AsyncMock()
+    storage.watched_symbols = AsyncMock(return_value=["JKH.N0000", "COMB.N0000"])
+    storage.active_rules_for_symbols = AsyncMock(return_value=[])
+    storage.persist_market_snapshots = AsyncMock(side_effect=RuntimeError("db down"))
+    storage.get_previous_state = AsyncMock()
+
+    board = [_snap("JKH.N0000"), _snap("COMB.N0000", 90.0)]
+    cse = AsyncMock()
+    cse.fetch_trade_summary = AsyncMock(return_value=board)
+
+    poller = Poller(_settings(), storage, cse, AsyncMock(return_value=True))
+    poller.watched_missing = ["STALE.N0000"]
+    events, price_ok = await poller._poll_prices()
+
+    assert events == []
+    assert price_ok is False
+    # Fail-closed before recomputing missing; watchlist path does not clear prior state.
+    assert poller.watched_missing == ["STALE.N0000"]
+    storage.persist_market_snapshots.assert_awaited_once_with(board)
+    storage.get_previous_state.assert_not_awaited()
+    storage.active_rules_for_symbols.assert_not_awaited()
+    assert "market_persist_failed" in capsys.readouterr().out
+
+
+@pytest.mark.asyncio
+async def test_watchlist_persist_failure_degrades_tick() -> None:
+    """run_once: persist failure with watchlist → price_poll_ok / last_tick_ok False."""
+    storage = AsyncMock()
+    storage.try_advisory_lock = AsyncMock(return_value=True)
+    storage.advisory_unlock = AsyncMock()
+    storage.watched_symbols = AsyncMock(return_value=["JKH.N0000"])
+    storage.active_rules_for_symbols = AsyncMock(return_value=[])
+    storage.claim_unsent_batch = AsyncMock(return_value=[])
+    storage.persist_market_snapshots = AsyncMock(side_effect=RuntimeError("db down"))
+
+    cse = AsyncMock()
+    cse.fetch_trade_summary = AsyncMock(return_value=[_snap("JKH.N0000")])
+    cse.fetch_announcements_for_symbol = AsyncMock(return_value=[])
+
+    poller = Poller(_settings(), storage, cse, AsyncMock(return_value=True))
+    events = await poller.run_once(force=True)
+
+    assert events == []
+    assert poller.price_poll_ok is False
+    assert poller.last_tick_ok is False
+    assert poller.last_error == "poll_degraded"
+
+
+@pytest.mark.asyncio
+async def test_empty_board_empty_watchlist_still_attempts_persist() -> None:
+    """Empty tradeSummary + empty watchlist: persist [] then price_ok False."""
+    storage = AsyncMock()
+    storage.watched_symbols = AsyncMock(return_value=[])
+    storage.active_rules_for_symbols = AsyncMock(return_value=[])
+    storage.persist_market_snapshots = AsyncMock(side_effect=_persist_with_ids)
+
+    cse = AsyncMock()
+    cse.fetch_trade_summary = AsyncMock(return_value=[])
+
+    poller = Poller(_settings(), storage, cse, AsyncMock(return_value=True))
+    poller.watched_missing = ["STALE.N0000"]
+    events, price_ok = await poller._poll_prices()
+
+    assert events == []
+    assert price_ok is False
+    assert poller.watched_missing == []
+    assert poller.trade_summary_empty_ok is True
+    assert poller.trade_summary_count == 0
+    cse.fetch_trade_summary.assert_awaited_once()
+    storage.persist_market_snapshots.assert_awaited_once_with([])
+    storage.active_rules_for_symbols.assert_not_awaited()
+
+
+@pytest.mark.asyncio
 async def test_circuit_open_empty_watchlist_degrades_tick() -> None:
     storage = AsyncMock()
     storage.try_advisory_lock = AsyncMock(return_value=True)

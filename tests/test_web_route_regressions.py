@@ -11,6 +11,7 @@ import pytest
 ROOT = Path(__file__).resolve().parents[1]
 WEB = ROOT / "web"
 UNIT_MTS = Path(__file__).resolve().parent / "web_health_route_unit.mts"
+UNIT_SYMBOLS_MTS = Path(__file__).resolve().parent / "web_symbols_route_unit.mts"
 
 RUNTIME_SUFFIXES = {".js", ".jsx", ".mjs", ".cjs", ".ts", ".tsx", ".mts", ".cts"}
 SKIP_DIRS = {".next", "node_modules"}
@@ -140,6 +141,52 @@ def test_symbols_list_route_requires_snapshots_and_session() -> None:
         for line in source.splitlines()
         if "cse.lk" in line.lower()
     )
+
+
+def test_symbols_list_query_validation_static() -> None:
+    """P1-C: limit clamp (default 50, max 200) + sort whitelist in route source."""
+    route = WEB / "src" / "app" / "api" / "v1" / "symbols" / "route.ts"
+    source = route.read_text(encoding="utf-8")
+    assert "const DEFAULT_LIMIT = 50;" in source
+    assert "const MAX_LIMIT = 200;" in source
+    assert "Math.min(limit, MAX_LIMIT)" in source
+    assert 'limit < 1) limit = DEFAULT_LIMIT' in source or (
+        "limit < 1" in source and "DEFAULT_LIMIT" in source
+    )
+    # Sort whitelist: only symbol|change_pct; anything else → change_pct.
+    assert 'sortRaw === "symbol" ? "symbol" : "change_pct"' in source
+    assert 'sort === "symbol"' in source
+    assert "ps.change_pct DESC NULLS LAST" in source
+    assert "s.symbol ASC" in source
+    assert "INNER JOIN LATERAL" in source
+    assert "LEFT JOIN LATERAL" not in source
+
+
+def test_symbols_list_query_validation_unit() -> None:
+    """Runtime: clamp limit, whitelist sort, INNER JOIN SQL, empty board items[]."""
+    assert UNIT_SYMBOLS_MTS.is_file(), f"missing {UNIT_SYMBOLS_MTS}"
+    assert (WEB / "src" / "app" / "api" / "v1" / "symbols" / "route.ts").is_file()
+    _require_web_node_modules()
+    npx = _npx()
+    staged = WEB / ".web_symbols_route_unit.mts"
+    staged.write_text(UNIT_SYMBOLS_MTS.read_text(encoding="utf-8"), encoding="utf-8")
+    try:
+        proc = subprocess.run(
+            [npx, "--yes", "tsx", str(staged.name)],
+            cwd=str(WEB),
+            capture_output=True,
+            text=True,
+            check=False,
+            timeout=120,
+        )
+    finally:
+        staged.unlink(missing_ok=True)
+    if proc.returncode != 0:
+        pytest.fail(
+            f"web_symbols_route_unit.mts failed ({proc.returncode}):\n"
+            f"stdout:\n{proc.stdout}\nstderr:\n{proc.stderr}"
+        )
+    assert "WEB_SYMBOLS_ROUTE_UNIT_OK" in proc.stdout
 
 
 def test_market_page_and_nav_browse_link() -> None:
