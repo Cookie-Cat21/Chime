@@ -104,6 +104,9 @@ def test_start_text_is_short_and_mentions_colombo_disclaimer() -> None:
     assert len(lines) <= 3
     assert "Colombo" in START_TEXT
     assert "/help" in START_TEXT
+    assert "Browse dash" in START_TEXT
+    assert "[CATEGORY]" in START_TEXT
+    assert "optional AI brief" in START_TEXT
     assert disclaimer() in START_TEXT
     assert "Not financial advice" in START_TEXT
 
@@ -117,8 +120,11 @@ def test_help_text_lists_alert_syntax_and_nfa() -> None:
     assert "/alert SYMBOL below PRICE" in HELP_TEXT
     assert "/alert SYMBOL move PERCENT" in HELP_TEXT
     assert "/alert SYMBOL disclosure" in HELP_TEXT
+    assert "[CATEGORY]" in HELP_TEXT
     assert "/cancel ALERT_ID" in HELP_TEXT
     assert "/myalerts — active only" in HELP_TEXT
+    assert "Browse dash" in HELP_TEXT
+    assert "optional AI brief" in HELP_TEXT
     assert "Disclosure alerts:" in HELP_TEXT
     assert disclaimer() in HELP_TEXT
     assert "Not financial advice" in HELP_TEXT

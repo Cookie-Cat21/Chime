@@ -114,16 +114,19 @@ def _env_cmd_rate_per_minute() -> int:
 
 
 # ≤3 lines including NFA; command dump lives on /help only (WS-014 / E7-B02).
+# Wave5: mention Browse dash, disclosure CATEGORY, optional AI brief.
 START_TEXT = (
-    "Chime watches the Colombo Stock Exchange and pings you on Telegram "
-    "when a price or daily-move alert fires — no app or browser tab required.\n"
-    "Disclosures need an explicit /alert SYMBOL disclosure. See /help for commands.\n"
+    "Chime watches the Colombo Stock Exchange and pings Telegram on price, "
+    "move, or disclosure alerts — Browse dash mirrors watchlists.\n"
+    "Disclosures: /alert SYMBOL disclosure [CATEGORY]; "
+    "optional AI brief when enabled. See /help.\n"
     f"{disclaimer()}"
 )
 
 # ≤12 lines (E7-B01). /myalerts lists active rules only (E9-B01).
 # E11-B01: alert syntax + NFA one-liner on /help.
 # E11-A01: disclosure alerts skip filings at/before rule create (fail-closed).
+# Wave5: Browse dash + CATEGORY + optional AI brief.
 HELP_TEXT = (
     "Commands:\n"
     "/watch SYMBOL\n"
@@ -133,10 +136,11 @@ HELP_TEXT = (
     "/alert SYMBOL move PERCENT\n"
     "/alert SYMBOL disclosure [CATEGORY]\n"
     "/cancel ALERT_ID\n"
-    "/myalerts — active only\n"
-    "/mywatchlist\n"
-    "Disclosure alerts: new filings after you set the rule only "
-    "(missing publish time → no fire; optional CATEGORY = substring).\n"
+    "/myalerts — active only · /mywatchlist\n"
+    "Browse dash: market symbols + watchlists (thin UI).\n"
+    "Disclosure alerts: new filings after the rule only "
+    "(missing publish time → no fire; CATEGORY = title substring; "
+    "optional AI brief when enabled).\n"
     f"{disclaimer()}"
 )
 
