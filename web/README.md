@@ -59,3 +59,10 @@ mutations (including `POST /api/v1/auth/logout`) require matching
 UI: `/watchlist`, `/alerts`, `/alerts/history`, `/symbols/[symbol]`, `/health`.
 Shapes follow `docs/factory/API_CONTRACT_V1.md`. Data from `DATABASE_URL` only.
 Mutations require matching `X-CSRF-Token`.
+
+## Security headers
+
+`next.config.ts` sets baseline headers on all routes: `X-Frame-Options`,
+`X-Content-Type-Options`, `Referrer-Policy`, `Permissions-Policy`, and
+disables `X-Powered-By`. Strict CSP is deferred until a nonce/proxy path
+exists (see Next.js CSP guide).
