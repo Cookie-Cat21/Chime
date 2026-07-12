@@ -117,6 +117,10 @@ Instrumented segment is **claim → Telegram send** (`alert_latency_ms`), target
 p95 &lt; 5s under normal Telegram. CSE print → user message is bounded by
 `POLL_INTERVAL_SECONDS` (default 60s + jitter), not sub-5s end-to-end.
 
+## Tijori / market browse
+
+See [TIJORI.md](TIJORI.md) — run poller for `/market`, `AI_BRIEFS_ENABLED`, `PDF_ENRICH_SLEEP_SECONDS`. No `DISCLOSURE_BULK` flag.
+
 ## Disclaimer
 
 Chime relays public market information. Not financial advice.

@@ -102,8 +102,13 @@ No commit farming. One concern per commit where practical.
 
 ## 5. Env (Phase 1 stub / Phase 2 live)
 
+Ops enablement (poller → browse, briefs flag, PDF sleep): [docs/runbooks/TIJORI.md](../runbooks/TIJORI.md).
+
 ```bash
-# Phase 1: market browse needs no new env
+# Phase 1: market browse needs no new env — just run the poller
+
+# PDF enrich (legacy filePath → pdf_url; after alerts; default 0.5s/symbol)
+PDF_ENRICH_SLEEP_SECONDS=0.5
 
 # Phase 2 (documented now, default off)
 AI_BRIEFS_ENABLED=0
@@ -113,6 +118,8 @@ AI_MODEL=gemini-2.0-flash
 AI_MAX_BRIEFS_PER_DAY=50
 AI_MAX_INPUT_CHARS=12000
 PDF_MAX_BYTES=5242880
+
+# DISCLOSURE_BULK — not implemented (per-symbol announcements only)
 ```
 
 ---
