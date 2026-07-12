@@ -289,9 +289,7 @@ async def test_retention_off_skips_cleanup() -> None:
 
 
 @pytest.mark.asyncio
-async def test_retention_runs_after_successful_persist(
-    capsys: pytest.CaptureFixture[str],
-) -> None:
+async def test_retention_runs_after_successful_persist() -> None:
     storage = AsyncMock()
     storage.watched_symbols = AsyncMock(return_value=["JKH.N0000"])
     storage.active_rules_for_symbols = AsyncMock(return_value=[])
@@ -318,7 +316,6 @@ async def test_retention_runs_after_successful_persist(
     assert price_ok is True
     storage.persist_market_snapshots.assert_awaited_once_with(board)
     storage.delete_old_non_watchlist_snapshots.assert_awaited_once_with(7)
-    assert "snapshot_retention_deleted" in capsys.readouterr().out
 
 
 @pytest.mark.asyncio

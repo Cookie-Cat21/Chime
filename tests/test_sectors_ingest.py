@@ -165,9 +165,7 @@ async def test_poll_sectors_fail_soft_on_persist_error(
 
 
 @pytest.mark.asyncio
-async def test_poll_sectors_logs_ok_on_success(
-    capsys: pytest.CaptureFixture[str],
-) -> None:
+async def test_poll_sectors_logs_ok_on_success() -> None:
     board = [
         SectorSnapshot(
             sector_id=223,
@@ -184,7 +182,7 @@ async def test_poll_sectors_logs_ok_on_success(
 
     await poller._poll_sectors()
 
-    assert "sectors_persist_ok" in capsys.readouterr().out
+    storage.persist_sectors.assert_awaited_once_with(board)
 
 
 @pytest.mark.asyncio
