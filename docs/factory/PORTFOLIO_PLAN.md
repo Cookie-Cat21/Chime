@@ -10,7 +10,7 @@ portfolio_score   = Σ repo_score(r)   over all enrolled factories
 
 **Horizon:** Multi-year climb across many products. Chime is **node 1** (~148 `repo_score` so far).
 
-**50M target:** [SCALE_50M.md](SCALE_50M.md) — `portfolio_score ≥ 50_000_000`, **not** 50M raw commits on Chime.
+**10K target (active):** [SCALE_10K.md](SCALE_10K.md) — `portfolio_score ≥ 10_000`, **not** raw commit farming. (50M = far horizon only.)
 
 **Authority:** Each repo still obeys its own constitution (for Chime: `CLAUDE.md` + `COMMIT_FACTORY.md`). Farming banned everywhere.
 
@@ -76,7 +76,7 @@ Pre-seeded epoch ladder (fence-legal only):
 
 When Epoch N clears → open N+1 from this ladder (or `scripts/factory/refill_board.py`).
 
-**Estimated Chime-only proper ceiling:** hundreds–low thousands over months — not millions. Portfolio growth needs **more repos**. See [SCALE_50M.md](SCALE_50M.md) for the 50M math and enrollment ladder.
+**Estimated Chime-only proper ceiling:** hundreds–low thousands over months — not enough alone for 10K. Portfolio growth needs **more repos**. See [SCALE_10K.md](SCALE_10K.md).
 
 ---
 
@@ -133,4 +133,4 @@ Resume next session from `docs/factory/HANDOFF.md`.
 | `refuted_fixed_same_wave` | Quality |
 | `raw_commit_count` | **Ignore** for goals |
 
-Climb toward **50M `portfolio_score`** over products and years — Chime is the template node, not the vehicle for raw-commit theater. Full plan: [SCALE_50M.md](SCALE_50M.md).
+Climb toward **10K `portfolio_score`** first — Chime is the template node, not a raw-commit farm. Full plan: [SCALE_10K.md](SCALE_10K.md).

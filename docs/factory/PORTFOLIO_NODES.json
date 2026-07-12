@@ -1,8 +1,8 @@
 {
   "portfolio_kpi": "A",
-  "portfolio_target": 50000000,
+  "portfolio_target": 10000,
   "formula": "sum_over_repos(min(proper_commits, clusters_closed))",
-  "scale_plan": "docs/factory/SCALE_50M.md",
+  "scale_plan": "docs/factory/SCALE_10K.md",
   "nodes": [
     {
       "id": "chime",

@@ -1,6 +1,6 @@
 {
-  "aspiration": "portfolio_score_50M",
-  "portfolio_target": 50000000,
+  "aspiration": "portfolio_score_10K",
+  "portfolio_target": 10000,
   "literal_raw_commit_target_rejected": true,
   "literal_trillion_commits": false,
   "farming_banned": true,
@@ -16,7 +16,7 @@
   "epoch3_done": 10,
   "open_board": "docs/factory/EPOCH18_BOARD.md",
   "loop_spec": "docs/factory/AGENTIC_LOOP.md",
-  "note": "Target is portfolio_score>=50M across nodes (SCALE_50M.md); raw git count on Chime rejected; portfolio_score == chime node while solo",
+  "note": "Active target portfolio_score>=10K (SCALE_10K.md); raw git count rejected; solo chime score=148",
   "epoch4_done": 9,
   "epoch5_done": 7,
   "epoch6_done": 8,
