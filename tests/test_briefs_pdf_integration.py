@@ -122,7 +122,7 @@ async def test_poller_enrich_sets_pdf_url_without_brief_reenqueue(
         symbol="JKH.N0000",
         title="ESOS",
         published_at=published,
-    ).model_copy(update={"id": 55, "pdf_url": None})
+    ).model_copy(update={"id": 55, "pdf_url": None, "just_inserted": True})
 
     storage = AsyncMock()
     storage.try_advisory_lock = AsyncMock(return_value=True)
@@ -170,6 +170,7 @@ async def test_poller_enrich_sets_pdf_url_without_brief_reenqueue(
     )
     poller = Poller(settings, storage, cse, AsyncMock(return_value=True))
     events = await poller.run_once(force=True)
+    await poller.await_pdf_enrichment()
 
     assert len(events) == 1
     expected_pdf = legacy_pdf_urls_by_id(legacy_rows)["25040"]

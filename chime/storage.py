@@ -347,17 +347,21 @@ class Storage:
             update={
                 "id": disclosure_id,
                 "pdf_url": existing_pdf if existing_pdf else disc.pdf_url,
+                "just_inserted": bool(data.get("inserted")),
             }
         )
 
     async def set_disclosure_pdf_url(self, disclosure_id: int, pdf_url: str) -> bool:
         """Fill ``disclosures.pdf_url`` when known; never overwrite an existing URL.
 
-        Returns True if a row was updated. Fail-soft callers treat False / errors
-        as non-blocking for alerts.
+        Only ``https://cdn.cse.lk/...`` URLs are persisted (SSRF guard). Returns
+        True if a row was updated. Fail-soft callers treat False / errors as
+        non-blocking for alerts.
         """
-        pdf_url = pdf_url.strip()
-        if not pdf_url:
+        from chime.adapters.cse import resolve_pdf_url
+
+        normalized = resolve_pdf_url(pdf_url)
+        if not normalized:
             return False
         async with self._pool.connection() as conn:
             row = await (
@@ -368,7 +372,7 @@ class Storage:
                     WHERE id = %s AND pdf_url IS NULL
                     RETURNING id
                     """,
-                    (pdf_url, disclosure_id),
+                    (normalized, disclosure_id),
                 )
             ).fetchone()
         return row is not None

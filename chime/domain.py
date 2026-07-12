@@ -57,6 +57,9 @@ class Disclosure(BaseModel):
     # CDN PDF from legacy ``filePath`` enrichment (optional; alerts do not wait on it).
     pdf_url: str | None = None
     id: int | None = None
+    # Ephemeral: True when upsert inserted a new row (not ON CONFLICT update).
+    # Poller uses this to queue PDF enrichment once — never on every re-poll.
+    just_inserted: bool = False
 
 
 class AlertRule(BaseModel):

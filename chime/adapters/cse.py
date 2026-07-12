@@ -9,6 +9,7 @@ from __future__ import annotations
 
 from datetime import UTC, datetime
 from typing import Any, Iterable, cast
+from urllib.parse import urlparse
 from zoneinfo import ZoneInfo
 
 import httpx
@@ -39,7 +40,8 @@ DEFAULT_HEADERS = {
 }
 
 ANNOUNCEMENTS_PAGE = "https://www.cse.lk/announcements"
-CDN_BASE = "https://cdn.cse.lk"
+CDN_HOST = "cdn.cse.lk"
+CDN_BASE = f"https://{CDN_HOST}"
 TRADE_SUMMARY_ENDPOINT = "tradeSummary"
 TRADE_SUMMARY_PATH = "/tradeSummary"
 LEGACY_ANNOUNCEMENTS_ENDPOINT = "announcements"
@@ -51,12 +53,39 @@ def _announcement_url(external_id: str) -> str:
     return f"{ANNOUNCEMENTS_PAGE}#{external_id}"
 
 
+def allowed_cdn_pdf_url(url: str | None) -> str | None:
+    """Normalize to ``https://cdn.cse.lk/...`` or ``None`` (SSRF guard).
+
+    Only the CSE CDN host is accepted. Credentials, non-http(s) schemes,
+    other hosts, and path traversal segments are rejected.
+    """
+    if url is None:
+        return None
+    raw = url.strip()
+    if not raw:
+        return None
+    parsed = urlparse(raw)
+    if parsed.scheme not in ("http", "https"):
+        return None
+    if parsed.hostname != CDN_HOST:
+        return None
+    if parsed.username is not None or parsed.password is not None:
+        return None
+    path = parsed.path or "/"
+    segments = [s for s in path.split("/") if s != ""]
+    if any(seg == ".." or seg == "." for seg in segments):
+        return None
+    normalized_path = "/" + "/".join(segments) if segments else "/"
+    return f"{CDN_BASE}{normalized_path}"
+
+
 def resolve_pdf_url(file_path: str | None) -> str | None:
     """Map legacy ``filePath`` to a public CDN PDF URL.
 
     Observed shape: ``uploadAnnounceFiles/....pdf`` →
     ``https://cdn.cse.lk/uploadAnnounceFiles/....pdf``. Absolute http(s) URLs
-    are returned unchanged. Empty / null paths yield ``None``.
+    are accepted only when the host is exactly ``cdn.cse.lk`` (normalized to
+    https). Empty / null / hostile paths yield ``None``.
     """
     if file_path is None:
         return None
@@ -65,10 +94,17 @@ def resolve_pdf_url(file_path: str | None) -> str | None:
         return None
     lower = path.lower()
     if lower.startswith("https://") or lower.startswith("http://"):
-        return path
+        return allowed_cdn_pdf_url(path)
+    if path.startswith("//"):
+        return None
+    first = path.split("/", 1)[0]
+    if ":" in first:
+        return None
     path = path.lstrip("/")
-    # Some frontend builds prefix with ``pdf/``; keep if already present.
-    return f"{CDN_BASE}/{path}"
+    segments = [s for s in path.split("/") if s != ""]
+    if not segments or any(seg == ".." or seg == "." for seg in segments):
+        return None
+    return allowed_cdn_pdf_url(f"{CDN_BASE}/{'/'.join(segments)}")
 
 
 class TradeSummaryRow(BaseModel):

@@ -310,12 +310,14 @@ async def test_upsert_disclosure_and_compat_wrapper() -> None:
     store = _store(conn)
     out = await store.upsert_disclosure(disc)
     assert out.id == 7
+    assert out.just_inserted is True
     assert any("disclosure_briefs" in s for s in conn.sql)
 
     conn2 = _Conn([None, {"id": 8, "inserted": False}])
     store2 = _store(conn2)
     again = await store2.insert_disclosure_if_new(disc)
     assert again is not None and again.id == 8
+    assert again.just_inserted is False
     assert not any("disclosure_briefs" in s for s in conn2.sql)
 
 

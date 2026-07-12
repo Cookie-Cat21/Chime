@@ -177,6 +177,14 @@ class Poller:
         self._dead_letter_notify_attempted_ids: set[int] = set()
         # Legacy PDF enrichment queued under lock; HTTP runs after unlock.
         self._pending_pdf_enrich: list[PendingPdfEnrich] = []
+        self._pdf_enrich_tasks: set[asyncio.Task[Any]] = set()
+        self._pdf_enrich_lock = asyncio.Lock()
+
+    async def await_pdf_enrichment(self) -> None:
+        """Drain in-flight PDF enrich tasks (tests / shutdown)."""
+        pending = list(self._pdf_enrich_tasks)
+        if pending:
+            await asyncio.gather(*pending, return_exceptions=True)
 
     async def run_once(self, *, force: bool = False) -> list[AlertEvent]:
         """Single poll cycle. Returns events claimed (delivered after unlock)."""
@@ -249,10 +257,7 @@ class Poller:
             await self._retry_unsent_with_lock()
         except Exception as exc:
             log.exception("poll_deliver_failed", error=str(exc))
-        try:
-            await self._enrich_disclosure_pdfs(pdf_enrich)
-        except Exception as exc:
-            log.warning("pdf_enrich_batch_failed", error=str(exc))
+        self._schedule_pdf_enrichment(pdf_enrich)
         return fired
 
     async def _retry_unsent_with_lock(self) -> None:
@@ -600,6 +605,7 @@ class Poller:
                 # rule eval / Telegram. Skip rows that already have pdf_url.
                 if (
                     stored.id is not None
+                    and stored.just_inserted
                     and not stored.pdf_url
                     and self._pending_pdf_enrich is not None
                 ):
@@ -667,11 +673,29 @@ class Poller:
         return fetched, covered, True
 
 
+    def _schedule_pdf_enrichment(self, items: list[PendingPdfEnrich]) -> None:
+        """Fire-and-forget enrich so run_once returns after alert delivery."""
+        if not items:
+            return
+        task = asyncio.create_task(
+            self._enrich_disclosure_pdfs_safe(items),
+            name="chime_pdf_enrich",
+        )
+        self._pdf_enrich_tasks.add(task)
+        task.add_done_callback(self._pdf_enrich_tasks.discard)
+
+    async def _enrich_disclosure_pdfs_safe(self, items: list[PendingPdfEnrich]) -> None:
+        try:
+            async with self._pdf_enrich_lock:
+                await self._enrich_disclosure_pdfs(items)
+        except Exception as exc:
+            log.warning("pdf_enrich_batch_failed", error=str(exc))
+
     async def _enrich_disclosure_pdfs(self, items: list[PendingPdfEnrich]) -> None:
         """Resolve legacy filePath → CDN PDF URL. Fail-soft; polite per-symbol sleep.
 
-        Runs outside the advisory lock so CSE latency / sleeps never pin the
-        poller or delay Telegram delivery.
+        Runs outside the advisory lock and outside run_once's await path so CSE
+        latency / sleeps never pin the poller or delay Telegram / next tick.
         """
         if not items:
             return
@@ -680,11 +704,9 @@ class Poller:
             by_symbol.setdefault(item.symbol, []).append(item)
 
         sleep_s = max(0.0, float(self.settings.pdf_enrich_sleep_seconds))
-        first = True
         for symbol, rows in sorted(by_symbol.items()):
-            if not first and sleep_s > 0:
+            if sleep_s > 0:
                 await asyncio.sleep(sleep_s)
-            first = False
             try:
                 legacy = await self.cse.fetch_legacy_announcements(symbol)
             except Exception as exc:
@@ -1116,6 +1138,16 @@ class Poller:
                 )
             except Exception:
                 log.exception("poller_shutdown_tick_error")
+        try:
+            await asyncio.wait_for(
+                self.await_pdf_enrichment(),
+                timeout=SHUTDOWN_TICK_TIMEOUT_SECONDS,
+            )
+        except TimeoutError:
+            log.warning(
+                "poller_shutdown_pdf_enrich_timeout",
+                timeout_seconds=SHUTDOWN_TICK_TIMEOUT_SECONDS,
+            )
         log.info("poller_stopped")
 
 
