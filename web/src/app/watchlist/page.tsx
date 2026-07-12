@@ -82,6 +82,8 @@ export default async function WatchlistPage() {
             change_pct,
             ts: toIso(r.ts),
           });
+          // Cap parser — hostile / uncapped API JSON must not balloon SSR.
+          if (items.length >= 500) break;
         }
         payload = { items };
       }

@@ -16,6 +16,8 @@ import { cn } from "@/lib/utils";
 
 export type ToastTone = "error" | "success" | "info";
 
+const TOAST_TONES = new Set<ToastTone>(["error", "success", "info"]);
+
 type ToastItem = {
   id: string;
   message: string;
@@ -32,6 +34,9 @@ const ToastContext = createContext<ToastApi | null>(null);
 
 const AUTO_DISMISS_MS = 4500;
 
+/** Max concurrent toasts — overflow must dismiss (clear timers), not leak. */
+export const MAX_VISIBLE_TOASTS = 3;
+
 /**
  * Cap toast copy so a misbuilt caller / hostile API error cannot balloon
  * the live region (parity with ``MAX_API_ERROR_MESSAGE_LENGTH``).
@@ -39,6 +44,13 @@ const AUTO_DISMISS_MS = 4500;
 export const MAX_TOAST_MESSAGE_LENGTH = 300;
 
 const CTRL_RE = /[\u0000-\u001F\u007F-\u009F]/g;
+
+/** Fail-closed tone — unknown / hostile values must not reach className. */
+export function normalizeToastTone(raw: unknown): ToastTone {
+  return typeof raw === "string" && TOAST_TONES.has(raw as ToastTone)
+    ? (raw as ToastTone)
+    : "info";
+}
 
 /** Strip controls + length-cap before rendering toast text. */
 export function sanitizeToastMessage(raw: string): string {
@@ -69,7 +81,21 @@ export function ToastProvider({ children }: { children: ReactNode }) {
       const safe = sanitizeToastMessage(
         typeof message === "string" ? message : "Something went wrong.",
       );
-      setItems((prev) => [...prev.slice(-3), { id, message: safe, tone }]);
+      const safeTone = normalizeToastTone(tone);
+      setItems((prev) => {
+        const next = [...prev, { id, message: safe, tone: safeTone }];
+        // Overflow must clear timers — slice-only used to leak dismiss timers.
+        while (next.length > MAX_VISIBLE_TOASTS) {
+          const dropped = next.shift();
+          if (!dropped) break;
+          const t = timers.current.get(dropped.id);
+          if (t) {
+            clearTimeout(t);
+            timers.current.delete(dropped.id);
+          }
+        }
+        return next;
+      });
       const t = setTimeout(() => dismiss(id), AUTO_DISMISS_MS);
       timers.current.set(id, t);
     },

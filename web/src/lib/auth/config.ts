@@ -16,6 +16,12 @@ export const SESSION_TTL_SECONDS = 12 * 60 * 60; // 12h
 export const MAX_CSRF_TOKEN_LENGTH = 128;
 
 /**
+ * Cap demo Telegram ID allowlist — a multi-KB comma env used to balloon the
+ * login ``<select>`` / SSR props (thin dash is not an IAM directory).
+ */
+export const MAX_DEMO_ALLOWLIST = 64;
+
+/**
  * Cookie Secure/SameSite (ADR 001 / API contract).
  * Secure only in production so local HTTP can still set cookies;
  * SameSite=Lax for same-site dashboard + Telegram-first CSRF story.
@@ -38,6 +44,7 @@ function parseAllowlist(raw: string | undefined): Set<number> {
   if (!raw || !raw.trim()) return new Set();
   const ids = new Set<number>();
   for (const part of raw.split(",")) {
+    if (ids.size >= MAX_DEMO_ALLOWLIST) break;
     // Digits-only ≤15 via toSafePositiveInt — bare Number()+isSafeInteger
     // can alias oversized env tokens onto MAX_SAFE_INTEGER.
     const n = toSafePositiveInt(part.trim());

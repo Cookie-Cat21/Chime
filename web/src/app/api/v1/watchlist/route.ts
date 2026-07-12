@@ -15,6 +15,9 @@ import { addWatch, getPool, getStock } from "@/lib/db";
 
 export const runtime = "nodejs";
 
+/** Cap watchlist list — unbounded SELECT used to OOM SSR / balloon JSON. */
+export const MAX_WATCHLIST_ITEMS = 500;
+
 /**
  * GET /api/v1/watchlist — session user's symbols + latest price_snapshots join.
  * Postgres only; no cse.lk.
@@ -52,8 +55,9 @@ export async function GET(request: NextRequest) {
          LIMIT 1
        ) ps ON TRUE
        WHERE w.user_id = $1
-       ORDER BY w.symbol ASC`,
-      [gated.session.user_id],
+       ORDER BY w.symbol ASC
+       LIMIT $2`,
+      [gated.session.user_id, MAX_WATCHLIST_ITEMS],
     );
 
     const items = result.rows.flatMap((row) => {

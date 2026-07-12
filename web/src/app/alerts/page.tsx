@@ -96,6 +96,8 @@ export default async function AlertsPage({
             armed: r.armed === true,
             created_at: toIso(r.created_at),
           });
+          // Cap parser — hostile / uncapped API JSON must not balloon SSR.
+          if (rules.length >= 500) break;
         }
         payload = { rules };
       }

@@ -13,6 +13,9 @@ import { createAlertRule, getPool, getStock } from "@/lib/db";
 
 export const runtime = "nodejs";
 
+/** Cap alert_rules list — unbounded SELECT used to OOM SSR / balloon JSON. */
+export const MAX_ALERT_RULES = 500;
+
 /**
  * GET /api/v1/alerts — session user's alert rules (active=true by default).
  * Optional `?symbol=` filters to one CSE symbol (case-insensitive normalize).
@@ -74,8 +77,9 @@ export async function GET(request: NextRequest) {
       `SELECT id, symbol, type, threshold, category, active, armed, created_at
        FROM alert_rules
        WHERE ${clauses.join(" AND ")}
-       ORDER BY id ASC`,
-      params,
+       ORDER BY id ASC
+       LIMIT $${params.length + 1}`,
+      [...params, MAX_ALERT_RULES],
     );
 
     const rules = result.rows.flatMap((row) => {
