@@ -27,7 +27,10 @@ def test_to_iso_fails_closed_on_unparseable() -> None:
     assert "if (Number.isNaN(d.getTime())) return value;" not in source
     assert "return value;" not in source
     assert "if (value instanceof Date) return value.toISOString();" not in source
-    assert "if (Number.isNaN(d.getTime())) return null;" in source
+    # W59: range-gated via safeToIsoString (NaN / |t|>MAX_DATE_MS / length).
+    assert "safeToIsoString" in source
+    assert "Number.isNaN(t)" in source
+    assert "MAX_DATE_MS" in source
     assert "\\u0000-\\u001F" in source
 
 

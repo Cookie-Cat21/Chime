@@ -52,5 +52,5 @@ def test_health_format_age_day_cap() -> None:
         encoding="utf-8"
     )
     assert "MAX_HEALTH_AGE_DAYS" in source
-    assert "9999" in source
+    assert "9_999" in source
     assert "days > MAX_HEALTH_AGE_DAYS" in source
