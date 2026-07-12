@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import inspect
 import json
 from datetime import UTC, datetime
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
@@ -14,6 +15,64 @@ def _is_loopback_host(host: str) -> bool:
     if h.startswith("[") and h.endswith("]"):
         h = h[1:-1]
     return h in ("127.0.0.1", "::1")
+
+
+def _nonneg_int(value: Any) -> int | None:
+    if isinstance(value, bool) or not isinstance(value, int):
+        return None
+    return value if value >= 0 else None
+
+
+def pdf_enrich_hint_from_poller(poller: Any) -> dict[str, int]:
+    """Cheap in-memory PDF enrich counters (mock-safe). Empty on failure."""
+    fn = getattr(poller, "pdf_enrich_health_snapshot", None)
+    if not callable(fn) or inspect.iscoroutinefunction(fn):
+        return {}
+    try:
+        raw = fn()
+    except Exception:
+        return {}
+    if not isinstance(raw, dict):
+        return {}
+    hint: dict[str, int] = {}
+    for key in ("in_flight_tasks", "last_batch_size", "batches_started"):
+        parsed = _nonneg_int(raw.get(key))
+        if parsed is not None:
+            hint[key] = parsed
+    return hint
+
+
+async def pending_briefs_count(storage: Any) -> int | None:
+    """Optional SQL pending-briefs count; None when unavailable (fail-soft)."""
+    fn = getattr(storage, "count_pending_disclosure_briefs", None)
+    if not callable(fn):
+        return None
+    try:
+        raw = await fn() if inspect.iscoroutinefunction(fn) else fn()
+    except Exception:
+        return None
+    return _nonneg_int(raw)
+
+
+async def brief_queue_health_hint(
+    storage: Any | None = None,
+    poller: Any | None = None,
+) -> dict[str, Any]:
+    """Assemble brief/pdf enrich queue hint for loopback health details.
+
+    Never raises. Omits ``pending_briefs`` when the SQL probe is unavailable.
+    Does not influence ``ok`` — ops hint only.
+    """
+    hint: dict[str, Any] = {}
+    if poller is not None:
+        pdf = pdf_enrich_hint_from_poller(poller)
+        if pdf:
+            hint["pdf_enrich"] = pdf
+    if storage is not None:
+        pending = await pending_briefs_count(storage)
+        if pending is not None:
+            hint["pending_briefs"] = pending
+    return hint
 
 
 class HealthState:

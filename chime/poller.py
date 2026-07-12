@@ -43,6 +43,7 @@ from chime.domain import (
     format_alert_message,
     format_dead_letter_notify,
 )
+from chime.health import brief_queue_health_hint
 from chime.logging_setup import get_logger
 from chime.notify import SendResult
 from chime.rules import evaluate_disclosure_rules, evaluate_price_rules, filter_fireable
@@ -1220,6 +1221,9 @@ async def run_poller_forever(
                 circuits=circuits,
                 last_error=poller.last_error,
             )
+            brief_queue = await brief_queue_health_hint(storage=storage, poller=poller)
+            if brief_queue:
+                health.update(brief_queue=brief_queue)
             with contextlib.suppress(TimeoutError):
                 await asyncio.wait_for(stop.wait(), timeout=10)
 

@@ -955,6 +955,23 @@ class Storage:
         finally:
             await cm.__aexit__(*exc_info)
 
+
+    async def count_pending_disclosure_briefs(self) -> int:
+        """Count ``disclosure_briefs`` rows still ``pending`` (ops queue hint)."""
+        async with self._pool.connection() as conn:
+            row = await (
+                await conn.execute(
+                    """
+                    SELECT COUNT(*)::int AS n
+                    FROM disclosure_briefs
+                    WHERE status = 'pending'
+                    """
+                )
+            ).fetchone()
+        if row is None:
+            return 0
+        return int(_as_row(row)["n"])
+
     def pool_health_snapshot(self) -> dict[str, Any]:
         """Return real pool metrics observed by health checks.
 

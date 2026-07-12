@@ -13,7 +13,7 @@ from telegram import Bot
 from chime.adapters.cse import CSEClient
 from chime.bot import build_application
 from chime.config import Settings
-from chime.health import HealthState, start_health_server
+from chime.health import HealthState, brief_queue_health_hint, start_health_server
 from chime.logging_setup import configure_logging, get_logger
 from chime.migrate import apply_migrations
 from chime.notify import SendResult, send_message
@@ -46,7 +46,11 @@ async def _refresh_bot_health(storage: Storage, health: HealthState) -> None:
     except Exception as exc:
         last_error = str(exc)
         log.warning("health_db_failed", error=str(exc))
-    health.update(ok=db_ok, db_ok=db_ok, last_error=last_error)
+    details: dict[str, object] = dict(ok=db_ok, db_ok=db_ok, last_error=last_error)
+    brief_queue = await brief_queue_health_hint(storage=storage)
+    if brief_queue:
+        details["brief_queue"] = brief_queue
+    health.update(**details)
 
 
 def _circuits_for_health(poller: Poller) -> dict[str, object]:
@@ -157,6 +161,9 @@ async def _refresh_both_health(storage: Storage, health: HealthState, poller: Po
     )
     if pool:
         details["db_pool"] = pool
+    brief_queue = await brief_queue_health_hint(storage=storage, poller=poller)
+    if brief_queue:
+        details["brief_queue"] = brief_queue
     health.update(**details)
 
 
