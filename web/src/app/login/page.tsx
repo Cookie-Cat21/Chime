@@ -17,7 +17,11 @@ export const metadata = {
   description: "Sign in to manage Chime CSE alerts that push to Telegram.",
 };
 
-export default async function LoginPage() {
+export default async function LoginPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ expired?: string | string[] }>;
+}) {
   const cfg = getDashAuthConfig();
   const jar = await cookies();
   const raw = jar.get(SESSION_COOKIE)?.value;
@@ -28,6 +32,11 @@ export default async function LoginPage() {
   if (session) {
     redirect("/watchlist");
   }
+
+  const sp = await searchParams;
+  const expiredRaw = sp.expired;
+  const expiredFlag = Array.isArray(expiredRaw) ? expiredRaw[0] : expiredRaw;
+  const sessionExpired = expiredFlag === "1" || expiredFlag === "true";
 
   const allowlist = publicDemoAllowlist(cfg);
   const defaultId =
@@ -50,6 +59,15 @@ export default async function LoginPage() {
         <h1 className="chime-rise chime-rise-delay-1 mt-5 text-xl font-medium text-foreground sm:text-2xl">
           CSE alerts, Telegram first
         </h1>
+        {sessionExpired ? (
+          <p
+            role="status"
+            data-testid="session-expired-notice"
+            className="chime-rise chime-rise-delay-1 mt-4 text-sm text-foreground"
+          >
+            Your session expired. Sign in again to manage watchlists and alerts.
+          </p>
+        ) : null}
         <p
           id="login-explainer"
           className="chime-rise chime-rise-delay-2 mt-3 text-sm text-muted-foreground sm:text-base"

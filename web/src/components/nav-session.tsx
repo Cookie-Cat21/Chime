@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 
 import { Button } from "@/components/ui/button";
 import { apiErrorMessage, apiMutate } from "@/lib/api/client-fetch";
-import { CSRF_COOKIE } from "@/lib/auth/config";
+import { redirectToLogin } from "@/lib/auth/session-redirect";
 
 type MePayload = {
   id: number;
@@ -18,17 +18,6 @@ function chipLabel(me: MePayload): string {
     return String(me.telegram_id);
   }
   return `user ${me.id}`;
-}
-
-/** Drop the readable CSRF cookie client-side (session is HttpOnly). */
-function clearBrowserCsrfCookie() {
-  if (typeof document === "undefined") return;
-  document.cookie = `${CSRF_COOKIE}=; Max-Age=0; Path=/`;
-}
-
-/** Full navigation so Set-Cookie + RSC cache cannot bounce back to /watchlist. */
-function redirectToLogin() {
-  window.location.assign("/login");
 }
 
 export function NavSession({ compact = false }: { compact?: boolean }) {
@@ -45,6 +34,11 @@ export function NavSession({ compact = false }: { compact?: boolean }) {
           headers: { Accept: "application/json" },
           cache: "no-store",
         });
+        if (res.status === 401) {
+          // Expired/invalid session while shell still mounted — leave cleanly.
+          if (!cancelled) redirectToLogin({ expired: true });
+          return;
+        }
         if (!res.ok) return;
         const data = (await res.json()) as MePayload;
         if (!cancelled) setMe(data);
@@ -62,6 +56,7 @@ export function NavSession({ compact = false }: { compact?: boolean }) {
     try {
       const { ok, status, data } = await apiMutate("/api/v1/auth/logout", {
         method: "POST",
+        authRedirect: false,
       });
       // 401 = already unauthenticated — still leave cleanly.
       if (!ok && status !== 401) {
@@ -70,7 +65,6 @@ export function NavSession({ compact = false }: { compact?: boolean }) {
         return;
       }
       setMe(null);
-      clearBrowserCsrfCookie();
       redirectToLogin();
     } catch {
       setPending(false);

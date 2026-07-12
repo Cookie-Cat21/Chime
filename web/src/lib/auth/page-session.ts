@@ -2,6 +2,7 @@ import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 
 import { getDashAuthConfig, SESSION_COOKIE } from "./config";
+import { LOGIN_EXPIRED_PATH } from "./session-redirect";
 import { type SessionPayload, verifySessionToken } from "./session";
 
 /** Require a signed session for App Router pages; redirect to /login if missing. */
@@ -14,7 +15,8 @@ export async function requirePageSession(): Promise<SessionPayload> {
       ? verifySessionToken(raw, cfg.sessionSecret)
       : null;
   if (!session) {
-    redirect("/login");
+    // Cookie present but invalid/expired → tell login why; bare miss → /login.
+    redirect(raw ? LOGIN_EXPIRED_PATH : "/login");
   }
   return session;
 }
