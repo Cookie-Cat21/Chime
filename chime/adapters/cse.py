@@ -24,7 +24,7 @@ from tenacity import (
 )
 
 from chime.circuit import CircuitBreaker, CircuitOpenError
-from chime.domain import Disclosure, PriceSnapshot
+from chime.domain import Disclosure, PriceSnapshot, SectorSnapshot
 
 log = structlog.get_logger(__name__)
 
@@ -45,6 +45,8 @@ CDN_HOST = "cdn.cse.lk"
 CDN_BASE = f"https://{CDN_HOST}"
 TRADE_SUMMARY_ENDPOINT = "tradeSummary"
 TRADE_SUMMARY_PATH = "/tradeSummary"
+ALL_SECTORS_ENDPOINT = "allSectors"
+ALL_SECTORS_PATH = "/allSectors"
 LEGACY_ANNOUNCEMENTS_ENDPOINT = "announcements"
 LEGACY_ANNOUNCEMENTS_PATH = "/announcements"
 
@@ -182,6 +184,28 @@ class ApprovedAnnouncementResponse(BaseModel):
     approvedAnnouncements: list[AnnouncementRow] = Field(default_factory=list)
 
 
+class SectorRow(BaseModel):
+    """Row from ``POST /allSectors`` (see docs/sample_responses/allSectors.json)."""
+
+    model_config = ConfigDict(extra="ignore")
+
+    id: int | None = None
+    sectorId: int
+    symbol: str
+    indexCode: str | None = None
+    indexCodeSp: str | None = None
+    indexName: str | None = None
+    name: str
+    indexValue: float | None = None
+    change: float | None = None
+    percentage: float | None = None
+    sectorTradeToday: float | None = None
+    sectorVolumeToday: float | None = None
+    sectorTurnoverToday: float | None = None
+    sectorPreviousClose: float | None = None
+    transactionTime: int | None = None
+
+
 class LegacyAnnouncementRow(BaseModel):
     """Row from legacy ``POST /announcements`` (PDF archive via ``filePath``)."""
 
@@ -280,6 +304,27 @@ def trade_row_to_snapshot(row: TradeSummaryRow, *, now: datetime | None = None) 
         market_cap=row.marketCap,
         name=row.name,
         ts=ts,
+    )
+
+
+def sector_row_to_snapshot(row: SectorRow, *, now: datetime | None = None) -> SectorSnapshot:
+    ts = _ms_to_dt(row.transactionTime) if row.transactionTime else (now or datetime.now(UTC))
+    return SectorSnapshot(
+        sector_id=row.sectorId,
+        symbol=row.symbol.strip().upper(),
+        name=row.name.strip(),
+        index_code=row.indexCode,
+        index_code_sp=row.indexCodeSp,
+        index_name=row.indexName,
+        index_value=row.indexValue,
+        change=row.change,
+        change_pct=row.percentage,
+        trade_today=row.sectorTradeToday,
+        volume_today=row.sectorVolumeToday,
+        turnover_today=row.sectorTurnoverToday,
+        previous_close=row.sectorPreviousClose,
+        ts=ts,
+        cse_row_id=row.id,
     )
 
 
@@ -555,6 +600,49 @@ class CSEClient:
             return out
 
         return cast(list[PriceSnapshot], await self._guarded(TRADE_SUMMARY_ENDPOINT, _call))
+
+    async def fetch_all_sectors(self) -> list[SectorSnapshot]:
+        """Fetch CSE sector index board (``POST /allSectors``, top-level array)."""
+
+        async def _call() -> list[SectorSnapshot]:
+            raw = await self._request("POST", ALL_SECTORS_PATH, json_body={})
+            if not isinstance(raw, list):
+                log.error(
+                    "cse_schema_error",
+                    endpoint=ALL_SECTORS_ENDPOINT,
+                    error="expected array",
+                )
+                raise ValueError(f"{ALL_SECTORS_ENDPOINT}: expected JSON array")
+            if not raw:
+                log.warning(
+                    "cse_all_sectors_empty_ok",
+                    endpoint=ALL_SECTORS_ENDPOINT,
+                )
+            now = datetime.now(UTC)
+            out: list[SectorSnapshot] = []
+            for item in raw:
+                try:
+                    row = SectorRow.model_validate(item)
+                except ValidationError as exc:
+                    log.warning(
+                        "cse_sector_row_skipped",
+                        endpoint=ALL_SECTORS_ENDPOINT,
+                        error=str(exc),
+                        row=str(item)[:200],
+                    )
+                    continue
+                if not row.symbol.strip() or not row.name.strip():
+                    log.warning(
+                        "cse_sector_row_skipped",
+                        endpoint=ALL_SECTORS_ENDPOINT,
+                        error="blank symbol or name",
+                        row=str(item)[:200],
+                    )
+                    continue
+                out.append(sector_row_to_snapshot(row, now=now))
+            return out
+
+        return cast(list[SectorSnapshot], await self._guarded(ALL_SECTORS_ENDPOINT, _call))
 
     async def fetch_company_info(self, symbol: str) -> PriceSnapshot | None:
         symbol = symbol.strip().upper()

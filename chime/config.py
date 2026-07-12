@@ -61,6 +61,9 @@ class Settings:
     # older than N days for symbols NOT on any watchlist. Default 0 = off
     # (keep everything). Watched symbols keep full history forever.
     snapshot_retention_days: int = 0
+    # SECTORS_INGEST=1 — optional POST /allSectors → sectors table persist.
+    # Default off (0); thin GET /api/v1/sectors reads Postgres only.
+    sectors_ingest: bool = False
 
     @classmethod
     def from_env(cls, *, require_token: bool = True) -> Settings:
@@ -86,6 +89,7 @@ class Settings:
             pdf_enrich_sleep_seconds=_float("PDF_ENRICH_SLEEP_SECONDS", 0.5),
             disclosure_bulk_feed=os.getenv("DISCLOSURE_BULK_FEED", "0").strip() == "1",
             snapshot_retention_days=max(0, _int("SNAPSHOT_RETENTION_DAYS", 0)),
+            sectors_ingest=os.getenv("SECTORS_INGEST", "0").strip() == "1",
         )
 
 

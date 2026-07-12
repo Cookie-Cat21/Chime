@@ -19,7 +19,7 @@ DATABASE_URL = os.getenv("DATABASE_URL", "").strip()
 
 
 def test_migration_filenames_ordered_and_wave3_presence() -> None:
-    """Filenames sort lexicographically; 005/006 define briefs + category."""
+    """Filenames sort lexicographically; 005/006/007/008 presence pinned."""
     files = sorted(p.name for p in migrations_dir().glob("*.sql") if p.is_file())
     assert files, "expected SQL migrations under db/migrations"
     assert files == sorted(files)
@@ -28,11 +28,15 @@ def test_migration_filenames_ordered_and_wave3_presence() -> None:
     assert "005_disclosure_briefs.sql" in files
     assert "006_alert_rule_category.sql" in files
     assert "007_brief_processing_status.sql" in files
+    assert "008_sectors.sql" in files
     assert files.index("005_disclosure_briefs.sql") < files.index(
         "006_alert_rule_category.sql"
     )
     assert files.index("006_alert_rule_category.sql") < files.index(
         "007_brief_processing_status.sql"
+    )
+    assert files.index("007_brief_processing_status.sql") < files.index(
+        "008_sectors.sql"
     )
 
     briefs_sql = (migrations_dir() / "005_disclosure_briefs.sql").read_text(
@@ -53,6 +57,10 @@ def test_migration_filenames_ordered_and_wave3_presence() -> None:
         migrations_dir() / "007_brief_processing_status.sql"
     ).read_text(encoding="utf-8")
     assert "processing" in processing_sql
+
+    sectors_sql = (migrations_dir() / "008_sectors.sql").read_text(encoding="utf-8")
+    assert "CREATE TABLE IF NOT EXISTS sectors" in sectors_sql
+    assert "sector_id" in sectors_sql
 
 
 @pytest.mark.skipif(not DATABASE_URL, reason="DATABASE_URL not set")

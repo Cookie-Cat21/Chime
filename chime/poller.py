@@ -267,6 +267,7 @@ class Poller:
         try:
             price_events, price_ok = await self._poll_prices()
             disc_events, disc_ok = await self._poll_disclosures()
+            await self._poll_sectors()
             fired.extend(price_events)
             fired.extend(disc_events)
             symbols = await self.storage.watched_symbols()
@@ -560,6 +561,21 @@ class Poller:
             rules_by_symbol.setdefault(rule.symbol, []).append(rule)
 
         return await self._evaluate_price_snaps(snaps, rules_by_symbol), price_ok
+
+    async def _poll_sectors(self) -> None:
+        """Optional ``SECTORS_INGEST`` board persist — fail-soft, never degrades tick."""
+        if not self.settings.sectors_ingest:
+            return
+        try:
+            sectors = await self.cse.fetch_all_sectors()
+        except Exception as exc:
+            log.warning("sectors_poll_failed", error=str(exc))
+            return
+        try:
+            stored = await self.storage.persist_sectors(sectors)
+            log.info("sectors_persist_ok", fetched=len(sectors), persisted=len(stored))
+        except Exception as exc:
+            log.exception("sectors_persist_failed", error=str(exc), count=len(sectors))
 
     async def _evaluate_price_snaps(
         self,

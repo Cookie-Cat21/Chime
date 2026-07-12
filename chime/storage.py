@@ -19,6 +19,7 @@ from chime.domain import (
     Disclosure,
     PreviousPriceState,
     PriceSnapshot,
+    SectorSnapshot,
 )
 
 
@@ -230,6 +231,78 @@ class Storage:
         if row is None:
             return 0
         return int(_as_row(row).get("n") or 0)
+
+    async def persist_sectors(self, sectors: list[SectorSnapshot]) -> list[SectorSnapshot]:
+        """Upsert CSE sector index rows (optional ``SECTORS_INGEST`` path).
+
+        Last-wins per ``sector_id``. Blank symbols skipped. Empty input is a no-op.
+        """
+        if not sectors:
+            return []
+
+        by_id: dict[int, SectorSnapshot] = {}
+        for sector in sectors:
+            symbol = sector.symbol.strip().upper()
+            if not symbol:
+                continue
+            by_id[sector.sector_id] = sector.model_copy(update={"symbol": symbol})
+        if not by_id:
+            return []
+
+        rows = list(by_id.values())
+        values = ",".join(
+            ["(%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)"] * len(rows)
+        )
+        params: list[Any] = []
+        for sector in rows:
+            params.extend(
+                [
+                    sector.sector_id,
+                    sector.symbol,
+                    sector.name,
+                    sector.index_code,
+                    sector.index_code_sp,
+                    sector.index_name,
+                    sector.index_value,
+                    sector.change,
+                    sector.change_pct,
+                    sector.trade_today,
+                    sector.volume_today,
+                    sector.turnover_today,
+                    sector.previous_close,
+                    sector.ts,
+                    sector.cse_row_id,
+                ]
+            )
+
+        async with self._pool.connection() as conn:
+            await conn.execute(
+                f"""
+                INSERT INTO sectors (
+                    sector_id, symbol, name, index_code, index_code_sp, index_name,
+                    index_value, change, change_pct, trade_today, volume_today,
+                    turnover_today, previous_close, ts, cse_row_id
+                ) VALUES {values}
+                ON CONFLICT (sector_id) DO UPDATE SET
+                    symbol = EXCLUDED.symbol,
+                    name = EXCLUDED.name,
+                    index_code = EXCLUDED.index_code,
+                    index_code_sp = EXCLUDED.index_code_sp,
+                    index_name = EXCLUDED.index_name,
+                    index_value = EXCLUDED.index_value,
+                    change = EXCLUDED.change,
+                    change_pct = EXCLUDED.change_pct,
+                    trade_today = EXCLUDED.trade_today,
+                    volume_today = EXCLUDED.volume_today,
+                    turnover_today = EXCLUDED.turnover_today,
+                    previous_close = EXCLUDED.previous_close,
+                    ts = EXCLUDED.ts,
+                    cse_row_id = EXCLUDED.cse_row_id,
+                    ingested_at = now()
+                """,
+                params,
+            )
+        return rows
 
     async def latest_snapshot(self, symbol: str) -> PriceSnapshot | None:
         symbol = symbol.strip().upper()

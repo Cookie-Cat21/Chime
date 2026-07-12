@@ -480,6 +480,41 @@ applies only to alert fire paths.
 
 ---
 
+## Sectors (optional ingest)
+
+### `GET /api/v1/sectors`
+
+Session required. Reads latest upserted rows from Postgres `sectors` (populated
+only when the poller runs with `SECTORS_INGEST=1`). Empty `items` when ingest
+has never run. No cse.lk from the dash.
+
+**Response** `200`
+
+```json
+{
+  "items": [
+    {
+      "sector_id": 223,
+      "symbol": "EGY",
+      "name": "Energy",
+      "index_code": "1010",
+      "index_name": "S&P/CSE Energy Industry Group Index",
+      "index_value": 2951.6,
+      "change": -67.62,
+      "change_pct": -2.24,
+      "volume_today": 74378,
+      "turnover_today": 9844386.05,
+      "previous_close": 3019.22,
+      "ts": "2026-07-11T09:00:00+00:00"
+    }
+  ]
+}
+```
+
+Not a sector heatmap/screener — list + performance fields only.
+
+---
+
 ## Route index (frozen)
 
 | Method | Path | Notes |
@@ -500,6 +535,7 @@ applies only to alert fire paths.
 | `GET` | `/api/v1/symbols/{symbol}` | Slim `last` |
 | `GET` | `/api/v1/symbols/{symbol}/snapshots` | |
 | `GET` | `/api/v1/symbols/{symbol}/disclosures` | `id` + `external_id` |
+| `GET` | `/api/v1/sectors` | Optional sector board (Postgres; needs `SECTORS_INGEST=1`) |
 
 ---
 

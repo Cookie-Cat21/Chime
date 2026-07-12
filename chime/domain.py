@@ -62,6 +62,32 @@ class Disclosure(BaseModel):
     just_inserted: bool = False
 
 
+class SectorSnapshot(BaseModel):
+    """Normalized CSE sector index row (POST /allSectors).
+
+    Optional browse layer — not used by alert rules. Poller persists only when
+    ``SECTORS_INGEST=1``.
+    """
+
+    model_config = ConfigDict(extra="ignore")
+
+    sector_id: int
+    symbol: str
+    name: str
+    index_code: str | None = None
+    index_code_sp: str | None = None
+    index_name: str | None = None
+    index_value: float | None = None
+    change: float | None = None
+    change_pct: float | None = None
+    trade_today: float | None = None
+    volume_today: float | None = None
+    turnover_today: float | None = None
+    previous_close: float | None = None
+    ts: datetime
+    cse_row_id: int | None = None
+
+
 class AlertRule(BaseModel):
     """Active user alert rule loaded from storage for evaluation."""
 
