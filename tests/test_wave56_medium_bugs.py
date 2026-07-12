@@ -34,6 +34,11 @@ def test_resolve_positive_int_cap_fail_closed() -> None:
     assert resolve_positive_int_cap(float("inf")) == 1
     assert resolve_positive_int_cap("nope") == 1
     assert resolve_positive_int_cap(10_000, absolute_max=100) == 100
+    # bool is an int subclass — must fail closed (w60 mypy narrow branch).
+    assert resolve_positive_int_cap(True) == 1
+    assert resolve_positive_int_cap(False) == 1
+    assert resolve_positive_int_cap(b"12") == 12
+    assert resolve_positive_int_cap(3.9) == 3
 
 
 def test_sanitize_brief_body_max_len_fail_closed() -> None:
