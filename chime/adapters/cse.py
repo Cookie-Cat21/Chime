@@ -7,8 +7,9 @@ with backoff; a per-endpoint circuit breaker short-circuits sustained outages.
 
 from __future__ import annotations
 
+from collections.abc import Iterable
 from datetime import UTC, datetime
-from typing import Any, Iterable, cast
+from typing import Any, cast
 from urllib.parse import urlparse
 from zoneinfo import ZoneInfo
 

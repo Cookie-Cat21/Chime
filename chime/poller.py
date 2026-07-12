@@ -179,6 +179,17 @@ class Poller:
         self._pending_pdf_enrich: list[PendingPdfEnrich] = []
         self._pdf_enrich_tasks: set[asyncio.Task[Any]] = set()
         self._pdf_enrich_lock = asyncio.Lock()
+        # Cheap ops counters for loopback health (wave3 brief_queue hint).
+        self._pdf_enrich_last_batch_size: int = 0
+        self._pdf_enrich_batches_started: int = 0
+
+    def pdf_enrich_health_snapshot(self) -> dict[str, int]:
+        """In-memory PDF enrich queue counters for health details."""
+        return {
+            "in_flight_tasks": len(self._pdf_enrich_tasks),
+            "last_batch_size": self._pdf_enrich_last_batch_size,
+            "batches_started": self._pdf_enrich_batches_started,
+        }
 
     async def await_pdf_enrichment(self) -> None:
         """Drain in-flight PDF enrich tasks (tests / shutdown)."""
@@ -651,17 +662,17 @@ class Poller:
         fetched: dict[str, list[Disclosure]] = {s: [] for s in covered}
         unmatched = 0
         for row in rows:
-            symbol = resolve_announcement_symbol(
+            resolved = resolve_announcement_symbol(
                 row, name_map=name_map, allowed_symbols=allowed
             )
-            if symbol is None:
+            if resolved is None:
                 unmatched += 1
                 continue
-            covered.add(symbol)
-            fetched.setdefault(symbol, [])
-            disc = announcement_to_disclosure(row, symbol=symbol, seen_at=seen_at)
+            covered.add(resolved)
+            fetched.setdefault(resolved, [])
+            disc = announcement_to_disclosure(row, symbol=resolved, seen_at=seen_at)
             if disc is not None:
-                fetched[symbol].append(disc)
+                fetched[resolved].append(disc)
 
         log.info(
             "disclosure_bulk_ok",
@@ -677,6 +688,8 @@ class Poller:
         """Fire-and-forget enrich so run_once returns after alert delivery."""
         if not items:
             return
+        self._pdf_enrich_last_batch_size = len(items)
+        self._pdf_enrich_batches_started += 1
         task = asyncio.create_task(
             self._enrich_disclosure_pdfs_safe(items),
             name="chime_pdf_enrich",
