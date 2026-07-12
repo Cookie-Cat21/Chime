@@ -120,3 +120,19 @@ PDF_MAX_BYTES=5242880
 ## 6. Success metric (product)
 
 User can: browse CSE symbols in dash → watch → set disclosure alert → get Telegram ping when filing lands → (Phase 2) read a short AI brief of the official filing. Scenario AI is optional polish, not the wedge.
+
+---
+
+## Wave execution log
+
+**2026-07-12** — User override for this Tijori multi-wave: allow **max parallelism** and **long improve loops** beyond the usual factory soft caps (still prefer disjoint OWNED_FILES; stop early when gates are green).
+
+**Phase 1+ in progress**
+
+| Item | Status |
+|---|---|
+| Market-wide `tradeSummary` persist | landed (`a802cb7`) |
+| `GET /api/v1/symbols` + `/market` Browse | landed |
+| `pdf_url` + `disclosure_briefs` + `chime/briefs/` stub | landed (`AI_BRIEFS_ENABLED=0`) |
+| Improve-loop / CI green on touched paths | in progress |
+| Phase 2 PDF enricher + LLM briefs | not started |

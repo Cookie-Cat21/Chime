@@ -355,7 +355,7 @@ UI must not render a Level-1 quote board from optional OHLC fields. Contract sur
 
 ### `GET /api/v1/symbols`
 
-Thin market browse list (Tijori/CSE Phase 1). Session required. Postgres only.
+Thin market browse list (Tijori/CSE Phase 1). Session required. Postgres only — latest `price_snapshots` via **INNER JOIN** (symbols with no tick omitted). UI `/market` calls with `limit=100&sort=change_pct` (+ optional `q`).
 
 Query:
 

@@ -36,12 +36,13 @@ No nested app shell beyond a single top nav: Browse · Watchlist · Alerts · Hi
 - No marketing sections, stats, or feature grids
 
 ### `/market`
-- Header: “Browse” + search (symbol/name)
-- List rows: `symbol` · name · last `price` · `change_pct` · link to symbol detail
+- Header: “Browse” + search (symbol/name); subtitle: snapshots for watch discovery, alerts stay on Telegram
+- Fetches `GET /api/v1/symbols?limit=100&sort=change_pct` (+ `q` when searching)
+- List rows: `symbol` (→ `/symbols/[symbol]`) · name · last `price` · `change_pct` · snapshot `ts`
 - Sorted by `change_pct` desc by default (thin movers view — not a screener)
-- Empty state: poller has not persisted tradeSummary yet
-- NFA under price-adjacent copy
-- Fence: no OHLC board, no multi-column sort UI, no live ticks
+- Empty state: poller has not persisted tradeSummary yet (or no search match)
+- NFA under price-adjacent copy + site footer
+- Fence: no OHLC board, no multi-column sort UI, no live ticks, no cse.lk from `web/`
 
 ### `/watchlist`
 - Header: “Watchlist” + add-symbol control (input + Add)
@@ -155,6 +156,7 @@ Do not introduce email/password, OAuth providers, or multi-tenant orgs in v1. Da
 | Page | Out of scope |
 |---|---|
 | `/login` | Marketing site, waitlist, payments, multi-provider SSO |
+| `/market` | Screener, OHLC board, multi-sort UI, live ticks, portfolio actions |
 | `/watchlist` | Portfolio quantities, cost basis, P&L, sector allocation |
 | `/alerts` | Complex boolean rules, trailing stops, backtests, quiet hours UI |
 | `/alerts/history` | Analytics funnels, export-to-tax, “would have made” sims |

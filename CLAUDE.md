@@ -159,6 +159,8 @@ scrape HTML; use the JSON endpoints above.
 ## Current status
 
 Stage A (adapter, schema, poller, rules, bot, health) is implemented and
-hardened through Stage B Pass 4. Commit Factory planning lives under
-`docs/factory/` (100 workstreams). Keep non-goals and compliance intact;
-thin dashboard only within the fence above. Ceyfi merge is deferred.
+hardened through Stage B Pass 4. Tijori-for-CSE Phase 1 is in progress:
+market-wide snapshot persist, thin `/market` browse (`GET /api/v1/symbols`),
+and a filing-brief stub (`AI_BRIEFS_ENABLED=0`). Commit Factory planning
+lives under `docs/factory/` (100 workstreams). Keep non-goals and compliance
+intact; thin dashboard only within the fence above. Ceyfi merge is deferred.
