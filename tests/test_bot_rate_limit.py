@@ -202,7 +202,7 @@ async def test_brief_under_limit_still_looks_up() -> None:
 
     storage.get_latest_ready_brief.assert_awaited_once_with("JKH.N0000")
     reply = update.effective_message.reply_text.await_args.args[0]
-    assert "JKH.N0000: none yet / AI off" in reply
+    assert "JKH.N0000: AI briefs are off" in reply
     assert RATE_LIMIT_REPLY not in reply
 
 
