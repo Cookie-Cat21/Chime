@@ -29,8 +29,10 @@ def test_toast_sanitizes_and_caps_message() -> None:
     assert "sanitizeToastMessage(" in source
     assert "CTRL_RE" in source
     # Must not push raw caller strings into state.
+    # w52: tone allowlisted via safeTone (was ``{ id, message: safe, tone }``).
     assert "{ id, message, tone }" not in source
-    assert "{ id, message: safe, tone }" in source
+    assert "{ id, message: safe, tone }" not in source
+    assert "{ id, message: safe, tone: safeTone }" in source
 
 
 def test_inline_error_sanitizes_and_caps_message() -> None:
