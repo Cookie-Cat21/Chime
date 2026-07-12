@@ -285,18 +285,23 @@ Phase 1 foundations and Phase 2 Tijori-core plumbing are **landed** across waves
 
 ---
 
-## Wave 11 — /brief empty-state align + wave report
+## Wave 11 — /brief polish, smoke make, dash headers, wave report
 
-**Theme:** Align `/brief` empty-state test with AI-off copy; append waves 10–11 to this report.
+**Theme:** Align `/brief` empty-state; Makefile tijori-smoke; brief-command docs; dash security headers; append waves 10–11 to this report.
 
 | SHA | Commit |
 |---|---|
 | `bee6aee` | fix(wave11): align /brief empty-state assertion with AI-off copy |
-| _(this)_ | docs(wave11): wave report append |
+| `4e4967e` | chore(wave11): make tijori-smoke |
+| `cbcf3d2` | docs(wave11): brief command docs |
+| `36f9ec6` | docs(wave11): wave report append |
+| `6ff1cc5` | feat(wave11): dash security headers |
 
 **Shipped**
 
 - `/brief` empty-state assertion matches AI-off bot copy (`tests/test_bot_rate_limit.py`).
+- `make tijori-smoke` target; README + TIJORI runbook document `/brief SYMBOL` (AI-off vs none-yet).
+- Dash security headers (`web/next.config.ts` + README note).
 - `TIJORI_WAVE_REPORT.md` — waves 10–11 inventory + updated totals.
 
 ---
@@ -315,8 +320,8 @@ Phase 1 foundations and Phase 2 Tijori-core plumbing are **landed** across waves
 | 8 (`wave8`) | 9 |
 | 9 (`wave9`) | 7 |
 | 10 (`wave10`) | 8 |
-| 11 (`wave11` + this report) | 2 |
-| **Total** | **85** |
+| 11 (`wave11`) | 5+ |
+| **Total** | **88+** |
 
 ---
 
