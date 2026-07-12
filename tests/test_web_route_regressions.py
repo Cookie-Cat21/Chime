@@ -360,6 +360,44 @@ def test_market_page_fence_no_screener_or_quote_board() -> None:
     assert "changeDirectionSr" in market_src
 
 
+def test_scenarios_dash_stub_page() -> None:
+    """Wave11: /scenarios is a thin NFA stub; disabled unless AI_SCENARIOS_ENABLED=1."""
+    page = WEB / "src" / "app" / "scenarios" / "page.tsx"
+    helper = WEB / "src" / "lib" / "scenarios.ts"
+    nav = WEB / "src" / "components" / "app-nav.tsx"
+    assert page.is_file()
+    assert helper.is_file()
+    page_src = page.read_text(encoding="utf-8")
+    helper_src = helper.read_text(encoding="utf-8")
+    nav_src = nav.read_text(encoding="utf-8")
+
+    assert "requirePageSession" in page_src
+    assert "scenariosEnabled" in page_src
+    assert "Coming soon" in page_src
+    assert "AI_SCENARIOS_ENABLED=1" in page_src
+    assert "NfaInline" in page_src
+    assert "NfaFooter" in page_src
+    assert "EmptyState" in page_src
+    # No LLM / provider wiring on the dash stub.
+    assert "fetch(" not in page_src
+    for tok in ("openai", "gemini", "groq", "openrouter", "generatecontent"):
+        assert tok not in page_src.lower()
+
+    assert "AI_SCENARIOS_ENABLED" in helper_src
+    assert '.trim() === "1"' in helper_src
+    assert 'href: "/scenarios", label: "Scenarios"' in nav_src
+
+    # Fence: not a portfolio / advice surface.
+    forbidden = ("portfolio", "P&L", "buy now", "sell now", "price target")
+    hits = [
+        tok
+        for tok in forbidden
+        for line in page_src.splitlines()
+        if tok.lower() in line.lower() and not _is_comment_only_hit(line, tok)
+    ]
+    assert hits == [], f"scenarios stub fence tokens: {hits}"
+
+
 def test_sectors_route_static() -> None:
     """Wave6: GET /api/v1/sectors reads Postgres sectors; session GET; no cse.lk."""
     route = WEB / "src" / "app" / "api" / "v1" / "sectors" / "route.ts"
