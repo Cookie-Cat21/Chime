@@ -49,9 +49,16 @@ cse-api-docs/
   site/                    # generated (committed for Pages path)
 ```
 
-## Ethics
+## Python helper package
 
-Read [docs/ETHICS.md](docs/ETHICS.md). Short version: public endpoints only, polite rate limits, no competitor scrape, no credential stuffing, not financial advice.
+```bash
+cd cse-api-docs/python
+pip install -e .
+python smoke.py
+```
+
+Thin wrappers only (`market_status`, `company_info`, `trade_summary`, …). Same ethics as the docs.
+
 
 ## License
 
