@@ -1,5 +1,6 @@
 import type { NextRequest } from "next/server";
 
+import { toFiniteNumber } from "@/lib/api/market-browse";
 import { normalizeSymbol } from "@/lib/api/symbol";
 import { toIso } from "@/lib/api/time";
 import { jsonError, jsonOk } from "@/lib/auth/errors";
@@ -60,8 +61,9 @@ export async function GET(request: NextRequest, context: RouteContext) {
     const points = result.rows
       .map((row) => ({
         ts: toIso(row.ts),
-        price: Number(row.price),
-        change_pct: row.change_pct == null ? null : Number(row.change_pct),
+        // Finite-only (parity with movers) so sparkline never gets NaN/±Inf.
+        price: toFiniteNumber(row.price),
+        change_pct: toFiniteNumber(row.change_pct),
       }))
       .reverse();
 

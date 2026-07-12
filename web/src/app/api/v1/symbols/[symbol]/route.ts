@@ -1,5 +1,6 @@
 import type { NextRequest } from "next/server";
 
+import { toFiniteNumber } from "@/lib/api/market-browse";
 import { normalizeSymbol } from "@/lib/api/symbol";
 import { toIso } from "@/lib/api/time";
 import { jsonError, jsonOk } from "@/lib/auth/errors";
@@ -56,15 +57,11 @@ export async function GET(request: NextRequest, context: RouteContext) {
       snap.rows.length === 0
         ? null
         : {
-            price: Number(snap.rows[0].price),
-            change:
-              snap.rows[0].change == null ? null : Number(snap.rows[0].change),
-            change_pct:
-              snap.rows[0].change_pct == null
-                ? null
-                : Number(snap.rows[0].change_pct),
-            volume:
-              snap.rows[0].volume == null ? null : Number(snap.rows[0].volume),
+            // Finite-only egress (parity with movers/browse) — NaN/±Inf → null.
+            price: toFiniteNumber(snap.rows[0].price),
+            change: toFiniteNumber(snap.rows[0].change),
+            change_pct: toFiniteNumber(snap.rows[0].change_pct),
+            volume: toFiniteNumber(snap.rows[0].volume),
             ts: toIso(snap.rows[0].ts),
           };
 

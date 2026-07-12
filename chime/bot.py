@@ -457,20 +457,30 @@ async def cmd_myalerts(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
         return
     lines = ["Your alerts:"]
     for r in rules:
+        sym = _CTRL_RE.sub("", r.symbol or "").strip() or "?"
         if r.type == AlertType.DISCLOSURE:
             if r.category:
-                lines.append(f"#{r.id} {r.symbol} disclosure {r.category}")
+                cat = _CTRL_RE.sub("", r.category).strip()
+                if cat:
+                    lines.append(f"#{r.id} {sym} disclosure {cat}")
+                else:
+                    lines.append(f"#{r.id} {sym} disclosure")
             else:
-                lines.append(f"#{r.id} {r.symbol} disclosure")
-        elif r.type == AlertType.DAILY_MOVE:
-            lines.append(f"#{r.id} {r.symbol} move {r.threshold:g}%")
-        elif r.type == AlertType.PRICE_ABOVE:
-            lines.append(f"#{r.id} {r.symbol} above {r.threshold:g}")
+                lines.append(f"#{r.id} {sym} disclosure")
         else:
-            lines.append(f"#{r.id} {r.symbol} below {r.threshold:g}")
+            # Null / non-finite threshold must not TypeError the whole handler
+            # (corrupt DB row / legacy insert); show "?" and keep listing.
+            thr = r.threshold
+            thr_s = f"{thr:g}" if thr is not None and math.isfinite(thr) else "?"
+            if r.type == AlertType.DAILY_MOVE:
+                lines.append(f"#{r.id} {sym} move {thr_s}%")
+            elif r.type == AlertType.PRICE_ABOVE:
+                lines.append(f"#{r.id} {sym} above {thr_s}")
+            else:
+                lines.append(f"#{r.id} {sym} below {thr_s}")
     lines.append("")
     lines.append(disclaimer())
-    await update.effective_message.reply_text("\n".join(lines))
+    await update.effective_message.reply_text(_clamp_telegram_message("\n".join(lines)))
 
 
 async def cmd_mywatchlist(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -487,7 +497,10 @@ async def cmd_mywatchlist(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
             "Watchlist empty. Add a CSE symbol with /watch SYMBOL.\nExample: /watch JKH.N0000"
         )
         return
-    await update.effective_message.reply_text("Watchlist:\n" + "\n".join(symbols))
+    clean = [_CTRL_RE.sub("", s or "").strip() or "?" for s in symbols]
+    await update.effective_message.reply_text(
+        _clamp_telegram_message("Watchlist:\n" + "\n".join(clean))
+    )
 
 
 def format_brief_lookup_reply(

@@ -1,5 +1,6 @@
 import type { NextRequest } from "next/server";
 
+import { toFiniteNumber } from "@/lib/api/market-browse";
 import { toIso } from "@/lib/api/time";
 import { normalizeSymbol } from "@/lib/api/symbol";
 import { jsonError, jsonOk } from "@/lib/auth/errors";
@@ -53,9 +54,10 @@ export async function GET(request: NextRequest) {
       symbol: row.symbol,
       name: row.name,
       sector: row.sector,
-      price: row.price == null ? null : Number(row.price),
-      change: row.change == null ? null : Number(row.change),
-      change_pct: row.change_pct == null ? null : Number(row.change_pct),
+      // Finite-only egress (parity with movers/browse) — NaN/±Inf → null.
+      price: toFiniteNumber(row.price),
+      change: toFiniteNumber(row.change),
+      change_pct: toFiniteNumber(row.change_pct),
       ts: toIso(row.ts),
     }));
 

@@ -229,8 +229,22 @@ async def test_claim_unsent_batch_leases_and_excludes() -> None:
         # Expire the claim lease (failed/deferred send clears it via mark_alert_attempt).
         await store.mark_alert_attempt(log_id)
 
-        first = await store.claim_unsent_batch(limit=10, lease_seconds=120)
-        assert any(int(r["id"]) == log_id for r in first)
+        # Drain past older unsent pollution from other integration tests (shared DB).
+        # Clear leases on non-matching rows so we do not strand them for 120s.
+        found = False
+        for _ in range(50):
+            batch = await store.claim_unsent_batch(limit=10, lease_seconds=120)
+            if not batch:
+                break
+            for row in batch:
+                rid = int(row["id"])
+                if rid == log_id:
+                    found = True
+                else:
+                    await store.mark_alert_attempt(rid)
+            if found:
+                break
+        assert found, f"expected claim_unsent to pick log_id={log_id}"
 
         # Active lease from claim_unsent_batch: not in unsent_alerts or a second claim.
         assert all(int(r["id"]) != log_id for r in await store.unsent_alerts())

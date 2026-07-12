@@ -273,11 +273,21 @@ def format_alert_message(
 def format_dead_letter_notify(symbol: str, attempts: int) -> str:
     """One-shot user message when an alert is abandoned after delivery failures.
 
-    Symbol is control-stripped (same egress bar as ``format_alert_message``) so a
-    hostile DB/parsed symbol cannot inject nulls/newlines into Telegram.
+    Symbol is control-stripped and length-capped (same egress bar as ``/brief``)
+    so a hostile DB/parsed symbol cannot inject nulls/newlines or blow past
+    Telegram's 4096 limit — an oversize dead-letter notify would itself fail
+    to send. Non-finite / unconvertible ``attempts`` fail closed to ``0``.
     """
     clean = _CTRL_RE.sub("", symbol or "").strip() or "?"
-    n = max(0, int(attempts))
+    if len(clean) > 32:
+        clean = clean[:31].rstrip() + "…"
+    try:
+        n = int(attempts)
+    except (TypeError, ValueError, OverflowError):
+        n = 0
+    # Bound display so a pathological int cannot pad the body past 4096.
+    if n < 0 or n > 1_000_000:
+        n = 0 if n < 0 else 1_000_000
     return (
         f"Chime could not deliver an alert for {clean} after {n} tries. "
         "Not financial advice."

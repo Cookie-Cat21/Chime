@@ -547,6 +547,46 @@ def test_sectors_route_static() -> None:
     # Shared finite helper — do not reintroduce a local NaN-leaky copy.
     assert 'from "@/lib/api/market-browse"' in source
     assert "function toFiniteNumber" not in source
+
+
+def test_price_egress_routes_use_to_finite_number() -> None:
+    """w17: symbol detail / snapshots / watchlist / alerts GET finite-only prices."""
+    paths = [
+        WEB / "src" / "app" / "api" / "v1" / "symbols" / "[symbol]" / "route.ts",
+        WEB / "src" / "app" / "api" / "v1" / "symbols" / "[symbol]" / "snapshots" / "route.ts",
+        WEB / "src" / "app" / "api" / "v1" / "watchlist" / "route.ts",
+        WEB / "src" / "app" / "api" / "v1" / "alerts" / "route.ts",
+    ]
+    for path in paths:
+        assert path.is_file(), path
+        source = path.read_text(encoding="utf-8")
+        assert 'from "@/lib/api/market-browse"' in source, path.name
+        assert "toFiniteNumber" in source, path.name
+        # Ban raw Number(...) on price-like fields (not substrings of toFiniteNumber).
+        for line in source.splitlines():
+            stripped = line.strip()
+            if "Number(" not in stripped or "toFiniteNumber(" in stripped:
+                continue
+            if "Number.is" in stripped or "Number.isFinite" in stripped:
+                continue
+            # Allow id / limit / offset ints — not quote/threshold egress.
+            if any(
+                tok in stripped
+                for tok in (
+                    "Number(row.id)",
+                    "Number(rawId)",
+                    "Number(limitRaw)",
+                    "Number(offsetRaw)",
+                    "Number(n)",
+                    "Number(limit)",
+                )
+            ):
+                continue
+            if any(
+                tok in stripped
+                for tok in (".price)", ".change)", ".change_pct)", ".threshold)", ".volume)")
+            ):
+                raise AssertionError(f"{path}: raw Number on price-like field: {stripped}")
     # Thin fence: not a heatmap / multi-filter board (comments may negate).
     for tok in ("heatmap", "cse.lk", "allSectors"):
         hits = [

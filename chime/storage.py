@@ -721,6 +721,7 @@ class Storage:
         msg = message_text or ""
         if not ext or not sym or not brief_text or not msg.strip():
             return []
+        lease = max(1, int(lease_seconds))
         async with self._pool.connection() as conn, conn.transaction():
             rows = await (
                 await conn.execute(
@@ -775,7 +776,7 @@ class Storage:
                     JOIN alert_rules ar ON ar.id = i.rule_id
                     JOIN users u ON u.id = ar.user_id
                     """,
-                    (ext, sym, brief_text, ext, msg, lease_seconds),
+                    (ext, sym, brief_text, ext, msg, lease),
                 )
             ).fetchall()
         return _as_rows(rows)
@@ -1449,7 +1450,10 @@ class Storage:
 
         Sets ``delivery_lease_until`` so concurrent ``claim_unsent_batch`` cannot
         pick up the row while ``_deliver_pending`` is still sending.
+        ``lease_seconds`` is floored to ``>= 1`` so a zero/negative lease cannot
+        race with unsent drain (lease-until == now() is immediately reclaimable).
         """
+        lease = max(1, int(lease_seconds))
         async with self._pool.connection() as conn:
             row = await (
                 await conn.execute(
@@ -1470,7 +1474,7 @@ class Storage:
                         event.snapshot_id,
                         event.event_key,
                         message_text,
-                        lease_seconds,
+                        lease,
                     ),
                 )
             ).fetchone()
@@ -1492,7 +1496,9 @@ class Storage:
 
         Sets ``delivery_lease_until`` like ``claim_alert`` so unsent drain cannot
         double-claim during the in-flight Telegram send.
+        ``lease_seconds`` is floored to ``>= 1`` (same as ``claim_alert``).
         """
+        lease = max(1, int(lease_seconds))
         async with self._pool.connection() as conn, conn.transaction():
             row = await (
                 await conn.execute(
@@ -1513,7 +1519,7 @@ class Storage:
                         event.snapshot_id,
                         event.event_key,
                         message_text,
-                        lease_seconds,
+                        lease,
                     ),
                 )
             ).fetchone()
@@ -1624,7 +1630,10 @@ class Storage:
         Locks and leases rows in one short transaction, then returns so Telegram
         send can proceed outside any advisory lock. Concurrent claimers skip
         already-locked or still-leased rows.
+        ``lease_seconds`` is floored to ``>= 1`` so zero/negative cannot make
+        the lease immediately reclaimable (``<= now()``).
         """
+        lease = max(1, int(lease_seconds))
         async with self._pool.connection() as conn, conn.transaction():
             rows = await (
                 await conn.execute(
@@ -1666,7 +1675,7 @@ class Storage:
                         )
                         SELECT * FROM leased
                         """,
-                    (limit, lease_seconds),
+                    (limit, lease),
                 )
             ).fetchall()
         return _as_rows(rows)
