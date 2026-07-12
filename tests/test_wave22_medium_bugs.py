@@ -22,7 +22,8 @@ def test_sectors_route_sanitizes_text_and_safe_ids() -> None:
     source = route.read_text(encoding="utf-8")
     assert "sanitizeDisclosureText" in source
     assert "MAX_SECTOR_NAME_LENGTH" in source
-    assert "MAX_SECTOR_SYMBOL_LENGTH" in source
+    assert "normalizeSymbol(row.symbol)" in source
+    assert "MAX_SECTOR_SYMBOL_LENGTH" not in source
     assert "MAX_SECTOR_INDEX_CODE_LENGTH" in source
     assert "MAX_SECTOR_INDEX_NAME_LENGTH" in source
     assert "Number.isSafeInteger" in source
