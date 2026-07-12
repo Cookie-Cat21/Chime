@@ -71,8 +71,10 @@ async def test_poller_survives_junk_then_ok() -> None:
     storage.advisory_unlock = AsyncMock()
     storage.watched_symbols = AsyncMock(return_value=["JKH.N0000"])
     storage.active_rules_for_symbols = AsyncMock(return_value=[disc_rule])
-    storage.insert_snapshot = AsyncMock(
-        side_effect=lambda s: s.model_copy(update={"id": 1})
+    storage.persist_market_snapshots = AsyncMock(
+        side_effect=lambda snaps: [
+            s.model_copy(update={"id": i}) for i, s in enumerate(snaps, start=1)
+        ]
     )
     storage.get_previous_state = AsyncMock()
     from chime.domain import PreviousPriceState
@@ -116,8 +118,10 @@ async def test_disclosure_poll_skips_price_only_symbols() -> None:
     storage.advisory_unlock = AsyncMock()
     storage.watched_symbols = AsyncMock(return_value=["JKH.N0000", "COMB.N0000"])
     storage.active_rules_for_symbols = AsyncMock(return_value=[price_rule])
-    storage.insert_snapshot = AsyncMock(
-        side_effect=lambda s: s.model_copy(update={"id": 1})
+    storage.persist_market_snapshots = AsyncMock(
+        side_effect=lambda snaps: [
+            s.model_copy(update={"id": i}) for i, s in enumerate(snaps, start=1)
+        ]
     )
     from chime.domain import PreviousPriceState
 
@@ -162,8 +166,10 @@ async def test_disclosure_poll_fetches_only_disclosure_symbols() -> None:
     storage.advisory_unlock = AsyncMock()
     storage.watched_symbols = AsyncMock(return_value=["JKH.N0000", "COMB.N0000"])
     storage.active_rules_for_symbols = AsyncMock(return_value=[price_rule, disc_rule])
-    storage.insert_snapshot = AsyncMock(
-        side_effect=lambda s: s.model_copy(update={"id": 1})
+    storage.persist_market_snapshots = AsyncMock(
+        side_effect=lambda snaps: [
+            s.model_copy(update={"id": i}) for i, s in enumerate(snaps, start=1)
+        ]
     )
     from chime.domain import PreviousPriceState
 

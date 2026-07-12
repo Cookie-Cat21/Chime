@@ -106,7 +106,11 @@ async def test_poller_reevaluates_existing_disclosure_after_upsert() -> None:
     storage.advisory_unlock = AsyncMock()
     storage.watched_symbols = AsyncMock(return_value=["COMB.N0000"])
     storage.active_rules_for_symbols = AsyncMock(return_value=[disc_rule])
-    storage.insert_snapshot = AsyncMock(side_effect=lambda s: s.model_copy(update={"id": 1}))
+    storage.persist_market_snapshots = AsyncMock(
+        side_effect=lambda snaps: [
+            s.model_copy(update={"id": i}) for i, s in enumerate(snaps, start=1)
+        ]
+    )
     storage.get_previous_state = AsyncMock(return_value=PreviousPriceState(price=None))
     # Simulate row already in DB (prior poll inserted, crashed before claim)
     storage.upsert_disclosure = AsyncMock(return_value=existing)

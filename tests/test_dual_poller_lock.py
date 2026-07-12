@@ -48,8 +48,8 @@ async def test_dual_poller_run_once_one_holds_lock() -> None:
     entered = asyncio.Event()
     release = asyncio.Event()
     try:
-        # Need a watched symbol so the lock holder enters _poll_prices → CSE
-        # (empty watchlist returns before fetch and unlocks immediately).
+        # Watched symbol so disclosure/price paths have work; empty watchlist
+        # still fetches tradeSummary but HoldingCSE blocks either way.
         user_id = await store_a.ensure_user(telegram_id=9_002_001)
         await store_a.upsert_stock("DPOL.N0000", "DPOL CO")
         await store_a.add_watch(user_id, "DPOL.N0000")

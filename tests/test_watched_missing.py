@@ -26,6 +26,13 @@ def _snap(symbol: str, price: float = 20.0) -> PriceSnapshot:
     return PriceSnapshot(symbol=symbol, price=price, ts=datetime.now(UTC))
 
 
+def _persist_with_ids(snaps: list[PriceSnapshot]) -> list[PriceSnapshot]:
+    """Assign incremental ids like persist_market_snapshots."""
+    return [
+        s.model_copy(update={"id": i}) for i, s in enumerate(snaps, start=1)
+    ]
+
+
 @pytest.mark.asyncio
 async def test_watched_missing_sets_price_ok_false(capsys: pytest.CaptureFixture[str]) -> None:
     storage = AsyncMock()
@@ -33,9 +40,7 @@ async def test_watched_missing_sets_price_ok_false(capsys: pytest.CaptureFixture
     storage.advisory_unlock = AsyncMock()
     storage.watched_symbols = AsyncMock(return_value=["JKH.N0000", "COMB.N0000", "SAMP.N0000"])
     storage.active_rules_for_symbols = AsyncMock(return_value=[])
-    storage.insert_snapshot = AsyncMock(
-        side_effect=lambda s: s.model_copy(update={"id": 1})
-    )
+    storage.persist_market_snapshots = AsyncMock(side_effect=_persist_with_ids)
     from chime.domain import PreviousPriceState
 
     storage.get_previous_state = AsyncMock(return_value=PreviousPriceState(price=None))
@@ -67,9 +72,7 @@ async def test_all_watched_present_clears_missing() -> None:
     storage.advisory_unlock = AsyncMock()
     storage.watched_symbols = AsyncMock(return_value=["JKH.N0000", "COMB.N0000"])
     storage.active_rules_for_symbols = AsyncMock(return_value=[])
-    storage.insert_snapshot = AsyncMock(
-        side_effect=lambda s: s.model_copy(update={"id": 1})
-    )
+    storage.persist_market_snapshots = AsyncMock(side_effect=_persist_with_ids)
     from chime.domain import PreviousPriceState
 
     storage.get_previous_state = AsyncMock(return_value=PreviousPriceState(price=None))
@@ -100,9 +103,12 @@ async def test_empty_watchlist_clears_watched_missing() -> None:
     storage.watched_symbols = AsyncMock(return_value=[])
     storage.active_rules_for_symbols = AsyncMock(return_value=[])
     storage.claim_unsent_batch = AsyncMock(return_value=[])
+    storage.persist_market_snapshots = AsyncMock(side_effect=_persist_with_ids)
 
     cse = AsyncMock()
-    cse.fetch_trade_summary = AsyncMock(return_value=[_snap("JKH.N0000")])
+    board = [_snap("JKH.N0000")]
+    cse.fetch_trade_summary = AsyncMock(return_value=board)
+    cse.fetch_announcements_for_symbol = AsyncMock(return_value=[])
 
     poller = Poller(_settings(), storage, cse, AsyncMock(return_value=True))
     poller.watched_missing = ["JKH.N0000"]
@@ -111,7 +117,8 @@ async def test_empty_watchlist_clears_watched_missing() -> None:
     assert events == []
     assert poller.watched_missing == []
     assert poller.price_poll_ok is True
-    cse.fetch_trade_summary.assert_not_awaited()
+    cse.fetch_trade_summary.assert_awaited_once()
+    storage.persist_market_snapshots.assert_awaited_once_with(board)
 
 
 @pytest.mark.asyncio
@@ -120,15 +127,14 @@ async def test_poll_prices_missing_still_evaluates_present() -> None:
     storage = AsyncMock()
     storage.watched_symbols = AsyncMock(return_value=["JKH.N0000", "COMB.N0000"])
     storage.active_rules_for_symbols = AsyncMock(return_value=[])
-    storage.insert_snapshot = AsyncMock(
-        side_effect=lambda s: s.model_copy(update={"id": 42})
-    )
+    storage.persist_market_snapshots = AsyncMock(side_effect=_persist_with_ids)
     from chime.domain import PreviousPriceState
 
     storage.get_previous_state = AsyncMock(return_value=PreviousPriceState(price=None))
 
     cse = AsyncMock()
-    cse.fetch_trade_summary = AsyncMock(return_value=[_snap("JKH.N0000")])
+    board = [_snap("JKH.N0000")]
+    cse.fetch_trade_summary = AsyncMock(return_value=board)
 
     poller = Poller(_settings(), storage, cse, AsyncMock(return_value=True))
     events, price_ok = await poller._poll_prices()
@@ -136,8 +142,9 @@ async def test_poll_prices_missing_still_evaluates_present() -> None:
     assert events == []
     assert price_ok is False
     assert poller.watched_missing == ["COMB.N0000"]
-    storage.insert_snapshot.assert_awaited_once()
-    assert storage.insert_snapshot.await_args.args[0].symbol == "JKH.N0000"
+    storage.persist_market_snapshots.assert_awaited_once_with(board)
+    storage.get_previous_state.assert_awaited_once()
+    assert storage.get_previous_state.await_args.kwargs["before_id"] == 1
 
 
 @pytest.mark.asyncio
@@ -148,6 +155,7 @@ async def test_trade_summary_empty_ok_logs_and_surfaces_health_detail(
     storage.watched_symbols = AsyncMock(return_value=["JKH.N0000", "COMB.N0000"])
     storage.active_rules_for_symbols = AsyncMock(return_value=[])
     storage.health_check = AsyncMock(return_value=True)
+    storage.persist_market_snapshots = AsyncMock(side_effect=_persist_with_ids)
 
     cse = AsyncMock()
     cse.fetch_trade_summary = AsyncMock(return_value=[])
@@ -161,6 +169,7 @@ async def test_trade_summary_empty_ok_logs_and_surfaces_health_detail(
     assert poller.trade_summary_count == 0
     assert poller.trade_summary_empty_ok is True
     assert poller.watched_missing == ["COMB.N0000", "JKH.N0000"]
+    storage.persist_market_snapshots.assert_awaited_once_with([])
     out = capsys.readouterr().out
     assert "trade_summary_empty_ok" in out
     assert "watched_symbols_missing" in out
