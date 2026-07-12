@@ -14,7 +14,7 @@ make tick                 # → python -m chime tick --force
 # dash → /market (session); data = Postgres only
 ```
 
-Empty board ⇒ no forced tick / poller not running, or `tradeSummary` empty that tick.
+Empty board ⇒ no snapshots yet — run `make tick` (or leave poller/both running), then refresh; or `tradeSummary` was empty that tick. `/market` empty copy points operators at `make tick`.
 
 Top movers rows use one symbol+**Watch** link to `/symbols/[symbol]` (accessible name includes the ticker). Actual add stays on `/watchlist` (“Add via watchlist” note on the strip) — no inline watch POST from `/market`.
 

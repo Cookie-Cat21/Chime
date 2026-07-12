@@ -373,7 +373,7 @@ export default async function MarketPage({
             description={
               q
                 ? "No symbols matched that search. Try another query, or browse again after the next market update."
-                : "No snapshot data is available yet. Check back after market hours, or open Health if this persists."
+                : "No snapshot data yet. On the host, run make tick (or leave poller/both running) to seed browse, then refresh. Open Health if this persists."
             }
             action={
               q ? (

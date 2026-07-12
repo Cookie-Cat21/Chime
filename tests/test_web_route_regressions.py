@@ -392,7 +392,9 @@ def test_market_page_and_nav_browse_link() -> None:
     assert "dangerouslySetInnerHTML" not in market_src
     assert 'aria-label="Market symbols"' in market_src
     assert "tradeSummary" not in market_src
+    assert "make tick" in market_src
     assert "tick --force" not in market_src
+    assert "No snapshot data yet" in market_src
     nav_src = nav.read_text(encoding="utf-8")
     assert 'href: "/market", label: "Browse"' in nav_src
     assert "hidden={!open}" in nav_src

@@ -43,7 +43,7 @@ No nested app shell beyond a single top nav: Browse · Watchlist · Alerts · Hi
 - Sectors strip (optional): name + change_pct from `GET /api/v1/sectors`; list uses `aria-labelledby` the Sectors heading; truncated names keep `title`
 - List rows: `symbol` (→ `/symbols/[symbol]`) · name · last `price` · `change_pct` · snapshot `ts`
 - Sorted by `change_pct` desc by default (thin movers view — not a screener)
-- Empty state: poller has not persisted tradeSummary yet (or no search match)
+- Empty state: no snapshots yet — run `make tick` (or leave poller/both running), then refresh; search miss is a separate empty
 - NFA under price-adjacent copy + site footer
 - Fence: no OHLC board, no multi-column sort UI, no live ticks, no cse.lk from `web/`
 
