@@ -1,7 +1,8 @@
 # Thin DX entrypoint for Chime local ops.
 PYTHON ?= python3
+WAVE_REPORT ?= docs/factory/passes/TIJORI_WAVE_REPORT.md
 
-.PHONY: help install lint typecheck test test-unit migrate tick up-db down-db up down up-web down-web factory-status factory-verify factory-scoreboard factory-refill factory-wave portfolio-sum tijori-smoke
+.PHONY: help install lint typecheck test test-unit migrate tick up-db down-db up down up-web down-web factory-status factory-verify factory-scoreboard factory-refill factory-wave portfolio-sum tijori-smoke tijori-report
 
 help:
 	@echo "Chime local targets:"
@@ -20,6 +21,7 @@ help:
 	@echo "  make factory-verify      ruff/mypy/pytest proof (+ portfolio_sum smoke)"
 	@echo "  make portfolio-sum       Plan A portfolio_sum.py smoke (non-fatal)"
 	@echo "  make tijori-smoke       briefs/scenarios import + migrate --help smoke"
+	@echo "  make tijori-report      Cat TIJORI_WAVE_REPORT.md"
 	@echo "  make factory-scoreboard  Refresh SCOREBOARD.json"
 	@echo "  make factory-refill      Activate next epoch if current empty"
 	@echo "  make factory-wave        Next ≤8 OPEN ids"
@@ -75,6 +77,9 @@ portfolio-sum:
 
 tijori-smoke:
 	bash scripts/tijori_smoke.sh
+
+tijori-report:
+	@cat $(WAVE_REPORT)
 
 factory-scoreboard:
 	$(PYTHON) scripts/factory/update_scoreboard.py --write
