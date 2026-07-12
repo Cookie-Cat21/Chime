@@ -43,8 +43,9 @@ function sanitizeSparklineTs(raw: unknown): string | null {
   if (!trimmed || trimmed.length > MAX_ISO_INPUT_LENGTH) return null;
   if (CTRL_RE.test(trimmed)) return null;
   const t = Date.parse(trimmed);
-  // Fail closed — NaN / out-of-range must not ride along in sparkline points.
-  if (Number.isNaN(t) || Math.abs(t) > MAX_DATE_MS) return null;
+  // Fail closed — parseable-but-out-of-range must not ride along; opaque
+  // short labels (non-ISO) stay allowed for title/aria callers.
+  if (!Number.isNaN(t) && Math.abs(t) > MAX_DATE_MS) return null;
   return trimmed;
 }
 

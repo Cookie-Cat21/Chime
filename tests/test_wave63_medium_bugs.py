@@ -30,7 +30,7 @@ def test_sparkline_ts_date_range_gate() -> None:
     )[0]
     assert "Date.parse(trimmed)" in chunk
     assert "Math.abs(t) > MAX_DATE_MS" in chunk
-    assert "Number.isNaN(t)" in chunk
+    assert "!Number.isNaN(t)" in chunk
 
 
 def test_symbol_is_stale_ts_range_and_typeof() -> None:
