@@ -22,6 +22,9 @@ dev = [
     "ruff",
     "mypy",
 ]
+briefs = [
+    "pypdf>=5",
+]
 
 [project.scripts]
 chime = "chime.__main__:main"
@@ -57,5 +60,5 @@ warn_unused_configs = true
 packages = ["chime"]
 
 [[tool.mypy.overrides]]
-module = ["apscheduler.*", "telegram.*"]
+module = ["apscheduler.*", "telegram.*", "pypdf.*"]
 ignore_missing_imports = true

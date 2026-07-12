@@ -1,16 +1,19 @@
 """Filing brief worker — enqueue stub + pending drain skeleton.
 
 Phase 1: schema + disabled-by-default stub.
-Phase 2 stub: ``claim_pending_briefs`` calls the Gemini provider when enabled.
+Phase 2: ``claim_pending_briefs`` fetches CDN PDF text (when ``pdf_url`` set)
+and calls the Gemini provider when briefs are enabled.
 """
 
 from __future__ import annotations
 
 from typing import Any, Protocol
 
+import httpx
 import structlog
 
-from chime.briefs import BriefSettings, BriefStatus, briefs_enabled
+from chime.briefs import BriefSettings, BriefStatus, briefs_enabled, build_brief_prompt
+from chime.briefs.extract import extract_pdf_text, fetch_cdn_pdf
 from chime.briefs.provider import BriefProvider, GeminiBriefProvider, make_brief_provider
 
 log = structlog.get_logger("chime.briefs")
@@ -90,12 +93,44 @@ async def enqueue_or_skip_brief(
 
 
 def _stub_input_text(row: dict[str, Any]) -> str:
-    """Skeleton input until PDF text extraction lands — title (+ symbol)."""
+    """Title-only fallback when no PDF text is available."""
     symbol = str(row.get("symbol") or "").strip()
     title = str(row.get("title") or "").strip()
     if symbol and title:
         return f"{symbol}: {title}"
     return title or symbol
+
+
+async def _input_text_for_row(
+    row: dict[str, Any],
+    *,
+    cfg: BriefSettings,
+    client: httpx.AsyncClient,
+) -> str:
+    """Build provider input: CDN PDF extract when ``pdf_url`` set, else title."""
+    symbol = str(row.get("symbol") or "").strip()
+    title = str(row.get("title") or "").strip()
+    pdf_url = row.get("pdf_url")
+    if isinstance(pdf_url, str) and pdf_url.strip():
+        raw = await fetch_cdn_pdf(
+            pdf_url.strip(),
+            max_bytes=cfg.pdf_max_bytes,
+            client=client,
+        )
+        if raw:
+            extracted = extract_pdf_text(raw)
+            if extracted:
+                return build_brief_prompt(
+                    symbol=symbol or "UNKNOWN",
+                    title=title or "Filing",
+                    extracted_text=extracted,
+                )
+            log.info(
+                "brief_pdf_text_empty",
+                disclosure_id=row.get("disclosure_id"),
+                pdf_url=pdf_url,
+            )
+    return _stub_input_text(row)
 
 
 async def claim_pending_briefs(
@@ -104,11 +139,14 @@ async def claim_pending_briefs(
     settings: BriefSettings | None = None,
     provider: BriefProvider | None = None,
     limit: int = 5,
+    http_client: httpx.AsyncClient | None = None,
 ) -> int:
     """Load pending rows, call provider, mark ready/failed.
 
-    No-op (returns 0) when briefs are disabled, the daily cap is hit, or there
-    are no pending rows. Honours ``max_briefs_per_day`` as a hard ceiling.
+    When ``pdf_url`` is set on a claimed row, fetches the CDN PDF (host check +
+    ``PDF_MAX_BYTES`` cap) and extracts text for the prompt. No-op (returns 0)
+    when briefs are disabled, the daily cap is hit, or there are no pending
+    rows. Honours ``max_briefs_per_day`` as a hard ceiling.
     """
     cfg = settings or BriefSettings.from_env()
     if not briefs_enabled(cfg):
@@ -131,12 +169,14 @@ async def claim_pending_briefs(
         return 0
 
     owns_provider = provider is None
+    owns_http = http_client is None
     prov: BriefProvider = provider or make_brief_provider(cfg)
+    http = http_client or httpx.AsyncClient(timeout=30.0)
     processed = 0
     try:
         for row in rows:
             disclosure_id = int(row["disclosure_id"])
-            text = _stub_input_text(row)
+            text = await _input_text_for_row(row, cfg=cfg, client=http)
             try:
                 brief = await prov.summarize(text)
                 await storage.mark_brief_ready(
@@ -162,6 +202,8 @@ async def claim_pending_briefs(
                 )
             processed += 1
     finally:
+        if owns_http:
+            await http.aclose()
         if owns_provider and isinstance(prov, GeminiBriefProvider):
             await prov.aclose()
     return processed
