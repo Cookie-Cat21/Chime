@@ -1,16 +1,16 @@
-# Tijori CSE — Waves 1–5 report
+# Tijori CSE — Waves 1–7 report
 
 **Branch:** `cursor/tijori-cse-phase1-e44e`  
 **Date:** 2026-07-12  
 **Plan:** [TIJORI_CSE_PLAN.md](../TIJORI_CSE_PLAN.md)  
 **Ops:** [docs/runbooks/TIJORI.md](../../runbooks/TIJORI.md)  
-**Range:** `a802cb7` … `49e5c0b` (+ this wave-5 report)
+**Range:** `a802cb7` … `c016b06` (+ this wave-7 report append)
 
 ---
 
 ## Verdict
 
-Phase 1 foundations and Phase 2 Tijori-core plumbing are **landed** across waves 1–4 (36 commits + foundation). Live Gemini briefs remain **flag/key gated** (`AI_BRIEFS_ENABLED=0` default). Phase 3 scenario AI is **not started**. Wave 5 is this rollup.
+Phase 1 foundations and Phase 2 Tijori-core plumbing are **landed** across waves 1–5. Waves 6–7 add sectors browse, storage/SQL harden, retention/sectors coverage, and an adversarial briefs/PDF/follow-up sweep. Live Gemini briefs remain **flag/key gated** (`AI_BRIEFS_ENABLED=0` default). Phase 3 scenario AI is **not started**.
 
 | Track | Status |
 |---|---|
@@ -134,17 +134,69 @@ Phase 1 foundations and Phase 2 Tijori-core plumbing are **landed** across waves
 
 ---
 
-## Wave 5 — Wave report (this doc)
+## Wave 5 — Wave report + Tijori surface polish
 
-**Theme:** Single rollup of waves 1–4 commits, what shipped, and what remains.
+**Theme:** Wave rollup, bot copy, briefs coverage, optional retention/sectors ingest, movers/follow-up harden.
 
 | SHA | Commit |
 |---|---|
-| _(this)_ | docs(wave5): wave report |
+| `67ee2cf` | docs(wave5): wave report |
+| `1240f80` | feat(wave5): bot copy tijori surfaces push |
+| `0c075d9` | test(wave5): briefs extract provider coverage |
+| `81d7dc4` | feat(wave5): optional non-watchlist snapshot retention |
+| `a45b306` | fix(wave5): movers harden push |
+| `44bbc3a` | feat(wave5): optional sectors ingest |
+| `2e4514e` | fix(wave5): brief followup idempotency push |
 
 **Shipped**
 
-- `docs/factory/passes/TIJORI_WAVE_REPORT.md` — commit inventory + remaining backlog.
+- Initial `TIJORI_WAVE_REPORT.md` rollup (waves 1–4).
+- Bot copy for Tijori surfaces; briefs extract/provider coverage.
+- Optional non-watchlist snapshot retention; optional sectors ingest.
+- Movers harden; brief follow-up idempotency.
+
+---
+
+## Wave 6 — Sectors browse + harden + coverage
+
+**Theme:** Seed/browse docs, sectors UI, follow-up isolation, SQL harden, CI, retention/sectors tests, adversarial briefs/PDF sweep.
+
+| SHA | Commit |
+|---|---|
+| `46cb49e` | docs(wave6): seed browse via tick --force |
+| `74473fe` | feat(wave6): sectors browse surface |
+| `29d923b` | test(wave6): followup key isolation |
+| `4da7397` | chore(wave6): dead code cleanup |
+| `18a1969` | fix(wave6): storage sql harden push |
+| `c2cca70` | fix(wave6): ci |
+| `1bd98be` | test(wave6): retention sectors poller coverage |
+| `02d4d59` | fix(wave6): adversarial sweep |
+
+**Shipped**
+
+- Ops/docs: seed browse via `tick --force` (Makefile / README / TIJORI runbook).
+- `/market` sectors browse surface.
+- Follow-up key isolation tests; dead-code cleanup.
+- Parameterized UNNEST inserts for market snapshots + sectors (no f-string VALUES).
+- CI: fence tokens, sectors route pins, dash_smoke + migrate 007/008 notes.
+- Retention log + `SECTORS_INGEST` fail-soft poller coverage.
+- Adversarial harden: honor `SendResult` on brief follow-up; reject CDN PDF redirects / non-200; primary-alert + paragraph-bounded brief skip; PDF page/char caps; batch retention deletes; `processing` `brief_status` in dash egress.
+
+---
+
+## Wave 7 — Test assert harden + wave report append
+
+**Theme:** Flake-proof retention/sectors asserts; append this rollup.
+
+| SHA | Commit |
+|---|---|
+| `c016b06` | fix(wave7): assert retention/sectors via mocks not stdout logs |
+| _(this)_ | docs(wave7): wave report append |
+
+**Shipped**
+
+- Retention/sectors tests assert via mocks (not `capsys` stdout logs) to avoid full-suite capture flakes.
+- `TIJORI_WAVE_REPORT.md` — waves 6–7 commit inventory append.
 
 ---
 
@@ -156,8 +208,10 @@ Phase 1 foundations and Phase 2 Tijori-core plumbing are **landed** across waves
 | 2 (`wave2`) | 9 |
 | 3 (`wave3`) | 9 |
 | 4 (`wave4`) | 9 |
-| 5 (`wave5` report) | 1 |
-| **Total** | **38** |
+| 5 (`wave5`) | 7 |
+| 6 (`wave6`) | 8 |
+| 7 (`wave7` + this report) | 2 |
+| **Total** | **54** |
 
 ---
 
@@ -179,6 +233,6 @@ Phase 1 foundations and Phase 2 Tijori-core plumbing are **landed** across waves
 
 ### Suggested next improve-loop focus
 
-- CI green on touched Python/web paths after wave 4.
+- CI green on touched Python/web paths after wave 7.
 - Controlled briefs-on soak (not default-on in prod).
 - No Phase 3 until Phase 2 live brief path is proven.
