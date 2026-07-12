@@ -141,7 +141,13 @@ async def test_fetch_cdn_pdf_respects_content_length_cap() -> None:
 @pytest.mark.asyncio
 async def test_fetch_cdn_pdf_respects_streamed_byte_cap() -> None:
     def handler(request: httpx.Request) -> httpx.Response:
-        return httpx.Response(200, content=b"y" * 200)
+        # Invalid Content-Length skips the header check so the streamed
+        # byte counter (not Content-Length) enforces the cap.
+        return httpx.Response(
+            200,
+            content=b"y" * 200,
+            headers={"content-length": "not-a-number"},
+        )
 
     transport = httpx.MockTransport(handler)
     async with httpx.AsyncClient(transport=transport) as client:
@@ -151,6 +157,101 @@ async def test_fetch_cdn_pdf_respects_streamed_byte_cap() -> None:
             client=client,
         )
     assert out is None
+
+
+@pytest.mark.asyncio
+async def test_fetch_cdn_pdf_skips_empty_stream_chunks() -> None:
+    body = b"%PDF-ok"
+
+    class _Resp:
+        status_code = 200
+        headers: dict[str, str] = {}
+
+        def raise_for_status(self) -> None:
+            return None
+
+        async def aiter_bytes(self):  # type: ignore[no-untyped-def]
+            yield b""
+            yield body
+
+        async def __aenter__(self) -> _Resp:
+            return self
+
+        async def __aexit__(self, *args: object) -> None:
+            return None
+
+    client = MagicMock()
+    client.stream = MagicMock(return_value=_Resp())
+    out = await fetch_cdn_pdf(
+        "https://cdn.cse.lk/empty-chunk.pdf",
+        max_bytes=1024,
+        client=client,
+    )
+    assert out == body
+
+
+@pytest.mark.asyncio
+async def test_fetch_cdn_pdf_http_error_returns_none() -> None:
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(500, text="cdn down")
+
+    transport = httpx.MockTransport(handler)
+    async with httpx.AsyncClient(transport=transport) as client:
+        out = await fetch_cdn_pdf(
+            "https://cdn.cse.lk/missing.pdf",
+            max_bytes=1024,
+            client=client,
+        )
+    assert out is None
+
+
+@pytest.mark.asyncio
+async def test_fetch_cdn_pdf_transport_error_returns_none() -> None:
+    def handler(request: httpx.Request) -> httpx.Response:
+        raise httpx.ConnectError("boom", request=request)
+
+    transport = httpx.MockTransport(handler)
+    async with httpx.AsyncClient(transport=transport) as client:
+        out = await fetch_cdn_pdf(
+            "https://cdn.cse.lk/x.pdf",
+            max_bytes=1024,
+            client=client,
+        )
+    assert out is None
+
+
+@pytest.mark.asyncio
+async def test_fetch_cdn_pdf_clamps_max_bytes_to_at_least_one() -> None:
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(200, content=b"ab")
+
+    transport = httpx.MockTransport(handler)
+    async with httpx.AsyncClient(transport=transport) as client:
+        out = await fetch_cdn_pdf(
+            "https://cdn.cse.lk/tiny.pdf",
+            max_bytes=0,
+            client=client,
+        )
+    # cap becomes 1; two-byte body trips the streamed oversize path
+    assert out is None
+
+
+def test_extract_pdf_text_skips_blank_pages() -> None:
+    pytest.importorskip("pypdf")
+
+    class _Page:
+        def __init__(self, text: str | None) -> None:
+            self._text = text
+
+        def extract_text(self) -> str | None:
+            return self._text
+
+    class _Reader:
+        def __init__(self, *_a: object, **_k: object) -> None:
+            self.pages = [_Page(None), _Page("   "), _Page("Keep me")]
+
+    with patch("pypdf.PdfReader", _Reader):
+        assert extract_pdf_text(b"%PDF") == "Keep me"
 
 
 @pytest.mark.asyncio

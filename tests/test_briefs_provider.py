@@ -13,6 +13,8 @@ from chime.briefs import BRIEF_SYSTEM_INSTRUCTION, BriefSettings, build_brief_pr
 from chime.briefs.provider import (
     BriefsDisabledError,
     GeminiBriefProvider,
+    _extract_gemini_text,
+    _gemini_failure_reason,
     make_brief_provider,
 )
 from chime.briefs.worker import claim_pending_briefs
@@ -103,6 +105,146 @@ async def test_gemini_summarize_truncates_input() -> None:
     assert "x" * 21 not in user_text
 
 
+@pytest.mark.asyncio
+async def test_gemini_summarize_rejects_empty_text() -> None:
+    transport = httpx.MockTransport(lambda r: _gemini_ok_response())
+    async with httpx.AsyncClient(transport=transport) as client:
+        provider = GeminiBriefProvider(_enabled_settings(), client=client)
+        with pytest.raises(ValueError, match="non-empty"):
+            await provider.summarize("   \x00  ")
+
+
+@pytest.mark.asyncio
+async def test_gemini_summarize_strips_nulls_and_keeps_prewrapped() -> None:
+    bodies: list[dict[str, Any]] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        bodies.append(json.loads(request.content))
+        return _gemini_ok_response("ok")
+
+    wrapped = "<<<FILING>>>\nhello\x00world\n<<<END_FILING>>>"
+    transport = httpx.MockTransport(handler)
+    async with httpx.AsyncClient(transport=transport) as client:
+        provider = GeminiBriefProvider(_enabled_settings(), client=client)
+        await provider.summarize(wrapped)
+
+    user_text = bodies[0]["contents"][0]["parts"][0]["text"]
+    assert user_text == "<<<FILING>>>\nhelloworld\n<<<END_FILING>>>"
+    assert user_text.count("<<<FILING>>>") == 1
+
+
+@pytest.mark.asyncio
+async def test_gemini_provider_context_manager_closes_owned_client() -> None:
+    transport = httpx.MockTransport(lambda r: _gemini_ok_response("done"))
+    async with httpx.AsyncClient(transport=transport) as external:
+        borrowed = GeminiBriefProvider(_enabled_settings(), client=external)
+        assert borrowed._owns_client is False
+        await borrowed.aclose()  # must not close the caller's client
+        assert await borrowed.summarize("filing") == "done"
+
+    async with GeminiBriefProvider(_enabled_settings(), timeout=5.0) as owned:
+        assert owned._owns_client is True
+        assert isinstance(owned, GeminiBriefProvider)
+        # Swap in a mock transport so summarize does not hit the network.
+        await owned._client.aclose()
+        owned._client = httpx.AsyncClient(transport=transport, timeout=owned._timeout)
+        assert await owned.summarize("filing") == "done"
+    # Owned client closed by __aexit__; further requests must fail.
+    with pytest.raises(RuntimeError):
+        await owned._client.post("https://example.invalid/")
+
+
+@pytest.mark.asyncio
+async def test_gemini_summarize_http_status_raises() -> None:
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(403, text="forbidden key")
+
+    transport = httpx.MockTransport(handler)
+    async with httpx.AsyncClient(transport=transport) as client:
+        provider = GeminiBriefProvider(_enabled_settings(), client=client)
+        with pytest.raises(RuntimeError, match="Gemini HTTP 403"):
+            await provider.summarize("filing")
+
+
+@pytest.mark.asyncio
+async def test_gemini_summarize_transport_error_raises() -> None:
+    def handler(request: httpx.Request) -> httpx.Response:
+        raise httpx.ConnectError("offline", request=request)
+
+    transport = httpx.MockTransport(handler)
+    async with httpx.AsyncClient(transport=transport) as client:
+        provider = GeminiBriefProvider(_enabled_settings(), client=client)
+        with pytest.raises(RuntimeError, match="transport error"):
+            await provider.summarize("filing")
+
+
+@pytest.mark.asyncio
+async def test_gemini_summarize_multiparts_joined() -> None:
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(
+            200,
+            json={
+                "candidates": [
+                    {
+                        "content": {
+                            "parts": [
+                                {"text": "First."},
+                                {"text": "  "},
+                                {"inlineData": {}},
+                                {"text": "Second."},
+                            ]
+                        }
+                    }
+                ]
+            },
+        )
+
+    transport = httpx.MockTransport(handler)
+    async with httpx.AsyncClient(transport=transport) as client:
+        provider = GeminiBriefProvider(_enabled_settings(), client=client)
+        out = await provider.summarize("filing")
+    assert out == "First.\nSecond."
+
+
+@pytest.mark.asyncio
+async def test_gemini_summarize_finish_reason_failure() -> None:
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(
+            200,
+            json={"candidates": [{"finishReason": "MAX_TOKENS", "content": {"parts": []}}]},
+        )
+
+    transport = httpx.MockTransport(handler)
+    async with httpx.AsyncClient(transport=transport) as client:
+        provider = GeminiBriefProvider(_enabled_settings(), client=client)
+        with pytest.raises(RuntimeError, match="finishReason=MAX_TOKENS"):
+            await provider.summarize("filing")
+
+
+def test_gemini_failure_reason_branches() -> None:
+    assert "non-object" in _gemini_failure_reason(["nope"])
+    assert _gemini_failure_reason({}) == "empty candidates"
+    assert _gemini_failure_reason({"candidates": "x"}) == "empty candidates"
+    assert _gemini_failure_reason({"candidates": [1]}) == "candidate not an object"
+    assert (
+        _gemini_failure_reason({"candidates": [{"content": {"parts": []}}]})
+        == "no text parts"
+    )
+
+
+def test_extract_gemini_text_edge_cases() -> None:
+    assert _extract_gemini_text("raw") == ""
+    assert _extract_gemini_text({"candidates": [1]}) == ""
+    assert _extract_gemini_text({"candidates": [{"content": "x"}]}) == ""
+    assert _extract_gemini_text({"candidates": [{"content": {"parts": "x"}}]}) == ""
+    assert _extract_gemini_text({"candidates": []}) == ""
+
+
+@pytest.mark.asyncio
+async def test_make_brief_provider_returns_gemini() -> None:
+    provider = make_brief_provider(_enabled_settings())
+    assert isinstance(provider, GeminiBriefProvider)
+    await provider.aclose()
 
 
 @pytest.mark.asyncio
