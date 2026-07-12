@@ -203,9 +203,20 @@ def _disclosure_category_matches(rule: AlertRule, disclosure: Disclosure) -> boo
     if not needle:
         return True
     haystack = disclosure.category
-    if haystack is None or not str(haystack).strip():
+    if haystack is None:
         return False
-    return needle.casefold() in haystack.casefold()
+    hay = str(haystack)
+    if not hay.strip():
+        return False
+    return needle.casefold() in hay.casefold()
+
+
+def _safe_utc_aware(dt: datetime) -> datetime | None:
+    """UTC-normalize; return None on out-of-range / unconvertible timestamps."""
+    try:
+        return _as_utc_aware(dt)
+    except (OverflowError, ValueError, OSError):
+        return None
 
 
 def evaluate_disclosure_rules(
@@ -219,11 +230,14 @@ def evaluate_disclosure_rules(
     backfill never floods Telegram. Missing rule.created_at fails closed (no fire).
     Undated CSE rows (Unix-epoch published_at) and empty external_id never fire.
     Optional rule.category filters by case-insensitive substring on disclosure.category.
+    Weird / unconvertible timestamps fail closed (never raise).
     """
     events: list[AlertEvent] = []
     if not (disclosure.external_id or "").strip():
         return events
-    published = _as_utc_aware(disclosure.published_at)
+    published = _safe_utc_aware(disclosure.published_at)
+    if published is None:
+        return events
     # Adapter stamps missing/non-positive createdDate as Unix epoch — never fire.
     if published <= datetime(1970, 1, 1, tzinfo=UTC):
         return events
@@ -237,7 +251,9 @@ def evaluate_disclosure_rules(
         # Fail-closed: without created_at we cannot gate backfill safely.
         if rule.created_at is None:
             continue
-        created = _as_utc_aware(rule.created_at)
+        created = _safe_utc_aware(rule.created_at)
+        if created is None:
+            continue
         if published <= created:
             continue
         if not _disclosure_category_matches(rule, disclosure):
