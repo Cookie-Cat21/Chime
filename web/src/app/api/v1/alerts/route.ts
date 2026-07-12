@@ -6,6 +6,7 @@ import {
   sanitizeDisclosureText,
 } from "@/lib/api/disclosure-safe";
 import { toFiniteNumber } from "@/lib/api/market-browse";
+import { MAX_ALERT_THRESHOLD } from "@/lib/api/finite-number";
 import { readJsonBody } from "@/lib/api/read-json-body";
 import { toSafePositiveInt } from "@/lib/api/safe-int";
 import { toIso } from "@/lib/api/time";
@@ -170,6 +171,14 @@ export async function POST(request: NextRequest) {
         400,
         "validation_error",
         "threshold must be a positive number.",
+      );
+    }
+    // Cap absurd magnitudes — MAX_VALUE / 1e308 used to persist dead rules.
+    if (obj.threshold > MAX_ALERT_THRESHOLD) {
+      return jsonError(
+        400,
+        "validation_error",
+        "threshold is too large.",
       );
     }
     threshold = obj.threshold;

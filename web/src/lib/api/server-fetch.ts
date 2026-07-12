@@ -95,6 +95,12 @@ export function isSafeServerApiPath(path: string): boolean {
   return pathOnly === "/api/v1" || pathOnly.startsWith("/api/v1/");
 }
 
+/** Abort budget for cookie-bearing SSR → /api/v1 (pages stay snappy). */
+export const SERVER_API_TIMEOUT_MS = 10_000;
+
+/** Cap SSR response body before page ``res.json()`` (browse payloads are tiny). */
+export const SERVER_API_BODY_MAX_BYTES = 1_048_576;
+
 /**
  * Server-side GET to our own /api/v1/* with the incoming session cookie.
  * Pages stay thin; route handlers own Postgres + auth.
@@ -102,6 +108,8 @@ export function isSafeServerApiPath(path: string): boolean {
  * Medium: root-relative ``/api/v1/*`` only; origin is loopback /
  * ``DASH_INTERNAL_ORIGIN`` — never client ``Host`` (session cookie must not
  * leave the process). ``redirect: "error"`` so Cookie cannot follow off-box.
+ * Bound timeout + body bytes so a stuck / hostile route cannot hang or OOM
+ * the SSR worker (parity with HEALTH_URL proxy bounds).
  */
 export async function serverApiGet(path: string): Promise<Response> {
   if (!isSafeServerApiPath(path)) {
@@ -112,14 +120,41 @@ export async function serverApiGet(path: string): Promise<Response> {
   // Cookie header only — do not derive fetch URL from client Host / XFH.
   const cookie = h.get("cookie") ?? "";
   const url = `${resolveInternalOrigin()}${path}`;
-  return fetch(url, {
-    method: "GET",
-    headers: {
-      Accept: "application/json",
-      cookie,
-    },
-    cache: "no-store",
-    // Fail closed — open redirects must not bounce the Cookie header off-box.
-    redirect: "error",
-  });
+  const ctrl = new AbortController();
+  const timer = setTimeout(() => ctrl.abort(), SERVER_API_TIMEOUT_MS);
+  try {
+    const res = await fetch(url, {
+      method: "GET",
+      headers: {
+        Accept: "application/json",
+        cookie,
+      },
+      cache: "no-store",
+      // Fail closed — open redirects must not bounce the Cookie header off-box.
+      redirect: "error",
+      signal: ctrl.signal,
+    });
+    // Bound body before page parsers call ``res.json()`` — huge payloads OOM SSR.
+    const rawText = await res.text().catch(() => "");
+    if (rawText.length > SERVER_API_BODY_MAX_BYTES) {
+      return new Response(JSON.stringify({ error: { code: "degraded" } }), {
+        status: 502,
+        headers: { "Content-Type": "application/json; charset=utf-8" },
+      });
+    }
+    const contentType =
+      res.headers.get("content-type") ?? "application/json; charset=utf-8";
+    return new Response(rawText, {
+      status: res.status,
+      statusText: res.statusText,
+      headers: { "Content-Type": contentType },
+    });
+  } catch {
+    return new Response(JSON.stringify({ error: { code: "degraded" } }), {
+      status: 502,
+      headers: { "Content-Type": "application/json; charset=utf-8" },
+    });
+  } finally {
+    clearTimeout(timer);
+  }
 }

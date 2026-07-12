@@ -8,6 +8,13 @@
 /** Cap hostile numeric strings before Number() (CSE quotes never need more). */
 export const MAX_FINITE_NUMBER_STRING_LENGTH = 32;
 
+/**
+ * Upper bound for alert thresholds (price / daily-move %).
+ * Hostile ``Number.MAX_VALUE`` used to persist useless rules and balloon JSON.
+ */
+export const MAX_ALERT_THRESHOLD = 1_000_000_000;
+
+
 /** Decimal only — reject sci-notation / hex / empty (Number("")===0 footgun). */
 const FINITE_DECIMAL_RE = /^-?\d+(\.\d+)?$/;
 

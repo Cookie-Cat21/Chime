@@ -10,7 +10,11 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { apiErrorMessage, apiMutate } from "@/lib/api/client-fetch";
 import { DISCLOSURE_CATEGORY_MAX } from "@/lib/api/disclosure-safe";
-import { toFiniteNumber } from "@/lib/api/finite-number";
+import {
+  MAX_ALERT_THRESHOLD,
+  toFiniteNumber,
+} from "@/lib/api/finite-number";
+import { toSafePositiveInt } from "@/lib/api/safe-int";
 import {
   ALERT_TYPES,
   type AlertType,
@@ -97,6 +101,8 @@ export function AlertCreateForm() {
             n <= 0
           ) {
             next.threshold = "Price threshold must be greater than zero.";
+          } else if (n > MAX_ALERT_THRESHOLD) {
+            next.threshold = "Threshold is too large.";
           } else {
             body.threshold = n;
           }
@@ -299,9 +305,17 @@ export function CancelAlertButton({ ruleId }: { ruleId: number }) {
 
   async function onClick() {
     setError(null);
+    // Fail closed — NaN / float / ≤0 must not hit DELETE /alerts/{id}.
+    const id = toSafePositiveInt(ruleId);
+    if (id == null) {
+      const msg = "Invalid alert id.";
+      setError(msg);
+      toast.error(msg);
+      return;
+    }
     setPending(true);
     try {
-      const { ok, status, data } = await apiMutate(`/api/v1/alerts/${ruleId}`, {
+      const { ok, status, data } = await apiMutate(`/api/v1/alerts/${id}`, {
         method: "DELETE",
       });
       if (!ok) {
@@ -310,7 +324,7 @@ export function CancelAlertButton({ ruleId }: { ruleId: number }) {
         toast.error(msg);
         return;
       }
-      toast.success(`Cancelled alert #${ruleId}.`);
+      toast.success(`Cancelled alert #${id}.`);
       router.refresh();
     } catch {
       const msg = "Network error.";
