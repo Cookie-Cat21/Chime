@@ -9,8 +9,9 @@
 3. ``csrfTokensMatch`` / ``readCsrfCookie`` must typeof-guard — non-string
    header/cookie used to hit ``Buffer.from(number)`` (zero-filled alloc of
    that size) instead of a clean CSRF reject.
-4. ``isSafeInternalHost`` / ``hostnameOnly`` must typeof-guard — non-strings
-   used to throw on ``.trim`` / ``.includes`` mid-origin resolve.
+4. ``isSafeInternalHost`` / ``hostnameOnly`` must typeof-guard.
+5. ``ListPageSkeleton`` must allowlist ``titleWidth`` tokens.
+6. Health ``OpsNotice`` / ``StaleOpsNotice`` must sanitize title/copy.
 """
 
 from __future__ import annotations
@@ -86,3 +87,26 @@ def test_host_helpers_typeof_guard() -> None:
         "export function isLoopbackHost"
     )[0]
     assert 'typeof host !== "string"' in name_chunk
+
+
+def test_skeleton_title_width_allowlisted() -> None:
+    source = (WEB / "src" / "components" / "skeleton.tsx").read_text(
+        encoding="utf-8"
+    )
+    assert "safeSkeletonTitleWidth" in source
+    assert "SKELETON_TITLE_WIDTHS" in source
+    assert "safeTitleWidth" in source
+    assert "safeTitleWidth)} />" in source
+    assert 'cn("h-9", titleWidth)' not in source
+
+
+def test_health_ops_notice_sanitizes_copy() -> None:
+    source = (WEB / "src" / "app" / "health" / "page.tsx").read_text(
+        encoding="utf-8"
+    )
+    assert "sanitizeOpsNoticeText" in source
+    assert "MAX_OPS_NOTICE_TITLE" in source
+    assert "MAX_OPS_NOTICE_COPY" in source
+    assert "safeTitle" in source
+    assert "safeCopy" in source
+    assert source.count("sanitizeOpsNoticeText(") >= 4

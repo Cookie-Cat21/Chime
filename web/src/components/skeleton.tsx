@@ -17,6 +17,25 @@ export function Skeleton({ className }: { className?: string }) {
 /** Cap skeleton rows — ``Array.from({ length: Infinity })`` throws; huge N OOMs. */
 export const MAX_SKELETON_ROWS = 24;
 
+/**
+ * Allowlisted Tailwind width tokens for the loading title bar.
+ * Medium: a misbuilt / hostile ``titleWidth`` used to inject arbitrary
+ * className strings (including multi-KB junk) into the skeleton shell.
+ */
+const SKELETON_TITLE_WIDTHS = new Set([
+  "w-24",
+  "w-28",
+  "w-32",
+  "w-36",
+  "w-40",
+]);
+
+export function safeSkeletonTitleWidth(raw: unknown): string {
+  return typeof raw === "string" && SKELETON_TITLE_WIDTHS.has(raw)
+    ? raw
+    : "w-40";
+}
+
 /** Shared shell chrome for route `loading.tsx` (lists, browse, health, symbol). */
 export function ListPageSkeleton({
   titleWidth = "w-40",
@@ -33,6 +52,8 @@ export function ListPageSkeleton({
     rows <= MAX_SKELETON_ROWS
       ? rows
       : 5;
+  // Fail closed — only allowlisted width tokens reach className.
+  const safeTitleWidth = safeSkeletonTitleWidth(titleWidth);
   return (
     <div className="flex min-h-full flex-1 flex-col bg-background">
       <div className="sticky top-0 z-40 border-b border-border/70 bg-background/80 px-4 py-3 sm:px-6">
@@ -51,7 +72,7 @@ export function ListPageSkeleton({
         aria-busy="true"
         aria-label="Loading"
       >
-        <Skeleton className={cn("h-9", titleWidth)} />
+        <Skeleton className={cn("h-9", safeTitleWidth)} />
         <Skeleton className="mt-3 h-4 w-full max-w-md" />
         <div className="mt-6 flex flex-col gap-3 sm:flex-row sm:items-end">
           <Skeleton className="h-10 flex-1" />

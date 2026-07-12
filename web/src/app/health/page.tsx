@@ -478,6 +478,23 @@ function statusToneClass(ok: boolean, pollerUnreachable: boolean): string {
   return "bg-[oklch(0.93_0.04_40)] text-[oklch(0.4_0.1_40)]";
 }
 
+/** Cap ops-notice copy — misbuilt callers used to balloon the health panel. */
+const MAX_OPS_NOTICE_TITLE = 120;
+const MAX_OPS_NOTICE_COPY = 600;
+
+function sanitizeOpsNoticeText(
+  raw: unknown,
+  maxLen: number,
+  fallback: string,
+): string {
+  // Fail closed — non-strings / controls / overlong must not balloon UI.
+  const cleaned = sanitizeDisclosureText(
+    typeof raw === "string" ? raw : null,
+    maxLen,
+  );
+  return cleaned ?? fallback;
+}
+
 function OpsNotice({
   tone,
   title,
@@ -499,11 +516,19 @@ function OpsNotice({
     tone === "danger"
       ? "text-[oklch(0.32_0.09_25)]"
       : "text-[oklch(0.32_0.07_55)]";
+  const safeTitle = sanitizeOpsNoticeText(
+    title,
+    MAX_OPS_NOTICE_TITLE,
+    "Notice",
+  );
+  const safeCopy = sanitizeOpsNoticeText(copy, MAX_OPS_NOTICE_COPY, "");
 
   return (
     <div className={`mt-5 rounded-lg border p-4 ${className}`}>
-      <p className={`text-sm font-medium ${titleClassName}`}>{title}</p>
-      <p className={`mt-1 text-sm ${copyClassName}`}>{copy}</p>
+      <p className={`text-sm font-medium ${titleClassName}`}>{safeTitle}</p>
+      {safeCopy ? (
+        <p className={`mt-1 text-sm ${copyClassName}`}>{safeCopy}</p>
+      ) : null}
     </div>
   );
 }
@@ -520,12 +545,20 @@ function Row({ label, value }: { label: string; value: string }) {
 }
 
 function StaleOpsNotice({ title, copy }: { title: string; copy: string }) {
+  const safeTitle = sanitizeOpsNoticeText(
+    title,
+    MAX_OPS_NOTICE_TITLE,
+    "Stale",
+  );
+  const safeCopy = sanitizeOpsNoticeText(copy, MAX_OPS_NOTICE_COPY, "");
   return (
     <div className="mt-5 rounded-lg border border-[oklch(0.78_0.08_65)] bg-[oklch(0.97_0.03_80)] p-4">
       <p className="text-sm font-medium text-[oklch(0.36_0.1_55)]">
-        {title}
+        {safeTitle}
       </p>
-      <p className="mt-1 text-sm text-[oklch(0.32_0.07_55)]">{copy}</p>
+      {safeCopy ? (
+        <p className="mt-1 text-sm text-[oklch(0.32_0.07_55)]">{safeCopy}</p>
+      ) : null}
     </div>
   );
 }
