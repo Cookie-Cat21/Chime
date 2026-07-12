@@ -107,8 +107,14 @@ Ops enablement (poller → browse, briefs flag, PDF sleep): [docs/runbooks/TIJOR
 ```bash
 # Phase 1: market browse needs no new env — just run the poller
 
-# PDF enrich (legacy filePath → pdf_url; after alerts; default 0.5s/symbol)
+# PDF enrich (legacy filePath → pdf_url; after alerts, outside poll lock;
+# polite sleep before each symbol's legacy /announcements call; default 0.5)
 PDF_ENRICH_SLEEP_SECONDS=0.5
+
+# Optional bulk disclosure discovery (exists in poller; default off).
+# DISCLOSURE_BULK_FEED=1 → POST /approvedAnnouncement + stocks name map;
+# fail-soft to per-symbol getAnnouncementByCompany. Not DISCLOSURE_BULK.
+DISCLOSURE_BULK_FEED=0
 
 # Phase 2 (documented now, default off)
 AI_BRIEFS_ENABLED=0
@@ -118,8 +124,6 @@ AI_MODEL=gemini-2.0-flash
 AI_MAX_BRIEFS_PER_DAY=50
 AI_MAX_INPUT_CHARS=12000
 PDF_MAX_BYTES=5242880
-
-# DISCLOSURE_BULK — not implemented (per-symbol announcements only)
 ```
 
 ---
