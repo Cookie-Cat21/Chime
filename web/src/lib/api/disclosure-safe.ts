@@ -51,10 +51,13 @@ export type BriefStatus =
   | "skipped";
 
 function normalizeHttpsUrl(
-  raw: string | null | undefined,
+  raw: unknown,
   allowedHosts: ReadonlySet<string>,
 ): string | null {
+  // Fail closed — non-strings used to throw on .trim() and 503 the whole
+  // disclosures list when a single poisoned pdf_url / url column arrived.
   if (raw == null) return null;
+  if (typeof raw !== "string") return null;
   const trimmed = raw.trim();
   if (!trimmed) return null;
   if (CTRL_RE.test(trimmed)) return null;
@@ -75,14 +78,12 @@ function normalizeHttpsUrl(
 }
 
 /** Accept only https://cdn.cse.lk/... PDF links; else null. */
-export function safePdfUrl(raw: string | null | undefined): string | null {
+export function safePdfUrl(raw: unknown): string | null {
   return normalizeHttpsUrl(raw, new Set([CDN_PDF_HOST]));
 }
 
 /** Accept only https://www.cse.lk/... announcement page links; else null. */
-export function safeAnnouncementUrl(
-  raw: string | null | undefined,
-): string | null {
+export function safeAnnouncementUrl(raw: unknown): string | null {
   return normalizeHttpsUrl(raw, new Set([ANNOUNCEMENTS_HOST]));
 }
 
@@ -90,10 +91,7 @@ export function safeAnnouncementUrl(
  * Prefer a safe PDF href; fall back to a safe announcements URL.
  * Never returns javascript:/data:/http: or off-allowlist https.
  */
-export function safeFilingHref(
-  pdfUrl: string | null | undefined,
-  pageUrl: string | null | undefined,
-): string | null {
+export function safeFilingHref(pdfUrl: unknown, pageUrl: unknown): string | null {
   return safePdfUrl(pdfUrl) ?? safeAnnouncementUrl(pageUrl);
 }
 
@@ -150,10 +148,9 @@ export function sanitizeBriefText(
   return sanitizeDisclosureText(brief, MAX_BRIEF_LENGTH);
 }
 
-export function normalizeBriefStatus(
-  raw: string | null | undefined,
-): BriefStatus | null {
-  if (raw == null) return null;
+export function normalizeBriefStatus(raw: unknown): BriefStatus | null {
+  // Fail closed — only plain status strings (never coerce non-strings).
+  if (typeof raw !== "string") return null;
   return BRIEF_STATUSES.has(raw) ? (raw as BriefStatus) : null;
 }
 

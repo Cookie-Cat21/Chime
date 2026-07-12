@@ -12,7 +12,7 @@ import { Button } from "@/components/ui/button";
 import { serverApiGet } from "@/lib/api/server-fetch";
 import { sanitizeDisclosureCategory } from "@/lib/api/disclosure-safe";
 import {
-  MAX_ALERT_THRESHOLD,
+  cappedAlertThreshold,
   toFiniteNumber,
 } from "@/lib/api/finite-number";
 import { toSafePositiveInt } from "@/lib/api/safe-int";
@@ -80,9 +80,7 @@ export default async function AlertsPage({
             typeof r.symbol === "string" ? r.symbol : null,
           );
           if (!symbol) continue;
-          const n = toFiniteNumber(r.threshold);
-          const threshold =
-            n != null && n <= MAX_ALERT_THRESHOLD ? n : null;
+          const threshold = cappedAlertThreshold(toFiniteNumber(r.threshold));
           rules.push({
             id,
             symbol,

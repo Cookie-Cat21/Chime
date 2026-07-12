@@ -2,7 +2,7 @@ import { Pool, type PoolClient } from "pg";
 
 import { sanitizeDisclosureCategory } from "@/lib/api/disclosure-safe";
 import { toFiniteNumber } from "@/lib/api/market-browse";
-import { MAX_ALERT_THRESHOLD } from "@/lib/api/finite-number";
+import { cappedAlertThreshold } from "@/lib/api/finite-number";
 import { toSafePositiveInt } from "@/lib/api/safe-int";
 import { toIso } from "@/lib/api/time";
 import { isAlertType, normalizeSymbol, type AlertType } from "@/lib/api/symbol";
@@ -152,11 +152,8 @@ function mapRule(row: {
     id,
     symbol,
     type: row.type,
-    // Finite-only + magnitude cap — NaN/±Inf / absurd → null.
-    threshold: (() => {
-      const n = toFiniteNumber(row.threshold);
-      return n != null && n <= MAX_ALERT_THRESHOLD ? n : null;
-    })(),
+    // Finite-only + abs magnitude cap — NaN/±Inf / ±absurd → null.
+    threshold: cappedAlertThreshold(toFiniteNumber(row.threshold)),
     category: sanitizeDisclosureCategory(
       row.category == null ? null : String(row.category),
     ),

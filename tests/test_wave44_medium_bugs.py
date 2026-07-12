@@ -2,7 +2,8 @@
 
 1. ``mapRule`` must cap thresholds at ``MAX_ALERT_THRESHOLD`` (parity with
    GET ``/api/v1/alerts``) — poisoned DB / create-return used to egress
-   ``Number.MAX_VALUE``-scale thresholds into dash JSON.
+   ``Number.MAX_VALUE``-scale thresholds into dash JSON. Wave59 strengthens
+   this to an abs-cap via ``cappedAlertThreshold``.
 2. Residual SYMBOL_RE egress (no sanitize ``"?"``) remains pinned for
    mapRule / history / browse / symbol detail.
 """
@@ -17,11 +18,13 @@ WEB = ROOT / "web"
 
 def test_map_rule_caps_alert_threshold() -> None:
     source = (WEB / "src" / "lib" / "db.ts").read_text(encoding="utf-8")
-    assert "MAX_ALERT_THRESHOLD" in source
+    assert "cappedAlertThreshold" in source
     assert "toFiniteNumber(row.threshold)" in source
-    assert "n <= MAX_ALERT_THRESHOLD" in source
+    assert "cappedAlertThreshold(toFiniteNumber(row.threshold))" in source
     # Bare uncapped toFiniteNumber assign must not remain.
     assert "threshold: toFiniteNumber(row.threshold)," not in source
+    # Upper-bound-only must not remain (hostile -1e308 used to pass).
+    assert "n <= MAX_ALERT_THRESHOLD" not in source
 
 
 def test_map_rule_normalizes_symbol() -> None:

@@ -15,6 +15,12 @@ type EmptyStateProps = {
  */
 export const MAX_EMPTY_STATE_TITLE_LENGTH = 120;
 
+/**
+ * Cap string descriptions — JSX ReactNode children stay trusted; plain
+ * string props used to render uncapped / control-laden copy.
+ */
+export const MAX_EMPTY_STATE_DESCRIPTION_LENGTH = 600;
+
 const CTRL_RE = /[\u0000-\u001F\u007F-\u009F]/g;
 
 /** Strip controls + length-cap before rendering empty-state titles. */
@@ -24,6 +30,16 @@ export function sanitizeEmptyStateTitle(raw: unknown): string {
   if (!cleaned) return "Nothing here yet";
   return cleaned.length > MAX_EMPTY_STATE_TITLE_LENGTH
     ? cleaned.slice(0, MAX_EMPTY_STATE_TITLE_LENGTH).trimEnd()
+    : cleaned;
+}
+
+/** Strip controls + length-cap for plain-string empty-state descriptions. */
+export function sanitizeEmptyStateDescription(raw: unknown): string {
+  if (typeof raw !== "string") return "";
+  const cleaned = raw.replace(CTRL_RE, "").trim();
+  if (!cleaned) return "";
+  return cleaned.length > MAX_EMPTY_STATE_DESCRIPTION_LENGTH
+    ? cleaned.slice(0, MAX_EMPTY_STATE_DESCRIPTION_LENGTH).trimEnd()
     : cleaned;
 }
 
@@ -39,6 +55,11 @@ export function EmptyState({
 }: EmptyStateProps) {
   // Fail closed — never render uncapped / control-laden titles.
   const safeTitle = sanitizeEmptyStateTitle(title);
+  // String descriptions must be sanitized; JSX ReactNode stays as-is.
+  const safeDescription =
+    typeof description === "string"
+      ? sanitizeEmptyStateDescription(description)
+      : description;
   return (
     <div
       className={cn(
@@ -52,7 +73,7 @@ export function EmptyState({
           {safeTitle}
         </p>
         <div className="mt-3 max-w-md text-sm leading-relaxed text-muted-foreground sm:text-base">
-          {description}
+          {safeDescription}
         </div>
         {action ? <div className="mt-6">{action}</div> : null}
       </div>

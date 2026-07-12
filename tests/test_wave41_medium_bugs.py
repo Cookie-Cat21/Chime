@@ -29,9 +29,11 @@ def test_read_csrf_cookie_length_capped() -> None:
 
 def test_map_rule_caps_alert_threshold() -> None:
     source = (WEB / "src" / "lib" / "db.ts").read_text(encoding="utf-8")
-    assert "MAX_ALERT_THRESHOLD" in source
+    # W59: abs-cap via cappedAlertThreshold (was upper-bound-only).
+    assert "cappedAlertThreshold" in source
     assert "toFiniteNumber(row.threshold)" in source
-    assert "n <= MAX_ALERT_THRESHOLD" in source
+    assert "n <= MAX_ALERT_THRESHOLD" not in source
+    assert "cappedAlertThreshold(toFiniteNumber(row.threshold))" in source
 
 
 def test_server_api_get_content_length_early_reject() -> None:

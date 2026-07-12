@@ -92,8 +92,9 @@ def test_pages_fail_closed_symbol_parse() -> None:
     )
     assert "normalizeSymbol(" in alerts
     assert "toFiniteNumber(r.threshold)" in alerts
-    assert "MAX_ALERT_THRESHOLD" in alerts
-    assert "n <= MAX_ALERT_THRESHOLD" in alerts
+    # W59: abs-cap via cappedAlertThreshold (was upper-bound-only).
+    assert "cappedAlertThreshold" in alerts
+    assert "n <= MAX_ALERT_THRESHOLD" not in alerts
     assert "MAX_HISTORY_SYMBOL_LENGTH" not in alerts
 
     watch = (WEB / "src" / "app" / "watchlist" / "page.tsx").read_text(

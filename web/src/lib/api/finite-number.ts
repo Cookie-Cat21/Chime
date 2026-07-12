@@ -43,3 +43,16 @@ export function toFiniteNumber(value: unknown): number | null {
   }
   return null;
 }
+
+/**
+ * Fail-closed alert threshold for egress / create-return.
+ *
+ * Medium: upper-bound-only ``n <= MAX_ALERT_THRESHOLD`` used to let hostile
+ * finite negatives (``-1e308`` / ``-Number.MAX_VALUE``) through mapRule /
+ * GET ``/alerts`` / page parsers into dash JSON.
+ */
+export function cappedAlertThreshold(n: number | null): number | null {
+  if (n == null || !Number.isFinite(n)) return null;
+  if (Math.abs(n) > MAX_ALERT_THRESHOLD) return null;
+  return n;
+}

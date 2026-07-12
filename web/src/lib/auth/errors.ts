@@ -12,7 +12,9 @@ export const MAX_JSON_ERROR_MESSAGE_LENGTH = 300;
 
 const CTRL_RE = /[\u0000-\u001F\u007F-\u009F]/g;
 
-function sanitizeErrorCode(code: string): string {
+function sanitizeErrorCode(code: unknown): string {
+  // Fail closed — non-strings used to throw on .replace.
+  if (typeof code !== "string") return "error";
   const cleaned = code.replace(CTRL_RE, "").trim();
   if (!cleaned) return "error";
   return cleaned.length > MAX_JSON_ERROR_CODE_LENGTH
@@ -20,7 +22,9 @@ function sanitizeErrorCode(code: string): string {
     : cleaned;
 }
 
-function sanitizeErrorMessage(message: string): string {
+function sanitizeErrorMessage(message: unknown): string {
+  // Fail closed — non-strings used to throw on .replace.
+  if (typeof message !== "string") return "Request failed.";
   const cleaned = message.replace(CTRL_RE, "").trim();
   if (!cleaned) return "Request failed.";
   return cleaned.length > MAX_JSON_ERROR_MESSAGE_LENGTH

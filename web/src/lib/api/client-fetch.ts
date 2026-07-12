@@ -200,6 +200,16 @@ export async function apiMutate(
   return { ok: res.ok, status: res.status, data };
 }
 
+/** Strip controls + length-cap for toast / inline error copy. */
+function sanitizeApiErrorCopy(raw: unknown, emptyFallback: string): string {
+  if (typeof raw !== "string") return emptyFallback;
+  const cleaned = raw.replace(CTRL_RE, "").trim();
+  if (!cleaned) return emptyFallback;
+  return cleaned.length > MAX_API_ERROR_MESSAGE_LENGTH
+    ? cleaned.slice(0, MAX_API_ERROR_MESSAGE_LENGTH).trimEnd()
+    : cleaned;
+}
+
 export function apiErrorMessage(
   data: unknown,
   fallback: string,
@@ -209,10 +219,12 @@ export function apiErrorMessage(
   }
   const body = data as ApiErrorBody | null;
   const raw = body?.error?.message;
-  if (typeof raw !== "string" || !raw.trim()) return fallback;
-  const cleaned = raw.replace(CTRL_RE, "").trim();
-  if (!cleaned) return fallback;
-  return cleaned.length > MAX_API_ERROR_MESSAGE_LENGTH
-    ? cleaned.slice(0, MAX_API_ERROR_MESSAGE_LENGTH).trimEnd()
-    : cleaned;
+  if (typeof raw === "string" && raw.trim()) {
+    return sanitizeApiErrorCopy(raw, "Request failed.");
+  }
+  // Preserve "" fallback (login uses empty to mean "no API message").
+  // Still sanitize non-empty fallbacks — misbuilt callers used to balloon UI.
+  if (typeof fallback !== "string") return "Something went wrong.";
+  if (!fallback) return "";
+  return sanitizeApiErrorCopy(fallback, "Something went wrong.");
 }

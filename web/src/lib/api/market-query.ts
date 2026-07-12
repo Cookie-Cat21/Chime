@@ -37,6 +37,8 @@ export function normalizeMarketQuery(raw: unknown): string {
  * Escape `\`, `%`, `_` for PostgreSQL LIKE … ESCAPE '\'.
  * Callers must use ESCAPE '\\' (or equivalent) in SQL.
  */
-export function escapeLikePattern(literal: string): string {
+export function escapeLikePattern(literal: unknown): string {
+  // Fail closed — non-string truthy used to throw on .replace mid-browse.
+  if (typeof literal !== "string") return "";
   return literal.replace(/\\/g, "\\\\").replace(/%/g, "\\%").replace(/_/g, "\\_");
 }

@@ -2,7 +2,10 @@ import type { NextRequest } from "next/server";
 
 import { sanitizeDisclosureCategory } from "@/lib/api/disclosure-safe";
 import { toFiniteNumber } from "@/lib/api/market-browse";
-import { MAX_ALERT_THRESHOLD } from "@/lib/api/finite-number";
+import {
+  cappedAlertThreshold,
+  MAX_ALERT_THRESHOLD,
+} from "@/lib/api/finite-number";
 import { readJsonBody } from "@/lib/api/read-json-body";
 import { toSafePositiveInt } from "@/lib/api/safe-int";
 import { toIso } from "@/lib/api/time";
@@ -90,11 +93,8 @@ export async function GET(request: NextRequest) {
       // Fail closed — only CSE SYMBOL_RE rows (not sanitize "?" fallback).
       const symbol = normalizeSymbol(row.symbol);
       if (!symbol) return [];
-      const thresholdRaw = toFiniteNumber(row.threshold);
-      const threshold =
-        thresholdRaw != null && thresholdRaw <= MAX_ALERT_THRESHOLD
-          ? thresholdRaw
-          : null;
+      // Finite + abs cap — upper-bound-only used to egress -1e308.
+      const threshold = cappedAlertThreshold(toFiniteNumber(row.threshold));
       return [
         {
           id,

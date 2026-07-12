@@ -53,7 +53,9 @@ export function normalizeToastTone(raw: unknown): ToastTone {
 }
 
 /** Strip controls + length-cap before rendering toast text. */
-export function sanitizeToastMessage(raw: string): string {
+export function sanitizeToastMessage(raw: unknown): string {
+  // Fail closed — non-strings used to throw on .replace (parity InlineError).
+  if (typeof raw !== "string") return "Something went wrong.";
   const cleaned = raw.replace(CTRL_RE, "").trim();
   if (!cleaned) return "Something went wrong.";
   return cleaned.length > MAX_TOAST_MESSAGE_LENGTH
@@ -77,10 +79,8 @@ export function ToastProvider({ children }: { children: ReactNode }) {
   const push = useCallback(
     (message: string, tone: ToastTone = "info") => {
       const id = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
-      // Fail closed — never render uncapped / control-laden toast copy.
-      const safe = sanitizeToastMessage(
-        typeof message === "string" ? message : "Something went wrong.",
-      );
+      // Fail closed — never render uncapped / control-laden / non-string toast copy.
+      const safe = sanitizeToastMessage(message);
       const safeTone = normalizeToastTone(tone);
       setItems((prev) => {
         const next = [...prev, { id, message: safe, tone: safeTone }];

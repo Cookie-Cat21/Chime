@@ -24,9 +24,11 @@ export const MAX_HISTORY_OFFSET = 10_000;
 const CTRL_RE = /[\u0000-\u001F\u007F-\u009F]/g;
 
 function sanitizeHistoryMessage(
-  raw: string | null | undefined,
+  raw: unknown,
 ): string | null {
-  if (raw == null) return null;
+  // Fail closed — non-strings used to throw on .replace (parity disclosure /
+  // inline-error sanitizers).
+  if (typeof raw !== "string") return null;
   const cleaned = raw.replace(CTRL_RE, "").trim();
   if (!cleaned) return null;
   return cleaned.length > HISTORY_MESSAGE_TEXT_MAX
