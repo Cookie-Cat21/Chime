@@ -1,11 +1,14 @@
 # Chime
 
-Telegram-first alerting layer for the Colombo Stock Exchange (CSE).
+Tijori-for-CSE: thin **Browse**, AI **filing briefs**, and real **Telegram push**
+for the Colombo Stock Exchange — not a portfolio tracker or trading terminal.
 
-Chime is a background watcher, not a dashboard. You set an alert condition —
-a price threshold, a daily % move, or "any new disclosure for this company" —
-and get a Telegram message the moment it fires, with no browser tab or app
-open. Full product plan: [CLAUDE.md](CLAUDE.md). Endpoint notes:
+Chime is a background watcher. You set an alert condition — a price threshold,
+a daily % move, or "any new disclosure for this company" — and get a Telegram
+message the moment it fires, with no browser tab or app open. The thin dash
+adds `/market` Browse and optional plain-language filing briefs on disclosures;
+push stays primary. Full product plan: [CLAUDE.md](CLAUDE.md). Tijori plan:
+[docs/factory/TIJORI_CSE_PLAN.md](docs/factory/TIJORI_CSE_PLAN.md). Endpoint notes:
 [docs/endpoint_probe_report.md](docs/endpoint_probe_report.md).
 
 ## Setup
