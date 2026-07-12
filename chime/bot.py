@@ -28,6 +28,7 @@ from chime.domain import (
     brief_budget_for_prefix,
     disclaimer,
     sanitize_brief_body,
+    sanitize_disclosure_category,
     truncate_disclosure_title,
 )
 from chime.logging_setup import get_logger
@@ -242,7 +243,8 @@ def parse_alert_args(args: list[str]) -> tuple[ParsedAlert | None, str | None]:
             return ParsedAlert(AlertType.PRICE_BELOW, threshold), None
         return ParsedAlert(AlertType.DAILY_MOVE, threshold), None
     if kind in ("disclosure", "announcement"):
-        category = " ".join(args[2:]).strip() or None
+        raw_cat = " ".join(args[2:]).strip() or None
+        category = sanitize_disclosure_category(raw_cat)
         return ParsedAlert(AlertType.DISCLOSURE, None, category), None
     return None, (f"I didn't catch that alert type.\n{ALERT_USAGE}")
 
@@ -389,18 +391,26 @@ async def cmd_alert(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     )
 
     if alert_type == AlertType.DISCLOSURE:
-        if rule.category:
-            desc = f"new disclosure for {symbol} matching category '{rule.category}'"
+        cat = sanitize_disclosure_category(rule.category)
+        if cat:
+            desc = f"new disclosure for {symbol} matching category '{cat}'"
         else:
             desc = f"new disclosure for {symbol}"
     elif alert_type == AlertType.DAILY_MOVE:
-        desc = f"{symbol} daily move ≥ {threshold:g}%"
+        thr_s = f"{threshold:g}" if threshold is not None and math.isfinite(threshold) else "?"
+        desc = f"{symbol} daily move ≥ {thr_s}%"
     elif alert_type == AlertType.PRICE_ABOVE:
-        desc = f"{symbol} crosses above {threshold:g}"
+        thr_s = f"{threshold:g}" if threshold is not None and math.isfinite(threshold) else "?"
+        desc = f"{symbol} crosses above {thr_s}"
     else:
-        desc = f"{symbol} crosses below {threshold:g}"
+        thr_s = f"{threshold:g}" if threshold is not None and math.isfinite(threshold) else "?"
+        desc = f"{symbol} crosses below {thr_s}"
 
-    await update.effective_message.reply_text(f"Alert #{rule.id} set: {desc}.\n{disclaimer()}")
+    # Clamp: hostile/huge category (or pathological rule id) must not blow past 4096
+    # — an oversize confirm would fail while the rule is already persisted.
+    await update.effective_message.reply_text(
+        _clamp_telegram_message(f"Alert #{rule.id} set: {desc}.\n{disclaimer()}")
+    )
 
 
 async def cmd_cancel(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -460,12 +470,9 @@ async def cmd_myalerts(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
     for r in rules:
         sym = _CTRL_RE.sub("", r.symbol or "").strip() or "?"
         if r.type == AlertType.DISCLOSURE:
-            if r.category:
-                cat = _CTRL_RE.sub("", r.category).strip()
-                if cat:
-                    lines.append(f"#{r.id} {sym} disclosure {cat}")
-                else:
-                    lines.append(f"#{r.id} {sym} disclosure")
+            cat = sanitize_disclosure_category(r.category)
+            if cat:
+                lines.append(f"#{r.id} {sym} disclosure {cat}")
             else:
                 lines.append(f"#{r.id} {sym} disclosure")
         else:

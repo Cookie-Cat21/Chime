@@ -7,6 +7,28 @@ import { getPool } from "@/lib/db";
 
 export const runtime = "nodejs";
 
+/** Cap fire-history message bodies so hostile DB text cannot balloon JSON. */
+export const HISTORY_MESSAGE_TEXT_MAX = 4_000;
+
+const CTRL_RE = /[\u0000-\u001F\u007F-\u009F]/g;
+
+function sanitizeHistoryMessage(
+  raw: string | null | undefined,
+): string | null {
+  if (raw == null) return null;
+  const cleaned = raw.replace(CTRL_RE, "").trim();
+  if (!cleaned) return null;
+  return cleaned.length > HISTORY_MESSAGE_TEXT_MAX
+    ? cleaned.slice(0, HISTORY_MESSAGE_TEXT_MAX - 1).trimEnd() + "…"
+    : cleaned;
+}
+
+function toSafeInt(raw: unknown, fallback = 0): number {
+  const n = typeof raw === "number" ? raw : Number(raw);
+  if (!Number.isFinite(n)) return fallback;
+  return Math.trunc(n);
+}
+
 /**
  * GET /api/v1/alerts/history — fire history (alert_log) for session user.
  * Contract path (not /alerts/fires).
@@ -86,26 +108,35 @@ export async function GET(request: NextRequest) {
       params,
     );
 
-    const events = result.rows.map((row) => ({
-      id: Number(row.id),
-      rule_id: Number(row.rule_id),
-      symbol: row.symbol,
-      type: row.type,
-      fired_at: toIso(row.fired_at),
-      message_sent: Boolean(row.message_sent),
-      dead_lettered: Boolean(row.dead_lettered),
-      attempt_count: Number(row.attempt_count),
-      delivery_status:
-        row.message_sent
-          ? "sent"
-          : row.dead_lettered
-            ? "dead_lettered"
-            : row.delivery_attempted_ok
+    const events = result.rows.flatMap((row) => {
+      const id = toSafeInt(row.id, Number.NaN);
+      const rule_id = toSafeInt(row.rule_id, Number.NaN);
+      // Drop non-finite ids — JSON.stringify(NaN) becomes null and breaks clients.
+      if (!Number.isFinite(id) || !Number.isFinite(rule_id)) return [];
+      const attempts = toSafeInt(row.attempt_count, 0);
+      return [
+        {
+          id,
+          rule_id,
+          symbol: row.symbol,
+          type: row.type,
+          fired_at: toIso(row.fired_at),
+          message_sent: Boolean(row.message_sent),
+          dead_lettered: Boolean(row.dead_lettered),
+          attempt_count: attempts < 0 ? 0 : attempts,
+          delivery_status:
+            row.message_sent
               ? "sent"
-              : "retrying",
-      message_text: row.message_text,
-      event_key: row.event_key,
-    }));
+              : row.dead_lettered
+                ? "dead_lettered"
+                : row.delivery_attempted_ok
+                  ? "sent"
+                  : "retrying",
+          message_text: sanitizeHistoryMessage(row.message_text),
+          event_key: row.event_key,
+        },
+      ];
+    });
 
     return jsonOk({ events, limit, offset });
   } catch (err) {

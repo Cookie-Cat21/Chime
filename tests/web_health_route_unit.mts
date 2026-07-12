@@ -258,11 +258,67 @@ async function testBriefQueueForwardedWithoutDegrading(): Promise<void> {
   }
 }
 
+async function testNestedPollerCannotOverwriteSanitizedFields(): Promise<void> {
+  installDbPool();
+  process.env.DASH_SESSION_SECRET = SECRET;
+  process.env.HEALTH_URL = "http://poller.local/health";
+
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = (async (input: RequestInfo | URL) => {
+    const url = String(input);
+    assert(url === process.env.HEALTH_URL, `unexpected health fetch URL ${url}`);
+    return new Response(
+      JSON.stringify({
+        started_at: "2026-07-11T00:00:00.000Z",
+        last_tick_ok: true,
+        price_poll_ok: true,
+        disclosure_poll_ok: true,
+        last_error: null,
+        watched_missing: [],
+        // Hostile nested shape used to raw-spread and clobber typed fields.
+        poller: {
+          last_tick_ok: "yes",
+          price_poll_ok: "nope",
+          watched_missing: [1, null, "COMB\u0000.N0000", "X".repeat(2000)],
+          last_error: { nested: true },
+          brief_queue: { pending_briefs: Number.NaN },
+        },
+      }),
+      { status: 200, headers: { "content-type": "application/json" } },
+    );
+  }) as typeof fetch;
+
+  try {
+    const res = await healthGet(makeRequest());
+    const body = await readBody(res);
+    // Top-level booleans must survive — nested non-booleans must not overwrite.
+    assert(body.poller?.last_tick_ok === true, "nested string must not clobber last_tick_ok");
+    assert(body.poller?.price_poll_ok === true, "nested string must not clobber price_poll_ok");
+    assert(body.poller?.disclosure_poll_ok === true, "disclosure_poll_ok preserved");
+    // Only string symbols kept; controls stripped; length capped.
+    const missing = body.poller?.watched_missing ?? [];
+    assert(missing.length === 2, `expected 2 cleaned symbols, got ${missing.length}`);
+    assert(missing[0] === "COMB.N0000", `controls stripped, got ${missing[0]}`);
+    assert(
+      typeof missing[1] === "string" && missing[1]!.length <= 512,
+      "hostile oversize watched_missing entry must be capped",
+    );
+    assert(body.poller?.last_error === null, "nested object last_error must not clobber null");
+    assert(body.poller?.brief_queue === undefined, "NaN brief_queue must be omitted");
+    // Cleaned missing still degrades ops status.
+    assert(res.status === 503, `cleaned watched_missing should degrade, got ${res.status}`);
+    assert(body.status === "degraded", `expected degraded, got ${body.status}`);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+}
+
 async function main(): Promise<void> {
   await testWatchedMissingDegradesRoute();
   await testUnreachableHealthUrlDegradesRoute();
   await testHealthProxyTimeoutAbortsAndDegrades();
   await testBriefQueueForwardedWithoutDegrading();
+  await testNestedPollerCannotOverwriteSanitizedFields();
   console.log("WEB_HEALTH_ROUTE_UNIT_OK");
 }
 

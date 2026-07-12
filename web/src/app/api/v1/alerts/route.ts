@@ -59,16 +59,23 @@ export async function GET(request: NextRequest) {
       params,
     );
 
-    const rules = result.rows.map((row) => ({
-      id: Number(row.id),
-      symbol: row.symbol,
-      type: row.type,
-      // Finite-only — NaN/±Inf threshold from a poisoned row → null.
-      threshold: toFiniteNumber(row.threshold),
-      active: Boolean(row.active),
-      armed: Boolean(row.armed),
-      created_at: toIso(row.created_at),
-    }));
+    const rules = result.rows.flatMap((row) => {
+      const id = Number(row.id);
+      // Drop non-finite ids — JSON.stringify(NaN) becomes null.
+      if (!Number.isFinite(id)) return [];
+      return [
+        {
+          id,
+          symbol: row.symbol,
+          type: row.type,
+          // Finite-only — NaN/±Inf threshold from a poisoned row → null.
+          threshold: toFiniteNumber(row.threshold),
+          active: Boolean(row.active),
+          armed: Boolean(row.armed),
+          created_at: toIso(row.created_at),
+        },
+      ];
+    });
 
     return jsonOk({ rules });
   } catch (err) {

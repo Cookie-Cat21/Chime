@@ -142,10 +142,27 @@ class PreviousPriceState(BaseModel):
 
 
 DISCLOSURE_TITLE_MAX = 120
+# Disclosure alert category substring — short CSE labels; keep confirm/myalerts safe.
+DISCLOSURE_CATEGORY_MAX = 64
 # Telegram hard cap is 4096; leave headroom for title/URL/NFA framing.
 BRIEF_BODY_MAX = 3500
 TELEGRAM_SAFE_MAX = 4096
 _CTRL_RE = re.compile(r"[\x00-\x1f\x7f-\x9f]")
+
+
+def sanitize_disclosure_category(category: str | None) -> str | None:
+    """Strip C0/C1 controls and cap length for disclosure category filters.
+
+    Returns ``None`` when empty after sanitize.
+    """
+    if category is None:
+        return None
+    cleaned = _CTRL_RE.sub("", category).strip()
+    if not cleaned:
+        return None
+    if len(cleaned) > DISCLOSURE_CATEGORY_MAX:
+        cleaned = cleaned[:DISCLOSURE_CATEGORY_MAX].rstrip()
+    return cleaned or None
 
 
 def disclaimer() -> str:

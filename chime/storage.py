@@ -21,6 +21,7 @@ from chime.domain import (
     PreviousPriceState,
     PriceSnapshot,
     SectorSnapshot,
+    sanitize_disclosure_category,
 )
 
 
@@ -1234,9 +1235,11 @@ class Storage:
         ``category`` is for disclosure rules only (substring filter); ignored otherwise.
         """
         symbol = symbol.strip().upper()
-        cat = category.strip() if category and category.strip() else None
-        if alert_type != AlertType.DISCLOSURE:
-            cat = None
+        cat = (
+            sanitize_disclosure_category(category)
+            if alert_type == AlertType.DISCLOSURE
+            else None
+        )
         await self.upsert_stock(symbol)
         await self.add_watch(user_id, symbol)
         async with self._pool.connection() as conn:

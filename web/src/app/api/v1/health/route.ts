@@ -47,6 +47,10 @@ type PollerHealth = {
   [key: string]: unknown;
 };
 
+/** Cap hostile HEALTH_URL strings so ops UI / JSON cannot balloon. */
+export const HEALTH_STRING_MAX = 512;
+export const HEALTH_WATCHED_MISSING_MAX = 64;
+
 /** Parse loopback health `brief_queue` (fail-soft; omit empty). */
 export function parseBriefQueue(raw: unknown): BriefQueueHint | undefined {
   if (!raw || typeof raw !== "object" || Array.isArray(raw)) return undefined;
@@ -81,6 +85,82 @@ export function parseBriefQueue(raw: unknown): BriefQueueHint | undefined {
   }
 
   return Object.keys(hint).length > 0 ? hint : undefined;
+}
+
+function sanitizeHealthString(raw: unknown): string | null | undefined {
+  if (raw === null) return null;
+  if (typeof raw !== "string") return undefined;
+  const cleaned = raw.replace(/[\u0000-\u001F\u007F-\u009F]/g, "").trim();
+  if (!cleaned) return null;
+  return cleaned.length > HEALTH_STRING_MAX
+    ? cleaned.slice(0, HEALTH_STRING_MAX)
+    : cleaned;
+}
+
+function sanitizeWatchedMissing(raw: unknown): string[] | undefined {
+  if (!Array.isArray(raw)) return undefined;
+  const out: string[] = [];
+  for (const item of raw) {
+    if (typeof item !== "string") continue;
+    const cleaned = item.replace(/[\u0000-\u001F\u007F-\u009F]/g, "").trim();
+    if (!cleaned) continue;
+    out.push(
+      cleaned.length > HEALTH_STRING_MAX
+        ? cleaned.slice(0, HEALTH_STRING_MAX)
+        : cleaned,
+    );
+    if (out.length >= HEALTH_WATCHED_MISSING_MAX) break;
+  }
+  return out;
+}
+
+/**
+ * Pick typed poller fields only — never raw-spread a nested `body.poller`
+ * (that overwrote sanitized booleans / watched_missing with hostile shapes).
+ * Omitted / wrong-typed keys stay ``undefined`` so a nested merge cannot
+ * clobber a good top-level value with a forced ``null``.
+ */
+export function sanitizePollerHealth(raw: unknown): PollerHealth | null {
+  if (!raw || typeof raw !== "object" || Array.isArray(raw)) return null;
+  const body = raw as Record<string, unknown>;
+  const poller: PollerHealth = {};
+
+  if ("last_tick_at" in body) {
+    poller.last_tick_at =
+      typeof body.last_tick_at === "string" || body.last_tick_at === null
+        ? (body.last_tick_at as string | null)
+        : null;
+  }
+  if (typeof body.last_tick_ok === "boolean") {
+    poller.last_tick_ok = body.last_tick_ok;
+  }
+  if (typeof body.price_poll_ok === "boolean") {
+    poller.price_poll_ok = body.price_poll_ok;
+  }
+  if (typeof body.disclosure_poll_ok === "boolean") {
+    poller.disclosure_poll_ok = body.disclosure_poll_ok;
+  }
+  if (typeof body.lock_held_skip === "boolean") {
+    poller.lock_held_skip = body.lock_held_skip;
+  }
+  if ("last_error" in body) {
+    poller.last_error = sanitizeHealthString(body.last_error) ?? null;
+  }
+  if ("watched_missing" in body) {
+    poller.watched_missing = sanitizeWatchedMissing(body.watched_missing) ?? [];
+  }
+  if (
+    body.circuits &&
+    typeof body.circuits === "object" &&
+    !Array.isArray(body.circuits)
+  ) {
+    poller.circuits = body.circuits as Record<string, unknown>;
+  }
+  const brief = parseBriefQueue(body.brief_queue);
+  if (brief) {
+    poller.brief_queue = brief;
+  }
+  return poller;
 }
 
 /**
@@ -128,53 +208,22 @@ export async function GET(request: NextRequest) {
         if (typeof body.started_at === "string") {
           startedAt = body.started_at;
         }
-        poller = {
-          last_tick_at:
-            typeof body.last_tick_at === "string" || body.last_tick_at === null
-              ? (body.last_tick_at as string | null)
-              : null,
-          last_tick_ok:
-            typeof body.last_tick_ok === "boolean"
-              ? body.last_tick_ok
-              : undefined,
-          price_poll_ok:
-            typeof body.price_poll_ok === "boolean"
-              ? body.price_poll_ok
-              : undefined,
-          disclosure_poll_ok:
-            typeof body.disclosure_poll_ok === "boolean"
-              ? body.disclosure_poll_ok
-              : undefined,
-          lock_held_skip:
-            typeof body.lock_held_skip === "boolean"
-              ? body.lock_held_skip
-              : undefined,
-          last_error:
-            typeof body.last_error === "string" || body.last_error === null
-              ? (body.last_error as string | null)
-              : null,
-          watched_missing: Array.isArray(body.watched_missing)
-            ? (body.watched_missing as unknown[]).filter(
-                (s): s is string => typeof s === "string",
-              )
-            : undefined,
-          circuits:
-            body.circuits &&
-            typeof body.circuits === "object" &&
-            !Array.isArray(body.circuits)
-              ? (body.circuits as Record<string, unknown>)
-              : undefined,
-          brief_queue: parseBriefQueue(body.brief_queue),
-        };
-        // Prefer nested poller if present
-        if (body.poller && typeof body.poller === "object") {
-          const nested = body.poller as PollerHealth;
-          const nestedBrief = parseBriefQueue(nested.brief_queue);
-          poller = {
-            ...poller,
-            ...nested,
-            brief_queue: nestedBrief ?? poller.brief_queue,
+        // Sanitize top-level + nested separately — never raw-spread nested
+        // (hostile HEALTH_URL used to overwrite typed booleans / watched_missing).
+        const top = sanitizePollerHealth(body);
+        const nested = sanitizePollerHealth(body.poller);
+        if (top || nested) {
+          const pick = (p: PollerHealth | null): Partial<PollerHealth> => {
+            if (!p) return {};
+            const out: Partial<PollerHealth> = {};
+            for (const [key, value] of Object.entries(p)) {
+              if (value !== undefined) {
+                (out as Record<string, unknown>)[key] = value;
+              }
+            }
+            return out;
           };
+          poller = { ...pick(top), ...pick(nested) };
         }
       }
     } catch (err) {
