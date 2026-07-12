@@ -94,24 +94,36 @@ function asSectorItems(body: unknown): SectorItem[] | null {
   return out;
 }
 
+function changeDirectionSr(pct: number | null): string {
+  if (pct == null) return "change unknown";
+  if (pct > 0) return "up ";
+  if (pct < 0) return "down ";
+  return "unchanged ";
+}
+
 function MoversList({
   title,
+  headingId,
   items,
   emptyLabel,
 }: {
   title: string;
+  headingId: string;
   items: MarketItem[];
   emptyLabel: string;
 }) {
   return (
     <div className="min-w-0 flex-1">
-      <h3 className="text-xs font-medium tracking-wide text-muted-foreground uppercase">
+      <h3
+        id={headingId}
+        className="text-xs font-medium tracking-wide text-muted-foreground uppercase"
+      >
         {title}
       </h3>
       {items.length === 0 ? (
         <p className="mt-2 text-sm text-muted-foreground">{emptyLabel}</p>
       ) : (
-        <ul className="mt-2 divide-y divide-border/60" aria-label={title}>
+        <ul className="mt-2 divide-y divide-border/60" aria-labelledby={headingId}>
           {items.map((item) => {
             const pct = item.change_pct;
             const tone =
@@ -127,21 +139,20 @@ function MoversList({
                 key={item.symbol}
                 className="flex items-baseline justify-between gap-2 py-2"
               >
-                <div className="flex min-w-0 items-baseline gap-2">
-                  <Link
-                    href={`/symbols/${encodeURIComponent(item.symbol)}`}
-                    className="rounded-sm font-mono text-sm font-medium text-foreground underline-offset-4 hover:underline focus-visible:ring-2 focus-visible:ring-ring/50 focus-visible:outline-none"
-                  >
+                <Link
+                  href={`/symbols/${encodeURIComponent(item.symbol)}`}
+                  aria-label={`Open ${item.symbol} detail to watch`}
+                  className="group flex min-w-0 items-baseline gap-2 rounded-sm focus-visible:ring-2 focus-visible:ring-ring/50 focus-visible:outline-none"
+                >
+                  <span className="font-mono text-sm font-medium text-foreground underline-offset-4 group-hover:underline">
                     {item.symbol}
-                  </Link>
-                  <Link
-                    href={`/symbols/${encodeURIComponent(item.symbol)}`}
-                    className="shrink-0 rounded-sm text-xs text-muted-foreground underline-offset-4 hover:underline focus-visible:ring-2 focus-visible:ring-ring/50 focus-visible:outline-none"
-                  >
+                  </span>
+                  <span className="shrink-0 text-xs font-medium text-foreground/70 underline-offset-4 group-hover:underline">
                     Watch
-                  </Link>
-                </div>
+                  </span>
+                </Link>
                 <span className={`font-mono text-sm tabular-nums ${tone}`}>
+                  <span className="sr-only">{changeDirectionSr(pct)}</span>
                   {formatPct(pct)}
                 </span>
               </li>
@@ -250,11 +261,13 @@ export default async function MarketPage({
             <div className="mt-4 flex flex-col gap-6 sm:flex-row sm:gap-10">
               <MoversList
                 title="Gainers"
+                headingId="movers-gainers-heading"
                 items={gainerItems ?? []}
                 emptyLabel="No gainers yet."
               />
               <MoversList
                 title="Losers"
+                headingId="movers-losers-heading"
                 items={loserItems ?? []}
                 emptyLabel="No losers yet."
               />
@@ -274,13 +287,13 @@ export default async function MarketPage({
               CSE sector index change from the latest poll — name and change only.
             </p>
             {(sectorItems ?? []).length === 0 ? (
-              <p className="mt-3 text-sm text-muted-foreground">
+              <p className="mt-3 text-sm text-muted-foreground" role="status">
                 No sector data yet.
               </p>
             ) : (
               <ul
                 className="mt-4 divide-y divide-border/60"
-                aria-label="Sectors"
+                aria-labelledby="sectors-heading"
               >
                 {(sectorItems ?? []).map((item) => {
                   const pct = item.change_pct;
@@ -297,12 +310,16 @@ export default async function MarketPage({
                       key={item.sector_id}
                       className="flex items-baseline justify-between gap-2 py-2"
                     >
-                      <span className="min-w-0 truncate text-sm text-foreground">
+                      <span
+                        className="min-w-0 truncate text-sm text-foreground"
+                        title={item.name}
+                      >
                         {item.name}
                       </span>
                       <span
                         className={`shrink-0 font-mono text-sm tabular-nums ${tone}`}
                       >
+                        <span className="sr-only">{changeDirectionSr(pct)}</span>
                         {formatPct(pct)}
                       </span>
                     </li>

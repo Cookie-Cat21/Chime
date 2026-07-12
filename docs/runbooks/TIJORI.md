@@ -16,7 +16,7 @@ make tick                 # → python -m chime tick --force
 
 Empty board ⇒ no forced tick / poller not running, or `tradeSummary` empty that tick.
 
-Top movers rows link to `/symbols/[symbol]` (including a thin **Watch** shortcut). Actual add stays on `/watchlist` (“Add via watchlist” note on the strip) — no inline watch POST from `/market`.
+Top movers rows use one symbol+**Watch** link to `/symbols/[symbol]` (accessible name includes the ticker). Actual add stays on `/watchlist` (“Add via watchlist” note on the strip) — no inline watch POST from `/market`.
 
 ## AI briefs (`AI_BRIEFS_ENABLED`)
 

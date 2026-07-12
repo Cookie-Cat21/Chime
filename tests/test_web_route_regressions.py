@@ -349,6 +349,15 @@ def test_market_page_fence_no_screener_or_quote_board() -> None:
     # Wave6: optional sectors strip (Postgres /api/v1/sectors; thin browse only).
     assert "/api/v1/sectors" in market_src
     assert 'aria-labelledby="sectors-heading"' in market_src
+    assert 'aria-label="Sectors"' not in market_src
+    # Wave9 a11y: movers Watch is one labelled link; sectors list labelled by heading.
+    assert "Open ${item.symbol} detail to watch" in market_src
+    assert "movers-gainers-heading" in market_src
+    assert "movers-losers-heading" in market_src
+    assert "Watch\n                  </span>" in market_src
+    assert "title={item.name}" in market_src
+    assert 'role="status"' in market_src
+    assert "changeDirectionSr" in market_src
 
 
 def test_sectors_route_static() -> None:

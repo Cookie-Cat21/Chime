@@ -38,7 +38,8 @@ No nested app shell beyond a single top nav: Browse · Watchlist · Alerts · Hi
 ### `/market`
 - Header: “Browse” + search (symbol/name); subtitle: snapshots for watch discovery, alerts stay on Telegram
 - Fetches `GET /api/v1/symbols?limit=100&sort=change_pct` (+ `q` when searching)
-- Top movers strip (gainers/losers): symbol → `/symbols/[symbol]`, thin **Watch** link (same symbol page — no inline POST/JS), plus “Add via watchlist” note → `/watchlist`
+- Top movers strip (gainers/losers): one symbol+Watch link → `/symbols/[symbol]` (unique `aria-label`, no duplicate tab stops; no inline POST/JS), plus “Add via watchlist” note → `/watchlist`
+- Sectors strip (optional): name + change_pct from `GET /api/v1/sectors`; list uses `aria-labelledby` the Sectors heading; truncated names keep `title`
 - List rows: `symbol` (→ `/symbols/[symbol]`) · name · last `price` · `change_pct` · snapshot `ts`
 - Sorted by `change_pct` desc by default (thin movers view — not a screener)
 - Empty state: poller has not persisted tradeSummary yet (or no search match)
