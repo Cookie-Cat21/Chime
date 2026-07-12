@@ -57,6 +57,10 @@ class Settings:
     # POST /approvedAnnouncement + stocks name map. Default off (0);
     # per-symbol getAnnouncementByCompany remains the safe path.
     disclosure_bulk_feed: bool = False
+    # SNAPSHOT_RETENTION_DAYS — after market persist, delete price_snapshots
+    # older than N days for symbols NOT on any watchlist. Default 0 = off
+    # (keep everything). Watched symbols keep full history forever.
+    snapshot_retention_days: int = 0
 
     @classmethod
     def from_env(cls, *, require_token: bool = True) -> Settings:
@@ -81,6 +85,7 @@ class Settings:
             bot_cmd_rate_per_minute=_int("BOT_CMD_RATE_PER_MINUTE", 20),
             pdf_enrich_sleep_seconds=_float("PDF_ENRICH_SLEEP_SECONDS", 0.5),
             disclosure_bulk_feed=os.getenv("DISCLOSURE_BULK_FEED", "0").strip() == "1",
+            snapshot_retention_days=max(0, _int("SNAPSHOT_RETENTION_DAYS", 0)),
         )
 
 

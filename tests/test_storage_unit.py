@@ -238,6 +238,36 @@ async def test_persist_market_snapshots_scales_to_board_size() -> None:
 
 
 @pytest.mark.asyncio
+async def test_delete_old_non_watchlist_snapshots_noop_when_days_le_zero() -> None:
+    conn = _Conn([{"n": 99}])
+    store = _store(conn)
+    assert await store.delete_old_non_watchlist_snapshots(0) == 0
+    assert await store.delete_old_non_watchlist_snapshots(-3) == 0
+    assert conn.sql == []
+
+
+@pytest.mark.asyncio
+async def test_delete_old_non_watchlist_snapshots_sql_and_count() -> None:
+    conn = _Conn([{"n": 42}])
+    store = _store(conn)
+    assert await store.delete_old_non_watchlist_snapshots(7) == 42
+    assert len(conn.sql) == 1
+    sql = conn.sql[0]
+    assert "DELETE FROM price_snapshots" in sql
+    assert "watchlist_items" in sql
+    assert "NOT EXISTS" in sql
+    assert "interval '1 day'" in sql
+    assert conn.params[0] == (7,)
+
+
+@pytest.mark.asyncio
+async def test_delete_old_non_watchlist_snapshots_null_row_returns_zero() -> None:
+    conn = _Conn([None])
+    store = _store(conn)
+    assert await store.delete_old_non_watchlist_snapshots(1) == 0
+
+
+@pytest.mark.asyncio
 async def test_latest_and_previous_snapshot() -> None:
     row = {
         "id": 5,

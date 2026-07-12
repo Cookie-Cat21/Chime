@@ -200,6 +200,37 @@ class Storage:
             )
         return out
 
+    async def delete_old_non_watchlist_snapshots(self, days: int) -> int:
+        """Delete ``price_snapshots`` older than ``days`` for non-watchlist symbols.
+
+        Symbols present on any user's watchlist keep full history. ``days <= 0``
+        is a no-op (returns 0). Used by optional ``SNAPSHOT_RETENTION_DAYS``.
+        """
+        if days <= 0:
+            return 0
+        async with self._pool.connection() as conn:
+            row = await (
+                await conn.execute(
+                    """
+                    WITH deleted AS (
+                        DELETE FROM price_snapshots ps
+                        WHERE ps.ts < now() - (%s * interval '1 day')
+                          AND NOT EXISTS (
+                              SELECT 1
+                              FROM watchlist_items w
+                              WHERE w.symbol = ps.symbol
+                          )
+                        RETURNING 1
+                    )
+                    SELECT COUNT(*)::int AS n FROM deleted
+                    """,
+                    (days,),
+                )
+            ).fetchone()
+        if row is None:
+            return 0
+        return int(_as_row(row).get("n") or 0)
+
     async def latest_snapshot(self, symbol: str) -> PriceSnapshot | None:
         symbol = symbol.strip().upper()
         async with self._pool.connection() as conn:

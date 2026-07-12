@@ -267,3 +267,111 @@ async def test_persist_failure_updates_missing_from_fetched_board() -> None:
     assert price_ok is False
     assert poller.watched_missing == ["COMB.N0000"]
     assert poller.trade_summary_count == 1
+
+
+@pytest.mark.asyncio
+async def test_retention_off_skips_cleanup() -> None:
+    """Default SNAPSHOT_RETENTION_DAYS=0 does not call retention delete."""
+    storage = AsyncMock()
+    storage.watched_symbols = AsyncMock(return_value=[])
+    storage.persist_market_snapshots = AsyncMock(side_effect=_persist_with_ids)
+    storage.delete_old_non_watchlist_snapshots = AsyncMock(return_value=0)
+
+    cse = AsyncMock()
+    cse.fetch_trade_summary = AsyncMock(return_value=[_snap("JKH.N0000")])
+
+    poller = Poller(_settings(), storage, cse, AsyncMock(return_value=True))
+    events, price_ok = await poller._poll_prices()
+
+    assert events == []
+    assert price_ok is True
+    storage.delete_old_non_watchlist_snapshots.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_retention_runs_after_successful_persist() -> None:
+    storage = AsyncMock()
+    storage.watched_symbols = AsyncMock(return_value=["JKH.N0000"])
+    storage.active_rules_for_symbols = AsyncMock(return_value=[])
+    storage.persist_market_snapshots = AsyncMock(side_effect=_persist_with_ids)
+    storage.delete_old_non_watchlist_snapshots = AsyncMock(return_value=12)
+    storage.get_previous_state = AsyncMock(
+        return_value=PreviousPriceState(price=None)
+    )
+
+    board = [_snap("JKH.N0000"), _snap("COMB.N0000", 90.0)]
+    cse = AsyncMock()
+    cse.fetch_trade_summary = AsyncMock(return_value=board)
+
+    settings = Settings(
+        telegram_bot_token="x",
+        database_url="postgresql://x",
+        poll_jitter_seconds=0,
+        snapshot_retention_days=7,
+    )
+    poller = Poller(settings, storage, cse, AsyncMock(return_value=True))
+    events, price_ok = await poller._poll_prices()
+
+    assert events == []
+    assert price_ok is True
+    storage.persist_market_snapshots.assert_awaited_once_with(board)
+    storage.delete_old_non_watchlist_snapshots.assert_awaited_once_with(7)
+
+
+@pytest.mark.asyncio
+async def test_retention_failure_is_fail_soft(
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """Retention errors must not degrade price_ok / skip rule eval."""
+    storage = AsyncMock()
+    storage.watched_symbols = AsyncMock(return_value=["JKH.N0000"])
+    storage.active_rules_for_symbols = AsyncMock(return_value=[])
+    storage.persist_market_snapshots = AsyncMock(side_effect=_persist_with_ids)
+    storage.delete_old_non_watchlist_snapshots = AsyncMock(
+        side_effect=RuntimeError("cleanup boom")
+    )
+    storage.get_previous_state = AsyncMock(
+        return_value=PreviousPriceState(price=None)
+    )
+
+    board = [_snap("JKH.N0000")]
+    cse = AsyncMock()
+    cse.fetch_trade_summary = AsyncMock(return_value=board)
+
+    settings = Settings(
+        telegram_bot_token="x",
+        database_url="postgresql://x",
+        poll_jitter_seconds=0,
+        snapshot_retention_days=14,
+    )
+    poller = Poller(settings, storage, cse, AsyncMock(return_value=True))
+    events, price_ok = await poller._poll_prices()
+
+    assert events == []
+    assert price_ok is True
+    storage.get_previous_state.assert_awaited_once()
+    assert "snapshot_retention_failed" in capsys.readouterr().out
+
+
+@pytest.mark.asyncio
+async def test_retention_skipped_when_persist_fails() -> None:
+    storage = AsyncMock()
+    storage.watched_symbols = AsyncMock(return_value=[])
+    storage.persist_market_snapshots = AsyncMock(side_effect=RuntimeError("db down"))
+    storage.delete_old_non_watchlist_snapshots = AsyncMock(return_value=0)
+
+    cse = AsyncMock()
+    cse.fetch_trade_summary = AsyncMock(return_value=[_snap("JKH.N0000")])
+
+    settings = Settings(
+        telegram_bot_token="x",
+        database_url="postgresql://x",
+        poll_jitter_seconds=0,
+        snapshot_retention_days=7,
+    )
+    poller = Poller(settings, storage, cse, AsyncMock(return_value=True))
+    events, price_ok = await poller._poll_prices()
+
+    assert events == []
+    assert price_ok is False
+    storage.delete_old_non_watchlist_snapshots.assert_not_awaited()

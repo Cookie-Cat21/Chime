@@ -510,6 +510,26 @@ class Poller:
                 self.watched_missing = []
             return [], False
 
+        # Optional non-watchlist snapshot retention (fail-soft — never degrade tick).
+        retention_days = self.settings.snapshot_retention_days
+        if retention_days > 0:
+            try:
+                deleted = await self.storage.delete_old_non_watchlist_snapshots(
+                    retention_days
+                )
+                if deleted:
+                    log.info(
+                        "snapshot_retention_deleted",
+                        deleted=deleted,
+                        days=retention_days,
+                    )
+            except Exception as exc:
+                log.exception(
+                    "snapshot_retention_failed",
+                    error=str(exc),
+                    days=retention_days,
+                )
+
         if not wanted:
             self.watched_missing = []
             # Empty HTTP-OK board is not a successful browse persist.

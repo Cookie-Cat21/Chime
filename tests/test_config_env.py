@@ -38,3 +38,29 @@ def test_from_env_missing_database_url_raises(monkeypatch: pytest.MonkeyPatch) -
     monkeypatch.delenv("DATABASE_URL", raising=False)
     with pytest.raises(RuntimeError, match="DATABASE_URL"):
         Settings.from_env(require_token=True)
+
+
+def test_snapshot_retention_days_default_off(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("TELEGRAM_BOT_TOKEN", "test-token")
+    monkeypatch.setenv("DATABASE_URL", _DSN)
+    monkeypatch.delenv("SNAPSHOT_RETENTION_DAYS", raising=False)
+    settings = Settings.from_env(require_token=True)
+    assert settings.snapshot_retention_days == 0
+
+
+def test_snapshot_retention_days_from_env(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("TELEGRAM_BOT_TOKEN", "test-token")
+    monkeypatch.setenv("DATABASE_URL", _DSN)
+    monkeypatch.setenv("SNAPSHOT_RETENTION_DAYS", "14")
+    settings = Settings.from_env(require_token=True)
+    assert settings.snapshot_retention_days == 14
+
+
+def test_snapshot_retention_days_negative_clamped(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("TELEGRAM_BOT_TOKEN", "test-token")
+    monkeypatch.setenv("DATABASE_URL", _DSN)
+    monkeypatch.setenv("SNAPSHOT_RETENTION_DAYS", "-5")
+    settings = Settings.from_env(require_token=True)
+    assert settings.snapshot_retention_days == 0
