@@ -23,6 +23,7 @@ from chime.domain import (
     BRIEF_BODY_MAX,
     AlertType,
     PriceSnapshot,
+    brief_budget_for_prefix,
     disclaimer,
     sanitize_brief_body,
     truncate_disclosure_title,
@@ -496,17 +497,20 @@ def format_brief_lookup_reply(
     and caps brief body length so Telegram's 4096 limit is not exceeded.
     Distinguishes AI-off from none-yet when ``ai_enabled`` is provided.
     """
-    body = sanitize_brief_body(brief, max_len=BRIEF_BODY_MAX)
+    lines = [f"{symbol} filing brief"]
+    if title and title.strip():
+        clean_title = truncate_disclosure_title(title)
+        if clean_title:
+            lines.append(f"Disclosure: {clean_title}")
+    safe_url = allowed_filing_url(url) if url else None
+    if safe_url:
+        lines.append(safe_url)
+    budget = min(BRIEF_BODY_MAX, brief_budget_for_prefix(lines))
+    body = sanitize_brief_body(brief, max_len=budget) if budget > 0 else None
     if body is None:
         if ai_enabled is False:
             return f"{symbol}: {BRIEF_AI_OFF}\n{disclaimer()}"
         return f"{symbol}: {BRIEF_NONE_YET}\n{disclaimer()}"
-    lines = [f"{symbol} filing brief"]
-    if title and title.strip():
-        lines.append(f"Disclosure: {truncate_disclosure_title(title)}")
-    safe_url = allowed_filing_url(url) if url else None
-    if safe_url:
-        lines.append(safe_url)
     lines.append("")
     lines.append(body)
     lines.append("")

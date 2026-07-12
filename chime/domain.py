@@ -143,6 +143,7 @@ class PreviousPriceState(BaseModel):
 DISCLOSURE_TITLE_MAX = 120
 # Telegram hard cap is 4096; leave headroom for title/URL/NFA framing.
 BRIEF_BODY_MAX = 3500
+TELEGRAM_SAFE_MAX = 4096
 _CTRL_RE = re.compile(r"[\x00-\x1f\x7f-\x9f]")
 
 
@@ -151,8 +152,14 @@ def disclaimer() -> str:
 
 
 def truncate_disclosure_title(title: str, max_len: int = DISCLOSURE_TITLE_MAX) -> str:
-    """Truncate long filing titles so Telegram alert bodies stay readable."""
-    t = title.strip()
+    """Truncate long filing titles so Telegram alert bodies stay readable.
+
+    Strips C0/C1 controls so a hostile DB title cannot inject nulls/newlines
+    into Telegram egress.
+    """
+    t = _CTRL_RE.sub("", title).strip()
+    if not t:
+        return ""
     if len(t) <= max_len:
         return t
     if max_len <= 1:
@@ -180,6 +187,18 @@ def sanitize_brief_body(
     return body
 
 
+def brief_budget_for_prefix(prefix_lines: list[str]) -> int:
+    """Chars available for a brief body under Telegram's hard cap.
+
+    Prefix is everything before the brief; reserves blank lines around the
+    brief (when present) plus the NFA disclaimer.
+    """
+    nfa = disclaimer()
+    # join(prefix) + "\\n\\n" + brief + "\\n\\n" + nfa
+    fixed = len("\n".join(prefix_lines)) + 2 + 2 + len(nfa)
+    return max(0, TELEGRAM_SAFE_MAX - 1 - fixed)
+
+
 def format_alert_message(
     event: AlertEvent,
     *,
@@ -191,8 +210,8 @@ def format_alert_message(
     Neither path calls an LLM — callers supply precomputed text only.
     Filing URLs are egress-hardened (CDN / www.cse.lk only) so a hostile DB
     ``url`` cannot become an auto-linked Telegram href. Brief bodies are
-    control-stripped and length-capped so a hostile/huge LLM string cannot
-    blow past Telegram's 4096 limit and fail the push.
+    control-stripped and length-capped (dynamic Telegram budget) so a
+    hostile/huge LLM string cannot blow past Telegram's 4096 limit.
     """
     # Lazy import: adapters.cse imports domain at module load.
     from chime.adapters.cse import allowed_filing_url
@@ -204,13 +223,16 @@ def format_alert_message(
     if event.current_price is not None:
         lines.append(f"Price: {event.current_price:.2f} LKR")
     if event.disclosure_title:
-        lines.append(f"Disclosure: {truncate_disclosure_title(event.disclosure_title)}")
+        title = truncate_disclosure_title(event.disclosure_title)
+        if title:
+            lines.append(f"Disclosure: {title}")
     if event.disclosure_url:
         safe_url = allowed_filing_url(event.disclosure_url)
         if safe_url:
             lines.append(safe_url)
     brief = filing_brief if filing_brief is not None else event.filing_brief
-    brief_text = sanitize_brief_body(brief)
+    budget = min(BRIEF_BODY_MAX, brief_budget_for_prefix(lines))
+    brief_text = sanitize_brief_body(brief, max_len=budget) if budget > 0 else None
     if brief_text:
         lines.append("")
         lines.append(brief_text)
@@ -248,12 +270,15 @@ def format_brief_followup(
         "Filing brief ready",
     ]
     if title and title.strip():
-        lines.append(f"Disclosure: {truncate_disclosure_title(title)}")
+        clean_title = truncate_disclosure_title(title)
+        if clean_title:
+            lines.append(f"Disclosure: {clean_title}")
     if url and str(url).strip():
         safe_url = allowed_filing_url(url)
         if safe_url:
             lines.append(safe_url)
-    brief_text = sanitize_brief_body(brief)
+    budget = min(BRIEF_BODY_MAX, brief_budget_for_prefix(lines))
+    brief_text = sanitize_brief_body(brief, max_len=budget) if budget > 0 else None
     if brief_text:
         lines.append("")
         lines.append(brief_text)

@@ -7,6 +7,7 @@ with backoff; a per-endpoint circuit breaker short-circuits sustained outages.
 
 from __future__ import annotations
 
+import re
 from collections.abc import Iterable
 from datetime import UTC, datetime
 from typing import Any, cast
@@ -44,6 +45,9 @@ ANNOUNCEMENTS_PAGE = "https://www.cse.lk/announcements"
 ANNOUNCEMENTS_HOST = "www.cse.lk"
 CDN_HOST = "cdn.cse.lk"
 CDN_BASE = f"https://{CDN_HOST}"
+# Telegram egress budget: unbounded path/fragment must not blow past 4096.
+FILING_URL_MAX = 512
+_URL_CTRL_RE = re.compile(r"[\x00-\x1f\x7f-\x9f]")
 TRADE_SUMMARY_ENDPOINT = "tradeSummary"
 TRADE_SUMMARY_PATH = "/tradeSummary"
 ALL_SECTORS_ENDPOINT = "allSectors"
@@ -61,12 +65,15 @@ def allowed_cdn_pdf_url(url: str | None) -> str | None:
     """Normalize to ``https://cdn.cse.lk/...`` or ``None`` (SSRF guard).
 
     Only the CSE CDN host is accepted. Credentials, non-http(s) schemes,
-    other hosts, and path traversal segments are rejected.
+    other hosts, path traversal segments, C0/C1 controls, and over-long
+    URLs (``FILING_URL_MAX``) are rejected.
     """
     if url is None:
         return None
     raw = url.strip()
     if not raw:
+        return None
+    if _URL_CTRL_RE.search(raw):
         return None
     parsed = urlparse(raw)
     if parsed.scheme not in ("http", "https"):
@@ -80,19 +87,25 @@ def allowed_cdn_pdf_url(url: str | None) -> str | None:
     if any(seg == ".." or seg == "." for seg in segments):
         return None
     normalized_path = "/" + "/".join(segments) if segments else "/"
-    return f"{CDN_BASE}{normalized_path}"
+    out = f"{CDN_BASE}{normalized_path}"
+    if len(out) > FILING_URL_MAX:
+        return None
+    return out
 
 
 def allowed_filing_url(url: str | None) -> str | None:
     """Telegram/dash egress: CDN PDF or ``www.cse.lk`` announcement page only.
 
-    Rejects ``javascript:`` / credentials / off-allowlist hosts so bot replies
-    never echo a hostile DB ``url`` as an auto-linked Telegram href.
+    Rejects ``javascript:`` / credentials / off-allowlist hosts / C0–C1
+    controls / over-long URLs so bot replies never echo a hostile DB ``url``
+    as an auto-linked Telegram href or blow past Telegram's 4096 limit.
     """
     if url is None:
         return None
     raw = url.strip()
     if not raw:
+        return None
+    if _URL_CTRL_RE.search(raw):
         return None
     cdn = allowed_cdn_pdf_url(raw)
     if cdn is not None:
@@ -114,6 +127,8 @@ def allowed_filing_url(url: str | None) -> str | None:
         out = f"{out}?{parsed.query}"
     if parsed.fragment:
         out = f"{out}#{parsed.fragment}"
+    if len(out) > FILING_URL_MAX:
+        return None
     return out
 
 

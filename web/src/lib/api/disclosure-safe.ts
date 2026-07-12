@@ -13,6 +13,10 @@ const CDN_PDF_HOST = ["cdn", "cse", "lk"].join(".");
 const ANNOUNCEMENTS_HOST = ["www", "cse", "lk"].join(".");
 
 export const MAX_BRIEF_LENGTH = 4_000;
+/** Match Python ``FILING_URL_MAX`` — reject over-long allowlisted hrefs. */
+export const MAX_FILING_URL_LENGTH = 512;
+
+const CTRL_RE = /[\u0000-\u001F\u007F-\u009F]/;
 
 const BRIEF_STATUSES = new Set([
   "pending",
@@ -36,6 +40,8 @@ function normalizeHttpsUrl(
   if (raw == null) return null;
   const trimmed = raw.trim();
   if (!trimmed) return null;
+  if (CTRL_RE.test(trimmed)) return null;
+  if (trimmed.length > MAX_FILING_URL_LENGTH) return null;
   let parsed: URL;
   try {
     parsed = new URL(trimmed);
@@ -47,6 +53,7 @@ function normalizeHttpsUrl(
   const host = parsed.hostname.toLowerCase();
   if (!allowedHosts.has(host)) return null;
   // Drop hash/search weirdness? Keep as-is — path already host-gated.
+  if (parsed.href.length > MAX_FILING_URL_LENGTH) return null;
   return parsed.href;
 }
 
