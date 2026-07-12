@@ -37,7 +37,8 @@ export async function GET(request: NextRequest) {
   }
 
   let limit = Number.parseInt(sp.get("limit") ?? String(DEFAULT_LIMIT), 10);
-  if (!Number.isFinite(limit) || limit < 1) limit = DEFAULT_LIMIT;
+  // SafeInteger — reject precision-loss / float-coerced limits.
+  if (!Number.isSafeInteger(limit) || limit < 1) limit = DEFAULT_LIMIT;
   limit = Math.min(limit, MAX_LIMIT);
 
   const sort = direction === "down" ? "change_pct_asc" : "change_pct";

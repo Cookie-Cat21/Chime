@@ -17,7 +17,11 @@ export const metadata = {
   description: "Alert fire history from your Chime rules.",
 };
 
-type DeliveryStatus = "sent" | "retrying" | "dead_lettered";
+type DeliveryStatus =
+  | "sent"
+  | "retrying"
+  | "dead_lettered"
+  | "delivered_unmarked";
 
 type HistoryPayload = {
   events: {
@@ -45,6 +49,8 @@ function deliveryBadgeClassName(status: DeliveryStatus): string {
   switch (status) {
     case "sent":
       return "border-emerald-500/30 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300";
+    case "delivered_unmarked":
+      return "border-sky-500/30 bg-sky-500/10 text-sky-700 dark:text-sky-300";
     case "retrying":
       return "border-amber-500/30 bg-amber-500/10 text-amber-700 dark:text-amber-300";
     case "dead_lettered":
@@ -61,6 +67,12 @@ function deliveryCopy(event: HistoryPayload["events"][number]): {
       return {
         label: "Sent",
         description: "Telegram delivery recorded.",
+      };
+    case "delivered_unmarked":
+      return {
+        label: "Delivered (unmarked)",
+        description:
+          "Telegram accepted the message, but the durable sent flag was not recorded.",
       };
     case "retrying":
       return {

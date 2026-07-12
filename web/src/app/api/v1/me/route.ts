@@ -1,5 +1,6 @@
 import type { NextRequest } from "next/server";
 
+import { toSafePositiveInt } from "@/lib/api/safe-int";
 import { toIso } from "@/lib/api/time";
 import { CSRF_COOKIE } from "@/lib/auth/config";
 import { jsonError, jsonOk } from "@/lib/auth/errors";
@@ -10,9 +11,8 @@ import { getPool } from "@/lib/db";
 export const runtime = "nodejs";
 
 function toSafeId(raw: unknown): number | null {
-  const n = typeof raw === "number" ? raw : Number(raw);
-  if (!Number.isSafeInteger(n) || n <= 0) return null;
-  return n;
+  const id = toSafePositiveInt(raw);
+  return id != null && Number.isSafeInteger(id) ? id : null;
 }
 
 /**

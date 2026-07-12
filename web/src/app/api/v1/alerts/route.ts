@@ -6,6 +6,7 @@ import {
   sanitizeDisclosureText,
 } from "@/lib/api/disclosure-safe";
 import { toFiniteNumber } from "@/lib/api/market-browse";
+import { toSafePositiveInt } from "@/lib/api/safe-int";
 import { toIso } from "@/lib/api/time";
 import { isAlertType, normalizeSymbol } from "@/lib/api/symbol";
 import { jsonError, jsonOk } from "@/lib/auth/errors";
@@ -66,10 +67,9 @@ export async function GET(request: NextRequest) {
     );
 
     const rules = result.rows.flatMap((row) => {
-      const id = Number(row.id);
-      // Drop non-safe ids — JSON.stringify(NaN) becomes null; unsafe ints
-      // lose precision and can alias the wrong rule.
-      if (!Number.isSafeInteger(id) || id <= 0) return [];
+      const id = toSafePositiveInt(row.id);
+      // Drop non-safe ids — Number(oversized) precision-loss used to alias rules.
+      if (id == null) return [];
       if (!isAlertType(row.type)) return [];
       return [
         {

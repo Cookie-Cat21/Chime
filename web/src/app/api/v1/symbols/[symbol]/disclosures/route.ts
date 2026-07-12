@@ -11,6 +11,7 @@ import {
   sanitizeBriefText,
   sanitizeDisclosureText,
 } from "@/lib/api/disclosure-safe";
+import { toSafePositiveInt } from "@/lib/api/safe-int";
 import { normalizeSymbol } from "@/lib/api/symbol";
 import { toIso } from "@/lib/api/time";
 import { jsonError, jsonOk } from "@/lib/auth/errors";
@@ -81,10 +82,9 @@ export async function GET(request: NextRequest, context: RouteContext) {
     );
 
     const items = result.rows.flatMap((row) => {
-      const id = Number(row.id);
-      // Drop non-safe ids — NaN→null in JSON; unsafe ints lose precision
-      // and can alias the wrong disclosure row.
-      if (!Number.isSafeInteger(id) || id <= 0) return [];
+      const id = toSafePositiveInt(row.id);
+      // Drop non-safe ids — Number(oversized) precision-loss aliases rows.
+      if (id == null) return [];
       const brief_status = normalizeBriefStatus(row.brief_status);
       // Title/category/company/external_id: strip controls + cap (hostile DB
       // text must not balloon JSON or leak C0 into the dash).

@@ -6,6 +6,13 @@ import { NfaFooter } from "@/components/nfa-footer";
 import { NfaInline } from "@/components/nfa-inline";
 import { Button } from "@/components/ui/button";
 import {
+  MAX_HISTORY_SYMBOL_LENGTH,
+  MAX_SECTOR_NAME_LENGTH,
+  MAX_STOCK_NAME_LENGTH,
+  MAX_STOCK_SECTOR_LENGTH,
+  sanitizeDisclosureText,
+} from "@/lib/api/disclosure-safe";
+import {
   MAX_MARKET_Q_LENGTH,
   normalizeMarketQuery,
 } from "@/lib/api/market-query";
@@ -60,8 +67,8 @@ function finiteOrNull(value: unknown): number | null {
 }
 
 /**
- * Fail-closed browse rows: require a non-empty trimmed symbol and coerce
- * numerics. Raw string change_pct must not reach formatPct (throws on toFixed).
+ * Fail-closed browse rows: sanitize symbol/name/sector (controls + cap) and
+ * coerce numerics. Raw string change_pct must not reach formatPct (throws).
  */
 function asMarketItems(body: unknown): MarketItem[] | null {
   if (body == null || typeof body !== "object" || Array.isArray(body)) {
@@ -73,15 +80,20 @@ function asMarketItems(body: unknown): MarketItem[] | null {
   for (const row of items) {
     if (row == null || typeof row !== "object" || Array.isArray(row)) continue;
     const r = row as Record<string, unknown>;
-    const symbol = typeof r.symbol === "string" ? r.symbol.trim() : "";
+    const symbol =
+      sanitizeDisclosureText(r.symbol, MAX_HISTORY_SYMBOL_LENGTH) ?? "";
     if (!symbol) continue;
-    const nameRaw = r.name;
-    const sectorRaw = r.sector;
     const tsRaw = r.ts;
     out.push({
       symbol,
-      name: typeof nameRaw === "string" ? nameRaw : null,
-      sector: typeof sectorRaw === "string" ? sectorRaw : null,
+      name: sanitizeDisclosureText(
+        typeof r.name === "string" ? r.name : null,
+        MAX_STOCK_NAME_LENGTH,
+      ),
+      sector: sanitizeDisclosureText(
+        typeof r.sector === "string" ? r.sector : null,
+        MAX_STOCK_SECTOR_LENGTH,
+      ),
       price: finiteOrNull(r.price),
       change: finiteOrNull(r.change),
       change_pct: finiteOrNull(r.change_pct),
@@ -101,7 +113,8 @@ function asSectorItems(body: unknown): SectorItem[] | null {
   for (const row of items) {
     if (row == null || typeof row !== "object" || Array.isArray(row)) continue;
     const r = row as Record<string, unknown>;
-    const name = typeof r.name === "string" ? r.name.trim() : "";
+    const name =
+      sanitizeDisclosureText(r.name, MAX_SECTOR_NAME_LENGTH) ?? "";
     if (!name) continue;
     const sectorIdRaw = finiteOrNull(r.sector_id);
     // SafeInteger only — floats / unsafe ints must not become React keys.

@@ -64,5 +64,8 @@ def test_disclosures_route_uses_safe_integer_ids() -> None:
         / "route.ts"
     )
     source = route.read_text(encoding="utf-8")
-    assert "Number.isSafeInteger(id)" in source
+    assert (
+        "Number.isSafeInteger(id)" in source
+        or "toSafePositiveInt(row.id)" in source
+    )
     assert "Number.isFinite(id)" not in source

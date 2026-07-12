@@ -5,6 +5,10 @@ import {
   MAX_HISTORY_SYMBOL_LENGTH,
   sanitizeDisclosureText,
 } from "@/lib/api/disclosure-safe";
+import {
+  toNonNegativeSafeInt,
+  toSafePositiveInt,
+} from "@/lib/api/safe-int";
 import { isAlertType, normalizeSymbol } from "@/lib/api/symbol";
 import { toIso } from "@/lib/api/time";
 import { jsonError, jsonOk } from "@/lib/auth/errors";
@@ -15,6 +19,8 @@ export const runtime = "nodejs";
 
 /** Cap fire-history message bodies so hostile DB text cannot balloon JSON. */
 export const HISTORY_MESSAGE_TEXT_MAX = 4_000;
+/** Bound OFFSET — same soft ceiling as market browse (no unbounded scans). */
+export const MAX_HISTORY_OFFSET = 10_000;
 
 const CTRL_RE = /[\u0000-\u001F\u007F-\u009F]/g;
 
@@ -29,10 +35,19 @@ function sanitizeHistoryMessage(
     : cleaned;
 }
 
-function toSafeInt(raw: unknown, fallback = 0): number {
-  const n = typeof raw === "number" ? raw : Number(raw);
-  if (!Number.isFinite(n)) return fallback;
-  return Math.trunc(n);
+/**
+ * Derive delivery_status per API_CONTRACT_V1 (alert_log delivery-state).
+ * Do not collapse delivered-unmarked into "sent" — that lies about message_sent.
+ */
+export function deriveDeliveryStatus(row: {
+  message_sent: boolean;
+  dead_lettered: boolean;
+  delivery_attempted_ok: boolean;
+}): "sent" | "dead_lettered" | "delivered_unmarked" | "retrying" {
+  if (row.message_sent) return "sent";
+  if (row.dead_lettered) return "dead_lettered";
+  if (row.delivery_attempted_ok) return "delivered_unmarked";
+  return "retrying";
 }
 
 /**
@@ -70,7 +85,8 @@ export async function GET(request: NextRequest) {
     if (!Number.isSafeInteger(n) || n < 0) {
       return jsonError(400, "validation_error", "offset must be a non-negative integer.");
     }
-    offset = n;
+    // Soft-cap like GET /symbols — reject pathological OFFSET scans.
+    offset = Math.min(n, MAX_HISTORY_OFFSET);
   }
 
   try {
@@ -120,19 +136,20 @@ export async function GET(request: NextRequest) {
     );
 
     const events = result.rows.flatMap((row) => {
-      const id = toSafeInt(row.id, Number.NaN);
-      const rule_id = toSafeInt(row.rule_id, Number.NaN);
-      // Drop non-safe ids — JSON.stringify(NaN) becomes null and breaks clients;
-      // unsafe ints lose precision and can alias the wrong fire row.
-      if (!Number.isSafeInteger(id) || !Number.isSafeInteger(rule_id)) return [];
-      if (id <= 0 || rule_id <= 0) return [];
+      // Digits-only SafeInteger — no Math.trunc float alias / precision loss.
+      const id = toSafePositiveInt(row.id);
+      const rule_id = toSafePositiveInt(row.rule_id);
+      if (id == null || rule_id == null) return [];
       if (!isAlertType(row.type)) return [];
-      const attempts = toSafeInt(row.attempt_count, 0);
+      const attempts = toNonNegativeSafeInt(row.attempt_count, 0);
       const symbol =
         sanitizeDisclosureText(row.symbol, MAX_HISTORY_SYMBOL_LENGTH) ?? "?";
       const event_key =
         sanitizeDisclosureText(row.event_key, MAX_HISTORY_EVENT_KEY_LENGTH) ??
         "";
+      const message_sent = Boolean(row.message_sent);
+      const dead_lettered = Boolean(row.dead_lettered);
+      const delivery_attempted_ok = Boolean(row.delivery_attempted_ok);
       return [
         {
           id,
@@ -140,17 +157,14 @@ export async function GET(request: NextRequest) {
           symbol,
           type: row.type,
           fired_at: toIso(row.fired_at),
-          message_sent: Boolean(row.message_sent),
-          dead_lettered: Boolean(row.dead_lettered),
-          attempt_count: attempts < 0 ? 0 : attempts,
-          delivery_status:
-            row.message_sent
-              ? "sent"
-              : row.dead_lettered
-                ? "dead_lettered"
-                : row.delivery_attempted_ok
-                  ? "sent"
-                  : "retrying",
+          message_sent,
+          dead_lettered,
+          attempt_count: attempts,
+          delivery_status: deriveDeliveryStatus({
+            message_sent,
+            dead_lettered,
+            delivery_attempted_ok,
+          }),
           message_text: sanitizeHistoryMessage(row.message_text),
           event_key,
         },

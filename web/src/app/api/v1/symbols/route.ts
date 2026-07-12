@@ -28,10 +28,11 @@ export async function GET(request: NextRequest) {
 
   const sp = request.nextUrl.searchParams;
   let limit = Number.parseInt(sp.get("limit") ?? String(DEFAULT_LIMIT), 10);
-  if (!Number.isFinite(limit) || limit < 1) limit = DEFAULT_LIMIT;
+  // SafeInteger — reject precision-loss / float-coerced limits.
+  if (!Number.isSafeInteger(limit) || limit < 1) limit = DEFAULT_LIMIT;
   limit = Math.min(limit, MAX_LIMIT);
   let offset = Number.parseInt(sp.get("offset") ?? "0", 10);
-  if (!Number.isFinite(offset) || offset < 0) offset = 0;
+  if (!Number.isSafeInteger(offset) || offset < 0) offset = 0;
   offset = Math.min(offset, MAX_SYMBOLS_OFFSET);
 
   const q = normalizeMarketQuery(sp.get("q"));

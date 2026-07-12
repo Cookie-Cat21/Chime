@@ -20,8 +20,7 @@ def test_history_route_sanitizes_symbol_event_key_and_safe_ids() -> None:
     assert "sanitizeDisclosureText" in source
     assert "MAX_HISTORY_SYMBOL_LENGTH" in source
     assert "MAX_HISTORY_EVENT_KEY_LENGTH" in source
-    assert "Number.isSafeInteger(id)" in source
-    assert "Number.isSafeInteger(rule_id)" in source
+    assert "toSafePositiveInt" in source
     # Ban raw symbol/event_key egress.
     assert "symbol: row.symbol" not in source
     assert "event_key: row.event_key" not in source
@@ -58,8 +57,8 @@ def test_market_browse_sanitizes_name_sector() -> None:
 def test_alerts_get_uses_safe_integer_ids() -> None:
     route = WEB / "src" / "app" / "api" / "v1" / "alerts" / "route.ts"
     source = route.read_text(encoding="utf-8")
-    assert "Number.isSafeInteger(id)" in source
-    assert "Number.isFinite(id)" not in source
+    assert "toSafePositiveInt" in source
+    assert "Number(row.id)" not in source
 
 
 def test_disclosure_safe_stock_history_caps_present() -> None:

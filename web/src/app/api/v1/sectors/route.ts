@@ -8,6 +8,7 @@ import {
   sanitizeDisclosureText,
 } from "@/lib/api/disclosure-safe";
 import { toFiniteNumber } from "@/lib/api/market-browse";
+import { toSafePositiveInt } from "@/lib/api/safe-int";
 import { toIso } from "@/lib/api/time";
 import { jsonError, jsonOk } from "@/lib/auth/errors";
 import { requireSession } from "@/lib/auth/guard";
@@ -34,9 +35,9 @@ type SectorRow = {
 };
 
 function toSafeSectorId(raw: unknown): number | null {
-  const n = typeof raw === "number" ? raw : Number(raw);
-  if (!Number.isSafeInteger(n) || n <= 0) return null;
-  return n;
+  // Digits-only — Number(oversized string) used to precision-lose into SafeInteger.
+  const id = toSafePositiveInt(raw);
+  return id != null && Number.isSafeInteger(id) ? id : null;
 }
 
 /**

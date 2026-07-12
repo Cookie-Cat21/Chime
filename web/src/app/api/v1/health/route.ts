@@ -174,8 +174,10 @@ export function sanitizePollerHealth(raw: unknown): PollerHealth | null {
     if (body.last_tick_at === null) {
       poller.last_tick_at = null;
     } else {
-      const tick = sanitizeHealthString(body.last_tick_at);
-      poller.last_tick_at = tick === undefined ? null : tick;
+      const cleaned = sanitizeHealthString(body.last_tick_at);
+      // Require parseable ISO — sanitize-only left hostile non-dates in ops JSON.
+      poller.last_tick_at =
+        cleaned === undefined ? null : cleaned == null ? null : toIso(cleaned);
     }
   }
   if (typeof body.last_tick_ok === "boolean") {
@@ -249,7 +251,8 @@ export async function GET(request: NextRequest) {
         unknown
       > | null;
       if (body && typeof body === "object") {
-        const started = sanitizeHealthString(body.started_at);
+        const startedClean = sanitizeHealthString(body.started_at);
+        const started = startedClean ? toIso(startedClean) : null;
         if (started) {
           startedAt = started;
         }

@@ -6,6 +6,7 @@ import {
   sanitizeDisclosureText,
 } from "@/lib/api/disclosure-safe";
 import { toFiniteNumber } from "@/lib/api/market-browse";
+import { toSafePositiveInt } from "@/lib/api/safe-int";
 import { toIso } from "@/lib/api/time";
 import type { AlertType } from "@/lib/api/symbol";
 
@@ -39,7 +40,13 @@ export async function ensureUser(telegramId: number): Promise<number> {
   );
   const row = result.rows[0];
   if (!row) throw new Error("ensure_user returned no row");
-  return Number(row.id);
+  // Digits-only SafeInteger — Number(oversized) used to precision-lose and
+  // mint a session for the wrong user_id after JSON/Number round-trip.
+  const id = toSafePositiveInt(row.id);
+  if (id == null || !Number.isSafeInteger(id)) {
+    throw new Error("ensure_user returned non-safe id");
+  }
+  return id;
 }
 
 export type StockRow = {
