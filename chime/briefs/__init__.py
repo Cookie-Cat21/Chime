@@ -101,7 +101,11 @@ class BriefSettings:
 
     @classmethod
     def from_env(cls) -> BriefSettings:
-        provider = os.getenv("AI_PROVIDER", "gemini").strip() or "gemini"
+        # Fail closed — non-string getenv mocks used to throw on .strip mid brief boot.
+        provider_raw = os.getenv("AI_PROVIDER", "gemini")
+        provider = (
+            provider_raw.strip() if isinstance(provider_raw, str) else ""
+        ) or "gemini"
         # Soft-default model to the provider's common chat model so
         # AI_PROVIDER=groq without AI_MODEL does not burn the daily cap on
         # Gemini model ids that Groq rejects.
@@ -113,14 +117,16 @@ class BriefSettings:
         else:
             default_model = "gemini-2.0-flash"
         model_raw = os.getenv("AI_MODEL")
-        if model_raw is None or not str(model_raw).strip():
+        if model_raw is None or not isinstance(model_raw, str) or not model_raw.strip():
             model = default_model
         else:
-            model = str(model_raw).strip()
+            model = model_raw.strip()
+        enabled_raw = os.getenv("AI_BRIEFS_ENABLED", "0")
+        api_key_raw = os.getenv("AI_API_KEY", "")
         return cls(
-            enabled=os.getenv("AI_BRIEFS_ENABLED", "0").strip() == "1",
+            enabled=(isinstance(enabled_raw, str) and enabled_raw.strip() == "1"),
             provider=provider,
-            api_key=os.getenv("AI_API_KEY", "").strip(),
+            api_key=api_key_raw.strip() if isinstance(api_key_raw, str) else "",
             model=model,
             max_briefs_per_day=max(0, _env_int("AI_MAX_BRIEFS_PER_DAY", 50)),
             max_input_chars=max(1, _env_int("AI_MAX_INPUT_CHARS", 12_000)),

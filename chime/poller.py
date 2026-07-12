@@ -339,9 +339,12 @@ class Poller:
 
     def _delivery_ok_ledger_path_from_env(self) -> Path | None:
         raw = os.getenv(DELIVERY_OK_LEDGER_ENV)
-        if raw is not None:
+        # Fail closed — non-string getenv mocks used to throw on .strip mid ledger path.
+        if isinstance(raw, str):
             raw = raw.strip()
             return Path(raw) if raw else None
+        if raw is not None:
+            return None
         digest = hashlib.sha256(self.settings.database_url.encode("utf-8")).hexdigest()[:16]
         return Path("/tmp/chime") / f"delivery-ok-{digest}.jsonl"
 

@@ -118,7 +118,9 @@ async def _rate_limited(update: Update, context: ContextTypes.DEFAULT_TYPE) -> b
 
 def _env_cmd_rate_per_minute() -> int:
     """Parse bot rate env; invalid / negative → 20 (0 = unlimited)."""
-    raw = os.getenv("BOT_CMD_RATE_PER_MINUTE", "").strip()
+    # Fail closed — non-string getenv mocks used to throw on .strip mid boot.
+    raw_env = os.getenv("BOT_CMD_RATE_PER_MINUTE", "")
+    raw = raw_env.strip() if isinstance(raw_env, str) else ""
     if not raw:
         return 20
     try:
@@ -196,6 +198,9 @@ def _parse_threshold_token(raw: str) -> float | None:
     Rejects European decimal commas (``100,50`` / ``1.000,50``), non-finite
     floats (``nan`` / ``inf``), and zero/negative values.
     """
+    # Fail closed — non-strings used to throw on .strip mid /alert parse.
+    if not isinstance(raw, str):
+        return None
     s = raw.strip()
     if not s:
         return None
@@ -509,7 +514,9 @@ async def cmd_myalerts(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
         return
     lines = ["Your alerts:"]
     for r in rules:
-        sym = _CTRL_RE.sub("", r.symbol or "").strip() or "?"
+        # Fail closed — non-string DB symbols used to throw on re.sub mid /myalerts.
+        sym_raw = r.symbol if isinstance(r.symbol, str) else ""
+        sym = _CTRL_RE.sub("", sym_raw).strip() or "?"
         if r.type == AlertType.DISCLOSURE:
             cat = sanitize_disclosure_category(r.category)
             if cat:
@@ -550,7 +557,11 @@ async def cmd_mywatchlist(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
             "Watchlist empty. Add a CSE symbol with /watch SYMBOL.\nExample: /watch JKH.N0000"
         )
         return
-    clean = [_CTRL_RE.sub("", s or "").strip() or "?" for s in symbols]
+    clean = [
+        # Fail closed — non-string watchlist rows used to throw on re.sub.
+        _CTRL_RE.sub("", s if isinstance(s, str) else "").strip() or "?"
+        for s in symbols
+    ]
     await update.effective_message.reply_text(
         _clamp_telegram_message("Watchlist:\n" + "\n".join(clean))
     )

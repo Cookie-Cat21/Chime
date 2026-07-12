@@ -38,7 +38,9 @@ class ScenarioSettings:
 
     @classmethod
     def from_env(cls) -> ScenarioSettings:
-        return cls(enabled=os.getenv("AI_SCENARIOS_ENABLED", "0").strip() == "1")
+        raw = os.getenv("AI_SCENARIOS_ENABLED", "0")
+        # Fail closed — non-string getenv mocks used to throw on .strip mid scenario gate.
+        return cls(enabled=isinstance(raw, str) and raw.strip() == "1")
 
 
 def scenarios_enabled(settings: ScenarioSettings | None = None) -> bool:

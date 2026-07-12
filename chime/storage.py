@@ -716,10 +716,11 @@ class Storage:
         delivery lease — concurrent callers and retries collide on
         UNIQUE(rule_id, event_key).
         """
-        ext = (external_id or "").strip()
-        sym = (symbol or "").strip().upper()
-        brief_text = (brief or "").strip()
-        msg = message_text or ""
+        # Fail closed — non-string args used to throw on .strip mid brief follow-up claim.
+        ext = external_id.strip() if isinstance(external_id, str) else ""
+        sym = symbol.strip().upper() if isinstance(symbol, str) else ""
+        brief_text = brief.strip() if isinstance(brief, str) else ""
+        msg = message_text if isinstance(message_text, str) else ""
         if not ext or not sym or not brief_text or not msg.strip():
             return []
         lease = max(1, int(lease_seconds))
@@ -1030,8 +1031,9 @@ class Storage:
                         )
                     ).fetchone()
             else:
-                ext = (external_id or "").strip()
-                sym = (symbol or "").strip().upper()
+                # Fail closed — non-string args used to throw on .strip mid brief lookup.
+                ext = external_id.strip() if isinstance(external_id, str) else ""
+                sym = symbol.strip().upper() if isinstance(symbol, str) else ""
                 if not ext or not sym:
                     return None
                 async with self._pool.connection() as conn:
@@ -1067,7 +1069,8 @@ class Storage:
         Ordered by disclosure ``published_at`` then ``id`` descending. Returns
         ``None`` when missing, blank, or on any DB error (fail-soft).
         """
-        sym = (symbol or "").strip().upper()
+        # Fail closed — non-string symbol used to throw on .strip mid /brief lookup.
+        sym = symbol.strip().upper() if isinstance(symbol, str) else ""
         if not sym:
             return None
         try:
