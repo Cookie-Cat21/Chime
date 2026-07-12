@@ -38,7 +38,9 @@ export function hostnameOnly(host: unknown): string {
 }
 
 /** True for loopback hostname/IP (optional :port / brackets). */
-export function isLoopbackHost(host: string): boolean {
+export function isLoopbackHost(host: unknown): boolean {
+  // Fail closed — non-strings must not rely solely on hostnameOnly soft-empty.
+  if (typeof host !== "string") return false;
   const name = hostnameOnly(host);
   return (
     name === "localhost" ||

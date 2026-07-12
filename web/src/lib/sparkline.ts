@@ -27,9 +27,14 @@ function isFinitePrice(price: unknown): price is number {
   );
 }
 
+/** ECMAScript Date absolute millisecond bound (parity ``time.ts``). */
+const MAX_DATE_MS = 8.64e15;
+
 /**
  * Fail-closed sparkline ts — non-strings / controls / overlong used to sit
  * in FiniteSparklinePoint and leak into title/aria callers.
+ * Medium (w63): length-gated ISO still admitted extreme timestamps
+ * (``+275760-...``) that sat in series points after price abs-cap.
  */
 function sanitizeSparklineTs(raw: unknown): string | null {
   if (raw == null) return null;
@@ -37,6 +42,9 @@ function sanitizeSparklineTs(raw: unknown): string | null {
   const trimmed = raw.trim();
   if (!trimmed || trimmed.length > MAX_ISO_INPUT_LENGTH) return null;
   if (CTRL_RE.test(trimmed)) return null;
+  const t = Date.parse(trimmed);
+  // Fail closed — NaN / out-of-range must not ride along in sparkline points.
+  if (Number.isNaN(t) || Math.abs(t) > MAX_DATE_MS) return null;
   return trimmed;
 }
 

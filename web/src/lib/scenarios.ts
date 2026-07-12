@@ -10,5 +10,8 @@
 export function scenariosEnabled(
   env: NodeJS.ProcessEnv = process.env,
 ): boolean {
-  return (env.AI_SCENARIOS_ENABLED ?? "0").trim() === "1";
+  const raw = env.AI_SCENARIOS_ENABLED ?? "0";
+  // Fail closed — non-string mock/hostile env values must not throw on .trim.
+  if (typeof raw !== "string") return false;
+  return raw.trim() === "1";
 }

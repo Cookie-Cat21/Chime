@@ -39,10 +39,14 @@ const MAX_PAGE_SNAPSHOT_POINTS = 200;
 /** Cap disclosures parse — parity with disclosures API max 100. */
 const MAX_PAGE_DISCLOSURES = 100;
 
+/** ECMAScript Date absolute millisecond bound (parity sparkline / toIso). */
+const MAX_DATE_MS = 8.64e15;
+
 function isStaleTs(ts: string | null | undefined): boolean {
-  if (!ts) return false;
+  // Fail closed — non-strings / out-of-range must not skew the stale banner.
+  if (typeof ts !== "string" || !ts) return false;
   const t = Date.parse(ts);
-  if (Number.isNaN(t)) return false;
+  if (Number.isNaN(t) || Math.abs(t) > MAX_DATE_MS) return false;
   return Date.now() - t > STALE_MS;
 }
 

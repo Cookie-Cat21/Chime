@@ -145,6 +145,10 @@ export async function GET(request: NextRequest) {
       if (id == null || rule_id == null) return [];
       if (!isAlertType(row.type)) return [];
       const attempts = toNonNegativeSafeInt(row.attempt_count, 0);
+      // Cap egress — 15-digit SafeIntegers used to balloon history JSON /
+      // fire-history copy (parity Python dead-letter notify 1_000_000).
+      const attempt_count =
+        attempts > 1_000_000 ? 1_000_000 : attempts;
       // Fail closed — only CSE SYMBOL_RE (no sanitize "?" placeholder).
       const symbol = normalizeSymbol(row.symbol);
       if (!symbol) return [];
@@ -164,7 +168,7 @@ export async function GET(request: NextRequest) {
           fired_at: toIso(row.fired_at),
           message_sent,
           dead_lettered,
-          attempt_count: attempts,
+          attempt_count,
           delivery_status: deriveDeliveryStatus({
             message_sent,
             dead_lettered,

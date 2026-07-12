@@ -52,8 +52,22 @@ type HistoryPayload = {
   offset: number;
 };
 
+/**
+ * Cap attempt labels in fire-history copy (parity Python dead-letter notify).
+ * ``toNonNegativeSafeInt`` still admits 15-digit SafeIntegers that balloon
+ * ``Retries stopped after N attempts`` UI text.
+ */
+const MAX_ATTEMPT_COUNT_DISPLAY = 1_000_000;
+
+function cappedAttemptCount(raw: unknown): number {
+  const n =
+    typeof raw === "number" && Number.isSafeInteger(raw) && raw >= 0 ? raw : 0;
+  return n > MAX_ATTEMPT_COUNT_DISPLAY ? MAX_ATTEMPT_COUNT_DISPLAY : n;
+}
+
 function pluralizeAttempts(count: number): string {
-  return `${count} ${count === 1 ? "attempt" : "attempts"}`;
+  const n = cappedAttemptCount(count);
+  return `${n} ${n === 1 ? "attempt" : "attempts"}`;
 }
 
 function deliveryBadgeClassName(status: DeliveryStatus): string {
@@ -163,7 +177,9 @@ export default async function AlertHistoryPage({
               ? statusRaw
               : null;
           if (!delivery_status) continue;
-          const attempt_count = toNonNegativeSafeInt(r.attempt_count, 0);
+          const attempt_count = cappedAttemptCount(
+            toNonNegativeSafeInt(r.attempt_count, 0),
+          );
           const event_key =
             sanitizeDisclosureText(
               typeof r.event_key === "string" ? r.event_key : null,
