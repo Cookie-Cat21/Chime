@@ -468,6 +468,7 @@ class Storage:
                     )
                     SELECT
                         c.disclosure_id,
+                        d.external_id,
                         d.symbol,
                         d.title,
                         d.url,
@@ -476,6 +477,85 @@ class Storage:
                     JOIN disclosures d ON d.id = c.disclosure_id
                     """,
                     (stale_processing_minutes, batch),
+                )
+            ).fetchall()
+        return _as_rows(rows)
+
+    async def claim_brief_followups(
+        self,
+        *,
+        external_id: str,
+        symbol: str,
+        brief: str,
+        message_text: str,
+        lease_seconds: int = 120,
+    ) -> list[dict[str, Any]]:
+        """Claim Telegram follow-ups for a ready brief (idempotent, no double send).
+
+        Only targets users who already have a primary disclosure alert claimed for
+        this filing (``disclosure:{rule_id}:{external_id}``). Skips recipients
+        whose primary message already includes the brief text (alert attached the
+        brief at claim time). Inserts ``brief_followup:{rule_id}:{external_id}``
+        into ``alert_log`` with a delivery lease — concurrent callers and retries
+        collide on UNIQUE(rule_id, event_key).
+        """
+        ext = (external_id or "").strip()
+        sym = (symbol or "").strip().upper()
+        brief_text = (brief or "").strip()
+        msg = message_text or ""
+        if not ext or not sym or not brief_text or not msg.strip():
+            return []
+        async with self._pool.connection() as conn, conn.transaction():
+            rows = await (
+                await conn.execute(
+                    """
+                    WITH primary_alerts AS (
+                        SELECT
+                            ar.id AS rule_id,
+                            u.telegram_id
+                        FROM alert_rules ar
+                        JOIN users u ON u.id = ar.user_id
+                        JOIN alert_log al
+                          ON al.rule_id = ar.id
+                         AND al.event_key = 'disclosure:' || ar.id::text || ':' || %s
+                        WHERE ar.active
+                          AND ar.type = 'disclosure'
+                          AND ar.symbol = %s
+                          AND (
+                              al.message_text IS NULL
+                              OR position(%s IN al.message_text) = 0
+                          )
+                    ),
+                    inserted AS (
+                        INSERT INTO alert_log (
+                            rule_id,
+                            snapshot_id,
+                            event_key,
+                            message_sent,
+                            message_text,
+                            delivery_lease_until
+                        )
+                        SELECT
+                            p.rule_id,
+                            NULL,
+                            'brief_followup:' || p.rule_id::text || ':' || %s,
+                            FALSE,
+                            %s,
+                            now() + (%s * interval '1 second')
+                        FROM primary_alerts p
+                        ON CONFLICT (rule_id, event_key) DO NOTHING
+                        RETURNING id, rule_id, message_text
+                    )
+                    SELECT
+                        i.id,
+                        i.rule_id,
+                        i.message_text,
+                        u.telegram_id
+                    FROM inserted i
+                    JOIN alert_rules ar ON ar.id = i.rule_id
+                    JOIN users u ON u.id = ar.user_id
+                    """,
+                    (ext, sym, brief_text, ext, msg, lease_seconds),
                 )
             ).fetchall()
         return _as_rows(rows)

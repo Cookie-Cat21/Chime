@@ -4,12 +4,13 @@ Phase 1: schema + disabled-by-default stub.
 Phase 2: ``claim_pending_briefs`` fetches CDN PDF text (when ``pdf_url`` set)
 and calls the Gemini provider when briefs are enabled.
 After mark-ready, optionally sends a Telegram follow-up via ``notify`` when the
-poller provides one and active disclosure rules exist for the symbol.
+poller provides one — only for users who already received a disclosure alert
+without the brief (durable ``alert_log`` claim; no double Telegram).
 """
 
 from __future__ import annotations
 
-from collections.abc import Awaitable, Callable, Sequence
+from collections.abc import Awaitable, Callable
 from typing import Any, Protocol
 
 import httpx
@@ -63,7 +64,19 @@ class _BriefDrainStorage(Protocol):
 
     async def count_briefs_today(self, *, stale_processing_minutes: int = 15) -> int: ...
 
-    async def active_rules_for_symbols(self, symbols: Sequence[str]) -> list[Any]: ...
+    async def claim_brief_followups(
+        self,
+        *,
+        external_id: str,
+        symbol: str,
+        brief: str,
+        message_text: str,
+        lease_seconds: int = 120,
+    ) -> list[dict[str, Any]]: ...
+
+    async def mark_delivery_attempted_ok(self, alert_log_id: int) -> None: ...
+
+    async def mark_alert_sent(self, alert_log_id: int) -> None: ...
 
 
 async def enqueue_or_skip_brief(
@@ -151,30 +164,6 @@ async def _input_text_for_row(
     )
 
 
-def _disclosure_telegram_ids(rules: list[Any], *, symbol: str) -> list[int]:
-    """Unique telegram ids with an active disclosure rule on ``symbol``."""
-    ids: set[int] = set()
-    sym = symbol.strip().upper()
-    for rule in rules:
-        if not getattr(rule, "active", True):
-            continue
-        rule_sym = str(getattr(rule, "symbol", "") or "").strip().upper()
-        if rule_sym != sym:
-            continue
-        rule_type = getattr(rule, "type", None)
-        type_val = getattr(rule_type, "value", rule_type)
-        if str(type_val) != "disclosure":
-            continue
-        tid = getattr(rule, "telegram_id", None)
-        if tid is None:
-            continue
-        try:
-            ids.add(int(tid))
-        except (TypeError, ValueError):
-            continue
-    return sorted(ids)
-
-
 async def _notify_brief_followups(
     storage: _BriefDrainStorage,
     *,
@@ -182,19 +171,28 @@ async def _notify_brief_followups(
     row: dict[str, Any],
     brief: str,
 ) -> None:
-    """Best-effort follow-up when a brief becomes ready. Never raises."""
+    """Best-effort follow-up when a brief becomes ready. Never raises.
+
+    Claims ``brief_followup:{rule}:{external_id}`` rows only for users who
+    already have a primary disclosure alert that did not include this brief.
+    That blocks ready-before-alert doubles and concurrent dual-notify.
+    """
     disclosure_id = row.get("disclosure_id")
     try:
         symbol = str(row.get("symbol") or "").strip()
+        external_id = str(row.get("external_id") or "").strip()
         brief_text = brief.strip()
-        if not symbol or not brief_text:
+        if not symbol or not brief_text or not external_id:
+            log.debug(
+                "brief_followup_skipped_incomplete",
+                disclosure_id=disclosure_id,
+                has_symbol=bool(symbol),
+                has_external_id=bool(external_id),
+                has_brief=bool(brief_text),
+            )
             return
-        rules_fn = getattr(storage, "active_rules_for_symbols", None)
-        if rules_fn is None:
-            return
-        rules = await rules_fn([symbol])
-        telegram_ids = _disclosure_telegram_ids(list(rules or []), symbol=symbol)
-        if not telegram_ids:
+        claim_fn = getattr(storage, "claim_brief_followups", None)
+        if claim_fn is None:
             return
         message = format_brief_followup(
             symbol=symbol,
@@ -202,14 +200,38 @@ async def _notify_brief_followups(
             title=str(row.get("title") or "") or None,
             url=str(row.get("url") or "") or None,
         )
-        for telegram_id in telegram_ids:
+        claimed = await claim_fn(
+            external_id=external_id,
+            symbol=symbol,
+            brief=brief_text,
+            message_text=message,
+        )
+        if not claimed:
+            log.debug(
+                "brief_followup_skipped_no_claim",
+                disclosure_id=disclosure_id,
+                symbol=symbol,
+                external_id=external_id,
+            )
+            return
+        for entry in claimed:
+            telegram_id = int(entry["telegram_id"])
+            log_id = int(entry["id"])
+            text = str(entry.get("message_text") or message)
             try:
-                await notify(telegram_id, message)
+                await notify(telegram_id, text)
+                mark_ok = getattr(storage, "mark_delivery_attempted_ok", None)
+                mark_sent = getattr(storage, "mark_alert_sent", None)
+                if mark_ok is not None:
+                    await mark_ok(log_id)
+                if mark_sent is not None:
+                    await mark_sent(log_id)
                 log.info(
                     "brief_followup_sent",
                     disclosure_id=disclosure_id,
                     symbol=symbol,
                     telegram_id=telegram_id,
+                    alert_log_id=log_id,
                 )
             except Exception as exc:
                 log.warning(
@@ -217,6 +239,7 @@ async def _notify_brief_followups(
                     disclosure_id=disclosure_id,
                     symbol=symbol,
                     telegram_id=telegram_id,
+                    alert_log_id=log_id,
                     error=str(exc),
                 )
     except Exception as exc:
@@ -243,10 +266,11 @@ async def claim_pending_briefs(
     when briefs are disabled, the daily cap is hit, or there are no pending
     rows. Honours ``max_briefs_per_day`` as a hard ceiling.
 
-    When ``notify`` is provided and ``mark_brief_ready`` succeeds, sends a
-    fail-soft Telegram follow-up to users with active disclosure rules on the
-    symbol (covers the case where the disclosure alert fired before the brief
-    was ready). Notify failures never fail the drain.
+    When ``notify`` is provided and ``mark_brief_ready`` succeeds, claims and
+    sends a fail-soft Telegram follow-up only for users whose disclosure alert
+    already fired without this brief (``claim_brief_followups``). Skips when the
+    primary alert has not claimed yet or already attached the brief. Notify
+    failures never fail the drain (unsent ``alert_log`` rows can retry).
     """
     cfg = settings or BriefSettings.from_env()
     if not briefs_enabled(cfg):

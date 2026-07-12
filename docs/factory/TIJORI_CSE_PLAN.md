@@ -38,7 +38,7 @@ Competitive gap in CSE: Tracker Pro owns portfolio; InvestNow/Rovana own analysi
 1. ✅ **Done** — Legacy `POST /announcements` enricher → resolve `filePath` → `cdn.cse.lk` PDF URL (SSRF/rate hardened).
 2. ✅ **Done** — PDF fetch + text extract (size/rate capped; `chime/briefs/extract.py`).
 3. ◐ **Partial** — Free-tier LLM brief (Gemini Flash provider wired) on **new** disclosures only; default `AI_BRIEFS_ENABLED=0` until keyed/enabled in prod.
-4. ✅ **Done** — Append brief to Telegram disclosure alert when ready, or follow-up: primary alert attaches a ready brief at claim time; if the brief becomes ready later, `claim_pending_briefs` optionally notifies via the poller’s `notify`/`send` callback to users with active disclosure rules on that symbol (fail-soft; always NFA-suffixed).
+4. ✅ **Done** — Append brief to Telegram disclosure alert when ready, or follow-up: primary alert attaches a ready brief at claim time; if the brief becomes ready later, `claim_pending_briefs` notifies via durable `claim_brief_followups` (`brief_followup:{rule}:{external_id}` in `alert_log`) only when a primary disclosure alert already fired without that brief (fail-soft; always NFA-suffixed; no ready-before-alert double send).
 5. ✅ **Done** — Dash symbol page / disclosures API shows brief when `status=ready` (egress-sanitized).
 6. ✅ **Done** — Optional category filter on `/alert SYMBOL disclosure [CATEGORY]`.
 
@@ -187,5 +187,9 @@ User can: browse CSE symbols in dash → watch → set disclosure alert → get 
 - [x] Brief follow-up Telegram when ready after alert (`claim_pending_briefs(..., notify=)`)
 - [x] Wire brief-ready notify through worker; provider harden (timeouts / empty candidates)
 - [x] Post-wave consistency pass
+
+### Wave 5 — Follow-up idempotency
+
+- [x] Brief follow-up claim-gated via `alert_log` (`brief_followup:…`); skip ready-before-alert / brief-already-attached
 
 **Remaining for Phase 2 “live”:** enable `AI_BRIEFS_ENABLED=1` + `AI_API_KEY` in a controlled env; watch rate caps / daily brief budget; no Phase 3 work yet.

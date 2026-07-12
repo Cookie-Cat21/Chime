@@ -1,4 +1,4 @@
-"""Wave4: brief-ready Telegram follow-up (fail-soft + NFA)."""
+"""Wave4/5: brief-ready Telegram follow-up (claim-gated + NFA)."""
 
 from __future__ import annotations
 
@@ -9,9 +9,9 @@ import pytest
 
 from chime.briefs import BriefSettings
 from chime.briefs.worker import claim_pending_briefs
-from chime.domain import AlertType, disclaimer, format_brief_followup
+from chime.domain import disclaimer, format_brief_followup
 from chime.notify import SendResult
-from tests.conftest import make_rule
+from tests.test_storage_unit import _Conn, _store
 
 
 def _enabled_settings(**kwargs: Any) -> BriefSettings:
@@ -25,6 +25,18 @@ def _enabled_settings(**kwargs: Any) -> BriefSettings:
     )
     base.update(kwargs)
     return BriefSettings(**base)  # type: ignore[arg-type]
+
+
+def _pending_row(**kwargs: Any) -> dict[str, Any]:
+    row = {
+        "disclosure_id": 7,
+        "external_id": "99",
+        "symbol": "JKH.N0000",
+        "title": "AGM Notice",
+        "url": "https://www.cse.lk/announcements#99",
+    }
+    row.update(kwargs)
+    return row
 
 
 def test_format_brief_followup_nfa_last() -> None:
@@ -42,35 +54,28 @@ def test_format_brief_followup_nfa_last() -> None:
 @pytest.mark.asyncio
 async def test_claim_pending_briefs_followup_when_notify_and_disclosure_rules() -> None:
     brief = "AGM set for August."
-    disc_rule = make_rule(
-        id=9,
-        telegram_id=1001,
-        symbol="JKH.N0000",
-        type=AlertType.DISCLOSURE,
-        threshold=None,
-    )
-    price_rule = make_rule(
-        id=2,
-        telegram_id=1002,
-        symbol="JKH.N0000",
-        type=AlertType.PRICE_ABOVE,
-        threshold=100.0,
-    )
     storage = MagicMock()
     storage.count_briefs_today = AsyncMock(return_value=0)
-    storage.claim_pending_briefs = AsyncMock(
-        return_value=[
-            {
-                "disclosure_id": 7,
-                "symbol": "JKH.N0000",
-                "title": "AGM Notice",
-                "url": "https://www.cse.lk/announcements#99",
-            },
-        ]
-    )
+    storage.claim_pending_briefs = AsyncMock(return_value=[_pending_row()])
     storage.mark_brief_ready = AsyncMock(return_value=True)
     storage.mark_brief_failed = AsyncMock(return_value=True)
-    storage.active_rules_for_symbols = AsyncMock(return_value=[disc_rule, price_rule])
+    storage.claim_brief_followups = AsyncMock(
+        return_value=[
+            {
+                "id": 501,
+                "rule_id": 9,
+                "telegram_id": 1001,
+                "message_text": format_brief_followup(
+                    symbol="JKH.N0000",
+                    brief=brief,
+                    title="AGM Notice",
+                    url="https://www.cse.lk/announcements#99",
+                ),
+            }
+        ]
+    )
+    storage.mark_delivery_attempted_ok = AsyncMock()
+    storage.mark_alert_sent = AsyncMock()
 
     provider = AsyncMock()
     provider.summarize = AsyncMock(return_value=brief)
@@ -89,31 +94,66 @@ async def test_claim_pending_briefs_followup_when_notify_and_disclosure_rules() 
         http_client=AsyncMock(),
     )
     assert n == 1
-    storage.active_rules_for_symbols.assert_awaited_once_with(["JKH.N0000"])
+    storage.claim_brief_followups.assert_awaited_once()
+    claim_kwargs = storage.claim_brief_followups.await_args.kwargs
+    assert claim_kwargs["external_id"] == "99"
+    assert claim_kwargs["symbol"] == "JKH.N0000"
+    assert claim_kwargs["brief"] == brief
+    assert "Filing brief ready" in claim_kwargs["message_text"]
     assert len(sent) == 1
     assert sent[0][0] == 1001
     assert brief in sent[0][1]
-    assert "Filing brief ready" in sent[0][1]
     assert disclaimer() in sent[0][1]
+    storage.mark_delivery_attempted_ok.assert_awaited_once_with(501)
+    storage.mark_alert_sent.assert_awaited_once_with(501)
+
+
+@pytest.mark.asyncio
+async def test_claim_pending_briefs_skips_followup_when_no_prior_alert_claim() -> None:
+    """Ready-before-alert: no primary disclosure claim → no follow-up Telegram."""
+    storage = MagicMock()
+    storage.count_briefs_today = AsyncMock(return_value=0)
+    storage.claim_pending_briefs = AsyncMock(return_value=[_pending_row()])
+    storage.mark_brief_ready = AsyncMock(return_value=True)
+    storage.claim_brief_followups = AsyncMock(return_value=[])
+    storage.mark_delivery_attempted_ok = AsyncMock()
+    storage.mark_alert_sent = AsyncMock()
+    provider = AsyncMock()
+    provider.summarize = AsyncMock(return_value="ok brief")
+    notify = AsyncMock()
+
+    n = await claim_pending_briefs(
+        storage,
+        settings=_enabled_settings(),
+        provider=provider,
+        notify=notify,
+        http_client=AsyncMock(),
+    )
+    assert n == 1
+    storage.claim_brief_followups.assert_awaited_once()
+    notify.assert_not_awaited()
+    storage.mark_alert_sent.assert_not_awaited()
 
 
 @pytest.mark.asyncio
 async def test_claim_pending_briefs_followup_fail_soft_on_notify_error() -> None:
-    disc_rule = make_rule(
-        id=9,
-        telegram_id=1001,
-        symbol="JKH.N0000",
-        type=AlertType.DISCLOSURE,
-        threshold=None,
-    )
     storage = MagicMock()
     storage.count_briefs_today = AsyncMock(return_value=0)
-    storage.claim_pending_briefs = AsyncMock(
-        return_value=[{"disclosure_id": 7, "symbol": "JKH.N0000", "title": "AGM Notice"}]
-    )
+    storage.claim_pending_briefs = AsyncMock(return_value=[_pending_row()])
     storage.mark_brief_ready = AsyncMock(return_value=True)
     storage.mark_brief_failed = AsyncMock(return_value=True)
-    storage.active_rules_for_symbols = AsyncMock(return_value=[disc_rule])
+    storage.claim_brief_followups = AsyncMock(
+        return_value=[
+            {
+                "id": 501,
+                "rule_id": 9,
+                "telegram_id": 1001,
+                "message_text": "follow-up body",
+            }
+        ]
+    )
+    storage.mark_delivery_attempted_ok = AsyncMock()
+    storage.mark_alert_sent = AsyncMock()
     provider = AsyncMock()
     provider.summarize = AsyncMock(return_value="ok brief")
 
@@ -130,17 +170,18 @@ async def test_claim_pending_briefs_followup_fail_soft_on_notify_error() -> None
     assert n == 1
     storage.mark_brief_ready.assert_awaited_once()
     storage.mark_brief_failed.assert_not_awaited()
+    # Leave alert_log leased/unsent for drain retry — do not mark sent.
+    storage.mark_alert_sent.assert_not_awaited()
+    storage.mark_delivery_attempted_ok.assert_not_awaited()
 
 
 @pytest.mark.asyncio
 async def test_claim_pending_briefs_skips_followup_when_mark_ready_false() -> None:
     storage = MagicMock()
     storage.count_briefs_today = AsyncMock(return_value=0)
-    storage.claim_pending_briefs = AsyncMock(
-        return_value=[{"disclosure_id": 7, "symbol": "JKH.N0000", "title": "AGM Notice"}]
-    )
+    storage.claim_pending_briefs = AsyncMock(return_value=[_pending_row()])
     storage.mark_brief_ready = AsyncMock(return_value=False)
-    storage.active_rules_for_symbols = AsyncMock(return_value=[])
+    storage.claim_brief_followups = AsyncMock(return_value=[])
     provider = AsyncMock()
     provider.summarize = AsyncMock(return_value="brief")
     notify = AsyncMock()
@@ -152,6 +193,31 @@ async def test_claim_pending_briefs_skips_followup_when_mark_ready_false() -> No
         http_client=AsyncMock(),
     )
     assert n == 1
+    notify.assert_not_awaited()
+    storage.claim_brief_followups.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_claim_pending_briefs_skips_followup_without_external_id() -> None:
+    storage = MagicMock()
+    storage.count_briefs_today = AsyncMock(return_value=0)
+    storage.claim_pending_briefs = AsyncMock(
+        return_value=[_pending_row(external_id="")]
+    )
+    storage.mark_brief_ready = AsyncMock(return_value=True)
+    storage.claim_brief_followups = AsyncMock(return_value=[])
+    provider = AsyncMock()
+    provider.summarize = AsyncMock(return_value="brief")
+    notify = AsyncMock()
+    n = await claim_pending_briefs(
+        storage,
+        settings=_enabled_settings(),
+        provider=provider,
+        notify=notify,
+        http_client=AsyncMock(),
+    )
+    assert n == 1
+    storage.claim_brief_followups.assert_not_awaited()
     notify.assert_not_awaited()
 
 
@@ -178,3 +244,56 @@ async def test_poller_drain_briefs_passes_notify(
     monkeypatch.setattr(poller_mod, "claim_pending_briefs", fake_claim)
     await poller._drain_briefs_safe()
     assert captured["kwargs"].get("notify") is send
+
+
+@pytest.mark.asyncio
+async def test_storage_claim_brief_followups_sql_gates_on_primary_alert() -> None:
+    conn = _Conn(
+        [
+            [
+                {
+                    "id": 88,
+                    "rule_id": 9,
+                    "message_text": "follow-up",
+                    "telegram_id": 1001,
+                }
+            ]
+        ]
+    )
+    store = _store(conn)
+    rows = await store.claim_brief_followups(
+        external_id="99",
+        symbol="jkh.n0000",
+        brief="AGM set for August.",
+        message_text="follow-up body",
+        lease_seconds=90,
+    )
+    assert len(rows) == 1
+    assert rows[0]["id"] == 88
+    sql = conn.sql[0]
+    assert "brief_followup:" in sql
+    assert "disclosure:" in sql
+    assert "ON CONFLICT (rule_id, event_key) DO NOTHING" in sql
+    assert "position(%s IN al.message_text) = 0" in sql
+    assert "delivery_lease_until" in sql
+    assert conn.params[0][0] == "99"
+    assert conn.params[0][1] == "JKH.N0000"
+    assert conn.params[0][2] == "AGM set for August."
+    assert conn.params[0][5] == 90
+
+
+@pytest.mark.asyncio
+async def test_storage_claim_brief_followups_noop_on_incomplete() -> None:
+    store = _store(_Conn([]))
+    assert await store.claim_brief_followups(
+        external_id="",
+        symbol="JKH.N0000",
+        brief="x",
+        message_text="y",
+    ) == []
+    assert await store.claim_brief_followups(
+        external_id="99",
+        symbol="",
+        brief="x",
+        message_text="y",
+    ) == []

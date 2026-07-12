@@ -428,8 +428,10 @@ async def test_storage_claim_pending_briefs_sql() -> None:
             [
                 {
                     "disclosure_id": 1,
+                    "external_id": "42",
                     "symbol": "JKH.N0000",
                     "title": "Filing",
+                    "url": "https://www.cse.lk/announcements#42",
                     "pdf_url": None,
                 }
             ],
@@ -442,8 +444,9 @@ async def test_storage_claim_pending_briefs_sql() -> None:
     assert any("pg_advisory_xact_lock" in s for s in conn.sql)
     assert any("status = 'processing'" in s for s in conn.sql)
     assert any("FOR UPDATE OF b SKIP LOCKED" in s for s in conn.sql)
-    # Follow-up notify needs announcement URL alongside title/pdf.
+    # Follow-up notify needs announcement URL + external_id for alert_log keys.
     assert any("d.url" in s for s in conn.sql)
+    assert any("d.external_id" in s for s in conn.sql)
 
 
 @pytest.mark.asyncio
