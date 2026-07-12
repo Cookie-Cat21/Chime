@@ -147,6 +147,7 @@ DISCLOSURE_CATEGORY_MAX = 64
 # Telegram hard cap is 4096; leave headroom for title/URL/NFA framing.
 BRIEF_BODY_MAX = 3500
 TELEGRAM_SAFE_MAX = 4096
+MAX_ALERT_THRESHOLD = 1_000_000_000
 _CTRL_RE = re.compile(r"[\x00-\x1f\x7f-\x9f]")
 
 

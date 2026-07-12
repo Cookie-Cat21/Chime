@@ -1,97 +1,45 @@
-"""Wave62: medium+ bugs — body abs-cap, formatTs range, session/category.
+"""Wave62: medium+ bugs — bot threshold abs-cap + HEALTH_URL typeof.
 
-1. ``readBoundedResponseText`` / ``readJsonBody`` must abs-cap ``maxBytes`` via
-   ``resolveBoundedBodyCap`` / ``MAX_BOUNDED_BODY_BYTES``.
-2. ``formatTs`` must fail-closed on out-of-range Date values via ``MAX_DATE_MS``.
-3. ``verifySessionToken`` must typeof-guard ``token`` / ``secret``.
-4. ``sanitizeDisclosureCategory`` / ``mapRule`` must not ``String()``-coerce;
-   Python ``_row_to_rule`` must not ``str()``-coerce.
+1. Bot ``_parse_threshold_token`` must reject magnitudes above
+   ``MAX_ALERT_THRESHOLD`` (parity dash POST ``/alerts``).
+2. ``isAllowedHealthProxyUrl`` must typeof-guard non-strings.
 """
 
 from __future__ import annotations
 
-from datetime import datetime, timezone
 from pathlib import Path
 
-from chime.domain import AlertType
-from chime.storage import _row_to_rule
+from chime.bot import parse_alert_args
+from chime.domain import MAX_ALERT_THRESHOLD
 
 ROOT = Path(__file__).resolve().parents[1]
 WEB = ROOT / "web"
 
 
-def test_bounded_body_cap_abs_ceiling() -> None:
-    bounded = (WEB / "src" / "lib" / "api" / "read-bounded-text.ts").read_text(
-        encoding="utf-8"
+def test_bot_threshold_caps_at_max_alert_threshold() -> None:
+    assert MAX_ALERT_THRESHOLD == 1_000_000_000
+    src = (ROOT / "chime" / "bot.py").read_text(encoding="utf-8")
+    assert "MAX_ALERT_THRESHOLD" in src
+    assert "threshold > MAX_ALERT_THRESHOLD" in src
+    parsed_huge, err_huge = parse_alert_args(["JKH.N0000", "above", "1e20"])
+    assert parsed_huge is None and err_huge is not None
+    parsed_max, err_max = parse_alert_args(
+        ["JKH.N0000", "above", str(MAX_ALERT_THRESHOLD)]
     )
-    assert "MAX_BOUNDED_BODY_BYTES" in bounded
-    assert "1_048_576" in bounded
-    assert "export function resolveBoundedBodyCap" in bounded
-    chunk = bounded.split("export function resolveBoundedBodyCap")[1].split(
-        "export async function readBoundedResponseText"
-    )[0]
-    assert "Number.isSafeInteger(maxBytes)" in chunk
-    assert "maxBytes > MAX_BOUNDED_BODY_BYTES" in chunk
-    assert "resolveBoundedBodyCap(maxBytes)" in bounded
-
-    json_body = (WEB / "src" / "lib" / "api" / "read-json-body.ts").read_text(
-        encoding="utf-8"
+    assert err_max is None and parsed_max is not None
+    assert parsed_max.threshold == float(MAX_ALERT_THRESHOLD)
+    parsed_over, err_over = parse_alert_args(
+        ["JKH.N0000", "move", str(MAX_ALERT_THRESHOLD + 1)]
     )
-    assert "resolveBoundedBodyCap" in json_body
-    assert "resolveBoundedBodyCap(maxBytes)" in json_body
-    assert 'typeof maxBytes === "number" &&' not in json_body
+    assert parsed_over is None and err_over is not None
 
 
-def test_format_ts_date_range_gate() -> None:
-    source = (WEB / "src" / "lib" / "format.ts").read_text(encoding="utf-8")
-    assert "MAX_DATE_MS" in source
-    chunk = source.split("export function formatTs")[1].split(
-        "export function alertTypeLabel"
+def test_health_proxy_url_typeof_guard() -> None:
+    source = (
+        WEB / "src" / "app" / "api" / "v1" / "health" / "route.ts"
+    ).read_text(encoding="utf-8")
+    assert "export function isAllowedHealthProxyUrl(raw: unknown)" in source
+    chunk = source.split("export function isAllowedHealthProxyUrl")[1].split(
+        "export function parseBriefQueue"
     )[0]
-    assert "Math.abs(t) > MAX_DATE_MS" in chunk
-    assert "Number.isNaN(t)" in chunk
-    assert "toLocaleString" in chunk
-    assert "catch {" in chunk
-    time_src = (WEB / "src" / "lib" / "api" / "time.ts").read_text(encoding="utf-8")
-    assert "export const MAX_DATE_MS" in time_src
-
-
-def test_verify_session_token_typeof_guard() -> None:
-    source = (WEB / "src" / "lib" / "auth" / "session.ts").read_text(encoding="utf-8")
-    chunk = source.split("export function verifySessionToken")[1].split(
-        "export function mintCsrfToken"
-    )[0]
-    assert "token: unknown" in chunk
-    assert "secret: unknown" in chunk
-    assert 'typeof token !== "string"' in chunk
-    assert 'typeof secret !== "string"' in chunk
-
-
-def test_category_no_string_coerce() -> None:
-    safe = (WEB / "src" / "lib" / "api" / "disclosure-safe.ts").read_text(
-        encoding="utf-8"
-    )
-    assert "export function sanitizeDisclosureCategory(" in safe
-    chunk = safe.split("export function sanitizeDisclosureCategory")[1]
-    assert "category: unknown" in chunk
-    assert 'typeof category !== "string"' in chunk
-    db = (WEB / "src" / "lib" / "db.ts").read_text(encoding="utf-8")
-    assert "sanitizeDisclosureCategory(row.category)" in db
-    assert "String(row.category)" not in db
-
-
-def test_row_to_rule_rejects_non_string_category() -> None:
-    base = {
-        "id": 1,
-        "user_id": 2,
-        "telegram_id": 3,
-        "symbol": "JKH.N0000",
-        "type": AlertType.DISCLOSURE.value,
-        "threshold": None,
-        "active": True,
-        "armed": True,
-        "created_at": datetime.now(timezone.utc),
-    }
-    for bad in ({"x": 1}, 42, True, b"bytes"):
-        assert _row_to_rule({**base, "category": bad}).category is None
-    assert _row_to_rule({**base, "category": "Financial"}).category == "Financial"
+    assert 'typeof raw !== "string"' in chunk

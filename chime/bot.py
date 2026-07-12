@@ -22,6 +22,7 @@ from chime.briefs import briefs_enabled
 from chime.domain import (
     _CTRL_RE,
     BRIEF_BODY_MAX,
+    MAX_ALERT_THRESHOLD,
     AlertType,
     PriceSnapshot,
     _clamp_telegram_message,
@@ -205,6 +206,8 @@ def _parse_threshold_token(raw: str) -> float | None:
         return None
     if not math.isfinite(threshold) or threshold <= 0:
         return None
+    if threshold > MAX_ALERT_THRESHOLD:
+        return None
     return threshold
 
 
@@ -235,7 +238,8 @@ def parse_alert_args(args: list[str]) -> tuple[ParsedAlert | None, str | None]:
         if threshold is None:
             return None, (
                 "Threshold must be a positive finite number "
-                "(use 1000 or 1,000 — not nan/inf). "
+                f"at most {MAX_ALERT_THRESHOLD:g} "
+                "(use 1000 or 1,000 — not nan/inf or huge values). "
                 f"Example: /alert JKH.N0000 {kind} 100\n{ALERT_USAGE}"
             )
         if kind == "above":

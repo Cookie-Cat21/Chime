@@ -69,7 +69,9 @@ const CIRCUIT_STATES = new Set(["closed", "open", "half_open"]);
  * turn the session-gated health proxy into an open SSRF (metadata, LAN).
  * Matches poller health loopback posture (http://127.0.0.1:8080/health).
  */
-export function isAllowedHealthProxyUrl(raw: string): boolean {
+export function isAllowedHealthProxyUrl(raw: unknown): boolean {
+  // Fail closed — non-strings used to throw on .trim mid HEALTH_URL gate.
+  if (typeof raw !== "string") return false;
   const trimmed = raw.trim();
   if (!trimmed || trimmed.length > 512) return false;
   let parsed: URL;
