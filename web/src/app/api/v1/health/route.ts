@@ -66,8 +66,6 @@ export async function GET(request: NextRequest) {
   if (healthUrl) {
     const ctrl = new AbortController();
     const timer = setTimeout(() => ctrl.abort(), healthProxyTimeoutMs());
-    // Avoid keeping the event loop awake solely for this timer (Node).
-    timer.unref?.();
     try {
       const res = await fetch(healthUrl, {
         method: "GET",
