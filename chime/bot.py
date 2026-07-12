@@ -144,9 +144,6 @@ HELP_TEXT = (
     f"{disclaimer()}"
 )
 
-# Back-compat alias for older imports / docs.
-HELP_HINT = HELP_TEXT
-
 
 @dataclass(frozen=True)
 class ParsedAlert:

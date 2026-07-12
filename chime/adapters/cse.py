@@ -129,12 +129,6 @@ class TradeSummaryRow(BaseModel):
     lastTradedTime: int | None = None
 
 
-class TradeSummaryResponse(BaseModel):
-    model_config = ConfigDict(extra="ignore")
-
-    reqTradeSummery: list[TradeSummaryRow] = Field(default_factory=list)
-
-
 class SymbolInfo(BaseModel):
     model_config = ConfigDict(extra="ignore")
 
@@ -756,7 +750,3 @@ class CSEClient:
             list[LegacyAnnouncementRow],
             await self._guarded(LEGACY_ANNOUNCEMENTS_ENDPOINT, _call),
         )
-
-    async def symbol_exists(self, symbol: str) -> bool:
-        snap = await self.fetch_company_info(symbol)
-        return snap is not None
