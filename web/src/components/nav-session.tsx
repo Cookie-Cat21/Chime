@@ -1,10 +1,10 @@
 "use client";
 
-import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 
 import { Button } from "@/components/ui/button";
 import { apiErrorMessage, apiMutate } from "@/lib/api/client-fetch";
+import { CSRF_COOKIE } from "@/lib/auth/config";
 
 type MePayload = {
   id: number;
@@ -20,8 +20,18 @@ function chipLabel(me: MePayload): string {
   return `user ${me.id}`;
 }
 
+/** Drop the readable CSRF cookie client-side (session is HttpOnly). */
+function clearBrowserCsrfCookie() {
+  if (typeof document === "undefined") return;
+  document.cookie = `${CSRF_COOKIE}=; Max-Age=0; Path=/`;
+}
+
+/** Full navigation so Set-Cookie + RSC cache cannot bounce back to /watchlist. */
+function redirectToLogin() {
+  window.location.assign("/login");
+}
+
 export function NavSession({ compact = false }: { compact?: boolean }) {
-  const router = useRouter();
   const [me, setMe] = useState<MePayload | null>(null);
   const [pending, setPending] = useState(false);
 
@@ -50,16 +60,18 @@ export function NavSession({ compact = false }: { compact?: boolean }) {
   async function onLogout() {
     setPending(true);
     try {
-      const { ok, data } = await apiMutate("/api/v1/auth/logout", {
+      const { ok, status, data } = await apiMutate("/api/v1/auth/logout", {
         method: "POST",
       });
-      if (!ok) {
+      // 401 = already unauthenticated — still leave cleanly.
+      if (!ok && status !== 401) {
         console.error(apiErrorMessage(data, "Logout failed."));
         setPending(false);
         return;
       }
-      router.replace("/login");
-      router.refresh();
+      setMe(null);
+      clearBrowserCsrfCookie();
+      redirectToLogin();
     } catch {
       setPending(false);
     }

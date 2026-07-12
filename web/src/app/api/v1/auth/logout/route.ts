@@ -16,12 +16,13 @@ export async function POST(request: NextRequest) {
 
   const res = jsonOk({ ok: true });
   const secure = process.env.NODE_ENV === "production";
+  const expired = new Date(0);
   const clear = {
-    httpOnly: true,
     secure,
     sameSite: "lax" as const,
     path: "/",
     maxAge: 0,
+    expires: expired,
   };
   res.cookies.set(SESSION_COOKIE, "", { ...clear, httpOnly: true });
   res.cookies.set(CSRF_COOKIE, "", { ...clear, httpOnly: false });
