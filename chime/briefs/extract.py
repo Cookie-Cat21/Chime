@@ -69,7 +69,8 @@ def extract_pdf_text(data: bytes) -> str:
                 )
                 break
             piece = page.extract_text()
-            if piece and piece.strip():
+            # Fail closed — non-string extract_text used to throw on .strip mid PDF parse.
+            if isinstance(piece, str) and piece.strip():
                 text = piece.strip()
                 remaining = _MAX_EXTRACT_CHARS - total_chars
                 if remaining <= 0:

@@ -416,7 +416,9 @@ def make_brief_provider(
 ) -> BriefProvider:
     """Build a provider from ``AI_PROVIDER`` (``gemini``, ``groq``, or ``openrouter``)."""
     cfg = settings or BriefSettings.from_env()
-    provider = (cfg.provider or "gemini").strip().lower()
+    # Fail closed — non-string BriefSettings.provider used to throw on .strip mid factory.
+    provider_raw = cfg.provider if isinstance(cfg.provider, str) else ""
+    provider = (provider_raw or "gemini").strip().lower()
     if provider == "gemini":
         return GeminiBriefProvider(cfg, client=client)
     if provider == "groq":

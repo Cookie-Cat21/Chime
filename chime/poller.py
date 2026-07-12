@@ -719,7 +719,12 @@ class Poller:
         per-symbol HTTP even when the feed has no rows for them). On any
         bulk/map failure, ``ok`` is False and the caller falls back fully.
         """
-        allowed = {s.strip().upper() for s in disclosure_symbols}
+        # Fail closed — non-string watchlist symbols used to throw on .strip mid bulk fetch.
+        allowed = {
+            s.strip().upper()
+            for s in disclosure_symbols
+            if isinstance(s, str) and s.strip()
+        }
         try:
             rows = await self.cse.fetch_approved_announcements()
             stock_pairs = await self.storage.list_stock_names()
@@ -730,6 +735,9 @@ class Poller:
         name_map = build_unique_company_name_map(stock_pairs)
         covered: set[str] = set()
         for symbol, name in stock_pairs:
+            # Fail closed — non-string stock pair members used to throw on .strip.
+            if not isinstance(symbol, str) or not isinstance(name, str):
+                continue
             sym = symbol.strip().upper()
             if sym not in allowed or not name:
                 continue
