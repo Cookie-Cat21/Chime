@@ -127,12 +127,20 @@ function MoversList({
                 key={item.symbol}
                 className="flex items-baseline justify-between gap-2 py-2"
               >
-                <Link
-                  href={`/symbols/${encodeURIComponent(item.symbol)}`}
-                  className="rounded-sm font-mono text-sm font-medium text-foreground underline-offset-4 hover:underline focus-visible:ring-2 focus-visible:ring-ring/50 focus-visible:outline-none"
-                >
-                  {item.symbol}
-                </Link>
+                <div className="flex min-w-0 items-baseline gap-2">
+                  <Link
+                    href={`/symbols/${encodeURIComponent(item.symbol)}`}
+                    className="rounded-sm font-mono text-sm font-medium text-foreground underline-offset-4 hover:underline focus-visible:ring-2 focus-visible:ring-ring/50 focus-visible:outline-none"
+                  >
+                    {item.symbol}
+                  </Link>
+                  <Link
+                    href={`/symbols/${encodeURIComponent(item.symbol)}`}
+                    className="shrink-0 rounded-sm text-xs text-muted-foreground underline-offset-4 hover:underline focus-visible:ring-2 focus-visible:ring-ring/50 focus-visible:outline-none"
+                  >
+                    Watch
+                  </Link>
+                </div>
                 <span className={`font-mono text-sm tabular-nums ${tone}`}>
                   {formatPct(pct)}
                 </span>
@@ -230,7 +238,14 @@ export default async function MarketPage({
               Top movers
             </h2>
             <p className="mt-1 text-sm text-muted-foreground">
-              Largest daily % moves from the latest snapshots.
+              Largest daily % moves from the latest snapshots.{" "}
+              <Link
+                href="/watchlist"
+                className="underline underline-offset-4 hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring/50 focus-visible:outline-none"
+              >
+                Add via watchlist
+              </Link>
+              .
             </p>
             <div className="mt-4 flex flex-col gap-6 sm:flex-row sm:gap-10">
               <MoversList
