@@ -717,9 +717,33 @@ async def test_storage_claim_pending_briefs_sql() -> None:
     assert any("pg_advisory_xact_lock" in s for s in conn.sql)
     assert any("status = 'processing'" in s for s in conn.sql)
     assert any("FOR UPDATE OF b SKIP LOCKED" in s for s in conn.sql)
+    # PDF grace: join disclosures + wait for pdf_url or age past grace.
+    claim_sql = next(s for s in conn.sql if "FOR UPDATE OF b SKIP LOCKED" in s)
+    assert "JOIN disclosures d ON d.id = b.disclosure_id" in claim_sql
+    assert "d.pdf_url IS NOT NULL" in claim_sql
+    assert "interval '1 second'" in claim_sql
     # Follow-up notify needs announcement URL + external_id for alert_log keys.
     assert any("d.url" in s for s in conn.sql)
     assert any("d.external_id" in s for s in conn.sql)
+    # Default grace (120s) is the third claim param after stale minutes + batch.
+    claim_params = conn.params[-1]
+    assert claim_params == (15, 120, 3)
+
+
+@pytest.mark.asyncio
+async def test_storage_claim_pending_briefs_custom_pdf_grace() -> None:
+    conn = _Conn(
+        [
+            None,
+            {"n": 0},
+            [],
+        ]
+    )
+    store = _store(conn)
+    await store.claim_pending_briefs(
+        limit=2, max_briefs_per_day=10, pdf_grace_seconds=0
+    )
+    assert conn.params[-1] == (15, 0, 2)
 
 
 @pytest.mark.asyncio

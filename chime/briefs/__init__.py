@@ -28,6 +28,28 @@ class BriefStatus(StrEnum):
     SKIPPED = "skipped"
 
 
+def _env_int(name: str, default: int) -> int:
+    """Parse int env; invalid / empty → default (never raise)."""
+    raw = os.getenv(name)
+    if raw is None or not str(raw).strip():
+        return default
+    try:
+        return int(str(raw).strip())
+    except ValueError:
+        return default
+
+
+def _env_float(name: str, default: float) -> float:
+    """Parse float env; invalid / empty → default (never raise)."""
+    raw = os.getenv(name)
+    if raw is None or not str(raw).strip():
+        return default
+    try:
+        return float(str(raw).strip())
+    except ValueError:
+        return default
+
+
 @dataclass(frozen=True, slots=True)
 class BriefSettings:
     """Env knobs (see root ``.env.example``):
@@ -40,6 +62,10 @@ class BriefSettings:
     - ``AI_MAX_INPUT_CHARS`` — default ``12000``
     - ``AI_HTTP_TIMEOUT_SECONDS`` — provider HTTP timeout (default ``30``)
     - ``PDF_MAX_BYTES`` — max PDF download size (default ``5242880``)
+    - ``BRIEF_PDF_GRACE_SECONDS`` — wait for ``pdf_url`` before title-only
+      summarize (default ``120``; ``0`` = claim immediately)
+    - ``BRIEF_SKIPPED_PROMOTE_HOURS`` — when briefs are on, re-queue recent
+      ``skipped`` rows as ``pending`` (default ``24``; ``0`` = off)
     """
 
     enabled: bool = False
@@ -50,6 +76,8 @@ class BriefSettings:
     max_input_chars: int = 12_000
     pdf_max_bytes: int = 5_242_880
     http_timeout_seconds: float = 30.0
+    pdf_grace_seconds: int = 120
+    skipped_promote_hours: int = 24
 
     @classmethod
     def from_env(cls) -> BriefSettings:
@@ -58,12 +86,12 @@ class BriefSettings:
             provider=os.getenv("AI_PROVIDER", "gemini").strip() or "gemini",
             api_key=os.getenv("AI_API_KEY", "").strip(),
             model=os.getenv("AI_MODEL", "gemini-2.0-flash").strip() or "gemini-2.0-flash",
-            max_briefs_per_day=int(os.getenv("AI_MAX_BRIEFS_PER_DAY", "50") or "50"),
-            max_input_chars=int(os.getenv("AI_MAX_INPUT_CHARS", "12000") or "12000"),
-            pdf_max_bytes=int(os.getenv("PDF_MAX_BYTES", "5242880") or "5242880"),
-            http_timeout_seconds=float(
-                os.getenv("AI_HTTP_TIMEOUT_SECONDS", "30") or "30"
-            ),
+            max_briefs_per_day=max(0, _env_int("AI_MAX_BRIEFS_PER_DAY", 50)),
+            max_input_chars=max(1, _env_int("AI_MAX_INPUT_CHARS", 12_000)),
+            pdf_max_bytes=max(1, _env_int("PDF_MAX_BYTES", 5_242_880)),
+            http_timeout_seconds=max(1.0, _env_float("AI_HTTP_TIMEOUT_SECONDS", 30.0)),
+            pdf_grace_seconds=max(0, _env_int("BRIEF_PDF_GRACE_SECONDS", 120)),
+            skipped_promote_hours=max(0, _env_int("BRIEF_SKIPPED_PROMOTE_HOURS", 24)),
         )
 
 

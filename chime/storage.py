@@ -452,12 +452,96 @@ class Storage:
             ).fetchone()
         return row is not None
 
+    async def promote_recent_skipped_briefs(
+        self,
+        *,
+        max_age_hours: int = 24,
+        limit: int = 100,
+    ) -> int:
+        """Re-queue recent ``skipped`` briefs as ``pending`` when AI is enabled.
+
+        Rows enqueued while ``AI_BRIEFS_ENABLED=0`` stay ``skipped`` forever
+        unless promoted. Bounded by age + limit so flipping the flag on cannot
+        dump the entire historical archive into the daily cap.
+        """
+        hours = max(0, int(max_age_hours))
+        if hours <= 0:
+            return 0
+        batch = max(1, int(limit))
+        async with self._pool.connection() as conn:
+            rows = await (
+                await conn.execute(
+                    """
+                    WITH picked AS (
+                        SELECT disclosure_id
+                        FROM disclosure_briefs
+                        WHERE status = 'skipped'
+                          AND created_at >= now() - (%s * interval '1 hour')
+                        ORDER BY created_at ASC
+                        LIMIT %s
+                        FOR UPDATE SKIP LOCKED
+                    )
+                    UPDATE disclosure_briefs b
+                    SET
+                        status = 'pending',
+                        updated_at = now(),
+                        error = NULL
+                    FROM picked
+                    WHERE b.disclosure_id = picked.disclosure_id
+                    RETURNING b.disclosure_id
+                    """,
+                    (hours, batch),
+                )
+            ).fetchall()
+        return len(rows)
+
+    async def list_ready_briefs_for_followup_sweep(
+        self,
+        *,
+        limit: int = 20,
+        max_age_days: int = 7,
+    ) -> list[dict[str, Any]]:
+        """Ready briefs eligible for late Telegram follow-up (idempotent claim).
+
+        Covers the race where a brief became ready while the primary disclosure
+        alert was still undelivered (deferred / unsent). ``claim_brief_followups``
+        remains the durable gate — this only lists candidates.
+        """
+        if limit <= 0:
+            return []
+        days = max(1, int(max_age_days))
+        async with self._pool.connection() as conn:
+            rows = await (
+                await conn.execute(
+                    """
+                    SELECT
+                        b.disclosure_id,
+                        b.brief,
+                        d.external_id,
+                        d.symbol,
+                        d.title,
+                        d.url
+                    FROM disclosure_briefs b
+                    JOIN disclosures d ON d.id = b.disclosure_id
+                    WHERE b.status = 'ready'
+                      AND b.brief IS NOT NULL
+                      AND btrim(b.brief) <> ''
+                      AND b.updated_at >= now() - (%s * interval '1 day')
+                    ORDER BY b.updated_at DESC
+                    LIMIT %s
+                    """,
+                    (days, limit),
+                )
+            ).fetchall()
+        return _as_rows(rows)
+
     async def claim_pending_briefs(
         self,
         *,
         limit: int = 5,
         max_briefs_per_day: int | None = None,
         stale_processing_minutes: int = 15,
+        pdf_grace_seconds: int = 120,
     ) -> list[dict[str, Any]]:
         """Lease pending (or stale processing) briefs as ``processing``.
 
@@ -466,9 +550,15 @@ class Storage:
         ``processing`` before returning so FOR UPDATE ending does not allow
         double-claim. Stale ``processing`` rows older than
         ``stale_processing_minutes`` are reclaimable after a crash.
+
+        PDF grace: rows without ``disclosures.pdf_url`` are skipped until
+        ``created_at`` is older than ``pdf_grace_seconds`` so legacy enrich can
+        land before a title-only summarize burns the daily cap. ``0`` claims
+        immediately (title-only ok).
         """
         if limit <= 0:
             return []
+        grace = max(0, int(pdf_grace_seconds))
         # Distinct from POLL_LOCK_ID; serializes brief claim + daily-cap check.
         brief_cap_lock_id = 4_201_339
         async with self._pool.connection() as conn, conn.transaction():
@@ -509,12 +599,20 @@ class Storage:
                     WITH picked AS (
                         SELECT b.disclosure_id
                         FROM disclosure_briefs b
-                        WHERE b.status = 'pending'
-                           OR (
-                               b.status = 'processing'
-                               AND b.updated_at
-                                   < now() - (%s * interval '1 minute')
-                           )
+                        JOIN disclosures d ON d.id = b.disclosure_id
+                        WHERE (
+                            b.status = 'pending'
+                            OR (
+                                b.status = 'processing'
+                                AND b.updated_at
+                                    < now() - (%s * interval '1 minute')
+                            )
+                        )
+                        AND (
+                            d.pdf_url IS NOT NULL
+                            OR b.created_at
+                                < now() - (%s * interval '1 second')
+                        )
                         ORDER BY b.created_at ASC
                         LIMIT %s
                         FOR UPDATE OF b SKIP LOCKED
@@ -539,7 +637,7 @@ class Storage:
                     FROM claimed c
                     JOIN disclosures d ON d.id = c.disclosure_id
                     """,
-                    (stale_processing_minutes, batch),
+                    (stale_processing_minutes, grace, batch),
                 )
             ).fetchall()
         return _as_rows(rows)

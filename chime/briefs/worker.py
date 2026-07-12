@@ -2,14 +2,18 @@
 
 Phase 1: schema + disabled-by-default stub.
 Phase 2: ``claim_pending_briefs`` fetches CDN PDF text (when ``pdf_url`` set)
-and calls the Gemini provider when briefs are enabled.
+and calls the Gemini/Groq provider when briefs are enabled.
 After mark-ready, optionally sends a Telegram follow-up via ``notify`` when the
 poller provides one — only for users who already received a disclosure alert
 without the brief (durable ``alert_log`` claim; no double Telegram).
+
+Also sweeps ready briefs for late follow-ups (primary delivered after brief
+ready) and promotes recent ``skipped`` rows when AI is newly enabled.
 """
 
 from __future__ import annotations
 
+import inspect
 from collections.abc import Awaitable, Callable
 from typing import Any, Protocol
 
@@ -18,13 +22,20 @@ import structlog
 
 from chime.briefs import BriefSettings, BriefStatus, briefs_enabled, build_brief_prompt
 from chime.briefs.extract import extract_pdf_text, fetch_cdn_pdf
-from chime.briefs.provider import BriefProvider, GeminiBriefProvider, make_brief_provider
+from chime.briefs.provider import BriefProvider, make_brief_provider
 from chime.domain import format_brief_followup
 from chime.notify import SendResult
 
 log = structlog.get_logger("chime.briefs")
 
 BriefNotifyFunc = Callable[[int, str], Awaitable[Any]]
+
+
+async def _maybe_await(value: Any) -> Any:
+    """Await coroutine/awaitable results; pass through plain values (tests/mocks)."""
+    if inspect.isawaitable(value):
+        return await value
+    return value
 
 
 def _notify_succeeded(result: Any) -> bool:
@@ -50,6 +61,7 @@ class _BriefDrainStorage(Protocol):
         limit: int = 5,
         max_briefs_per_day: int | None = None,
         stale_processing_minutes: int = 15,
+        pdf_grace_seconds: int = 120,
     ) -> list[dict[str, Any]]: ...
 
     async def mark_brief_ready(
@@ -85,6 +97,20 @@ class _BriefDrainStorage(Protocol):
     async def mark_delivery_attempted_ok(self, alert_log_id: int) -> None: ...
 
     async def mark_alert_sent(self, alert_log_id: int) -> None: ...
+
+    async def promote_recent_skipped_briefs(
+        self,
+        *,
+        max_age_hours: int = 24,
+        limit: int = 100,
+    ) -> int: ...
+
+    async def list_ready_briefs_for_followup_sweep(
+        self,
+        *,
+        limit: int = 20,
+        max_age_days: int = 7,
+    ) -> list[dict[str, Any]]: ...
 
 
 async def enqueue_or_skip_brief(
@@ -281,6 +307,57 @@ async def _notify_brief_followups(
         )
 
 
+async def _promote_skipped_if_needed(
+    storage: _BriefDrainStorage,
+    *,
+    cfg: BriefSettings,
+) -> None:
+    """Best-effort: recent skipped → pending when AI briefs are on."""
+    hours = int(cfg.skipped_promote_hours)
+    if hours <= 0:
+        return
+    promote = getattr(storage, "promote_recent_skipped_briefs", None)
+    if promote is None or not callable(promote):
+        return
+    try:
+        raw = await _maybe_await(promote(max_age_hours=hours))
+        n = int(raw) if isinstance(raw, int) else 0
+        if n:
+            log.info("brief_skipped_promoted", count=n, max_age_hours=hours)
+    except Exception as exc:
+        log.warning("brief_skipped_promote_failed", error=str(exc))
+
+
+async def _sweep_brief_followups(
+    storage: _BriefDrainStorage,
+    *,
+    notify: BriefNotifyFunc,
+    limit: int = 20,
+) -> None:
+    """Retry follow-ups for ready briefs after late primary delivery. Fail-soft."""
+    list_fn = getattr(storage, "list_ready_briefs_for_followup_sweep", None)
+    if list_fn is None or not callable(list_fn):
+        return
+    try:
+        raw = await _maybe_await(list_fn(limit=max(1, limit)))
+        rows = raw if isinstance(raw, list) else []
+    except Exception as exc:
+        log.warning("brief_followup_sweep_list_failed", error=str(exc))
+        return
+    for row in rows:
+        if not isinstance(row, dict):
+            continue
+        brief = row.get("brief")
+        if not isinstance(brief, str) or not brief.strip():
+            continue
+        await _notify_brief_followups(
+            storage,
+            notify=notify,
+            row=row,
+            brief=brief,
+        )
+
+
 async def claim_pending_briefs(
     storage: _BriefDrainStorage,
     *,
@@ -293,14 +370,14 @@ async def claim_pending_briefs(
     """Load pending rows, call provider, mark ready/failed.
 
     When ``pdf_url`` is set on a claimed row, fetches the CDN PDF (host check +
-    ``PDF_MAX_BYTES`` cap) and extracts text for the prompt. No-op (returns 0)
-    when briefs are disabled, the daily cap is hit, or there are no pending
-    rows. Honours ``max_briefs_per_day`` as a hard ceiling.
+    ``PDF_MAX_BYTES`` cap) and extracts text for the prompt. Claim SQL applies a
+    PDF grace window so title-only summarize waits for legacy enrich when possible.
+    No-op (returns 0) when briefs are disabled. Honours ``max_briefs_per_day``.
 
-    When ``notify`` is provided and ``mark_brief_ready`` succeeds, claims and
-    sends a fail-soft Telegram follow-up only for users whose disclosure alert
-    already fired without this brief (``claim_brief_followups``). Skips when the
-    primary alert has not claimed yet or already attached the brief. Notify
+    When ``notify`` is provided: (1) after each successful ``mark_brief_ready``,
+    and (2) via a ready-brief sweep covering late primary delivery, claims and
+    sends fail-soft Telegram follow-ups only for users whose disclosure alert
+    already fired without this brief (``claim_brief_followups``). Notify
     failures never fail the drain (unsent ``alert_log`` rows can retry).
     """
     cfg = settings or BriefSettings.from_env()
@@ -308,6 +385,9 @@ async def claim_pending_briefs(
         log.debug("brief_drain_skipped_disabled")
         return 0
 
+    await _promote_skipped_if_needed(storage, cfg=cfg)
+
+    processed = 0
     used = await storage.count_briefs_today()
     remaining = max(0, int(cfg.max_briefs_per_day) - used)
     if remaining <= 0:
@@ -316,60 +396,70 @@ async def claim_pending_briefs(
             used=used,
             max_briefs_per_day=cfg.max_briefs_per_day,
         )
-        return 0
-
-    batch = min(max(1, limit), remaining)
-    rows = await storage.claim_pending_briefs(
-        limit=batch,
-        max_briefs_per_day=cfg.max_briefs_per_day,
-    )
-    if not rows:
-        return 0
-
-    owns_provider = provider is None
-    owns_http = http_client is None
-    prov: BriefProvider = provider or make_brief_provider(cfg)
-    http = http_client or httpx.AsyncClient(timeout=float(cfg.http_timeout_seconds or 30.0))
-    processed = 0
-    try:
-        for row in rows:
-            disclosure_id = int(row["disclosure_id"])
-            text = await _input_text_for_row(row, cfg=cfg, client=http)
+    else:
+        batch = min(max(1, limit), remaining)
+        rows = await storage.claim_pending_briefs(
+            limit=batch,
+            max_briefs_per_day=cfg.max_briefs_per_day,
+            pdf_grace_seconds=cfg.pdf_grace_seconds,
+        )
+        if rows:
+            owns_provider = provider is None
+            owns_http = http_client is None
+            prov: BriefProvider = provider or make_brief_provider(cfg)
+            http = http_client or httpx.AsyncClient(
+                timeout=float(cfg.http_timeout_seconds or 30.0)
+            )
             try:
-                brief = await prov.summarize(text)
-                marked = await storage.mark_brief_ready(
-                    disclosure_id,
-                    brief=brief,
-                    model=cfg.model,
-                )
-                log.info(
-                    "brief_ready",
-                    disclosure_id=disclosure_id,
-                    model=cfg.model,
-                    marked=marked,
-                )
-                if marked and notify is not None:
-                    await _notify_brief_followups(
-                        storage,
-                        notify=notify,
-                        row=row,
-                        brief=brief,
-                    )
-            except Exception as exc:
-                await storage.mark_brief_failed(
-                    disclosure_id,
-                    error=str(exc),
-                    model=cfg.model,
-                )
-                log.warning(
-                    "brief_failed",
-                    disclosure_id=disclosure_id,
-                    error=str(exc),
-                )
-            processed += 1
-    finally:
-        if owns_http:
-            await http.aclose()
-        if owns_provider and isinstance(prov, GeminiBriefProvider):
-            await prov.aclose()
+                for row in rows:
+                    disclosure_id = int(row["disclosure_id"])
+                    text = await _input_text_for_row(row, cfg=cfg, client=http)
+                    try:
+                        brief = await prov.summarize(text)
+                        marked = await storage.mark_brief_ready(
+                            disclosure_id,
+                            brief=brief,
+                            model=cfg.model,
+                        )
+                        log.info(
+                            "brief_ready",
+                            disclosure_id=disclosure_id,
+                            model=cfg.model,
+                            marked=marked,
+                        )
+                        if marked and notify is not None:
+                            await _notify_brief_followups(
+                                storage,
+                                notify=notify,
+                                row=row,
+                                brief=brief,
+                            )
+                    except Exception as exc:
+                        await storage.mark_brief_failed(
+                            disclosure_id,
+                            error=str(exc),
+                            model=cfg.model,
+                        )
+                        log.warning(
+                            "brief_failed",
+                            disclosure_id=disclosure_id,
+                            error=str(exc),
+                        )
+                    processed += 1
+            finally:
+                if owns_http:
+                    await http.aclose()
+                if owns_provider:
+                    aclose = getattr(prov, "aclose", None)
+                    if callable(aclose):
+                        await _maybe_await(aclose())
+
+    # Late follow-up sweep even when the daily cap blocked new summarizes or
+    # the pending queue was empty (primary may have delivered after ready).
+    if notify is not None:
+        await _sweep_brief_followups(
+            storage,
+            notify=notify,
+            limit=max(5, limit),
+        )
     return processed
