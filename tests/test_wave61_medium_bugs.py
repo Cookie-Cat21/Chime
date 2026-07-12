@@ -16,7 +16,7 @@
 
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 
 from chime.domain import AlertType
@@ -85,7 +85,8 @@ def test_category_no_string_coerce() -> None:
     )
     assert "export function sanitizeDisclosureCategory(" in safe
     assert "category: unknown" in safe
-    assert "typeof category !== \"string\"" in safe.split("export function sanitizeDisclosureCategory")[1]
+    cat_chunk = safe.split("export function sanitizeDisclosureCategory")[1]
+    assert 'typeof category !== "string"' in cat_chunk
 
     db = (WEB / "src" / "lib" / "db.ts").read_text(encoding="utf-8")
     assert "sanitizeDisclosureCategory(row.category)" in db
@@ -102,7 +103,7 @@ def test_row_to_rule_rejects_non_string_category() -> None:
         "threshold": None,
         "active": True,
         "armed": True,
-        "created_at": datetime.now(timezone.utc),
+        "created_at": datetime.now(UTC),
     }
     for bad in ({"x": 1}, 42, True, b"bytes"):
         rule = _row_to_rule({**base, "category": bad})
