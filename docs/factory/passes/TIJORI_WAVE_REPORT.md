@@ -1,16 +1,16 @@
-# Tijori CSE — Waves 1–7 report
+# Tijori CSE — Waves 1–9 report
 
 **Branch:** `cursor/tijori-cse-phase1-e44e`  
 **Date:** 2026-07-12  
 **Plan:** [TIJORI_CSE_PLAN.md](../TIJORI_CSE_PLAN.md)  
 **Ops:** [docs/runbooks/TIJORI.md](../../runbooks/TIJORI.md)  
-**Range:** `a802cb7` … `c016b06` (+ this wave-7 report append)
+**Range:** `a802cb7` … `d46e3ea` (+ this wave-9 report refresh)
 
 ---
 
 ## Verdict
 
-Phase 1 foundations and Phase 2 Tijori-core plumbing are **landed** across waves 1–5. Waves 6–7 add sectors browse, storage/SQL harden, retention/sectors coverage, and an adversarial briefs/PDF/follow-up sweep. Live Gemini briefs remain **flag/key gated** (`AI_BRIEFS_ENABLED=0` default). Phase 3 scenario AI is **not started**.
+Phase 1 foundations and Phase 2 Tijori-core plumbing are **landed** across waves 1–5. Waves 6–7 add sectors browse, storage/SQL harden, retention/sectors coverage, Groq provider, disclosure baseline watermark, and briefs PDF grace / late follow-up sweep. Waves 8–9 add OpenRouter provider, brief drain pacing, market UX polish, adversarial grace/storage close, and a ruff format sweep. Live LLM briefs remain **flag/key gated** (`AI_BRIEFS_ENABLED=0` default; `AI_PROVIDER=gemini|groq|openrouter`). Phase 3 scenario AI is **not started**.
 
 | Track | Status |
 |---|---|
@@ -184,19 +184,70 @@ Phase 1 foundations and Phase 2 Tijori-core plumbing are **landed** across waves
 
 ---
 
-## Wave 7 — Test assert harden + wave report append
+## Wave 7 — Assert harden + Groq + briefs grace
 
-**Theme:** Flake-proof retention/sectors asserts; append this rollup.
+**Theme:** Flake-proof retention/sectors asserts; Groq provider; disclosure baseline; PDF grace / late follow-up / env harden; wave report append.
 
 | SHA | Commit |
 |---|---|
 | `c016b06` | fix(wave7): assert retention/sectors via mocks not stdout logs |
-| _(this)_ | docs(wave7): wave report append |
+| `a3ae6e4` | docs(wave7): makefile readme tijori pointers |
+| `76bfce4` | docs(wave7): wave report append |
+| `af4ad49` | test(wave7): alert parse fuzz |
+| `75b8dc9` | feat(wave7): groq brief provider |
+| `c0d5d60` | test(wave7): disclosure baseline push |
+| `c483c83` | fix(wave7): briefs PDF grace, late follow-up sweep, env harden |
 
 **Shipped**
 
 - Retention/sectors tests assert via mocks (not `capsys` stdout logs) to avoid full-suite capture flakes.
-- `TIJORI_WAVE_REPORT.md` — waves 6–7 commit inventory append.
+- Makefile / README Tijori pointers; `TIJORI_WAVE_REPORT.md` waves 6–7 append.
+- Alert-parse fuzz coverage; disclosure create-watermark baseline (no historical flood).
+- `AI_PROVIDER=groq` OpenAI-compatible chat path (+ httpx-mocked coverage).
+- Briefs PDF grace (wait for `pdf_url` before title-only summarize), late follow-up retry after primary delivery, promote recent skipped rows when AI enabled, soft-parse `BriefSettings`, aclose owned providers after drain.
+
+---
+
+## Wave 8 — OpenRouter + pacing + adversarial close
+
+**Theme:** OpenRouter provider, brief drain pacing, market UX polish, grace/storage adversarial close, docs.
+
+| SHA | Commit |
+|---|---|
+| `8bf12b0` | docs(wave8): third party pypdf |
+| `8b5e28a` | docs(wave8): claude status tijori |
+| `f854cb2` | feat(wave8): market UX polish |
+| `371c72a` | test(wave8): poller brief pdf coverage |
+| `cb6bad8` | feat(wave8): brief drain pacing |
+| `6539563` | feat(wave8): openrouter brief provider |
+| `bd61382` | fix(wave8): briefs grace, late follow-up, groq defaults |
+| `e264242` | docs(wave8): mention openrouter in BriefSettings |
+| `78f536d` | fix(wave8): storage grace + follow-up sweep starvation |
+
+**Shipped**
+
+- Third-party `pypdf` note; CLAUDE.md Tijori status; OpenRouter in `BriefSettings` docs.
+- `/market` movers **Watch** links + “Add via watchlist” note (no inline watch POST).
+- Poller brief/PDF fail-soft coverage (worker errors, cancel re-raise, enrich edge cases).
+- `AI_BRIEF_SLEEP_SECONDS` pacing between consecutive LLM drain calls.
+- `AI_PROVIDER=openrouter` OpenAI-compatible path (+ soft-default model when unset).
+- Adversarial close: grace keyed off `updated_at` (promote-safe); reject empty `pdf_url`; late follow-up sweep only ready briefs missing a follow-up row (oldest-first); Groq soft-default model; list content-part parse.
+
+---
+
+## Wave 9 — Format sweep + wave report refresh
+
+**Theme:** Ruff format across chime/tests; refresh this rollup through waves 8–9.
+
+| SHA | Commit |
+|---|---|
+| `d46e3ea` | style(wave9): ruff format chime and tests |
+| _(this)_ | docs(wave9): wave report refresh |
+
+**Shipped**
+
+- `ruff format` over `chime/` and related tests (style-only).
+- `TIJORI_WAVE_REPORT.md` — waves 8–9 inventory + updated totals.
 
 ---
 
@@ -210,8 +261,10 @@ Phase 1 foundations and Phase 2 Tijori-core plumbing are **landed** across waves
 | 4 (`wave4`) | 9 |
 | 5 (`wave5`) | 7 |
 | 6 (`wave6`) | 8 |
-| 7 (`wave7` + this report) | 2 |
-| **Total** | **54** |
+| 7 (`wave7`) | 7 |
+| 8 (`wave8`) | 9 |
+| 9 (`wave9` + this report) | 2 |
+| **Total** | **70** |
 
 ---
 
@@ -219,8 +272,8 @@ Phase 1 foundations and Phase 2 Tijori-core plumbing are **landed** across waves
 
 ### Phase 2 “live” (ops, not more code required for stub path)
 
-1. Enable `AI_BRIEFS_ENABLED=1` + `AI_API_KEY` in a controlled env.
-2. Watch rate caps / `AI_MAX_BRIEFS_PER_DAY` budget under real CSE traffic.
+1. Enable `AI_BRIEFS_ENABLED=1` + `AI_API_KEY` in a controlled env (`AI_PROVIDER=gemini|groq|openrouter`).
+2. Watch rate caps / `AI_MAX_BRIEFS_PER_DAY` + `AI_BRIEF_SLEEP_SECONDS` under real CSE traffic.
 3. Confirm follow-up notify + NFA suffix in production Telegram.
 
 ### Still deferred
@@ -233,6 +286,6 @@ Phase 1 foundations and Phase 2 Tijori-core plumbing are **landed** across waves
 
 ### Suggested next improve-loop focus
 
-- CI green on touched Python/web paths after wave 7.
+- CI green on touched Python/web paths after wave 9.
 - Controlled briefs-on soak (not default-on in prod).
 - No Phase 3 until Phase 2 live brief path is proven.
