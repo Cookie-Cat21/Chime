@@ -68,14 +68,15 @@ reads Postgres / Chime API only — no second cse.lk client from `web/`.
 **Still forbidden:** portfolio / P&L, tax reports, stock screener, technical
 analysis charts, payments, native app.
 
-Optional component bookmarks (reference only; prefer shadcn primitives):
+Optional component bookmarks (reference only; prefer shadcn primitives).
+**Filter before copying:** [factory/DASH_COMPONENT_FILTER.md](factory/DASH_COMPONENT_FILTER.md)
+(Tremor Blocks MIT inventory, ACCEPT/REJECT by fence, bookmark license gate).
 
-- HyperUI
-- daisyUI
-- Tremor
-- React Bits
-- 21st.dev
-- Shadcnblocks (free)
-- Cult UI
-- Watermelon UI
-- Aceternity
+- HyperUI (MIT patterns — adapt; don’t dual-stack)
+- Tremor Blocks / Raw (MIT — cherry-pick; **no** full Planner/Overview import)
+- 21st.dev (per-item MIT verify; no dump-all)
+- Cult UI free / Watermelon (MIT confirm; skip Pro)
+- daisyUI — inspiration only (do not install beside shadcn)
+- React Bits — **skip** (Commons Clause ≠ constitution MIT)
+- Shadcnblocks Pro — **skip**; free only with clear LICENSE
+- Aceternity / marketing carousels / FAQ footers — **skip** for thin dash
