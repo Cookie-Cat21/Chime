@@ -10,11 +10,11 @@ import { NfaFooter } from "@/components/nfa-footer";
 import { NfaInline } from "@/components/nfa-inline";
 import { Button } from "@/components/ui/button";
 import { serverApiGet } from "@/lib/api/server-fetch";
+import { sanitizeDisclosureCategory } from "@/lib/api/disclosure-safe";
 import {
-  MAX_HISTORY_SYMBOL_LENGTH,
-  sanitizeDisclosureCategory,
-  sanitizeDisclosureText,
-} from "@/lib/api/disclosure-safe";
+  MAX_ALERT_THRESHOLD,
+  toFiniteNumber,
+} from "@/lib/api/finite-number";
 import { toSafePositiveInt } from "@/lib/api/safe-int";
 import { isAlertType, normalizeSymbol } from "@/lib/api/symbol";
 import { toIso } from "@/lib/api/time";
@@ -75,16 +75,14 @@ export default async function AlertsPage({
           const id = toSafePositiveInt(r.id);
           if (id == null) continue;
           if (!isAlertType(r.type)) continue;
-          const symbol =
-            sanitizeDisclosureText(
-              typeof r.symbol === "string" ? r.symbol : null,
-              MAX_HISTORY_SYMBOL_LENGTH,
-            ) ?? "";
+          // Fail closed — only CSE SYMBOL_RE rows (not sanitize-only junk).
+          const symbol = normalizeSymbol(
+            typeof r.symbol === "string" ? r.symbol : null,
+          );
           if (!symbol) continue;
+          const n = toFiniteNumber(r.threshold);
           const threshold =
-            typeof r.threshold === "number" && Number.isFinite(r.threshold)
-              ? r.threshold
-              : null;
+            n != null && n <= MAX_ALERT_THRESHOLD ? n : null;
           rules.push({
             id,
             symbol,

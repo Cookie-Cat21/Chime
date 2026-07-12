@@ -7,7 +7,6 @@ import { NfaInline } from "@/components/nfa-inline";
 import { Button } from "@/components/ui/button";
 import {
   MAX_HISTORY_EVENT_KEY_LENGTH,
-  MAX_HISTORY_SYMBOL_LENGTH,
   sanitizeDisclosureText,
 } from "@/lib/api/disclosure-safe";
 import { toNonNegativeSafeInt, toSafePositiveInt } from "@/lib/api/safe-int";
@@ -146,11 +145,10 @@ export default async function AlertHistoryPage({
           const rule_id = toSafePositiveInt(r.rule_id);
           if (id == null || rule_id == null) continue;
           if (!isAlertType(r.type)) continue;
-          const symbol =
-            sanitizeDisclosureText(
-              typeof r.symbol === "string" ? r.symbol : null,
-              MAX_HISTORY_SYMBOL_LENGTH,
-            ) ?? "";
+          // Fail closed — only CSE SYMBOL_RE rows (not sanitize-only junk).
+          const symbol = normalizeSymbol(
+            typeof r.symbol === "string" ? r.symbol : null,
+          );
           if (!symbol) continue;
           const statusRaw =
             typeof r.delivery_status === "string" ? r.delivery_status : "";

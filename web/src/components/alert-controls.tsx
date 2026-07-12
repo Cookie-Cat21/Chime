@@ -9,7 +9,10 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { apiErrorMessage, apiMutate } from "@/lib/api/client-fetch";
-import { DISCLOSURE_CATEGORY_MAX } from "@/lib/api/disclosure-safe";
+import {
+  DISCLOSURE_CATEGORY_MAX,
+  sanitizeDisclosureCategory,
+} from "@/lib/api/disclosure-safe";
 import {
   MAX_ALERT_THRESHOLD,
   toFiniteNumber,
@@ -108,7 +111,7 @@ export function AlertCreateForm() {
           }
         }
       } else {
-        const cat = category.trim();
+        const cat = sanitizeDisclosureCategory(category);
         if (cat) {
           body.category = cat;
         }

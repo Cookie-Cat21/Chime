@@ -1,7 +1,6 @@
 import type { NextRequest } from "next/server";
 
 import {
-  MAX_HISTORY_SYMBOL_LENGTH,
   MAX_STOCK_NAME_LENGTH,
   MAX_STOCK_SECTOR_LENGTH,
   sanitizeDisclosureText,
@@ -58,8 +57,8 @@ export async function GET(request: NextRequest) {
     );
 
     const items = result.rows.flatMap((row) => {
-      const symbol =
-        sanitizeDisclosureText(row.symbol, MAX_HISTORY_SYMBOL_LENGTH) ?? "";
+      // Fail closed — only CSE SYMBOL_RE rows (not sanitize-only junk).
+      const symbol = normalizeSymbol(row.symbol);
       if (!symbol) return [];
       return [
         {

@@ -1,10 +1,6 @@
 import type { NextRequest } from "next/server";
 
-import {
-  MAX_HISTORY_SYMBOL_LENGTH,
-  sanitizeDisclosureCategory,
-  sanitizeDisclosureText,
-} from "@/lib/api/disclosure-safe";
+import { sanitizeDisclosureCategory } from "@/lib/api/disclosure-safe";
 import { toFiniteNumber } from "@/lib/api/market-browse";
 import { MAX_ALERT_THRESHOLD } from "@/lib/api/finite-number";
 import { readJsonBody } from "@/lib/api/read-json-body";
@@ -87,15 +83,21 @@ export async function GET(request: NextRequest) {
       // Drop non-safe ids — Number(oversized) precision-loss used to alias rules.
       if (id == null) return [];
       if (!isAlertType(row.type)) return [];
+      // Fail closed — only CSE SYMBOL_RE rows (not sanitize "?" fallback).
+      const symbol = normalizeSymbol(row.symbol);
+      if (!symbol) return [];
+      const thresholdRaw = toFiniteNumber(row.threshold);
+      const threshold =
+        thresholdRaw != null && thresholdRaw <= MAX_ALERT_THRESHOLD
+          ? thresholdRaw
+          : null;
       return [
         {
           id,
-          symbol:
-            sanitizeDisclosureText(row.symbol, MAX_HISTORY_SYMBOL_LENGTH) ??
-            "?",
+          symbol,
           type: row.type,
-          // Finite-only — NaN/±Inf threshold from a poisoned row → null.
-          threshold: toFiniteNumber(row.threshold),
+          // Finite-only + cap — NaN/±Inf / absurd magnitudes → null.
+          threshold,
           // Strip C0/C1 + cap — parity with bot storage read path.
           category: sanitizeDisclosureCategory(row.category),
           // Strict === true — Boolean("false") used to mislabel armed/active.

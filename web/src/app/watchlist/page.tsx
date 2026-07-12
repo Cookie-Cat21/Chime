@@ -10,12 +10,13 @@ import {
   WatchlistAddForm,
 } from "@/components/watchlist-controls";
 import {
-  MAX_HISTORY_SYMBOL_LENGTH,
   MAX_STOCK_NAME_LENGTH,
   MAX_STOCK_SECTOR_LENGTH,
   sanitizeDisclosureText,
 } from "@/lib/api/disclosure-safe";
+import { toFiniteNumber } from "@/lib/api/finite-number";
 import { serverApiGet } from "@/lib/api/server-fetch";
+import { normalizeSymbol } from "@/lib/api/symbol";
 import { toIso } from "@/lib/api/time";
 import { requirePageSession } from "@/lib/auth/page-session";
 import { formatNumber, formatPct, formatTs } from "@/lib/format";
@@ -58,24 +59,14 @@ export default async function WatchlistPage() {
             continue;
           }
           const r = row as Record<string, unknown>;
-          const symbol =
-            sanitizeDisclosureText(
-              typeof r.symbol === "string" ? r.symbol : null,
-              MAX_HISTORY_SYMBOL_LENGTH,
-            ) ?? "";
+          // Fail closed — only CSE SYMBOL_RE rows (not sanitize-only junk).
+          const symbol = normalizeSymbol(
+            typeof r.symbol === "string" ? r.symbol : null,
+          );
           if (!symbol) continue;
-          const price =
-            typeof r.price === "number" && Number.isFinite(r.price)
-              ? r.price
-              : null;
-          const change =
-            typeof r.change === "number" && Number.isFinite(r.change)
-              ? r.change
-              : null;
-          const change_pct =
-            typeof r.change_pct === "number" && Number.isFinite(r.change_pct)
-              ? r.change_pct
-              : null;
+          const price = toFiniteNumber(r.price);
+          const change = toFiniteNumber(r.change);
+          const change_pct = toFiniteNumber(r.change_pct);
           items.push({
             symbol,
             name: sanitizeDisclosureText(
