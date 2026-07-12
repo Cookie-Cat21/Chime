@@ -170,8 +170,8 @@ async def test_claim_pending_briefs_without_daily_cap() -> None:
     claim_sql = conn.sql[0]
     assert "FOR UPDATE OF b SKIP LOCKED" in claim_sql
     assert "status = 'processing'" in claim_sql
-    # stale minutes, pdf grace (default 120), batch=limit
-    assert conn.params[0] == (15, 120, 2)
+    # stale minutes, pdf grace (120), CDN backoff (300), batch=limit
+    assert conn.params[0] == (15, 120, 300, 2)
 
 
 @pytest.mark.asyncio

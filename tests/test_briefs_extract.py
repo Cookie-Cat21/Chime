@@ -10,7 +10,7 @@ import httpx
 import pytest
 
 from chime.briefs import BriefSettings, build_brief_prompt
-from chime.briefs.extract import extract_pdf_text, fetch_cdn_pdf
+from chime.briefs.extract import CdnPdfPermanentError, extract_pdf_text, fetch_cdn_pdf
 from chime.briefs.worker import claim_pending_briefs
 
 
@@ -130,12 +130,12 @@ async def test_fetch_cdn_pdf_respects_content_length_cap() -> None:
 
     transport = httpx.MockTransport(handler)
     async with httpx.AsyncClient(transport=transport) as client:
-        out = await fetch_cdn_pdf(
-            "https://cdn.cse.lk/big.pdf",
-            max_bytes=50,
-            client=client,
-        )
-    assert out is None
+        with pytest.raises(CdnPdfPermanentError, match="too large"):
+            await fetch_cdn_pdf(
+                "https://cdn.cse.lk/big.pdf",
+                max_bytes=50,
+                client=client,
+            )
 
 
 @pytest.mark.asyncio
@@ -151,12 +151,12 @@ async def test_fetch_cdn_pdf_respects_streamed_byte_cap() -> None:
 
     transport = httpx.MockTransport(handler)
     async with httpx.AsyncClient(transport=transport) as client:
-        out = await fetch_cdn_pdf(
-            "https://cdn.cse.lk/big.pdf",
-            max_bytes=50,
-            client=client,
-        )
-    assert out is None
+        with pytest.raises(CdnPdfPermanentError, match="too large"):
+            await fetch_cdn_pdf(
+                "https://cdn.cse.lk/big.pdf",
+                max_bytes=50,
+                client=client,
+            )
 
 
 @pytest.mark.asyncio
@@ -227,13 +227,12 @@ async def test_fetch_cdn_pdf_clamps_max_bytes_to_at_least_one() -> None:
 
     transport = httpx.MockTransport(handler)
     async with httpx.AsyncClient(transport=transport) as client:
-        out = await fetch_cdn_pdf(
-            "https://cdn.cse.lk/tiny.pdf",
-            max_bytes=0,
-            client=client,
-        )
-    # cap becomes 1; two-byte body trips the streamed oversize path
-    assert out is None
+        with pytest.raises(CdnPdfPermanentError, match="too large"):
+            await fetch_cdn_pdf(
+                "https://cdn.cse.lk/tiny.pdf",
+                max_bytes=0,
+                client=client,
+            )
 
 
 @pytest.mark.asyncio
@@ -246,12 +245,12 @@ async def test_fetch_cdn_pdf_rejects_redirect() -> None:
 
     transport = httpx.MockTransport(handler)
     async with httpx.AsyncClient(transport=transport) as client:
-        out = await fetch_cdn_pdf(
-            "https://cdn.cse.lk/uploadAnnounceFiles/x.pdf",
-            max_bytes=1024,
-            client=client,
-        )
-    assert out is None
+        with pytest.raises(CdnPdfPermanentError, match="redirect"):
+            await fetch_cdn_pdf(
+                "https://cdn.cse.lk/uploadAnnounceFiles/x.pdf",
+                max_bytes=1024,
+                client=client,
+            )
 
 
 @pytest.mark.asyncio

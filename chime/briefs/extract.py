@@ -21,6 +21,14 @@ _MAX_PDF_PAGES = 40
 _MAX_EXTRACT_CHARS = 50_000
 
 
+class CdnPdfPermanentError(RuntimeError):
+    """Non-retryable CDN PDF failure (oversized body or redirect off-host).
+
+    Distinct from soft ``None`` returns (transport / 5xx / 404) so the brief
+    worker can mark ``failed`` instead of requeue-hammering the CDN forever.
+    """
+
+
 def extract_pdf_text(data: bytes) -> str:
     """Extract plain text from PDF bytes.
 
@@ -81,9 +89,10 @@ async def fetch_cdn_pdf(
 ) -> bytes | None:
     """GET a CSE CDN PDF with host allowlist + byte cap.
 
-    Returns ``None`` when the URL fails the CDN SSRF check, the response is
-    oversized (Content-Length or streamed body), redirects away from the
-    allowlisted host, or the request errors. Redirects are never followed.
+    Returns ``None`` for transient misses (transport error, non-200) so the
+    worker can requeue with backoff. Raises ``CdnPdfPermanentError`` for
+    oversized bodies and redirects (never followed — SSRF / poison loops).
+    Host allowlist failures return ``None`` (caller usually pre-checks).
     """
     allowed = allowed_cdn_pdf_url(pdf_url)
     if allowed is None:
@@ -107,7 +116,9 @@ async def fetch_cdn_pdf(
                     status_code=status,
                     location=headers.get("location"),
                 )
-                return None
+                raise CdnPdfPermanentError(
+                    f"CDN PDF redirect rejected for {allowed!r} (status={status})"
+                )
             if status != 200:
                 log.warning(
                     "pdf_fetch_bad_status",
@@ -125,9 +136,14 @@ async def fetch_cdn_pdf(
                             content_length=int(content_length),
                             max_bytes=cap,
                         )
-                        return None
+                        raise CdnPdfPermanentError(
+                            f"CDN PDF too large for {allowed!r} "
+                            f"(content-length={int(content_length)} > {cap})"
+                        )
                 except ValueError:
                     pass
+                except CdnPdfPermanentError:
+                    raise
 
             chunks: list[bytes] = []
             total = 0
@@ -142,9 +158,14 @@ async def fetch_cdn_pdf(
                         bytes_read=total,
                         max_bytes=cap,
                     )
-                    return None
+                    raise CdnPdfPermanentError(
+                        f"CDN PDF too large for {allowed!r} "
+                        f"(bytes_read={total} > {cap})"
+                    )
                 chunks.append(chunk)
             return b"".join(chunks)
+    except CdnPdfPermanentError:
+        raise
     except Exception as exc:
         log.warning("pdf_fetch_failed", pdf_url=allowed, error=str(exc))
         return None

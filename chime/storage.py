@@ -574,6 +574,7 @@ class Storage:
         max_briefs_per_day: int | None = None,
         stale_processing_minutes: int = 15,
         pdf_grace_seconds: int = 120,
+        cdn_backoff_seconds: int = 300,
     ) -> list[dict[str, Any]]:
         """Lease pending (or stale processing) briefs as ``processing``.
 
@@ -588,10 +589,17 @@ class Storage:
         can land before a title-only summarize burns the daily cap. Uses
         ``updated_at`` (not ``created_at``) so ``promote_recent_skipped_briefs``
         restarts the grace window. ``0`` claims immediately (title-only ok).
+
+        CDN backoff: pending rows that already have an ``error`` (transient CDN
+        miss requeue) and a non-empty ``pdf_url`` are skipped until
+        ``updated_at`` ages past ``cdn_backoff_seconds`` so a flapping CDN
+        cannot starve newer briefs or hammer the host every drain tick.
+        ``0`` disables backoff (immediate reclaim).
         """
         if limit <= 0:
             return []
         grace = max(0, int(pdf_grace_seconds))
+        cdn_backoff = max(0, int(cdn_backoff_seconds))
         async with self._pool.connection() as conn, conn.transaction():
             if max_briefs_per_day is not None:
                 # Must stay distinct from poller.POLL_LOCK_ID (session try-lock).
@@ -648,6 +656,12 @@ class Storage:
                             OR b.updated_at
                                 < now() - (%s * interval '1 second')
                         )
+                        AND (
+                            b.error IS NULL
+                            OR NULLIF(btrim(d.pdf_url), '') IS NULL
+                            OR b.updated_at
+                                < now() - (%s * interval '1 second')
+                        )
                         ORDER BY b.created_at ASC
                         LIMIT %s
                         FOR UPDATE OF b SKIP LOCKED
@@ -672,7 +686,7 @@ class Storage:
                     FROM claimed c
                     JOIN disclosures d ON d.id = c.disclosure_id
                     """,
-                    (stale_processing_minutes, grace, batch),
+                    (stale_processing_minutes, grace, cdn_backoff, batch),
                 )
             ).fetchall()
         return _as_rows(rows)

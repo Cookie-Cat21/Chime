@@ -165,7 +165,12 @@ def format_alert_message(
 
     ``filing_brief`` kwarg overrides ``event.filing_brief`` when not None.
     Neither path calls an LLM — callers supply precomputed text only.
+    Filing URLs are egress-hardened (CDN / www.cse.lk only) so a hostile DB
+    ``url`` cannot become an auto-linked Telegram href.
     """
+    # Lazy import: adapters.cse imports domain at module load.
+    from chime.adapters.cse import allowed_filing_url
+
     lines = [
         f"🔔 {event.symbol}",
         f"Trigger: {event.trigger}",
@@ -175,7 +180,9 @@ def format_alert_message(
     if event.disclosure_title:
         lines.append(f"Disclosure: {truncate_disclosure_title(event.disclosure_title)}")
     if event.disclosure_url:
-        lines.append(event.disclosure_url)
+        safe_url = allowed_filing_url(event.disclosure_url)
+        if safe_url:
+            lines.append(safe_url)
     brief = filing_brief if filing_brief is not None else event.filing_brief
     if brief is not None:
         brief_text = brief.strip()
@@ -205,7 +212,11 @@ def format_brief_followup(
     """Telegram follow-up when a filing brief becomes ready after the alert.
 
     Always ends with NFA. Callers supply precomputed brief text only.
+    Filing URLs are egress-hardened (CDN / www.cse.lk only), matching ``/brief``.
     """
+    # Lazy import: adapters.cse imports domain at module load.
+    from chime.adapters.cse import allowed_filing_url
+
     lines = [
         f"🔔 {symbol}",
         "Filing brief ready",
@@ -213,7 +224,9 @@ def format_brief_followup(
     if title and title.strip():
         lines.append(f"Disclosure: {truncate_disclosure_title(title)}")
     if url and str(url).strip():
-        lines.append(str(url).strip())
+        safe_url = allowed_filing_url(url)
+        if safe_url:
+            lines.append(safe_url)
     brief_text = brief.strip()
     if brief_text:
         lines.append("")

@@ -955,9 +955,9 @@ async def test_storage_claim_pending_briefs_sql() -> None:
     # Follow-up notify needs announcement URL + external_id for alert_log keys.
     assert any("d.url" in s for s in conn.sql)
     assert any("d.external_id" in s for s in conn.sql)
-    # Default grace (120s) is the third claim param after stale minutes + batch.
+    # Default grace (120s) + CDN backoff (300s) after stale minutes + batch.
     claim_params = conn.params[-1]
-    assert claim_params == (15, 120, 3)
+    assert claim_params == (15, 120, 300, 3)
 
 
 @pytest.mark.asyncio
@@ -971,7 +971,7 @@ async def test_storage_claim_pending_briefs_custom_pdf_grace() -> None:
     )
     store = _store(conn)
     await store.claim_pending_briefs(limit=2, max_briefs_per_day=10, pdf_grace_seconds=0)
-    assert conn.params[-1] == (15, 0, 2)
+    assert conn.params[-1] == (15, 0, 300, 2)
 
 
 @pytest.mark.asyncio

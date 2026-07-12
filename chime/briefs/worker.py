@@ -23,7 +23,7 @@ import structlog
 
 from chime.adapters.cse import allowed_cdn_pdf_url
 from chime.briefs import BriefSettings, BriefStatus, briefs_enabled, build_brief_prompt
-from chime.briefs.extract import extract_pdf_text, fetch_cdn_pdf
+from chime.briefs.extract import CdnPdfPermanentError, extract_pdf_text, fetch_cdn_pdf
 from chime.briefs.provider import BriefProvider, make_brief_provider
 from chime.domain import format_brief_followup
 from chime.notify import SendResult
@@ -68,6 +68,7 @@ class _BriefDrainStorage(Protocol):
         max_briefs_per_day: int | None = None,
         stale_processing_minutes: int = 15,
         pdf_grace_seconds: int = 120,
+        cdn_backoff_seconds: int = 300,
     ) -> list[dict[str, Any]]: ...
 
     async def mark_brief_ready(
@@ -185,9 +186,10 @@ async def _input_text_for_row(
 
     When ``pdf_url`` is set, a failed CDN fetch raises ``BriefCdnTransientError``
     so the drain requeues ``pending`` (no daily-cap burn) instead of a silent
-    title-only summarize or a permanent ``failed``. Non-allowlisted hosts raise
-    a plain ``RuntimeError`` (permanent fail). Empty extract after a successful
-    fetch still falls back to title (image-only PDFs).
+    title-only summarize or a permanent ``failed``. Non-allowlisted hosts and
+    permanent CDN faults (oversized / redirect) raise a plain ``RuntimeError``
+    (permanent fail). Empty extract after a successful fetch still falls back
+    to title (image-only PDFs).
     """
     symbol = str(row.get("symbol") or "").strip()
     title = str(row.get("title") or "").strip()
@@ -197,11 +199,14 @@ async def _input_text_for_row(
         url = pdf_url.strip()
         if allowed_cdn_pdf_url(url) is None:
             raise RuntimeError(f"CDN PDF URL rejected (not allowlisted): {url!r}")
-        raw = await fetch_cdn_pdf(
-            url,
-            max_bytes=cfg.pdf_max_bytes,
-            client=client,
-        )
+        try:
+            raw = await fetch_cdn_pdf(
+                url,
+                max_bytes=cfg.pdf_max_bytes,
+                client=client,
+            )
+        except CdnPdfPermanentError as exc:
+            raise RuntimeError(str(exc)) from exc
         if raw is None:
             raise BriefCdnTransientError(f"CDN PDF fetch failed for {url!r}")
         extracted = extract_pdf_text(raw)
@@ -431,6 +436,7 @@ async def claim_pending_briefs(
             limit=batch,
             max_briefs_per_day=cfg.max_briefs_per_day,
             pdf_grace_seconds=cfg.pdf_grace_seconds,
+            cdn_backoff_seconds=cfg.cdn_backoff_seconds,
         )
         if rows:
             owns_provider = provider is None

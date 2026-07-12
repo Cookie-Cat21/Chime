@@ -55,7 +55,7 @@ async def test_claim_pending_briefs_pdf_grace_sql_uses_updated_at() -> None:
     assert "NULLIF(btrim(d.pdf_url), '') IS NOT NULL" in claim_sql
     # Must not use created_at for the grace age predicate.
     assert "b.created_at\n                                < now()" not in claim_sql
-    assert conn.params[-1] == (15, 90, 1)
+    assert conn.params[-1] == (15, 90, 300, 1)
 
 
 @pytest.mark.asyncio

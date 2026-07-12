@@ -69,6 +69,9 @@ class BriefSettings:
     - ``BRIEF_PDF_GRACE_SECONDS`` — wait for ``pdf_url`` before title-only
       summarize, keyed off brief ``updated_at`` (default ``120``; ``0`` =
       claim immediately; promote restarts the window)
+    - ``BRIEF_CDN_BACKOFF_SECONDS`` — after a transient CDN miss requeue,
+      skip reclaim until ``updated_at`` ages past this window (default
+      ``300``; ``0`` = immediate reclaim — can hammer CDN / starve queue)
     - ``BRIEF_SKIPPED_PROMOTE_HOURS`` — when briefs are on, re-queue recent
       ``skipped`` rows as ``pending`` (default ``24``; ``0`` = off)
     """
@@ -83,6 +86,7 @@ class BriefSettings:
     http_timeout_seconds: float = 30.0
     sleep_seconds: float = 0.5
     pdf_grace_seconds: int = 120
+    cdn_backoff_seconds: int = 300
     skipped_promote_hours: int = 24
 
     @classmethod
@@ -114,6 +118,7 @@ class BriefSettings:
             http_timeout_seconds=max(1.0, _env_float("AI_HTTP_TIMEOUT_SECONDS", 30.0)),
             sleep_seconds=max(0.0, _env_float("AI_BRIEF_SLEEP_SECONDS", 0.5)),
             pdf_grace_seconds=max(0, _env_int("BRIEF_PDF_GRACE_SECONDS", 120)),
+            cdn_backoff_seconds=max(0, _env_int("BRIEF_CDN_BACKOFF_SECONDS", 300)),
             skipped_promote_hours=max(0, _env_int("BRIEF_SKIPPED_PROMOTE_HOURS", 24)),
         )
 

@@ -372,7 +372,8 @@ async def test_cmd_brief_usage_bad_symbol_and_none_yet(
 
     update2, context2 = _make_update_context(args=["!!!"], storage=storage)
     await cmd_brief(update2, context2)
-    assert "doesn't look like a CSE symbol" in update2.effective_message.reply_text.await_args.args[0]
+    bad = update2.effective_message.reply_text.await_args.args[0]
+    assert "doesn't look like a CSE symbol" in bad
 
     update3, context3 = _make_update_context(args=["JKH.N0000"], storage=storage)
     await cmd_brief(update3, context3)
