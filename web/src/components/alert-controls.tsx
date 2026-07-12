@@ -129,15 +129,18 @@ export function AlertCreateForm() {
       if (!ok) {
         const msg = apiErrorMessage(data, `Could not create (${status}).`);
         // Map common API codes to fields when possible
-        const code =
+        const codeRaw =
           data &&
           typeof data === "object" &&
           "error" in data &&
           data.error &&
           typeof data.error === "object" &&
           "code" in data.error
-            ? String((data.error as { code?: string }).code ?? "")
-            : "";
+            ? (data.error as { code?: unknown }).code
+            : undefined;
+        // Fail closed — never String()-coerce non-string error codes (objects
+        // used to become "[object Object]" and mis-route field errors).
+        const code = typeof codeRaw === "string" ? codeRaw : "";
         if (code === "invalid_symbol" || code === "not_found") {
           setErrors({ symbol: msg });
         } else if (msg.toLowerCase().includes("threshold")) {

@@ -30,7 +30,9 @@ export const MAX_DEMO_ALLOWLIST = 64;
 export const COOKIE_SAME_SITE = "lax" as const;
 
 export function cookieSecure(): boolean {
-  return process.env.NODE_ENV === "production";
+  // Fail closed — non-string NODE_ENV must not soft-match production Secure.
+  const raw = process.env.NODE_ENV;
+  return typeof raw === "string" && raw === "production";
 }
 
 export type DashAuthConfig = {
@@ -55,14 +57,22 @@ function parseAllowlist(raw: string | undefined): Set<number> {
 }
 
 export function getDashAuthConfig(): DashAuthConfig {
-  const secret = (process.env.DASH_SESSION_SECRET ?? "").trim();
+  // Fail closed — non-string mock/hostile env values must not throw on .trim
+  // (parity scenariosEnabled typeof guard).
+  const secretRaw = process.env.DASH_SESSION_SECRET;
+  const secret = typeof secretRaw === "string" ? secretRaw.trim() : "";
+  const defaultRaw = process.env.DASH_DEFAULT_TELEGRAM_ID;
   const defaultTelegramId = toSafePositiveInt(
-    (process.env.DASH_DEFAULT_TELEGRAM_ID ?? "").trim(),
+    typeof defaultRaw === "string" ? defaultRaw.trim() : "",
   );
+  const demoRaw = process.env.DASH_DEMO_AUTH;
+  const allowRaw = process.env.DASH_DEMO_TELEGRAM_IDS;
 
   return {
-    demoAuthEnabled: process.env.DASH_DEMO_AUTH === "1",
-    allowlist: parseAllowlist(process.env.DASH_DEMO_TELEGRAM_IDS),
+    demoAuthEnabled: typeof demoRaw === "string" && demoRaw === "1",
+    allowlist: parseAllowlist(
+      typeof allowRaw === "string" ? allowRaw : undefined,
+    ),
     defaultTelegramId,
     sessionSecret: secret,
   };

@@ -4,7 +4,7 @@ import { sanitizeDisclosureText } from "@/lib/api/disclosure-safe";
 import { toNonNegativeSafeInt } from "@/lib/api/safe-int";
 import { serverApiGet } from "@/lib/api/server-fetch";
 import { normalizeSymbol } from "@/lib/api/symbol";
-import { toIso } from "@/lib/api/time";
+import { MAX_DATE_MS, toIso } from "@/lib/api/time";
 import { requirePageSession } from "@/lib/auth/page-session";
 import { formatTs } from "@/lib/format";
 
@@ -444,9 +444,11 @@ type TimestampAge = {
 };
 
 function timestampAge(iso: string | null | undefined): TimestampAge | null {
-  if (!iso) return null;
+  // Fail closed — non-strings / out-of-range must not skew stale ops banners
+  // (parity formatTs / isStaleTs; formatAge day-cap alone still computed huge ageMs).
+  if (typeof iso !== "string" || !iso) return null;
   const ts = Date.parse(iso);
-  if (Number.isNaN(ts)) return null;
+  if (Number.isNaN(ts) || Math.abs(ts) > MAX_DATE_MS) return null;
   const ageMs = Math.max(0, Date.now() - ts);
   return {
     ageMs,
