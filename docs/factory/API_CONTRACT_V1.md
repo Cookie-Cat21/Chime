@@ -53,7 +53,7 @@ All non-2xx JSON errors:
 |---|---|
 | `POST /auth/demo` | Public (demo gated by env); CSRF-exempt |
 | `POST /auth/logout` | Valid session + CSRF |
-| `GET /me`, watchlist, alerts, symbols (list + detail), disclosures, history | Valid session |
+| `GET /me`, watchlist, alerts, symbols (list + detail), disclosures, history, market movers, sectors | Valid session |
 | Mutating watchlist/alerts | Valid session + CSRF |
 | `GET /health` | **Ops-gated** (valid session in v1 demo; not anonymously public by default) |
 
@@ -390,6 +390,44 @@ Query:
 
 Fence: discovery list for watchlist setup — not a screener or OHLC board. See [TIJORI_CSE_PLAN.md](TIJORI_CSE_PLAN.md).
 
+### `GET /api/v1/market/movers`
+
+Thin top gainers/losers peek for `/market` (Tijori/CSE Phase 1). Session required.
+Reuses the same Postgres browse query as `GET /api/v1/symbols` (latest
+`price_snapshots` via **INNER JOIN**). Sign-filtered so gainers/losers cannot
+mislabel flats or opposite moves. No cse.lk. Not a screener — no `q` / sector /
+volume / multi-sort filters.
+
+Query:
+
+| Param | Default | Notes |
+|---|---|---|
+| `direction` | `up` | `up` (change_pct > 0, sort desc) or `down` (change_pct < 0, sort asc). Other values → `400` `validation_error`. |
+| `limit` | `20` | Max `50` |
+
+**Response** `200`
+
+```json
+{
+  "items": [
+    {
+      "symbol": "JKH.N0000",
+      "name": "John Keells Holdings PLC",
+      "sector": null,
+      "price": 22.5,
+      "change": 0.3,
+      "change_pct": 1.35,
+      "ts": "2026-07-11T09:00:00+00:00"
+    }
+  ],
+  "direction": "up",
+  "limit": 20
+}
+```
+
+Item shape matches `GET /api/v1/symbols` browse rows. UI calls
+`?direction=up&limit=5` and `?direction=down&limit=5` for the top-movers strip.
+
 ### `GET /api/v1/symbols/{symbol}`
 
 **Response** `200`
@@ -458,11 +496,33 @@ Query: `limit` (default `20`, max `100`).
 
 Both DB `id` and `external_id` are required in the payload (resolves IA↔WAVE naming drift).
 
-`pdf_url` / `brief` / `brief_status` come from `disclosures.pdf_url` LEFT JOIN
-`disclosure_briefs` (`status` exposed as `brief_status`). When no brief row exists,
-all three are `null`. `brief_status` is one of `pending` \| `processing` \| `ready` \| `failed` \|
-`skipped` when present. Dash UI prefers `pdf_url` over `url` for the filing link
-and renders `brief` only when `brief_status === "ready"`.
+#### Brief fields (`pdf_url`, `brief`, `brief_status`)
+
+| Field | Source | Notes |
+|---|---|---|
+| `pdf_url` | `disclosures.pdf_url` | CDN-allowlisted egress (`https://cdn.cse.lk/…`); unsafe/off-allowlist → `null`. |
+| `brief` | `disclosure_briefs.brief` | Plain text; **only egresses when `brief_status === "ready"`** (else `null`, even if a draft row exists). Caps/strips controls on egress. |
+| `brief_status` | `disclosure_briefs.status` | LEFT JOIN; `null` when no brief row. |
+
+When no `disclosure_briefs` row exists, `pdf_url` may still be set (enricher), but
+`brief` and `brief_status` are `null`.
+
+#### Processing status (`brief_status` enum)
+
+DB check constraint (`007_brief_processing_status.sql`) and dash egress allowlist
+are identical. `brief_status` is one of:
+
+| Status | Meaning |
+|---|---|
+| `pending` | Queued for the briefs worker (AI enabled at enqueue). |
+| `processing` | Claimed/leased by a worker drain; in-flight. Stale `processing` rows are reclaimable after the lease window. |
+| `ready` | Brief text available; only status where API/`brief` egress is non-null and UI may render the summary. |
+| `failed` | Worker failed; `brief` stays null. |
+| `skipped` | Enqueued while AI briefs were off (`AI_BRIEFS_ENABLED=0`); may later promote to `pending`. |
+
+Unknown/invalid DB values normalize to `null` on egress. Dash UI prefers
+`pdf_url` over `url` for the filing link and renders `brief` only when
+`brief_status === "ready"`.
 
 ### Disclosure alert gating (bot / poller — E11-A01)
 
@@ -532,9 +592,10 @@ Not a sector heatmap/screener — list + performance fields only.
 | `DELETE` | `/api/v1/alerts/{id}` | Soft cancel by id |
 | `GET` | `/api/v1/alerts/history` | Not `/fires` |
 | `GET` | `/api/v1/symbols` | Market browse list (slim) |
+| `GET` | `/api/v1/market/movers` | Thin gainers/losers (`direction` + `limit`) |
 | `GET` | `/api/v1/symbols/{symbol}` | Slim `last` |
 | `GET` | `/api/v1/symbols/{symbol}/snapshots` | |
-| `GET` | `/api/v1/symbols/{symbol}/disclosures` | `id` + `external_id` |
+| `GET` | `/api/v1/symbols/{symbol}/disclosures` | `id` + `external_id` + brief fields (`brief_status` includes `processing`) |
 | `GET` | `/api/v1/sectors` | Optional sector board (Postgres; needs `SECTORS_INGEST=1`) |
 
 ---
@@ -554,6 +615,10 @@ Not a sector heatmap/screener — list + performance fields only.
 | API host | Next Route Handlers + Postgres |
 | Watchlist validate | Against Postgres `stocks` / poller data — **no** dash→cse.lk |
 | Disclosure ids | Both `id` and `external_id` |
+| Disclosure brief fields | `pdf_url` + `brief` + `brief_status`; brief text only when `ready` |
+| Brief processing status | `pending` \| `processing` \| `ready` \| `failed` \| `skipped` |
+| Market movers | `GET /api/v1/market/movers` thin sign-filtered peek (not a screener) |
+| Sectors | `GET /api/v1/sectors` optional Postgres board (`SECTORS_INGEST=1`) |
 | Symbol `last` | Slim fields for UI; no OHLC board requirement |
 
 ---
