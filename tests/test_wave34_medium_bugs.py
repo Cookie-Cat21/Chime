@@ -2,6 +2,7 @@
 
 1. Fire history UI must pass digits-only ``offset`` (API already paginated) and
    expose Previous/Next — WS-034 acceptance is paginated audit trail.
+   W58 hardens prev/next a11y (``rel``, page ``aria-label``, ``aria-disabled``).
 2. History API/UI delivery flags must use ``=== true`` (not ``Boolean(...)``
    which treats ``"false"`` / ``1`` as sent/dead-lettered).
 3. Alerts list/API/db ``active``/``armed`` must use ``=== true`` for the same
@@ -28,6 +29,12 @@ def test_history_ui_paginates_with_offset() -> None:
     assert "historyHref" in source
     assert "hasPrev" in source
     assert "hasNext" in source
+    # W58 a11y: labelled prev/next links + aria-disabled on unavailable side.
+    assert 'aria-label="Previous page of fire history"' in source
+    assert 'aria-label="Next page of fire history"' in source
+    assert 'rel="prev"' in source
+    assert 'rel="next"' in source
+    assert 'aria-disabled="true"' in source
     # Filter Apply must not drop limit; new filter omits offset (reset page).
     assert 'name="limit"' in source
 

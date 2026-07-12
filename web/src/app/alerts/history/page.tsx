@@ -373,22 +373,36 @@ export default async function AlertHistoryPage({
             {hasPrev ? (
               <Link
                 href={historyHref(prevOffset)}
-                className="underline underline-offset-4"
+                rel="prev"
+                aria-label="Previous page of fire history"
+                className="rounded-sm underline underline-offset-4 focus-visible:ring-2 focus-visible:ring-ring/50 focus-visible:outline-none"
               >
                 Previous
               </Link>
             ) : (
-              <span className="text-muted-foreground">Previous</span>
+              <span
+                aria-disabled="true"
+                className="text-muted-foreground"
+              >
+                Previous
+              </span>
             )}
             {hasNext ? (
               <Link
                 href={historyHref(nextOffset)}
-                className="underline underline-offset-4"
+                rel="next"
+                aria-label="Next page of fire history"
+                className="rounded-sm underline underline-offset-4 focus-visible:ring-2 focus-visible:ring-ring/50 focus-visible:outline-none"
               >
                 Next
               </Link>
             ) : (
-              <span className="text-muted-foreground">Next</span>
+              <span
+                aria-disabled="true"
+                className="text-muted-foreground"
+              >
+                Next
+              </span>
             )}
           </nav>
         ) : null}

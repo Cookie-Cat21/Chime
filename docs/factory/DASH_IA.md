@@ -65,6 +65,7 @@ No nested app shell beyond a single top nav: Browse · Watchlist · Alerts · Hi
 ### `/alerts/history`
 - Filter: symbol (optional), limit
 - Rows: fired_at · symbol · type · trigger/message excerpt · message_sent
+- Pagination: `nav` labelled “Fire history pages”; Previous/Next links use `rel` + `aria-label` (“…page of fire history”); unavailable side is a non-link `aria-disabled="true"` span (not tabbable)
 - No charts, no “P&L impact”
 
 ### `/symbols/[symbol]`
