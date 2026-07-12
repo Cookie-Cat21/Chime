@@ -203,7 +203,7 @@ def _disclosure_category_matches(rule: AlertRule, disclosure: Disclosure) -> boo
     if not needle:
         return True
     haystack = disclosure.category
-    if haystack is None:
+    if haystack is None or not str(haystack).strip():
         return False
     return needle.casefold() in haystack.casefold()
 
@@ -217,10 +217,16 @@ def evaluate_disclosure_rules(
 
     Skips announcements published at or before the rule's created_at so historical
     backfill never floods Telegram. Missing rule.created_at fails closed (no fire).
+    Undated CSE rows (Unix-epoch published_at) and empty external_id never fire.
     Optional rule.category filters by case-insensitive substring on disclosure.category.
     """
     events: list[AlertEvent] = []
+    if not (disclosure.external_id or "").strip():
+        return events
     published = _as_utc_aware(disclosure.published_at)
+    # Adapter stamps missing/non-positive createdDate as Unix epoch — never fire.
+    if published <= datetime(1970, 1, 1, tzinfo=UTC):
+        return events
     for rule in rules:
         if not rule.active:
             continue

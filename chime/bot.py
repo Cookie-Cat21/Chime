@@ -6,6 +6,7 @@ Alert dispatch happens from the poller via notify.send_message.
 
 from __future__ import annotations
 
+import math
 import os
 import re
 import time
@@ -41,7 +42,7 @@ ALERT_USAGE = (
     "/alert SYMBOL above PRICE\n"
     "/alert SYMBOL below PRICE\n"
     "/alert SYMBOL move PERCENT\n"
-    "/alert SYMBOL disclosure\n"
+    "/alert SYMBOL disclosure [CATEGORY]\n"
     "Example: /alert JKH.N0000 above 100\n"
     f"{disclaimer()}"
 )
@@ -130,12 +131,12 @@ HELP_TEXT = (
     "/alert SYMBOL above PRICE\n"
     "/alert SYMBOL below PRICE\n"
     "/alert SYMBOL move PERCENT\n"
-    "/alert SYMBOL disclosure\n"
+    "/alert SYMBOL disclosure [CATEGORY]\n"
     "/cancel ALERT_ID\n"
     "/myalerts — active only\n"
     "/mywatchlist\n"
     "Disclosure alerts: new filings after you set the rule only "
-    "(missing publish time → no fire).\n"
+    "(missing publish time → no fire; optional CATEGORY = substring).\n"
     f"{disclaimer()}"
 )
 
@@ -158,11 +159,37 @@ def normalize_symbol(raw: str) -> str | None:
     return s
 
 
+def _parse_threshold_token(raw: str) -> float | None:
+    """Parse a threshold token; None if not a positive finite number.
+
+    Accepts plain decimals and US-style thousands (``1,000`` / ``1,000.5``).
+    Rejects European decimal commas (``100,50`` / ``1.000,50``), non-finite
+    floats (``nan`` / ``inf``), and zero/negative values.
+    """
+    s = raw.strip()
+    if not s:
+        return None
+    if "," in s:
+        if not re.fullmatch(r"[-+]?\d{1,3}(,\d{3})+(\.\d+)?", s):
+            return None
+        s = s.replace(",", "")
+    try:
+        threshold = float(s)
+    except ValueError:
+        return None
+    if not math.isfinite(threshold) or threshold <= 0:
+        return None
+    return threshold
+
+
 def parse_alert_args(args: list[str]) -> tuple[ParsedAlert | None, str | None]:
     """Parse /alert args after the command. Returns (parsed, kind_error).
 
     Caller validates/normalizes ``args[0]`` as the symbol. On error, parsed is
     None and kind_error is a user-facing message.
+
+    Disclosure form: ``/alert SYMBOL disclosure [CATEGORY...]`` — remaining
+    tokens join into one optional category substring filter.
     """
     if len(args) < 2:
         return None, ALERT_USAGE
@@ -173,17 +200,17 @@ def parse_alert_args(args: list[str]) -> tuple[ParsedAlert | None, str | None]:
                 f"Almost — need a number after {kind}. "
                 f"Example: /alert JKH.N0000 {kind} 5\n{ALERT_USAGE}"
             )
-        try:
-            threshold = float(args[2].replace(",", ""))
-        except ValueError:
+        if len(args) > 3:
             return None, (
-                "The threshold must be a number. "
-                f"Example: /alert JKH.N0000 {kind} 100\n{ALERT_USAGE}"
-            )
-        if threshold <= 0:
-            return None, (
-                "Threshold must be a positive number. "
+                f"Unexpected extra text after the {kind} threshold. "
                 f"Example: /alert JKH.N0000 {kind} 5\n{ALERT_USAGE}"
+            )
+        threshold = _parse_threshold_token(args[2])
+        if threshold is None:
+            return None, (
+                "Threshold must be a positive finite number "
+                "(use 1000 or 1,000 — not nan/inf). "
+                f"Example: /alert JKH.N0000 {kind} 100\n{ALERT_USAGE}"
             )
         if kind == "above":
             return ParsedAlert(AlertType.PRICE_ABOVE, threshold), None

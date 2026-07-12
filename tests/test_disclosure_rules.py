@@ -206,3 +206,38 @@ def test_disclosure_blank_category_filter_treated_as_any() -> None:
     disc = make_disclosure(category=None)
     events = evaluate_disclosure_rules(disclosure=disc, rules=[rule])
     assert len(events) == 1
+
+
+def test_epoch_published_at_never_fires() -> None:
+    """Undated CSE rows stamped as Unix epoch must not alert."""
+    rule = make_rule(
+        type=AlertType.DISCLOSURE,
+        threshold=None,
+        created_at=datetime(1970, 1, 1, 0, 0, 1, tzinfo=UTC),
+    )
+    disc = make_disclosure(published_at=datetime(1970, 1, 1, tzinfo=UTC))
+    assert evaluate_disclosure_rules(disclosure=disc, rules=[rule]) == []
+
+
+def test_empty_external_id_never_fires() -> None:
+    rule = make_rule(
+        type=AlertType.DISCLOSURE,
+        threshold=None,
+        created_at=_RULE_CREATED,
+    )
+    disc = make_disclosure(
+        external_id="  ",
+        published_at=datetime(2026, 7, 12, 6, 0, 0, tzinfo=UTC),
+    )
+    assert evaluate_disclosure_rules(disclosure=disc, rules=[rule]) == []
+
+
+def test_disclosure_category_blank_haystack_no_fire() -> None:
+    rule = make_rule(
+        type=AlertType.DISCLOSURE,
+        threshold=None,
+        category="Financial",
+        created_at=_RULE_CREATED,
+    )
+    disc = make_disclosure(category="   ")
+    assert evaluate_disclosure_rules(disclosure=disc, rules=[rule]) == []

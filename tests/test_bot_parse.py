@@ -64,8 +64,8 @@ def test_parse_alert_args_variants(
         ([], "couldn't parse"),
         (["JKH.N0000"], "couldn't parse"),
         (["JKH.N0000", "above"], "need a number"),
-        (["JKH.N0000", "above", "nope"], "must be a number"),
-        (["JKH.N0000", "below", "-1"], "positive"),
+        (["JKH.N0000", "above", "nope"], "positive finite number"),
+        (["JKH.N0000", "below", "-1"], "positive finite number"),
         (["JKH.N0000", "sideways", "1"], "didn't catch that alert type"),
     ],
 )
@@ -146,3 +146,23 @@ def test_parse_disclosure_category_args(args: list[str], category: str | None) -
     assert parsed is not None
     assert parsed.alert_type == AlertType.DISCLOSURE
     assert parsed.category == category
+
+
+@pytest.mark.parametrize(
+    "args",
+    [
+        ["JKH.N0000", "above", "nan"],
+        ["JKH.N0000", "above", "NaN"],
+        ["JKH.N0000", "below", "inf"],
+        ["JKH.N0000", "move", "Infinity"],
+        ["JKH.N0000", "above", "1e309"],
+        ["JKH.N0000", "above", "100,50"],
+        ["JKH.N0000", "above", "1.000,50"],
+        ["JKH.N0000", "above", "100", "extra"],
+    ],
+)
+def test_parse_alert_args_rejects_non_finite_ambiguous_and_trailing(args: list[str]) -> None:
+    """Wave2: nan/inf, EU decimals, and trailing junk must not create rules."""
+    parsed, err = parse_alert_args(args)
+    assert parsed is None
+    assert err is not None
