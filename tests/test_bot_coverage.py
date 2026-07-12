@@ -287,6 +287,7 @@ async def test_cmd_myalerts_empty_and_formatted() -> None:
     assert "/alert JKH.N0000 below 90" in empty_reply
     assert "/alert JKH.N0000 move 5" in empty_reply
     assert "/alert JKH.N0000 disclosure" in empty_reply
+    assert "/alert JKH.N0000 disclosure Financial" in empty_reply
     assert disclaimer() in empty_reply
 
     rules = [

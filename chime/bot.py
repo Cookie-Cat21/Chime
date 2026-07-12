@@ -452,6 +452,7 @@ async def cmd_myalerts(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
             "/alert JKH.N0000 below 90\n"
             "/alert JKH.N0000 move 5\n"
             "/alert JKH.N0000 disclosure\n"
+            "/alert JKH.N0000 disclosure Financial\n"
             f"{disclaimer()}"
         )
         return
@@ -478,6 +479,10 @@ async def cmd_myalerts(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
                 lines.append(f"#{r.id} {sym} above {thr_s}")
             else:
                 lines.append(f"#{r.id} {sym} below {thr_s}")
+    # Category disclosure rules share a symbol with any-disclosure rules; the
+    # numeric id from this list is the only way to cancel one filter.
+    lines.append("")
+    lines.append("Cancel with /cancel ALERT_ID")
     lines.append("")
     lines.append(disclaimer())
     await update.effective_message.reply_text(_clamp_telegram_message("\n".join(lines)))
