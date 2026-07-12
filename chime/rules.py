@@ -6,7 +6,9 @@ No I/O inside evaluation.
 
 from __future__ import annotations
 
+import math
 from datetime import UTC, datetime
+from typing import TypeGuard
 from zoneinfo import ZoneInfo
 
 from chime.domain import (
@@ -28,16 +30,21 @@ def _as_utc_aware(dt: datetime) -> datetime:
     return dt.astimezone(UTC)
 
 
+def _finite(value: float | None) -> TypeGuard[float]:
+    """True when value is a real finite float (not None / NaN / ±Inf)."""
+    return value is not None and math.isfinite(value)
+
+
 def crossed_above(prev: float | None, curr: float, threshold: float) -> bool:
     """True iff price transitioned from below threshold to at/above threshold."""
-    if prev is None:
+    if prev is None or not (_finite(prev) and _finite(curr) and _finite(threshold)):
         return False
     return prev < threshold <= curr
 
 
 def crossed_below(prev: float | None, curr: float, threshold: float) -> bool:
     """True iff price transitioned from above threshold to at/below threshold."""
-    if prev is None:
+    if prev is None or not (_finite(prev) and _finite(curr) and _finite(threshold)):
         return False
     return prev > threshold >= curr
 
@@ -61,9 +68,16 @@ def _event_key_price(rule: AlertRule, snapshot: PriceSnapshot) -> str:
     return f"price:{rule.id}:{side}:{thr:g}:{minute}:{snapshot.price:g}"
 
 
-def _event_key_move(rule: AlertRule, snapshot: PriceSnapshot) -> str:
-    """One daily-move fire per Colombo calendar day (not UTC midnight)."""
-    day = snapshot.ts.astimezone(_COLOMBO).date().isoformat()
+def _event_key_move(rule: AlertRule, snapshot: PriceSnapshot) -> str | None:
+    """One daily-move fire per Colombo calendar day (not UTC midnight).
+
+    Returns None when the snapshot timestamp cannot be converted (extreme /
+    overflow offsets) so callers fail closed instead of raising.
+    """
+    try:
+        day = snapshot.ts.astimezone(_COLOMBO).date().isoformat()
+    except (OverflowError, ValueError, OSError):
+        return None
     return f"move:{rule.id}:{day}"
 
 
@@ -77,17 +91,23 @@ def evaluate_price_rules(
     previous: PreviousPriceState,
     rules: list[AlertRule],
 ) -> list[AlertEvent]:
-    """Evaluate price_above / price_below / daily_move rules for one snapshot."""
+    """Evaluate price_above / price_below / daily_move rules for one snapshot.
+
+    Non-finite prices / thresholds / pcts and unconvertible timestamps fail
+    closed (skip the rule, never raise).
+    """
     events: list[AlertEvent] = []
     prev_price = previous.price
     curr = snapshot.price
+    if not _finite(curr):
+        return events
 
     for rule in rules:
         if not rule.active or rule.symbol != snapshot.symbol:
             continue
 
         if rule.type == AlertType.PRICE_ABOVE:
-            if rule.threshold is None:
+            if rule.threshold is None or not math.isfinite(rule.threshold):
                 continue
             thr = rule.threshold
             if rule.armed and crossed_above(prev_price, curr, thr):
@@ -124,7 +144,7 @@ def evaluate_price_rules(
                 )
 
         elif rule.type == AlertType.PRICE_BELOW:
-            if rule.threshold is None:
+            if rule.threshold is None or not math.isfinite(rule.threshold):
                 continue
             thr = rule.threshold
             if rule.armed and crossed_below(prev_price, curr, thr):
@@ -161,20 +181,24 @@ def evaluate_price_rules(
                 )
 
         elif rule.type == AlertType.DAILY_MOVE:
-            if rule.threshold is None:
+            if rule.threshold is None or not math.isfinite(rule.threshold):
                 continue
             thr = abs(rule.threshold)
             pct = snapshot.change_pct
             if pct is None and snapshot.previous_close not in (None, 0):
-                pct = ((curr - snapshot.previous_close) / snapshot.previous_close) * 100.0
-            if pct is None:
+                pc = snapshot.previous_close
+                if _finite(pc) and pc != 0:
+                    pct = ((curr - pc) / pc) * 100.0
+            if not _finite(pct):
                 continue
             key = _event_key_move(rule, snapshot)
+            if key is None:
+                continue
             if key in previous.move_fired_keys:
                 continue
             # Crossing semantics on |pct|: require previous |pct| below threshold
             prev_pct = previous.change_pct
-            if prev_pct is None:
+            if not _finite(prev_pct):
                 # Baseline only — do not fire on first observation / already-exceeded
                 continue
             if abs(prev_pct) < thr <= abs(pct):

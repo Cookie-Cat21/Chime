@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import math
 import re
 from datetime import datetime
 from enum import StrEnum
@@ -187,6 +188,15 @@ def sanitize_brief_body(
     return body
 
 
+def format_price_lkr(price: float) -> str:
+    """Compact LKR price for Telegram — avoids pathological ``.2f`` on huge floats."""
+    if not math.isfinite(price):
+        return "n/a"
+    if abs(price) >= 1_000_000_000:
+        return f"{price:.6g}"
+    return f"{price:.2f}"
+
+
 def brief_budget_for_prefix(prefix_lines: list[str]) -> int:
     """Chars available for a brief body under Telegram's hard cap.
 
@@ -197,6 +207,21 @@ def brief_budget_for_prefix(prefix_lines: list[str]) -> int:
     # join(prefix) + "\\n\\n" + brief + "\\n\\n" + nfa
     fixed = len("\n".join(prefix_lines)) + 2 + 2 + len(nfa)
     return max(0, TELEGRAM_SAFE_MAX - 1 - fixed)
+
+
+def _clamp_telegram_message(msg: str) -> str:
+    """Hard cap Telegram body length while keeping the NFA suffix."""
+    if len(msg) < TELEGRAM_SAFE_MAX:
+        return msg
+    nfa = disclaimer()
+    suffix = "\n\n" + nfa
+    head = msg
+    if nfa in msg:
+        head = msg[: msg.rfind(nfa)].rstrip()
+    budget = max(1, TELEGRAM_SAFE_MAX - 1 - len(suffix))
+    if len(head) > budget:
+        head = head[: budget - 1].rstrip() + "…"
+    return head + suffix
 
 
 def format_alert_message(
@@ -212,16 +237,20 @@ def format_alert_message(
     ``url`` cannot become an auto-linked Telegram href. Brief bodies are
     control-stripped and length-capped (dynamic Telegram budget) so a
     hostile/huge LLM string cannot blow past Telegram's 4096 limit.
+    Symbol / trigger are control-stripped; prices use compact formatting;
+    the final body is hard-clamped under Telegram's 4096 limit.
     """
     # Lazy import: adapters.cse imports domain at module load.
     from chime.adapters.cse import allowed_filing_url
 
+    symbol = _CTRL_RE.sub("", event.symbol).strip() or "?"
+    trigger = _CTRL_RE.sub("", event.trigger).strip() or "alert"
     lines = [
-        f"🔔 {event.symbol}",
-        f"Trigger: {event.trigger}",
+        f"🔔 {symbol}",
+        f"Trigger: {trigger}",
     ]
     if event.current_price is not None:
-        lines.append(f"Price: {event.current_price:.2f} LKR")
+        lines.append(f"Price: {format_price_lkr(event.current_price)} LKR")
     if event.disclosure_title:
         title = truncate_disclosure_title(event.disclosure_title)
         if title:
@@ -238,7 +267,7 @@ def format_alert_message(
         lines.append(brief_text)
     lines.append("")
     lines.append(disclaimer())
-    return "\n".join(lines)
+    return _clamp_telegram_message("\n".join(lines))
 
 
 def format_dead_letter_notify(symbol: str, attempts: int) -> str:
@@ -261,12 +290,14 @@ def format_brief_followup(
     Always ends with NFA. Callers supply precomputed brief text only.
     Filing URLs are egress-hardened (CDN / www.cse.lk only), matching ``/brief``.
     Brief bodies are control-stripped and length-capped (Telegram 4096).
+    Symbol is control-stripped; final body is hard-clamped under 4096.
     """
     # Lazy import: adapters.cse imports domain at module load.
     from chime.adapters.cse import allowed_filing_url
 
+    clean_symbol = _CTRL_RE.sub("", symbol).strip() or "?"
     lines = [
-        f"🔔 {symbol}",
+        f"🔔 {clean_symbol}",
         "Filing brief ready",
     ]
     if title and title.strip():
@@ -284,7 +315,7 @@ def format_brief_followup(
         lines.append(brief_text)
     lines.append("")
     lines.append(disclaimer())
-    return "\n".join(lines)
+    return _clamp_telegram_message("\n".join(lines))
 
 
 def as_dict(model: BaseModel) -> dict[str, Any]:
