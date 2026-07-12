@@ -29,6 +29,9 @@ WEB = ROOT / "web"
 
 def test_sanitize_disclosure_category_strips_controls_and_caps() -> None:
     assert sanitize_disclosure_category(None) is None
+    # W59: non-strings must fail closed (isinstance guard — cov line).
+    assert sanitize_disclosure_category(123) is None  # type: ignore[arg-type]
+    assert sanitize_disclosure_category(["x"]) is None  # type: ignore[arg-type]
     assert sanitize_disclosure_category("  \x00\x01  ") is None
     assert sanitize_disclosure_category("Rights\nIssue") == "RightsIssue"
     huge = "F" * 500
