@@ -64,3 +64,18 @@ def test_snapshot_retention_days_negative_clamped(
     monkeypatch.setenv("SNAPSHOT_RETENTION_DAYS", "-5")
     settings = Settings.from_env(require_token=True)
     assert settings.snapshot_retention_days == 0
+
+
+@pytest.mark.parametrize("raw", ["nan", "NaN", "inf", "+inf", "-inf", "not-a-float"])
+def test_float_env_rejects_nonfinite_and_invalid(
+    monkeypatch: pytest.MonkeyPatch,
+    raw: str,
+) -> None:
+    """Wave14: POLL_INTERVAL_SECONDS=nan/inf must not break the poller sleep loop."""
+    monkeypatch.setenv("TELEGRAM_BOT_TOKEN", "test-token")
+    monkeypatch.setenv("DATABASE_URL", _DSN)
+    monkeypatch.setenv("POLL_INTERVAL_SECONDS", raw)
+    monkeypatch.setenv("HTTP_TIMEOUT_SECONDS", raw)
+    settings = Settings.from_env(require_token=True)
+    assert settings.poll_interval_seconds == 60.0
+    assert settings.http_timeout_seconds == 15.0

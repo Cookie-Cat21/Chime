@@ -48,6 +48,19 @@ def test_brief_settings_from_env_soft_parses_bad_numbers(
     assert cfg.skipped_promote_hours == 24
 
 
+@pytest.mark.parametrize("raw", ["nan", "NaN", "inf", "+inf", "-inf"])
+def test_brief_settings_rejects_nonfinite_float_env(
+    monkeypatch: pytest.MonkeyPatch,
+    raw: str,
+) -> None:
+    """Wave14: nan/inf must not pass max() clamps (max(1.0, nan) is nan)."""
+    monkeypatch.setenv("AI_HTTP_TIMEOUT_SECONDS", raw)
+    monkeypatch.setenv("AI_BRIEF_SLEEP_SECONDS", raw)
+    cfg = BriefSettings.from_env()
+    assert cfg.http_timeout_seconds == 30.0
+    assert cfg.sleep_seconds == 0.5
+
+
 def test_brief_settings_from_env_reads_grace_and_promote(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:

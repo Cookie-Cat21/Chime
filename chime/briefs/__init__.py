@@ -7,6 +7,7 @@ briefs are produced by the Python worker only.
 
 from __future__ import annotations
 
+import math
 import os
 from dataclasses import dataclass
 from enum import StrEnum
@@ -41,14 +42,21 @@ def _env_int(name: str, default: int) -> int:
 
 
 def _env_float(name: str, default: float) -> float:
-    """Parse float env; invalid / empty → default (never raise)."""
+    """Parse float env; invalid / empty / non-finite → default (never raise).
+
+    ``max(1.0, float('nan'))`` is nan in Python — reject non-finite before clamp
+    so AI timeout/sleep knobs cannot poison httpx or drain pacing.
+    """
     raw = os.getenv(name)
     if raw is None or not str(raw).strip():
         return default
     try:
-        return float(str(raw).strip())
+        value = float(str(raw).strip())
     except ValueError:
         return default
+    if not math.isfinite(value):
+        return default
+    return value
 
 
 @dataclass(frozen=True, slots=True)

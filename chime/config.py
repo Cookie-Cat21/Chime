@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import math
 import os
 from dataclasses import dataclass
 from pathlib import Path
@@ -20,17 +21,31 @@ def _require(name: str) -> str:
 
 
 def _float(name: str, default: float) -> float:
+    """Parse a float env var; blank / invalid / non-finite → default.
+
+    Rejects ``nan`` / ``±inf`` so ops knobs like ``POLL_INTERVAL_SECONDS``
+    cannot silently become non-finite and break APScheduler / sleep loops.
+    """
     raw = os.getenv(name)
     if raw is None or raw.strip() == "":
         return default
-    return float(raw)
+    try:
+        value = float(raw)
+    except ValueError:
+        return default
+    if not math.isfinite(value):
+        return default
+    return value
 
 
 def _int(name: str, default: int) -> int:
     raw = os.getenv(name)
     if raw is None or raw.strip() == "":
         return default
-    return int(raw)
+    try:
+        return int(raw)
+    except ValueError:
+        return default
 
 
 @dataclass(frozen=True, slots=True)
