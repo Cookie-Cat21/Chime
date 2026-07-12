@@ -45,6 +45,47 @@ Read-only lookup of the latest **ready** filing brief for a symbol from Postgres
 
 Rate-limited with other bot commands. Ops: leave `AI_BRIEFS_ENABLED=0` until a controlled soak; `/brief` still works for already-ready rows when AI is on.
 
+## Load envelope (ops planning)
+
+Planning numbers for one poller replica at defaults. Not SLOs — capacity / quota guardrails before a briefs-on soak.
+
+### Price snapshots (~300 / min)
+
+| Knob | Default | Effect |
+|---|---|---|
+| CSE board size | ~280–300 symbols | `tradeSummary.reqTradeSummery[]` (sample note: 282) |
+| `POLL_INTERVAL_SECONDS` | `60` (+ `POLL_JITTER_SECONDS=5`) | One full-board persist per tick |
+
+→ **~300 `price_snapshots` rows/min** during market hours (one row per symbol per tick). CSE HTTP stays **1** `POST /tradeSummary` per tick (bulk), not N per-symbol quote calls. Rule eval stays watchlist-scoped; empty watchlist still persists the board for `/market`.
+
+Optional extras per tick (fail-soft): `SECTORS_INGEST=1` → one `POST /allSectors`; disclosure rules → bulk and/or per-symbol announcement calls; PDF enrich → polite `PDF_ENRICH_SLEEP_SECONDS` before each legacy symbol call (outside the poll lock).
+
+### Brief caps (Chime-side)
+
+| Env | Default | Role |
+|---|---|---|
+| `AI_MAX_BRIEFS_PER_DAY` | `50` | Hard daily claim budget (`BRIEF_CAP_LOCK_ID`); `ready`/`failed` count toward it |
+| `AI_BRIEF_SLEEP_SECONDS` | `0.5` | Pause between consecutive LLM calls in a drain |
+| `AI_MAX_INPUT_CHARS` | `12000` | Truncate filing text before provider call |
+| `PDF_MAX_BYTES` | `5242880` | Max PDF download for extract |
+| `BRIEF_PDF_GRACE_SECONDS` | `120` | Wait for `pdf_url` before title-only summarize |
+| `BRIEF_CDN_BACKOFF_SECONDS` | `300` | After transient CDN miss requeue, skip reclaim |
+| `BOT_CMD_RATE_PER_MINUTE` | `20` | Per-user Telegram cmd window (includes `/brief`) |
+
+Leave `AI_BRIEFS_ENABLED=0` until keyed; raising `AI_MAX_BRIEFS_PER_DAY` past free-tier RPD without a paid plan will 429 under a disclosure burst. CDN miss requeues **pending** (no daily-cap burn).
+
+### Free provider API limits (verify in console)
+
+Vendor free-tier RPM/RPD/TPM **drift by model and account** — confirm in [Google AI Studio](https://aistudio.google.com/) / [Groq console](https://console.groq.com/settings/limits) / OpenRouter dashboard before soak. Chime defaults are sized to sit **under** typical free ceilings:
+
+| Provider (`AI_PROVIDER`) | Soft-default model | Free-tier planning envelope (approx.) | Chime fit |
+|---|---|---|---|
+| `gemini` | `gemini-2.0-flash` | Flash-class free rows often ~15 RPM / ~1.5k RPD (project-level; check Quotas) | `50` briefs/day + `0.5`s sleep ≪ RPD; well under RPM |
+| `groq` | `llama-3.3-70b-versatile` | Often ~30 RPM / ~1k RPD / ~12k TPM (org-level) | Daily cap ≪ RPD; sleep keeps bursts off RPM |
+| `openrouter` | `openai/gpt-4o-mini` | Free/route limits vary widely by model | Treat as bursty; keep Chime caps; prefer keyed paid route for soak |
+
+On HTTP 429 the drain fails soft and retries on a later tick — do not disable pacing to “catch up.” Model IDs in `.env.example` may lose free eligibility; swap `AI_MODEL` to a current free Flash/chat row rather than raising Chime caps first.
+
 ## Advisory locks (poll vs brief claim)
 
 Poll tick uses session `pg_try_advisory_lock(4_201_337)`; brief daily-cap claim uses transaction `pg_advisory_xact_lock(4_201_339)`. Wave 10 audit: **no deadlock** between them (distinct keys; brief drain after poll unlock; claim uses `SKIP LOCKED`). Do **not** unify the IDs — same key + `max_size=2` can pool-deadlock. Detail: [ADVISORY_LOCK_DEADLOCK.md](../factory/passes/ADVISORY_LOCK_DEADLOCK.md).
