@@ -1,10 +1,10 @@
-# Tijori CSE — Waves 1–60 report
+# Tijori CSE — Waves 1–65 report
 
 **Branch:** `cursor/tijori-cse-phase1-e44e`  
 **Date:** 2026-07-12  
 **Plan:** [TIJORI_CSE_PLAN.md](../TIJORI_CSE_PLAN.md)  
 **Ops:** [docs/runbooks/TIJORI.md](../../runbooks/TIJORI.md)  
-**Range:** `a802cb7` … wave 55 (post-100% harden → soft ~100)
+**Range:** `a802cb7` … wave 65 (post-100% harden → soft ~100)
 
 ---
 
@@ -23,7 +23,7 @@ Matches the plan constraint note in [TIJORI_CSE_PLAN.md](../TIJORI_CSE_PLAN.md).
 
 ## Verdict
 
-Phase 1 foundations and Phase 2 Tijori-core plumbing are **landed** across waves 1–5. Waves 6–7 add sectors browse, storage/SQL harden, retention/sectors coverage, Groq provider, disclosure baseline watermark, and briefs PDF grace / late follow-up sweep. Waves 8–9 add OpenRouter provider, brief drain pacing, market UX/a11y polish, adversarial grace/storage close, env-example completeness, storage brief-method coverage, and a Phase 3 scenario stub fence (`AI_SCENARIOS_ENABLED=0`). Wave 10 hardens briefs ops (smoke, rate limits, CDN requeue, poller/disclosure coverage) and audits poll↔brief advisory locks as a non-issue. Wave 11 aligns `/brief` empty-state test copy with AI-off messaging. Wave 12 records parallelism honesty (plus follow-on fix/docs/test lanes). Wave 13 closes browse API examples, env sync, Telegram/dash URL egress caps, web adversarial harden, and coverage pushes (migrate / storage / CSE / poller / bot). Wave 14 ships coverage/harden lanes (web regress, health/circuit, config/migrate, main, rules format fuzz, worker) plus fail-closed non-finite float env knobs. Wave 15 adds `make tijori-report`, briefs extra-install docs, help-budget / web movers / briefs / residual coverage, and ops-knob harden. **Wave 16 milestone:** full-package `pytest --cov=chime` at **100%** (3427 stmts / 0 miss) — coverage ratchet complete; post-milestone CSE pacing, brief egress, NFA chrome, and integration-collect harden. **Wave 17** closes post-100% harden (loop status, storage NaN defense, CSE pace concurrency, login a11y, factory verify, health proxy timeout, DL/`myalerts`/lease floor, finite price egress). **Wave 18** hardens dash/ops (brief-queue health UI, category cancel, watchlist duplicate soft flag, sparkline finite filter, category confirm / history egress / nested health). **Wave 19** documents dash CSRF, aligns `/unwatch` copy, adds dash disclosure category, and hardens history/watchlist/browse egress. **Wave 20** advances loop status + report, START browse note, and cancel-id / category-read / dash egress harden. **Wave 21** hardens alerts history/list/forms symbol filters (`normalizeSymbol` / `invalid_symbol`), disclosure SafeInteger ids, and logout hard-redirect UX. **Wave 22** pushes loop status + symbol not-found Browse link (late sectors/alerts/health egress pin). **Wave 23** hardens sectors/health/browse egress + safe ids and rolls the report. **Wave 24** points `/market` empty state at `make tick` / poller seed (late history/watchlist/login SafeInteger pin). **Wave 25** hard-redirects mid-use 401 / missing CSRF to `/login?expired=1` and pins egress harden. **Wave 26** advances loop status (late mapRule/alerts/watchlist fail-closed pin). **Wave 27** hardens toIso/delivery/SafeInteger egress and rolls the report. **Wave 28** restores web `tsc` (`BigInt()` / sanitize string guards) + loop status (late sector ids / browse limits / toIso / session pin). **Wave 29** hardens demo auth telegram_id / allowlist via digits-only `toSafePositiveInt`. **Wave 30** keeps alert-form disclosure category a11y (`aria-describedby` / maxLength / `aria-busy`) (late symbol/health/nav fail-closed pin). **Wave 31** rolls the report (late session exp/sid / market numbers / health timeout / labels pin). **Wave 32** advances loop status + hardens `toFiniteNumber` / health SafeInt / alert thresholds. **Wave 33** resolves AppNav active state for `/scenarios` (longest-prefix) (late session/CSRF token caps + health body bound). **Wave 34** extends loading NFA chrome to browse/health/symbol shells (late history pagination / strict booleans / client finite). **Wave 35** hardens SSRF host / session mint / CSRF+symbol decode / formatTs. **Wave 36** advances loop status + hardens SSR loopback / HEALTH_URL SSRF / JSON body / CSRF path. **Wave 37** gates `apiMutate` to `/api/v1/*` and fails closed NavSession `/me` timestamps/CSRF. **Wave 38** bounds SSR fetch timeout/body and caps alert thresholds. **Wave 39** hardens `/me` parse, cancel id, session TTL, threshold, and SSR bounds. **Wave 40** pins SSR origin / HEALTH_URL / JSON body / CSRF path. **Wave 41** advances loop status + caps CSRF cookie / mapRule threshold / SSR Content-Length early-reject. **Wave 42** caps `jsonError` egress + pins SSR Cookie/CT/CL. **Wave 43** centralizes session/CSRF cookie Secure+SameSite helpers. **Wave 44** caps mapRule thresholds (parity GET `/alerts`). **Wave 45** bounds client mutate/login/NavSession, gates Unwatch, fail-closed SYMBOL_RE egress. **Wave 46** advances loop status + SYMBOL_RE page egress / health watched+CL. **Wave 47** early-rejects client Content-Length before body allocate. **Wave 48** aligns alerts empty CTAs with Browse + sectors SYMBOL_RE / SSR statusText / client CL. **Wave 49** sanitizes sparkline timestamps + pins circuit/sectors. **Wave 50** caps toast/inline copy, fail-closes format digits, bounds sparkline series, and appends the 46–50 rollup. **Wave 51** advances loop status + fail-closes bounded-reader `maxBytes`. **Wave 52** bounds GET `/alerts`/`/watchlist` SQL LIMITs + toast tone/timers + demo allowlist. **Wave 53** stream-bounds response bodies (`readBoundedResponseText`) so missing/understated Content-Length cannot bypass allocate caps. **Wave 54** fail-closes sanitize `maxLen`, caps EmptyState titles, typeof-guards InlineError, clamps skeleton rows, and caps page list parsers. **Wave 55** fail-closes format abs-caps + `alertTypeLabel` typeof and appends this rollup toward soft ~100 — not cov gap-fill. Live LLM briefs remain **flag/key gated** (`AI_BRIEFS_ENABLED=0` default; `AI_PROVIDER=gemini|groq|openrouter`). Phase 3 scenario AI is **stub only** — no LLM wiring yet.
+Phase 1 foundations and Phase 2 Tijori-core plumbing are **landed** across waves 1–5. Waves 6–7 add sectors browse, storage/SQL harden, retention/sectors coverage, Groq provider, disclosure baseline watermark, and briefs PDF grace / late follow-up sweep. Waves 8–9 add OpenRouter provider, brief drain pacing, market UX/a11y polish, adversarial grace/storage close, env-example completeness, storage brief-method coverage, and a Phase 3 scenario stub fence (`AI_SCENARIOS_ENABLED=0`). Wave 10 hardens briefs ops (smoke, rate limits, CDN requeue, poller/disclosure coverage) and audits poll↔brief advisory locks as a non-issue. Wave 11 aligns `/brief` empty-state test copy with AI-off messaging. Wave 12 records parallelism honesty (plus follow-on fix/docs/test lanes). Wave 13 closes browse API examples, env sync, Telegram/dash URL egress caps, web adversarial harden, and coverage pushes (migrate / storage / CSE / poller / bot). Wave 14 ships coverage/harden lanes (web regress, health/circuit, config/migrate, main, rules format fuzz, worker) plus fail-closed non-finite float env knobs. Wave 15 adds `make tijori-report`, briefs extra-install docs, help-budget / web movers / briefs / residual coverage, and ops-knob harden. **Wave 16 milestone:** full-package `pytest --cov=chime` at **100%** (3427 stmts / 0 miss) — coverage ratchet complete; post-milestone CSE pacing, brief egress, NFA chrome, and integration-collect harden. **Wave 17** closes post-100% harden (loop status, storage NaN defense, CSE pace concurrency, login a11y, factory verify, health proxy timeout, DL/`myalerts`/lease floor, finite price egress). **Wave 18** hardens dash/ops (brief-queue health UI, category cancel, watchlist duplicate soft flag, sparkline finite filter, category confirm / history egress / nested health). **Wave 19** documents dash CSRF, aligns `/unwatch` copy, adds dash disclosure category, and hardens history/watchlist/browse egress. **Wave 20** advances loop status + report, START browse note, and cancel-id / category-read / dash egress harden. **Wave 21** hardens alerts history/list/forms symbol filters (`normalizeSymbol` / `invalid_symbol`), disclosure SafeInteger ids, and logout hard-redirect UX. **Wave 22** pushes loop status + symbol not-found Browse link (late sectors/alerts/health egress pin). **Wave 23** hardens sectors/health/browse egress + safe ids and rolls the report. **Wave 24** points `/market` empty state at `make tick` / poller seed (late history/watchlist/login SafeInteger pin). **Wave 25** hard-redirects mid-use 401 / missing CSRF to `/login?expired=1` and pins egress harden. **Wave 26** advances loop status (late mapRule/alerts/watchlist fail-closed pin). **Wave 27** hardens toIso/delivery/SafeInteger egress and rolls the report. **Wave 28** restores web `tsc` (`BigInt()` / sanitize string guards) + loop status (late sector ids / browse limits / toIso / session pin). **Wave 29** hardens demo auth telegram_id / allowlist via digits-only `toSafePositiveInt`. **Wave 30** keeps alert-form disclosure category a11y (`aria-describedby` / maxLength / `aria-busy`) (late symbol/health/nav fail-closed pin). **Wave 31** rolls the report (late session exp/sid / market numbers / health timeout / labels pin). **Wave 32** advances loop status + hardens `toFiniteNumber` / health SafeInt / alert thresholds. **Wave 33** resolves AppNav active state for `/scenarios` (longest-prefix) (late session/CSRF token caps + health body bound). **Wave 34** extends loading NFA chrome to browse/health/symbol shells (late history pagination / strict booleans / client finite). **Wave 35** hardens SSRF host / session mint / CSRF+symbol decode / formatTs. **Wave 36** advances loop status + hardens SSR loopback / HEALTH_URL SSRF / JSON body / CSRF path. **Wave 37** gates `apiMutate` to `/api/v1/*` and fails closed NavSession `/me` timestamps/CSRF. **Wave 38** bounds SSR fetch timeout/body and caps alert thresholds. **Wave 39** hardens `/me` parse, cancel id, session TTL, threshold, and SSR bounds. **Wave 40** pins SSR origin / HEALTH_URL / JSON body / CSRF path. **Wave 41** advances loop status + caps CSRF cookie / mapRule threshold / SSR Content-Length early-reject. **Wave 42** caps `jsonError` egress + pins SSR Cookie/CT/CL. **Wave 43** centralizes session/CSRF cookie Secure+SameSite helpers. **Wave 44** caps mapRule thresholds (parity GET `/alerts`). **Wave 45** bounds client mutate/login/NavSession, gates Unwatch, fail-closed SYMBOL_RE egress. **Wave 46** advances loop status + SYMBOL_RE page egress / health watched+CL. **Wave 47** early-rejects client Content-Length before body allocate. **Wave 48** aligns alerts empty CTAs with Browse + sectors SYMBOL_RE / SSR statusText / client CL. **Wave 49** sanitizes sparkline timestamps + pins circuit/sectors. **Wave 50** caps toast/inline copy, fail-closes format digits, bounds sparkline series, and appends the 46–50 rollup. **Wave 51** advances loop status + fail-closes bounded-reader `maxBytes`. **Wave 52** bounds GET `/alerts`/`/watchlist` SQL LIMITs + toast tone/timers + demo allowlist. **Wave 53** stream-bounds response bodies (`readBoundedResponseText`) so missing/understated Content-Length cannot bypass allocate caps. **Wave 54** fail-closes sanitize `maxLen`, caps EmptyState titles, typeof-guards InlineError, clamps skeleton rows, and caps page list parsers. **Wave 55** fail-closes format abs-caps + `alertTypeLabel` typeof and appends the 51–55 rollup. **Wave 56** advances loop status + fail-closed brief/PDF max caps. **Wave 57** typeof/length-caps API path/nav/CSRF. **Wave 58** history pagination a11y + threshold/sanitize. **Wave 59** sparkline abs-cap + toIso range. **Wave 60** toFiniteNumber abs-cap + report. **Wave 61** advances loop status + body abs-cap / formatTs range / session+category typeof. **Wave 62** bot threshold abs-cap + HEALTH_URL typeof. **Wave 63** sparkline/stale ts range + attempt cap. **Wave 64** health age range + dash auth env. **Wave 65** filing URL isinstance + notify symbol + mint secret and appends this rollup toward soft ~100 — not cov gap-fill. Live LLM briefs remain **flag/key gated** (`AI_BRIEFS_ENABLED=0` default; `AI_PROVIDER=gemini|groq|openrouter`). Phase 3 scenario AI is **stub only** — no LLM wiring yet.
 
 | Track | Status |
 |---|---|
@@ -31,7 +31,7 @@ Phase 1 foundations and Phase 2 Tijori-core plumbing are **landed** across waves
 | Phase 2 Tijori core | ◐ mostly done — live LLM still off until keyed |
 | Phase 3 scenario AI | ◐ stub fence only (`AI_SCENARIOS_ENABLED=0`) |
 | `chime` unit coverage | ✅ **100%** (wave 16 milestone) |
-| Improve-loop / CI on touched paths | ongoing — wave 55 post-100% harden → soft ~100 loops |
+| Improve-loop / CI on touched paths | ongoing — wave 65 post-100% harden → soft ~100 loops |
 
 ---
 
@@ -1211,7 +1211,9 @@ Phase 1 foundations and Phase 2 Tijori-core plumbing are **landed** across waves
 | SHA | Commit |
 |---|---|
 | `d6e4059` | fix(w60): toFiniteNumber abs-cap + API path typeof |
-| _(this)_ | docs(w60): report push |
+| `f1b18b5` | fix(w60): narrow resolve_positive_int_cap for mypy |
+| `ec1b87a` | docs(w60): report push |
+| `4dacd09` | fix(w60): cover resolve_positive_int_cap bool branch |
 
 **Shipped**
 
@@ -1219,6 +1221,97 @@ Phase 1 foundations and Phase 2 Tijori-core plumbing are **landed** across waves
 - `isSafeClientApiPath` / `isSafeServerApiPath` typeof pin realign (parity w57).
 - Pin: `tests/test_wave60_medium_bugs.py` (+ wave25/31/59/movers realign).
 - `TIJORI_WAVE_REPORT.md` — append waves 56–60 toward soft ~100.
+- Late: mypy-narrow + bool-branch cover for `resolve_positive_int_cap`.
+
+---
+
+## Wave 61 — Loop status + body abs-cap / formatTs / session typeof
+
+**Theme:** Honest loop-status advance after wave 60 close; abs-cap bounded body readers; fail-closed `formatTs` date range; typeof-guard session verify + disclosure category (no `String()` coerce).
+
+| SHA | Commit |
+|---|---|
+| `735c3b30` | docs(w61): loop status push |
+| `372656ae` | fix(w61): body abs-cap, formatTs range, session/category typeof |
+| `7249b697` | fix(w61): realign wave43 cookieSecure typeof pin |
+
+**Shipped**
+
+- [LOOP_STATUS.md](LOOP_STATUS.md) — waves-completed through w60; status push **w61**; horizon still soft ~100.
+- `resolveBoundedBodyCap` / `MAX_BOUNDED_BODY_BYTES` abs-cap for `readBoundedResponseText` / `readJsonBody`.
+- `formatTs` fail-closes via `MAX_DATE_MS` (parity `safeToIsoString`).
+- `verifySessionToken` typeof-guards token/secret; category sanitize / `_row_to_rule` stop `String()`-coercing non-strings.
+- Pin: `tests/test_wave61_medium_bugs.py` (+ wave33/35/43/51 realign).
+
+---
+
+## Wave 62 — Bot threshold abs-cap + HEALTH_URL typeof
+
+**Theme:** Cap Telegram `/alert` thresholds at shared `MAX_ALERT_THRESHOLD` (parity dash POST); typeof-guard health-proxy URL SSRF gate.
+
+| SHA | Commit |
+|---|---|
+| `dea4e4ce` | fix(w62): bot threshold abs-cap + HEALTH_URL typeof |
+
+**Shipped**
+
+- `_parse_threshold_token` rejects magnitudes above `MAX_ALERT_THRESHOLD` (hostile `1e308` / `1e20` no longer persist useless rules).
+- `isAllowedHealthProxyUrl` typeof-guards non-strings (no `.trim` throw mid SSRF gate).
+- Pin: `tests/test_wave62_medium_bugs.py`.
+
+---
+
+## Wave 63 — Sparkline/stale ts range + typeof + attempt cap
+
+**Theme:** Fail-closed sparkline/stale timestamps via `MAX_DATE_MS`; typeof-guard loopback/scenarios; abs-cap fire-history attempt display.
+
+| SHA | Commit |
+|---|---|
+| `dce2e839` | fix(w63): sparkline/stale ts range + typeof + attempt cap |
+| `432b8a6d` | fix(w63): keep opaque sparkline ts labels on range gate |
+
+**Shipped**
+
+- `sanitizeSparklineTs` + symbol `isStaleTs` range-gate via `MAX_DATE_MS`; opaque labels retained on reject.
+- `isLoopbackHost` / `scenariosEnabled` typeof-guards.
+- History `attempt_count` abs-capped at `1_000_000` (API + page display).
+- Pin: `tests/test_wave63_medium_bugs.py`.
+
+---
+
+## Wave 64 — Health age range + dash auth env + alert code typeof
+
+**Theme:** Health `timestampAge` typeof + date-range gate; dash auth / cookieSecure typeof-guard env; alert form typeof-guards API `error.code`.
+
+| SHA | Commit |
+|---|---|
+| `4d807eed` | fix(w64): health age range, dash auth env, alert code typeof |
+
+**Shipped**
+
+- Health `timestampAge` typeof-guards + `MAX_DATE_MS` range (parity formatTs / isStaleTs).
+- `getDashAuthConfig` / `cookieSecure` typeof-guard env values (no `.trim` throw on mocks).
+- Alert create form typeof-guards `error.code` (no `[object Object]` field mis-route).
+- Pin: `tests/test_wave64_medium_bugs.py`.
+
+---
+
+## Wave 65 — Filing URL isinstance + notify symbol + mint secret + report rollup
+
+**Theme:** isinstance-guard filing/CDN PDF URLs + notify/format symbol; typeof-guard session mint secret. Docs lane append waves 61–65 toward soft ~100 (STOP on CLEAN×2; no empty farming).
+
+| SHA | Commit |
+|---|---|
+| `04297d24` | fix(w65): filing URL isinstance + notify symbol + mint secret |
+| _(this)_ | docs(w65): report push |
+
+**Shipped**
+
+- `allowed_cdn_pdf_url` / `allowed_filing_url` / `resolve_pdf_url` isinstance-guard non-strings.
+- Dead-letter / brief-followup formatters isinstance-guard `symbol` (no `re.sub` raise).
+- `mintSessionToken` typeof-guards secret (fail closed before HMAC).
+- Pin: `tests/test_wave65_medium_bugs.py`.
+- `TIJORI_WAVE_REPORT.md` — append waves 61–65 toward soft ~100.
 
 ---
 
@@ -1285,7 +1378,12 @@ Phase 1 foundations and Phase 2 Tijori-core plumbing are **landed** across waves
 | 57 (`w57`) | 1 (API path/nav/CSRF typeof + length caps) |
 | 58 (`w58`) | 2 (history pagination a11y + threshold/sanitize) |
 | 59 (`w59`) | 2 (sparkline/toIso/decode/age + pin realign) |
-| 60 (`w60`) | 2 (toFiniteNumber abs-cap + report) |
+| 60 (`w60`) | 4 (toFiniteNumber abs-cap + report + late caps cover) |
+| 61 (`w61`) | 3 (loop status + body/formatTs/session + cookie pin) |
+| 62 (`w62`) | 1 (bot threshold abs-cap + HEALTH_URL typeof) |
+| 63 (`w63`) | 2 (sparkline/stale ts range + opaque label) |
+| 64 (`w64`) | 1 (health age + dash auth + alert code) |
+| 65 (`w65`) | 2 (filing URL/notify/mint + report) |
 | **Total** | **100+** |
 
 ---
@@ -1310,7 +1408,7 @@ Phase 1 foundations and Phase 2 Tijori-core plumbing are **landed** across waves
 
 ### Suggested next improve-loop focus
 
-- Wave 60+ post-100% harden/ops only (STOP early on CLEAN×2); do not farm commits to pad loops.
+- Wave 65+ post-100% harden/ops only (STOP early on CLEAN×2); do not farm commits to pad loops.
 - Optionally raise `--cov-fail-under` toward 100 once CI owners agree (measured 100% already).
 - Controlled briefs-on soak (not default-on in prod).
 - Keep `AI_SCENARIOS_ENABLED=0` until Phase 2 live brief path is proven.
