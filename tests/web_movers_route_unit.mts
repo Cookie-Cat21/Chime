@@ -341,7 +341,10 @@ async function testFiniteEgressAndNoQFilter(): Promise<void> {
   assert(toFiniteNumber(0) === 0, "zero kept");
   assert(toFiniteNumber(-3.5) === -3.5, "negative finite kept");
   assert(toFiniteNumber("nope") === null, "non-numeric → null");
-  assert(toFiniteNumber("") === 0, "empty string Number('') → 0");
+  assert(toFiniteNumber("") === null, "empty string → null (not Number('')→0)");
+  assert(toFiniteNumber("1e2") === null, "sci-notation → null");
+  assert(toFiniteNumber(true) === null, "boolean → null");
+  assert(toFiniteNumber([]) === null, "array → null");
 
   const { res, body, captured } = await call(
     "direction=up&limit=3",

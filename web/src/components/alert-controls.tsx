@@ -10,6 +10,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { apiErrorMessage, apiMutate } from "@/lib/api/client-fetch";
 import { DISCLOSURE_CATEGORY_MAX } from "@/lib/api/disclosure-safe";
+import { toFiniteNumber } from "@/lib/api/market-browse";
 import {
   ALERT_TYPES,
   type AlertType,
@@ -83,8 +84,10 @@ export function AlertCreateForm() {
               ? "Enter a percent move (e.g. 5)."
               : "Enter a price threshold.";
         } else {
-          const n = Number(raw);
-          if (!Number.isFinite(n)) {
+          // Decimal-only via toFiniteNumber — Number("1e2") / Number("")→0
+          // used to soft-accept sci-notation and empty thresholds.
+          const n = toFiniteNumber(raw);
+          if (n == null) {
             next.threshold = "Threshold must be a number.";
           } else if (type === "daily_move" && n <= 0) {
             next.threshold = "Daily move percent must be greater than zero.";

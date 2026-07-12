@@ -273,6 +273,10 @@ async function testFiniteNumberEgress(): Promise<void> {
   assert(toFiniteNumber("22.5") === 22.5, "numeric string → number");
   assert(toFiniteNumber(-1.44) === -1.44, "negative finite kept");
   assert(toFiniteNumber("nope") === null, "non-numeric → null");
+  assert(toFiniteNumber("") === null, "empty string → null (not Number('')→0)");
+  assert(toFiniteNumber("1e2") === null, "sci-notation → null");
+  assert(toFiniteNumber(true) === null, "boolean → null");
+  assert(toFiniteNumber([]) === null, "array → null");
 
   const { res, body } = await call("limit=10", [
     {

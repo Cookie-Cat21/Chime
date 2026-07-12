@@ -6,6 +6,7 @@ import {
 } from "@/lib/api/disclosure-safe";
 import { toNonNegativeSafeInt } from "@/lib/api/safe-int";
 import { serverApiGet } from "@/lib/api/server-fetch";
+import { toIso } from "@/lib/api/time";
 import { requirePageSession } from "@/lib/auth/page-session";
 import { formatTs } from "@/lib/format";
 
@@ -55,6 +56,14 @@ function healthUiString(raw: unknown): string | null {
     typeof raw === "string" ? raw : null,
     HEALTH_UI_STRING_MAX,
   );
+}
+
+/** Fail-closed timestamp — sanitize then require parseable ISO (no raw echo). */
+function healthTs(raw: unknown): string | null {
+  if (raw === null) return null;
+  if (typeof raw !== "string") return null;
+  const cleaned = healthUiString(raw);
+  return cleaned ? toIso(cleaned) : null;
 }
 
 /**
@@ -146,11 +155,7 @@ function parseHealthPayload(body: unknown): HealthPayload | null {
 
     poller = {
       last_tick_at:
-        p.last_tick_at === null
-          ? null
-          : typeof p.last_tick_at === "string"
-            ? healthUiString(p.last_tick_at)
-            : undefined,
+        p.last_tick_at === null ? null : healthTs(p.last_tick_at) ?? undefined,
       last_tick_ok:
         typeof p.last_tick_ok === "boolean" ? p.last_tick_ok : undefined,
       price_poll_ok:
@@ -178,12 +183,8 @@ function parseHealthPayload(body: unknown): HealthPayload | null {
   return {
     status,
     db_ok: r.db_ok,
-    started_at:
-      typeof r.started_at === "string" ? healthUiString(r.started_at) : null,
-    last_snapshot_at:
-      typeof r.last_snapshot_at === "string"
-        ? healthUiString(r.last_snapshot_at)
-        : null,
+    started_at: healthTs(r.started_at),
+    last_snapshot_at: healthTs(r.last_snapshot_at),
     poller,
   };
 }

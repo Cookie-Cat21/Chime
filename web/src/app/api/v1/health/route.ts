@@ -1,7 +1,10 @@
 import type { NextRequest } from "next/server";
 
 import { toIso } from "@/lib/api/time";
-import { toSafePositiveInt } from "@/lib/api/safe-int";
+import {
+  toNonNegativeSafeInt,
+  toSafePositiveInt,
+} from "@/lib/api/safe-int";
 import { jsonOk } from "@/lib/auth/errors";
 import { requireSession } from "@/lib/auth/guard";
 import { getPool } from "@/lib/db";
@@ -63,12 +66,11 @@ export function parseBriefQueue(raw: unknown): BriefQueueHint | undefined {
   const obj = raw as Record<string, unknown>;
   const hint: BriefQueueHint = {};
 
-  if (
-    typeof obj.pending_briefs === "number" &&
-    Number.isFinite(obj.pending_briefs) &&
-    obj.pending_briefs >= 0
-  ) {
-    hint.pending_briefs = Math.floor(obj.pending_briefs);
+  // Digits-only SafeInteger — Number.isFinite+Math.floor used to soft-accept
+  // floats / sci-notation strings into ops JSON.
+  const pending = toNonNegativeSafeInt(obj.pending_briefs, -1);
+  if (pending >= 0) {
+    hint.pending_briefs = pending;
   }
 
   const pe = obj.pdf_enrich;
@@ -80,9 +82,9 @@ export function parseBriefQueue(raw: unknown): BriefQueueHint | undefined {
       "last_batch_size",
       "batches_started",
     ] as const) {
-      const v = src[key];
-      if (typeof v === "number" && Number.isFinite(v) && v >= 0) {
-        pdf[key] = Math.floor(v);
+      const n = toNonNegativeSafeInt(src[key], -1);
+      if (n >= 0) {
+        pdf[key] = n;
       }
     }
     if (Object.keys(pdf).length > 0) {
@@ -146,9 +148,10 @@ export function sanitizeCircuits(
       "fail_max",
       "reset_timeout_seconds",
     ] as const) {
-      const v = src[numKey];
-      if (typeof v === "number" && Number.isFinite(v) && v >= 0) {
-        entry[numKey] = v;
+      // Digits-only SafeInteger — reject float / sci-notation soft-accept.
+      const n = toNonNegativeSafeInt(src[numKey], -1);
+      if (n >= 0) {
+        entry[numKey] = n;
       }
     }
     if (typeof src.half_open_trial === "boolean") {
