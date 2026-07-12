@@ -300,6 +300,8 @@ async def test_storage_claim_pending_briefs_sql() -> None:
     assert any("pg_advisory_xact_lock" in s for s in conn.sql)
     assert any("status = 'processing'" in s for s in conn.sql)
     assert any("FOR UPDATE OF b SKIP LOCKED" in s for s in conn.sql)
+    # Follow-up notify needs announcement URL alongside title/pdf.
+    assert any("d.url" in s for s in conn.sql)
 
 
 @pytest.mark.asyncio
