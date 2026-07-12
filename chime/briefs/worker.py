@@ -1,8 +1,8 @@
-"""Filing brief worker — enqueue stub + pending drain skeleton.
+"""Filing brief worker — enqueue ledger rows and drain pending briefs.
 
-Phase 1: schema + disabled-by-default stub.
-Phase 2: ``claim_pending_briefs`` fetches CDN PDF text (when ``pdf_url`` set)
-and calls the Gemini/Groq provider when briefs are enabled.
+``enqueue_brief`` persists pending/skipped rows. ``drain_pending_briefs``
+claims work, fetches CDN PDF text when ``pdf_url`` is set, and calls the
+configured provider (Gemini/Groq/OpenRouter) when briefs are enabled.
 After mark-ready, optionally sends a Telegram follow-up via ``notify`` when the
 poller provides one — only for users who already received a disclosure alert
 without the brief (durable ``alert_log`` claim; no double Telegram).
@@ -146,7 +146,7 @@ async def enqueue_or_skip_brief(
         log.debug("brief_skipped_disabled", disclosure_id=disclosure_id)
     else:
         log.info(
-            "brief_enqueue_stub",
+            "brief_enqueue_no_storage",
             disclosure_id=disclosure_id,
             provider=cfg.provider,
             model=cfg.model,
@@ -154,7 +154,7 @@ async def enqueue_or_skip_brief(
     return status
 
 
-def _stub_input_text(row: dict[str, Any]) -> str:
+def _title_only_input_text(row: dict[str, Any]) -> str:
     """Title-only fallback when no PDF text is available."""
     symbol = str(row.get("symbol") or "").strip()
     title = str(row.get("title") or "").strip()
@@ -204,7 +204,7 @@ async def _input_text_for_row(
     return build_brief_prompt(
         symbol=symbol or "UNKNOWN",
         title=title or "Filing",
-        extracted_text=_stub_input_text(row),
+        extracted_text=_title_only_input_text(row),
         max_chars=max_chars,
     )
 

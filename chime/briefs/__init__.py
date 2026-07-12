@@ -1,7 +1,8 @@
 """Filing brief helpers (Tijori-style AI summaries).
 
-Phase 1: schema + disabled-by-default stub. Phase 2 wires PDF fetch + LLM.
-Never call cse.lk from web/ — briefs are produced by the Python worker only.
+Settings, status enum, and prompt builders for the Python briefs worker.
+Disabled by default (``AI_BRIEFS_ENABLED=0``). Never call cse.lk from web/ —
+briefs are produced by the Python worker only.
 """
 
 from __future__ import annotations
