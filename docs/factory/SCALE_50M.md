@@ -1,5 +1,6 @@
 # Superseded: 50M sketch
 
-**Operating target is now 10K.** See [SCALE_10K.md](SCALE_10K.md).
+**Operating target:** Chime **2K–3K** — [CHIME_HORIZON.md](CHIME_HORIZON.md).  
+**Later (not active):** [SCALE_10K.md](SCALE_10K.md) stub.
 
-50M `portfolio_score` remains a far-horizon fantasy under Plan A (thousands of nodes). Do not use this file for day-to-day factory goals.
+50M `portfolio_score` is multi-thousand-node fantasy under Plan A. Do not use this file for goals.
