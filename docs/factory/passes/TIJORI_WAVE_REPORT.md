@@ -1120,7 +1120,7 @@ Phase 1 foundations and Phase 2 Tijori-core plumbing are **landed** across waves
 |---|---|
 | `0723337` | fix(w55): sanitize maxLen, empty title, inline typeof |
 | `5d1da00` | fix(w55): format abs-cap + alertTypeLabel typeof |
-| _(this)_ | docs(w55): report push |
+| `e90d1d3` | docs(w55): report push |
 
 **Shipped**
 
@@ -1129,6 +1129,96 @@ Phase 1 foundations and Phase 2 Tijori-core plumbing are **landed** across waves
 - `alertTypeLabel` typeof-guards non-string inputs (no hostile fallthrough echo).
 - Pin: `tests/test_wave55_medium_bugs.py`.
 - `TIJORI_WAVE_REPORT.md` — append waves 51–55 toward soft ~100.
+
+---
+
+## Wave 56 — Loop status + fail-closed brief/PDF caps
+
+**Theme:** Honest loop-status advance after wave 55 close; fail-closed positive-int caps for brief/PDF paths (`max(1, int(x))` raised on None/NaN/inf mid Telegram format / CDN fetch / prompt build).
+
+| SHA | Commit |
+|---|---|
+| `5f6be2e` | docs(w56): loop status push |
+| `7e4fb1a` | fix(w56): fail-closed brief/PDF max caps + brief typeof |
+
+**Shipped**
+
+- [LOOP_STATUS.md](LOOP_STATUS.md) — waves-completed through w55; status push **w56**; horizon still soft ~100; commits-ahead-of-main refreshed.
+- `resolve_positive_int_cap` wired into `sanitize_brief_body`, title truncate, `build_brief_prompt`, provider sanitize, and `fetch_cdn_pdf`.
+- Dash `sanitizeBriefText` typeof-guards non-string brief status/body.
+- Pin: `tests/test_wave56_medium_bugs.py`.
+
+---
+
+## Wave 57 — API path / nav / CSRF typeof + length caps
+
+**Theme:** Typeof-guard and length-cap mutation/SSR API paths, nav active resolution, CSRF compare/read, and internal-host helpers so non-strings / multi-MB forged inputs cannot throw or burn CPU before gates.
+
+| SHA | Commit |
+|---|---|
+| `f7d8d47` | fix(w59): realign toIso/age pins after range-gated helper |
+
+**Shipped**
+
+- `isSafeClientApiPath` / `isSafeServerApiPath`: unknown + `MAX_*_API_PATH_LENGTH`.
+- `resolveActiveNavHref`: typeof + `MAX_NAV_PATH_LENGTH`.
+- `csrfTokensMatch` / `readCsrfCookie`: typeof-guard (no `Buffer.from(number)` alloc footgun).
+- `isSafeInternalHost` / `hostnameOnly`: typeof-guard.
+- Pin: `tests/test_wave57_medium_bugs.py` (landed under a w59-labeled SHA).
+
+---
+
+## Wave 58 — History pagination a11y + threshold/sanitize harden
+
+**Theme:** Label fire-history Previous/Next for a11y; abs-cap alert thresholds (upper-bound-only let `-1e308` through); typeof-guard history/toast/jsonError/filing URL/brief status/LIKE sanitizers; sanitize apiErrorMessage fallbacks + EmptyState descriptions.
+
+| SHA | Commit |
+|---|---|
+| `9f723e0` | fix(w58): history pagination a11y |
+| `60f608b` | fix(w58): abs-cap thresholds + typeof sanitize guards |
+
+**Shipped**
+
+- History pagination: page aria-labels, `rel=prev/next`, `aria-disabled` on unavailable sides (DASH_IA + wave34 pin).
+- `cappedAlertThreshold` via `Math.abs` vs `MAX_ALERT_THRESHOLD` for mapRule / GET `/alerts` / alerts page.
+- Typeof-guards across history/toast/jsonError/filing URL/brief status/LIKE escape; EmptyState description sanitize+cap.
+- Pin: `tests/test_wave58_medium_bugs.py` (+ wave41/44/45 realign).
+
+---
+
+## Wave 59 — Sparkline abs-cap + toIso range + decode/age
+
+**Theme:** Reject absurd finite sparkline prices; fail-closed `toIso` on out-of-range Date/number + overlong ISO egress; typeof-guard `safeDecodeURIComponent`; cap health `formatAge` day labels.
+
+| SHA | Commit |
+|---|---|
+| `a3808b5` | fix(w59): sparkline abs-cap, toIso range, decode/age guards |
+| `11846c2` | fix(w59): realign wave25/59 pins for safeToIsoString + 9_999 |
+
+**Shipped**
+
+- Sparkline prices abs-capped via `MAX_SPARKLINE_ABS_PRICE` (hostile `1e308` no longer balloons SVG polyline coords).
+- `safeToIsoString` / `MAX_DATE_MS` range gate + ISO length egress cap.
+- `safeDecodeURIComponent` typeof-guard; health age labels capped at `MAX_HEALTH_AGE_DAYS` (`9_999`).
+- Pin: `tests/test_wave59_medium_bugs.py` (+ wave25 toIso realign).
+
+---
+
+## Wave 60 — toFiniteNumber abs-cap + API path typeof + report rollup
+
+**Theme:** Abs-cap `toFiniteNumber` so hostile finite extremes cannot reach market/watchlist/sectors/page a11y paths after display/sparkline fail-closed; reinforce API path typeof. Docs lane append waves 56–60 toward soft ~100 (STOP on CLEAN×2; no empty farming).
+
+| SHA | Commit |
+|---|---|
+| `d6e4059` | fix(w60): toFiniteNumber abs-cap + API path typeof |
+| _(this)_ | docs(w60): report push |
+
+**Shipped**
+
+- `toFiniteNumber` rejects via `MAX_FINITE_ABS_VALUE`; market/symbol page parsers route through it (drop finite-only `finiteOrNull`).
+- `isSafeClientApiPath` / `isSafeServerApiPath` typeof pin realign (parity w57).
+- Pin: `tests/test_wave60_medium_bugs.py` (+ wave25/31/59/movers realign).
+- `TIJORI_WAVE_REPORT.md` — append waves 56–60 toward soft ~100.
 
 ---
 
@@ -1191,6 +1281,11 @@ Phase 1 foundations and Phase 2 Tijori-core plumbing are **landed** across waves
 | 53 (`w53`) | 1 (stream-bound response bodies) |
 | 54 (`w54`) | 1 (sanitize maxLen + empty/skeleton/page caps) |
 | 55 (`w55`) | 3 (sanitize pin + format abs-cap + report) |
+| 56 (`w56`) | 2 (loop status + brief/PDF fail-closed caps) |
+| 57 (`w57`) | 1 (API path/nav/CSRF typeof + length caps) |
+| 58 (`w58`) | 2 (history pagination a11y + threshold/sanitize) |
+| 59 (`w59`) | 2 (sparkline/toIso/decode/age + pin realign) |
+| 60 (`w60`) | 2 (toFiniteNumber abs-cap + report) |
 | **Total** | **100+** |
 
 ---
@@ -1215,7 +1310,7 @@ Phase 1 foundations and Phase 2 Tijori-core plumbing are **landed** across waves
 
 ### Suggested next improve-loop focus
 
-- Wave 55+ post-100% harden/ops only (STOP early on CLEAN×2); do not farm commits to pad loops.
+- Wave 60+ post-100% harden/ops only (STOP early on CLEAN×2); do not farm commits to pad loops.
 - Optionally raise `--cov-fail-under` toward 100 once CI owners agree (measured 100% already).
 - Controlled briefs-on soak (not default-on in prod).
 - Keep `AI_SCENARIOS_ENABLED=0` until Phase 2 live brief path is proven.
