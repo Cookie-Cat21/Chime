@@ -77,7 +77,12 @@ class Storage:
     async def upsert_stock(
         self, symbol: str, name: str | None = None, sector: str | None = None
     ) -> None:
+        # Fail closed — non-string symbol used to throw on .strip mid upsert.
+        if not isinstance(symbol, str):
+            return
         symbol = symbol.strip().upper()
+        if not symbol:
+            return
         async with self._pool.connection() as conn:
             await conn.execute(
                 """
@@ -376,7 +381,12 @@ class Storage:
         return rows
 
     async def latest_snapshot(self, symbol: str) -> PriceSnapshot | None:
+        # Fail closed — non-string symbol used to throw on .strip mid lookup.
+        if not isinstance(symbol, str):
+            return None
         symbol = symbol.strip().upper()
+        if not symbol:
+            return None
         async with self._pool.connection() as conn:
             row = await (
                 await conn.execute(
@@ -394,7 +404,12 @@ class Storage:
         return _row_to_snapshot(_as_row(row))
 
     async def previous_snapshot(self, symbol: str, *, before_id: int) -> PriceSnapshot | None:
+        # Fail closed — non-string symbol used to throw on .strip mid lookup.
+        if not isinstance(symbol, str):
+            return None
         symbol = symbol.strip().upper()
+        if not symbol:
+            return None
         async with self._pool.connection() as conn:
             row = await (
                 await conn.execute(
@@ -1144,7 +1159,12 @@ class Storage:
         return int(_as_row(row)["id"])
 
     async def add_watch(self, user_id: int, symbol: str) -> None:
+        # Fail closed — non-string symbol used to throw on .strip mid watch.
+        if not isinstance(symbol, str):
+            return
         symbol = symbol.strip().upper()
+        if not symbol:
+            return
         await self.upsert_stock(symbol)
         async with self._pool.connection() as conn:
             await conn.execute(
@@ -1157,7 +1177,12 @@ class Storage:
             )
 
     async def remove_watch(self, user_id: int, symbol: str) -> bool:
+        # Fail closed — non-string symbol used to throw on .strip mid remove.
+        if not isinstance(symbol, str):
+            return False
         symbol = symbol.strip().upper()
+        if not symbol:
+            return False
         async with self._pool.connection() as conn:
             row = await (
                 await conn.execute(
@@ -1177,7 +1202,12 @@ class Storage:
         Returns ``(removed_from_watchlist, deactivated_rule_count)`` in one
         transaction so a crash cannot leave active orphans without a watch row.
         """
+        # Fail closed — non-string symbol used to throw on .strip mid unwatch.
+        if not isinstance(symbol, str):
+            return False, 0
         symbol = symbol.strip().upper()
+        if not symbol:
+            return False, 0
         async with self._pool.connection() as conn, conn.transaction():
             row = await (
                 await conn.execute(
@@ -1237,7 +1267,12 @@ class Storage:
         deactivate the rule id we already returned to the user.
         ``category`` is for disclosure rules only (substring filter); ignored otherwise.
         """
+        # Fail closed — non-string symbol used to throw on .strip mid create.
+        if not isinstance(symbol, str):
+            raise ValueError("symbol must be a non-empty string")
         symbol = symbol.strip().upper()
+        if not symbol:
+            raise ValueError("symbol must be a non-empty string")
         cat = (
             sanitize_disclosure_category(category)
             if alert_type == AlertType.DISCLOSURE
@@ -1384,7 +1419,12 @@ class Storage:
 
     async def deactivate_rules_for_symbol(self, user_id: int, symbol: str) -> int:
         """Deactivate all active rules for user+symbol. Return count."""
+        # Fail closed — non-string symbol used to throw on .strip mid deactivate.
+        if not isinstance(symbol, str):
+            return 0
         symbol = symbol.strip().upper()
+        if not symbol:
+            return 0
         async with self._pool.connection() as conn:
             rows = await (
                 await conn.execute(

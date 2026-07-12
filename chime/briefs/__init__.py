@@ -172,13 +172,17 @@ def build_brief_prompt(
     Truncates the filing body (not the delimiters) to ``max_chars`` so
     ``AI_MAX_INPUT_CHARS`` cannot chop ``<<<END_FILING>>>`` off mid-prompt.
     """
-    body = (extracted_text or "").replace("\x00", "").strip()
+    # Fail closed — non-strings used to throw on .replace/.strip mid prompt build.
+    body_raw = extracted_text if isinstance(extracted_text, str) else ""
+    body = body_raw.replace("\x00", "").strip()
     # Fail closed — int(NaN)/None/inf used to raise mid prompt build.
     cap = resolve_positive_int_cap(max_chars, default=1, absolute_max=200_000)
     if len(body) > cap:
         body = body[:cap]
-    sym = (symbol or "").replace("\x00", "").strip() or "UNKNOWN"
-    ttl = (title or "").replace("\x00", "").strip() or "(untitled)"
+    sym_raw = symbol if isinstance(symbol, str) else ""
+    ttl_raw = title if isinstance(title, str) else ""
+    sym = sym_raw.replace("\x00", "").strip() or "UNKNOWN"
+    ttl = ttl_raw.replace("\x00", "").strip() or "(untitled)"
     return (
         f"Symbol: {sym}\nTitle: {ttl}\n\n<<<FILING>>>\n{body}\n<<<END_FILING>>>\n\n{nfa_suffix()}"
     )

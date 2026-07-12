@@ -547,13 +547,20 @@ def resolve_announcement_symbol(
     ``row.company`` via ``name_map``. Unmatched / ambiguous → None (caller
     must not invent a ticker).
     """
-    allowed = {s.strip().upper() for s in allowed_symbols}
-    if row.symbol and row.symbol.strip():
-        sym = row.symbol.strip().upper()
+    # Fail closed — non-string members used to throw on .strip mid bulk resolve.
+    allowed = {
+        s.strip().upper()
+        for s in allowed_symbols
+        if isinstance(s, str) and s.strip()
+    }
+    row_sym = row.symbol if isinstance(row.symbol, str) else None
+    if row_sym and row_sym.strip():
+        sym = row_sym.strip().upper()
         return sym if sym in allowed else None
-    if not row.company or not row.company.strip():
+    row_company = row.company if isinstance(row.company, str) else None
+    if not row_company or not row_company.strip():
         return None
-    mapped = name_map.get(normalize_company_name(row.company))
+    mapped = name_map.get(normalize_company_name(row_company))
     if mapped is None:
         return None
     return mapped if mapped in allowed else None

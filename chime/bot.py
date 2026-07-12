@@ -230,6 +230,9 @@ def parse_alert_args(args: list[str]) -> tuple[ParsedAlert | None, str | None]:
     """
     if len(args) < 2:
         return None, ALERT_USAGE
+    # Fail closed — non-string kind used to throw on .lower mid /alert parse.
+    if not isinstance(args[1], str):
+        return None, ALERT_USAGE
     kind = args[1].lower()
     if kind in ("above", "below", "move"):
         if len(args) < 3:
