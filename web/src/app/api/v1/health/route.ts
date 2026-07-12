@@ -62,6 +62,31 @@ export const HEALTH_PROXY_BODY_MAX_BYTES = 64_000;
 
 const CIRCUIT_STATES = new Set(["closed", "open", "half_open"]);
 
+/**
+ * HEALTH_URL must be loopback HTTP only. A mis-set / injected env must not
+ * turn the session-gated health proxy into an open SSRF (metadata, LAN).
+ * Matches poller health loopback posture (http://127.0.0.1:8080/health).
+ */
+export function isAllowedHealthProxyUrl(raw: string): boolean {
+  const trimmed = raw.trim();
+  if (!trimmed || trimmed.length > 512) return false;
+  let parsed: URL;
+  try {
+    parsed = new URL(trimmed);
+  } catch {
+    return false;
+  }
+  if (parsed.protocol !== "http:") return false;
+  if (parsed.username || parsed.password) return false;
+  const host = parsed.hostname.toLowerCase();
+  if (host !== "127.0.0.1" && host !== "localhost" && host !== "::1") {
+    return false;
+  }
+  // Reject fragment weirdness that is not a health probe.
+  if (parsed.hash) return false;
+  return true;
+}
+
 /** Parse loopback health `brief_queue` (fail-soft; omit empty). */
 export function parseBriefQueue(raw: unknown): BriefQueueHint | undefined {
   if (!raw || typeof raw !== "object" || Array.isArray(raw)) return undefined;
@@ -244,60 +269,71 @@ export async function GET(request: NextRequest) {
 
   const healthUrl = (process.env.HEALTH_URL ?? "").trim();
   if (healthUrl) {
-    const ctrl = new AbortController();
-    const timer = setTimeout(() => ctrl.abort(), healthProxyTimeoutMs());
-    try {
-      const res = await fetch(healthUrl, {
-        method: "GET",
-        signal: ctrl.signal,
-        headers: { Accept: "application/json" },
-      });
-      // Keep abort armed through body read — hung / huge JSON must not OOM.
-      const rawText = await res.text().catch(() => "");
-      if (rawText.length > HEALTH_PROXY_BODY_MAX_BYTES) {
-        throw new Error("health_url_body_too_large");
-      }
-      let body: Record<string, unknown> | null = null;
-      try {
-        const parsed: unknown = rawText ? JSON.parse(rawText) : null;
-        if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) {
-          body = parsed as Record<string, unknown>;
-        }
-      } catch {
-        body = null;
-      }
-      if (body && typeof body === "object") {
-        const startedClean = sanitizeHealthString(body.started_at);
-        const started = startedClean ? toIso(startedClean) : null;
-        if (started) {
-          startedAt = started;
-        }
-        // Sanitize top-level + nested separately — never raw-spread nested
-        // (hostile HEALTH_URL used to overwrite typed booleans / watched_missing).
-        const top = sanitizePollerHealth(body);
-        const nested = sanitizePollerHealth(body.poller);
-        if (top || nested) {
-          const pick = (p: PollerHealth | null): Partial<PollerHealth> => {
-            if (!p) return {};
-            const out: Partial<PollerHealth> = {};
-            for (const [key, value] of Object.entries(p)) {
-              if (value !== undefined) {
-                (out as Record<string, unknown>)[key] = value;
-              }
-            }
-            return out;
-          };
-          poller = { ...pick(top), ...pick(nested) };
-        }
-      }
-    } catch (err) {
-      console.error("GET /health HEALTH_URL fetch failed", err);
+    // Fail closed — non-loopback / https / credentialed URLs must not fetch.
+    if (!isAllowedHealthProxyUrl(healthUrl)) {
+      console.error("GET /health HEALTH_URL rejected (not loopback http)");
       poller = {
         last_tick_ok: false,
         last_error: "health_url_unreachable",
       };
-    } finally {
-      clearTimeout(timer);
+    } else {
+      const ctrl = new AbortController();
+      const timer = setTimeout(() => ctrl.abort(), healthProxyTimeoutMs());
+      try {
+        const res = await fetch(healthUrl, {
+          method: "GET",
+          signal: ctrl.signal,
+          // Fail closed — open redirects must not bounce into metadata/LAN.
+          redirect: "error",
+          headers: { Accept: "application/json" },
+        });
+        // Keep abort armed through body read — hung / huge JSON must not OOM.
+        const rawText = await res.text().catch(() => "");
+        if (rawText.length > HEALTH_PROXY_BODY_MAX_BYTES) {
+          throw new Error("health_url_body_too_large");
+        }
+        let body: Record<string, unknown> | null = null;
+        try {
+          const parsed: unknown = rawText ? JSON.parse(rawText) : null;
+          if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) {
+            body = parsed as Record<string, unknown>;
+          }
+        } catch {
+          body = null;
+        }
+        if (body && typeof body === "object") {
+          const startedClean = sanitizeHealthString(body.started_at);
+          const started = startedClean ? toIso(startedClean) : null;
+          if (started) {
+            startedAt = started;
+          }
+          // Sanitize top-level + nested separately — never raw-spread nested
+          // (hostile HEALTH_URL used to overwrite typed booleans / watched_missing).
+          const top = sanitizePollerHealth(body);
+          const nested = sanitizePollerHealth(body.poller);
+          if (top || nested) {
+            const pick = (p: PollerHealth | null): Partial<PollerHealth> => {
+              if (!p) return {};
+              const out: Partial<PollerHealth> = {};
+              for (const [key, value] of Object.entries(p)) {
+                if (value !== undefined) {
+                  (out as Record<string, unknown>)[key] = value;
+                }
+              }
+              return out;
+            };
+            poller = { ...pick(top), ...pick(nested) };
+          }
+        }
+      } catch (err) {
+        console.error("GET /health HEALTH_URL fetch failed", err);
+        poller = {
+          last_tick_ok: false,
+          last_error: "health_url_unreachable",
+        };
+      } finally {
+        clearTimeout(timer);
+      }
     }
   }
 

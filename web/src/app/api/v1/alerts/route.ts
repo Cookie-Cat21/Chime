@@ -6,6 +6,7 @@ import {
   sanitizeDisclosureText,
 } from "@/lib/api/disclosure-safe";
 import { toFiniteNumber } from "@/lib/api/market-browse";
+import { readJsonBody } from "@/lib/api/read-json-body";
 import { toSafePositiveInt } from "@/lib/api/safe-int";
 import { toIso } from "@/lib/api/time";
 import { isAlertType, normalizeSymbol } from "@/lib/api/symbol";
@@ -25,8 +26,22 @@ export async function GET(request: NextRequest) {
 
   const url = request.nextUrl;
   const activeParam = url.searchParams.get("active");
-  // Default true; ?active=false lists cancelled; omit / true → active only.
-  const activeOnly = activeParam === null || activeParam === "true";
+  // Default true; only exact "true"/"false" — junk used to soft-accept as
+  // cancelled (?active=TRUE / ?active=1 listed inactive rules).
+  let activeOnly = true;
+  if (activeParam != null) {
+    if (activeParam === "true") {
+      activeOnly = true;
+    } else if (activeParam === "false") {
+      activeOnly = false;
+    } else {
+      return jsonError(
+        400,
+        "validation_error",
+        "active must be true or false.",
+      );
+    }
+  }
 
   const symbolRaw = url.searchParams.get("symbol");
   let symbol: string | null = null;
@@ -104,18 +119,18 @@ export async function POST(request: NextRequest) {
   const gated = requireSessionAndCsrf(request);
   if (!gated.ok) return gated.response;
 
-  let body: unknown;
-  try {
-    body = await request.json();
-  } catch {
+  const parsed = await readJsonBody(request);
+  if (!parsed.ok) {
+    if (parsed.reason === "too_large") {
+      return jsonError(400, "validation_error", "Request body too large.");
+    }
     return jsonError(400, "validation_error", "Invalid JSON body.");
   }
-
-  if (typeof body !== "object" || body === null) {
+  if (typeof parsed.value !== "object" || parsed.value === null) {
     return jsonError(400, "validation_error", "Invalid request body.");
   }
 
-  const obj = body as Record<string, unknown>;
+  const obj = parsed.value as Record<string, unknown>;
   const symbol = normalizeSymbol(obj.symbol);
   if (!symbol) {
     return jsonError(400, "invalid_symbol", "Invalid CSE symbol.");

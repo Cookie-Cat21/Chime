@@ -7,6 +7,7 @@ import { InlineError } from "@/components/inline-error";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { apiErrorMessage } from "@/lib/api/client-fetch";
 import { toSafePositiveInt } from "@/lib/api/safe-int";
 import { NFA_INLINE } from "@/lib/nfa";
 
@@ -62,12 +63,12 @@ export function LoginForm({ allowlist, defaultTelegramId, demoEnabled }: Props) 
         body: JSON.stringify({ telegram_id: id }),
         credentials: "same-origin",
       });
-      const data = (await res.json().catch(() => null)) as
-        | { error?: { message?: string }; user?: { id: number } }
-        | null;
+      const data = (await res.json().catch(() => null)) as unknown;
       if (!res.ok) {
-        const detail = data?.error?.message
-          ? `Chime couldn't sign you in: ${data.error.message}`
+        // Cap + strip controls — hostile error.message must not balloon UI.
+        const apiMsg = apiErrorMessage(data, "");
+        const detail = apiMsg
+          ? `Chime couldn't sign you in: ${apiMsg}`
           : `Chime couldn't sign you in (${res.status}). Check the allowlisted Telegram ID.`;
         setError(loginError(detail));
         return;

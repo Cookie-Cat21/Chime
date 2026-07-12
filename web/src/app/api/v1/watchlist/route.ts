@@ -7,6 +7,7 @@ import {
   sanitizeDisclosureText,
 } from "@/lib/api/disclosure-safe";
 import { toFiniteNumber } from "@/lib/api/market-browse";
+import { readJsonBody } from "@/lib/api/read-json-body";
 import { toIso } from "@/lib/api/time";
 import { normalizeSymbol } from "@/lib/api/symbol";
 import { jsonError, jsonOk } from "@/lib/auth/errors";
@@ -90,12 +91,14 @@ export async function POST(request: NextRequest) {
   const gated = requireSessionAndCsrf(request);
   if (!gated.ok) return gated.response;
 
-  let body: unknown;
-  try {
-    body = await request.json();
-  } catch {
+  const parsed = await readJsonBody(request);
+  if (!parsed.ok) {
+    if (parsed.reason === "too_large") {
+      return jsonError(400, "validation_error", "Request body too large.");
+    }
     return jsonError(400, "validation_error", "Invalid JSON body.");
   }
+  const body = parsed.value;
 
   const rawSymbol =
     typeof body === "object" && body !== null && "symbol" in body

@@ -8,6 +8,13 @@ export const SESSION_COOKIE = "chime_session";
 export const CSRF_COOKIE = "chime_csrf";
 export const SESSION_TTL_SECONDS = 12 * 60 * 60; // 12h
 
+/**
+ * Cap hostile CSRF header/cookie before compare / browser decode.
+ * Mint emits 32-byte base64url (~43 chars). Shared by server + client
+ * (client cannot import csrf.ts — that pulls node:crypto).
+ */
+export const MAX_CSRF_TOKEN_LENGTH = 128;
+
 export type DashAuthConfig = {
   demoAuthEnabled: boolean;
   allowlist: ReadonlySet<number>;

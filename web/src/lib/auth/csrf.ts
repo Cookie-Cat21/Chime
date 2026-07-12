@@ -1,15 +1,12 @@
 import { timingSafeEqual } from "node:crypto";
 
-import { CSRF_COOKIE } from "./config";
+import { CSRF_COOKIE, MAX_CSRF_TOKEN_LENGTH } from "./config";
 
 /** Header clients must send on mutating /api/v1 requests (except login). */
 export const CSRF_HEADER = "x-csrf-token";
 
-/**
- * Cap hostile CSRF header/cookie before Buffer alloc / timingSafeEqual.
- * Mint emits 32-byte base64url (~43 chars).
- */
-export const MAX_CSRF_TOKEN_LENGTH = 128;
+/** Re-export — server callers may import from csrf or config. */
+export { MAX_CSRF_TOKEN_LENGTH };
 
 /**
  * Double-submit CSRF: `X-CSRF-Token` must equal the non-HttpOnly `chime_csrf` cookie.

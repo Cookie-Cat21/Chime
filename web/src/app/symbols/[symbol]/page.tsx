@@ -17,6 +17,7 @@ import {
   MAX_STOCK_NAME_LENGTH,
   MAX_STOCK_SECTOR_LENGTH,
   normalizeBriefStatus,
+  safeAnnouncementUrl,
   safeFilingHref,
   safePdfUrl,
   sanitizeBriefText,
@@ -188,6 +189,13 @@ function parseDisclosuresPayload(body: unknown): DisclosuresPayload {
       typeof r.brief_status === "string" ? r.brief_status : null,
     );
     const publishedRaw = r.published_at;
+    // Parse-time allowlist — never soft-accept raw javascript:/data: hrefs
+    // or brief text before render (defense in depth vs API shape drift).
+    const url =
+      typeof r.url === "string" ? safeAnnouncementUrl(r.url) : null;
+    const pdf_url =
+      typeof r.pdf_url === "string" ? safePdfUrl(r.pdf_url) : null;
+    const briefRaw = typeof r.brief === "string" ? r.brief : null;
     items.push({
       id,
       external_id,
@@ -196,15 +204,15 @@ function parseDisclosuresPayload(body: unknown): DisclosuresPayload {
         typeof r.category === "string" ? r.category : null,
         MAX_DISCLOSURE_CATEGORY_LENGTH,
       ),
-      url: typeof r.url === "string" ? r.url : null,
+      url,
       // Fail-closed ISO — no raw overlong / control-laden ts echo.
       published_at: toIso(publishedRaw),
       company_name: sanitizeDisclosureText(
         typeof r.company_name === "string" ? r.company_name : null,
         MAX_DISCLOSURE_COMPANY_LENGTH,
       ),
-      pdf_url: typeof r.pdf_url === "string" ? r.pdf_url : null,
-      brief: typeof r.brief === "string" ? r.brief : null,
+      pdf_url,
+      brief: sanitizeBriefText(briefRaw, brief_status),
       brief_status,
     });
   }

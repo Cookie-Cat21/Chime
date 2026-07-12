@@ -74,7 +74,7 @@ async function readBody(res: Response): Promise<HealthBody> {
 async function testWatchedMissingDegradesRoute(): Promise<void> {
   const queries = installDbPool();
   process.env.DASH_SESSION_SECRET = SECRET;
-  process.env.HEALTH_URL = "http://poller.local/health";
+  process.env.HEALTH_URL = "http://127.0.0.1:8080/health";
 
   const originalFetch = globalThis.fetch;
   const seenUrls: string[] = [];
@@ -118,7 +118,7 @@ async function testWatchedMissingDegradesRoute(): Promise<void> {
 async function testUnreachableHealthUrlDegradesRoute(): Promise<void> {
   installDbPool();
   process.env.DASH_SESSION_SECRET = SECRET;
-  process.env.HEALTH_URL = "http://poller.local/unreachable";
+  process.env.HEALTH_URL = "http://127.0.0.1:8080/unreachable";
 
   const originalFetch = globalThis.fetch;
   const seenUrls: string[] = [];
@@ -149,7 +149,7 @@ async function testUnreachableHealthUrlDegradesRoute(): Promise<void> {
 async function testHealthProxyTimeoutAbortsAndDegrades(): Promise<void> {
   installDbPool();
   process.env.DASH_SESSION_SECRET = SECRET;
-  process.env.HEALTH_URL = "http://poller.local/slow";
+  process.env.HEALTH_URL = "http://127.0.0.1:8080/slow";
   process.env.HEALTH_PROXY_TIMEOUT_MS = "40";
   assert(healthProxyTimeoutMs() === 40, "test timeout env should parse to 40ms");
 
@@ -207,7 +207,7 @@ async function testHealthProxyTimeoutAbortsAndDegrades(): Promise<void> {
 async function testBriefQueueForwardedWithoutDegrading(): Promise<void> {
   installDbPool();
   process.env.DASH_SESSION_SECRET = SECRET;
-  process.env.HEALTH_URL = "http://poller.local/health";
+  process.env.HEALTH_URL = "http://127.0.0.1:8080/health";
 
   const originalFetch = globalThis.fetch;
   globalThis.fetch = (async (input: RequestInfo | URL) => {
@@ -261,7 +261,7 @@ async function testBriefQueueForwardedWithoutDegrading(): Promise<void> {
 async function testNestedPollerCannotOverwriteSanitizedFields(): Promise<void> {
   installDbPool();
   process.env.DASH_SESSION_SECRET = SECRET;
-  process.env.HEALTH_URL = "http://poller.local/health";
+  process.env.HEALTH_URL = "http://127.0.0.1:8080/health";
 
   const originalFetch = globalThis.fetch;
   globalThis.fetch = (async (input: RequestInfo | URL) => {
@@ -313,9 +313,39 @@ async function testNestedPollerCannotOverwriteSanitizedFields(): Promise<void> {
   }
 }
 
+async function testNonLoopbackHealthUrlRejectedWithoutFetch(): Promise<void> {
+  installDbPool();
+  process.env.DASH_SESSION_SECRET = SECRET;
+  process.env.HEALTH_URL = "http://evil.example/metadata";
+
+  const originalFetch = globalThis.fetch;
+  let fetchCalls = 0;
+  globalThis.fetch = (async () => {
+    fetchCalls += 1;
+    fail("non-loopback HEALTH_URL must not fetch");
+  }) as typeof fetch;
+
+  try {
+    const res = await healthGet(makeRequest());
+    const body = await readBody(res);
+    assert(res.status === 503, `rejected HEALTH_URL should return 503, got ${res.status}`);
+    assert(body.status === "degraded", `expected degraded, got ${body.status}`);
+    assert(body.db_ok === true, "fake DB should be healthy");
+    assert(body.poller?.last_tick_ok === false, "rejected URL marks tick false");
+    assert(
+      body.poller?.last_error === "health_url_unreachable",
+      `expected health_url_unreachable, got ${body.poller?.last_error}`,
+    );
+    assert(fetchCalls === 0, `expected zero fetches, got ${fetchCalls}`);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+}
+
 async function main(): Promise<void> {
   await testWatchedMissingDegradesRoute();
   await testUnreachableHealthUrlDegradesRoute();
+  await testNonLoopbackHealthUrlRejectedWithoutFetch();
   await testHealthProxyTimeoutAbortsAndDegrades();
   await testBriefQueueForwardedWithoutDegrading();
   await testNestedPollerCannotOverwriteSanitizedFields();

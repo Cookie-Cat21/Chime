@@ -1,8 +1,13 @@
-import { CSRF_COOKIE } from "@/lib/auth/config";
+import { CSRF_COOKIE, MAX_CSRF_TOKEN_LENGTH } from "@/lib/auth/config";
 import { redirectToLogin } from "@/lib/auth/session-redirect";
 
 /** Must match server `CSRF_HEADER` / guard double-submit check. */
 const CSRF_HEADER = "x-csrf-token";
+
+/** Cap hostile API error.message before toast / inline render. */
+export const MAX_API_ERROR_MESSAGE_LENGTH = 300;
+
+const CTRL_RE = /[\u0000-\u001F\u007F-\u009F]/g;
 
 /** User-facing copy when double-submit CSRF fails (E6-D05). */
 export const CSRF_FRIENDLY_MESSAGE =
@@ -15,9 +20,14 @@ export function readBrowserCsrf(): string | null {
   for (const part of document.cookie.split(";")) {
     const trimmed = part.trim();
     if (trimmed.startsWith(prefix)) {
+      const raw = trimmed.slice(prefix.length);
+      // Fail closed — multi-MB forged cookies must not decode / ship.
+      if (raw.length > MAX_CSRF_TOKEN_LENGTH) return null;
       // Malformed % sequences must not throw URIError mid-mutation.
       try {
-        return decodeURIComponent(trimmed.slice(prefix.length));
+        const decoded = decodeURIComponent(raw);
+        if (decoded.length > MAX_CSRF_TOKEN_LENGTH) return null;
+        return decoded;
       } catch {
         return null;
       }
@@ -61,6 +71,33 @@ export async function apiMutate(
     authRedirect?: boolean;
   },
 ): Promise<{ ok: boolean; status: number; data: unknown }> {
+  // Fail closed — absolute / scheme-relative paths would leak X-CSRF-Token
+  // off-origin (credentials stay same-origin, but the header still ships).
+  if (!path.startsWith("/") || path.startsWith("//") || path.includes("://")) {
+    return {
+      ok: false,
+      status: 400,
+      data: {
+        error: {
+          code: "validation_error",
+          message: "apiMutate path must be root-relative.",
+        },
+      },
+    };
+  }
+  if (path.includes("..") || path.includes("\\")) {
+    return {
+      ok: false,
+      status: 400,
+      data: {
+        error: {
+          code: "validation_error",
+          message: "apiMutate path must be root-relative.",
+        },
+      },
+    };
+  }
+
   const authRedirect = init.authRedirect !== false;
   const csrf = readBrowserCsrf();
   if (!csrf) {
@@ -124,5 +161,11 @@ export function apiErrorMessage(
     return CSRF_FRIENDLY_MESSAGE;
   }
   const body = data as ApiErrorBody | null;
-  return body?.error?.message ?? fallback;
+  const raw = body?.error?.message;
+  if (typeof raw !== "string" || !raw.trim()) return fallback;
+  const cleaned = raw.replace(CTRL_RE, "").trim();
+  if (!cleaned) return fallback;
+  return cleaned.length > MAX_API_ERROR_MESSAGE_LENGTH
+    ? cleaned.slice(0, MAX_API_ERROR_MESSAGE_LENGTH).trimEnd()
+    : cleaned;
 }
