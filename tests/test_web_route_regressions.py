@@ -113,12 +113,13 @@ def test_web_runtime_sources_do_not_import_or_call_cse_lk() -> None:
 
 
 def test_dashboard_pages_render_nfa_footer() -> None:
-    """Watchlist, alerts, browse, and health keep the global NFA footer visible."""
+    """Watchlist, alerts, browse, health, and scenarios keep the global NFA footer."""
     page_paths = [
         WEB / "src" / "app" / "watchlist" / "page.tsx",
         WEB / "src" / "app" / "market" / "page.tsx",
         WEB / "src" / "app" / "alerts" / "page.tsx",
         WEB / "src" / "app" / "health" / "page.tsx",
+        WEB / "src" / "app" / "scenarios" / "page.tsx",
     ]
 
     missing: list[str] = []
@@ -365,7 +366,7 @@ def test_market_page_fence_no_screener_or_quote_board() -> None:
 
 
 def test_scenarios_dash_stub_page() -> None:
-    """Wave11: /scenarios is a thin NFA stub; disabled unless AI_SCENARIOS_ENABLED=1."""
+    """Wave11/w14: /scenarios is a thin NFA stub; disabled unless AI_SCENARIOS_ENABLED=1."""
     page = WEB / "src" / "app" / "scenarios" / "page.tsx"
     helper = WEB / "src" / "lib" / "scenarios.ts"
     nav = WEB / "src" / "components" / "app-nav.tsx"
@@ -377,21 +378,40 @@ def test_scenarios_dash_stub_page() -> None:
 
     assert "requirePageSession" in page_src
     assert "scenariosEnabled" in page_src
+    assert 'export const dynamic = "force-dynamic"' in page_src
+    assert 'title: "Scenarios · Chime"' in page_src
+    assert "stub only" in page_src
+    assert 'id="main-content"' in page_src
+    assert 'active="/scenarios"' in page_src
     assert "Coming soon" in page_src
+    assert "Scenarios opted in — runs not wired" in page_src
     assert "AI_SCENARIOS_ENABLED=1" in page_src
+    assert "no LLM scenario runner" in page_src
+    assert "no LLM calls" in page_src
+    assert "Not a\n          trading terminal" in page_src or (
+        "Not a" in page_src and "trading terminal" in page_src
+    )
+    assert "no personas" in page_src
+    assert "no queued runs" in page_src
     assert "NfaInline" in page_src
     assert "NfaFooter" in page_src
     assert "EmptyState" in page_src
-    # No LLM / provider wiring on the dash stub.
+    # No LLM / provider / DB wiring on the dash stub.
     assert "fetch(" not in page_src
-    for tok in ("openai", "gemini", "groq", "openrouter", "generatecontent"):
+    assert "getPool" not in page_src
+    assert "useEffect" not in page_src
+    for tok in ("openai", "gemini", "groq", "openrouter", "generatecontent", "anthropic"):
         assert tok not in page_src.lower()
+        assert tok not in helper_src.lower()
 
     assert "AI_SCENARIOS_ENABLED" in helper_src
     assert '.trim() === "1"' in helper_src
     # Loose truthy env values must not opt in (only exact "1" after trim).
-    assert "true" in helper_src.lower()  # documented as non-enabling lookalike
+    assert "`true` / `yes` / `on`" in helper_src
     assert 'href: "/scenarios", label: "Scenarios"' in nav_src
+
+    # No scenarios API surface — page is chrome-only.
+    assert not (WEB / "src" / "app" / "api" / "v1" / "scenarios").exists()
 
     # Fence: not a portfolio / advice surface.
     forbidden = ("portfolio", "P&L", "buy now", "sell now", "price target")
@@ -402,6 +422,34 @@ def test_scenarios_dash_stub_page() -> None:
         if tok.lower() in line.lower() and not _is_comment_only_hit(line, tok)
     ]
     assert hits == [], f"scenarios stub fence tokens: {hits}"
+
+
+def test_next_config_security_headers() -> None:
+    """w14: next.config.ts pins baseline dash security headers on all routes."""
+    config = WEB / "next.config.ts"
+    assert config.is_file()
+    source = config.read_text(encoding="utf-8")
+
+    assert "securityHeaders" in source
+    assert 'key: "X-Frame-Options", value: "DENY"' in source
+    assert 'key: "X-Content-Type-Options", value: "nosniff"' in source
+    assert 'key: "Referrer-Policy", value: "strict-origin-when-cross-origin"' in source
+    assert 'key: "Permissions-Policy"' in source
+    assert "camera=(), microphone=(), geolocation=()" in source
+    # Legacy XSS auditors opted out (modern browsers ignore / mishandle them).
+    assert 'key: "X-XSS-Protection", value: "0"' in source
+    assert "poweredByHeader: false" in source
+    assert 'source: "/:path*"' in source
+    assert "async headers()" in source
+    # Strict CSP stays deferred — do not claim a full CSP ship.
+    csp_lines = [
+        line
+        for line in source.splitlines()
+        if "Content-Security-Policy" in line
+        and not _is_comment_only_hit(line, "Content-Security-Policy")
+    ]
+    assert csp_lines == [], f"unexpected CSP header ship: {csp_lines}"
+    assert "deferred" in source.lower()  # comment documents CSP deferral
 
 
 def test_sectors_route_static() -> None:
