@@ -34,6 +34,8 @@ from chime.adapters.cse import (
     normalize_company_name,
     resolve_announcement_symbol,
 )
+from chime.briefs import briefs_enabled
+from chime.briefs.worker import claim_pending_briefs
 from chime.circuit import CircuitOpenError
 from chime.config import Settings
 from chime.domain import (
@@ -183,6 +185,8 @@ class Poller:
         # Cheap ops counters for loopback health (wave3 brief_queue hint).
         self._pdf_enrich_last_batch_size: int = 0
         self._pdf_enrich_batches_started: int = 0
+        self._brief_drain_tasks: set[asyncio.Task[Any]] = set()
+        self._brief_drain_lock = asyncio.Lock()
 
     def pdf_enrich_health_snapshot(self) -> dict[str, int]:
         """In-memory PDF enrich queue counters for health details."""
@@ -198,6 +202,12 @@ class Poller:
         if pending:
             await asyncio.gather(*pending, return_exceptions=True)
 
+    async def await_brief_drain(self) -> None:
+        """Drain in-flight brief worker tasks (tests / shutdown)."""
+        pending = list(self._brief_drain_tasks)
+        if pending:
+            await asyncio.gather(*pending, return_exceptions=True)
+
     async def run_once(self, *, force: bool = False) -> list[AlertEvent]:
         """Single poll cycle. Returns events claimed (delivered after unlock)."""
         now = datetime.now(UTC)
@@ -207,6 +217,7 @@ class Poller:
             # so Telegram failures overnight/weekend still drain.
             await self._retry_unsent_with_lock()
             self.last_tick_at = datetime.now(UTC)
+            self._schedule_brief_drain()
             return []
 
         locked = await self.storage.try_advisory_lock(POLL_LOCK_ID)
@@ -270,6 +281,7 @@ class Poller:
         except Exception as exc:
             log.exception("poll_deliver_failed", error=str(exc))
         self._schedule_pdf_enrichment(pdf_enrich)
+        self._schedule_brief_drain()
         return fired
 
     async def _retry_unsent_with_lock(self) -> None:
@@ -698,6 +710,26 @@ class Poller:
         self._pdf_enrich_tasks.add(task)
         task.add_done_callback(self._pdf_enrich_tasks.discard)
 
+    def _schedule_brief_drain(self) -> None:
+        """Fire-and-forget pending brief drain when AI briefs are enabled."""
+        if not briefs_enabled():
+            return
+        task = asyncio.create_task(
+            self._drain_briefs_safe(),
+            name="chime_brief_drain",
+        )
+        self._brief_drain_tasks.add(task)
+        task.add_done_callback(self._brief_drain_tasks.discard)
+
+    async def _drain_briefs_safe(self) -> None:
+        try:
+            async with self._brief_drain_lock:
+                n = await claim_pending_briefs(self.storage)
+                if n:
+                    log.info("brief_drain_done", processed=n)
+        except Exception as exc:
+            log.warning("brief_drain_failed", error=str(exc))
+
     async def _enrich_disclosure_pdfs_safe(self, items: list[PendingPdfEnrich]) -> None:
         try:
             async with self._pdf_enrich_lock:
@@ -884,6 +916,34 @@ class Poller:
                 attempts=attempts,
             )
 
+    async def _ready_filing_brief_for(self, event: AlertEvent) -> str | None:
+        """Best-effort ready brief for a disclosure alert; never raises."""
+        if event.type.value != "disclosure":
+            return None
+        external_id: str | None = None
+        # event_key = disclosure:{rule_id}:{external_id}
+        if event.event_key.startswith("disclosure:"):
+            parts = event.event_key.split(":", 2)
+            if len(parts) == 3 and parts[2].strip():
+                external_id = parts[2].strip()
+        try:
+            brief = await self.storage.get_ready_filing_brief(
+                disclosure_id=event.disclosure_id,
+                external_id=external_id,
+                symbol=event.symbol,
+            )
+        except Exception as exc:
+            log.warning(
+                "ready_filing_brief_lookup_failed",
+                event_key=event.event_key,
+                disclosure_id=event.disclosure_id,
+                error=str(exc),
+            )
+            return None
+        if isinstance(brief, str) and brief.strip():
+            return brief
+        return None
+
     async def _claim_only(
         self,
         event: AlertEvent,
@@ -894,8 +954,12 @@ class Poller:
 
         When ``disarm`` is True (price crosses), uses ``claim_and_disarm`` so
         claim + armed=False commit together. Conflict → no disarm.
+
+        Disclosure claims attach a ready ``disclosure_briefs`` filing brief when
+        present (fail-soft — missing/pending briefs do not block the push).
         """
-        message = format_alert_message(event)
+        filing_brief = await self._ready_filing_brief_for(event)
+        message = format_alert_message(event, filing_brief=filing_brief)
         if disarm:
             log_id = await self.storage.claim_and_disarm(event, message)
         else:
@@ -1160,6 +1224,16 @@ class Poller:
         except TimeoutError:
             log.warning(
                 "poller_shutdown_pdf_enrich_timeout",
+                timeout_seconds=SHUTDOWN_TICK_TIMEOUT_SECONDS,
+            )
+        try:
+            await asyncio.wait_for(
+                self.await_brief_drain(),
+                timeout=SHUTDOWN_TICK_TIMEOUT_SECONDS,
+            )
+        except TimeoutError:
+            log.warning(
+                "poller_shutdown_brief_drain_timeout",
                 timeout_seconds=SHUTDOWN_TICK_TIMEOUT_SECONDS,
             )
         log.info("poller_stopped")

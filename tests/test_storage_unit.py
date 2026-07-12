@@ -322,6 +322,51 @@ async def test_upsert_disclosure_and_compat_wrapper() -> None:
 
 
 @pytest.mark.asyncio
+async def test_get_ready_filing_brief_by_disclosure_id() -> None:
+    brief = "Company declared an interim dividend of 1.50 LKR."
+    conn = _Conn([{"brief": brief}])
+    store = _store(conn)
+    assert await store.get_ready_filing_brief(disclosure_id=55) == brief
+    assert "disclosure_briefs" in conn.sql[0]
+    assert "status = 'ready'" in conn.sql[0]
+    assert conn.params[0] == (55,)
+
+
+@pytest.mark.asyncio
+async def test_get_ready_filing_brief_by_external_id() -> None:
+    brief = "Rights issue of 1:10 approved by the board."
+    conn = _Conn([{"brief": brief}])
+    store = _store(conn)
+    out = await store.get_ready_filing_brief(
+        external_id="25040",
+        symbol="jkh.n0000",
+    )
+    assert out == brief
+    assert "JOIN disclosures" in conn.sql[0]
+    assert conn.params[0] == ("25040", "JKH.N0000")
+
+
+@pytest.mark.asyncio
+async def test_get_ready_filing_brief_missing_or_blank_returns_none() -> None:
+    assert await _store(_Conn([None])).get_ready_filing_brief(disclosure_id=1) is None
+    assert (
+        await _store(_Conn([{"brief": "   "}])).get_ready_filing_brief(disclosure_id=1)
+        is None
+    )
+    # No keys → no query
+    conn = _Conn([{"brief": "x"}])
+    assert await _store(conn).get_ready_filing_brief() is None
+    assert conn.sql == []
+
+
+@pytest.mark.asyncio
+async def test_get_ready_filing_brief_fail_soft_on_db_error() -> None:
+    conn = _Conn([RuntimeError("briefs table missing")])
+    store = _store(conn)
+    assert await store.get_ready_filing_brief(disclosure_id=9) is None
+
+
+@pytest.mark.asyncio
 async def test_ensure_user_add_remove_watch_list() -> None:
     conn = _Conn([{"id": 3}, None, {"symbol": "JKH.N0000"}, [{"symbol": "JKH.N0000"}]])
     store = _store(conn)

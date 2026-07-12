@@ -94,6 +94,8 @@ class AlertEvent(BaseModel):
     current_price: float | None = None
     disclosure_url: str | None = None
     disclosure_title: str | None = None
+    # DB id of disclosures row (disclosure alerts); used to look up ready briefs.
+    disclosure_id: int | None = None
     # Optional plain-language filing brief (Phase 2); never generated here.
     filing_brief: str | None = None
     snapshot_id: int | None = None

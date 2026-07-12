@@ -20,11 +20,13 @@ def test_new_disclosure_matching_symbol_fires() -> None:
         created_at=_RULE_CREATED,
     )
     disc = make_disclosure(external_id="ext-42", symbol="JKH.N0000", title="AGM Notice")
+    disc = disc.model_copy(update={"id": 77})
     events = evaluate_disclosure_rules(disclosure=disc, rules=[rule])
     assert len(events) == 1
     assert events[0].trigger == "new disclosure: AGM Notice"
     assert events[0].disclosure_url == disc.url
     assert events[0].disclosure_title == "AGM Notice"
+    assert events[0].disclosure_id == 77
 
 
 def test_wrong_symbol_ignored() -> None:

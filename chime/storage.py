@@ -377,6 +377,67 @@ class Storage:
             ).fetchone()
         return row is not None
 
+    async def get_ready_filing_brief(
+        self,
+        *,
+        disclosure_id: int | None = None,
+        external_id: str | None = None,
+        symbol: str | None = None,
+    ) -> str | None:
+        """Return brief text when ``disclosure_briefs.status = ready``.
+
+        Lookup prefers ``disclosure_id``; otherwise ``external_id`` + ``symbol``
+        (unique on disclosures). Returns None when missing, not ready, blank,
+        or on any DB error (fail-soft — alerts must not wait on briefs).
+        """
+        try:
+            if disclosure_id is not None:
+                async with self._pool.connection() as conn:
+                    row = await (
+                        await conn.execute(
+                            """
+                            SELECT brief
+                            FROM disclosure_briefs
+                            WHERE disclosure_id = %s
+                              AND status = 'ready'
+                              AND brief IS NOT NULL
+                              AND btrim(brief) <> ''
+                            """,
+                            (disclosure_id,),
+                        )
+                    ).fetchone()
+            else:
+                ext = (external_id or "").strip()
+                sym = (symbol or "").strip().upper()
+                if not ext or not sym:
+                    return None
+                async with self._pool.connection() as conn:
+                    row = await (
+                        await conn.execute(
+                            """
+                            SELECT b.brief
+                            FROM disclosure_briefs b
+                            JOIN disclosures d ON d.id = b.disclosure_id
+                            WHERE d.external_id = %s
+                              AND d.symbol = %s
+                              AND b.status = 'ready'
+                              AND b.brief IS NOT NULL
+                              AND btrim(b.brief) <> ''
+                            """,
+                            (ext, sym),
+                        )
+                    ).fetchone()
+            if row is None:
+                return None
+            data = _as_row(row)
+            brief = data.get("brief")
+            if not isinstance(brief, str):
+                return None
+            text_out = brief.strip()
+            return text_out or None
+        except Exception:
+            return None
+
     async def insert_disclosure_if_new(self, disc: Disclosure) -> Disclosure | None:
         """Compat wrapper — prefer upsert_disclosure.
 

@@ -254,6 +254,7 @@ def evaluate_disclosure_rules(
                 current_price=None,
                 disclosure_url=disclosure.url,
                 disclosure_title=disclosure.title,
+                disclosure_id=disclosure.id,
                 snapshot_id=None,
                 event_key=_event_key_disclosure(rule, disclosure),
             )
