@@ -3,10 +3,13 @@
 Phase 1: schema + disabled-by-default stub.
 Phase 2: ``claim_pending_briefs`` fetches CDN PDF text (when ``pdf_url`` set)
 and calls the Gemini provider when briefs are enabled.
+After mark-ready, optionally sends a Telegram follow-up via ``notify`` when the
+poller provides one and active disclosure rules exist for the symbol.
 """
 
 from __future__ import annotations
 
+from collections.abc import Awaitable, Callable, Sequence
 from typing import Any, Protocol
 
 import httpx
@@ -15,8 +18,11 @@ import structlog
 from chime.briefs import BriefSettings, BriefStatus, briefs_enabled, build_brief_prompt
 from chime.briefs.extract import extract_pdf_text, fetch_cdn_pdf
 from chime.briefs.provider import BriefProvider, GeminiBriefProvider, make_brief_provider
+from chime.domain import format_brief_followup
 
 log = structlog.get_logger("chime.briefs")
+
+BriefNotifyFunc = Callable[[int, str], Awaitable[Any]]
 
 
 class _BriefEnqueuer(Protocol):
@@ -50,6 +56,8 @@ class _BriefDrainStorage(Protocol):
     ) -> bool: ...
 
     async def count_briefs_today(self) -> int: ...
+
+    async def active_rules_for_symbols(self, symbols: Sequence[str]) -> list[Any]: ...
 
 
 async def enqueue_or_skip_brief(
@@ -133,6 +141,82 @@ async def _input_text_for_row(
     return _stub_input_text(row)
 
 
+def _disclosure_telegram_ids(rules: list[Any], *, symbol: str) -> list[int]:
+    """Unique telegram ids with an active disclosure rule on ``symbol``."""
+    ids: set[int] = set()
+    sym = symbol.strip().upper()
+    for rule in rules:
+        if not getattr(rule, "active", True):
+            continue
+        rule_sym = str(getattr(rule, "symbol", "") or "").strip().upper()
+        if rule_sym != sym:
+            continue
+        rule_type = getattr(rule, "type", None)
+        type_val = getattr(rule_type, "value", rule_type)
+        if str(type_val) != "disclosure":
+            continue
+        tid = getattr(rule, "telegram_id", None)
+        if tid is None:
+            continue
+        try:
+            ids.add(int(tid))
+        except (TypeError, ValueError):
+            continue
+    return sorted(ids)
+
+
+async def _notify_brief_followups(
+    storage: _BriefDrainStorage,
+    *,
+    notify: BriefNotifyFunc,
+    row: dict[str, Any],
+    brief: str,
+) -> None:
+    """Best-effort follow-up when a brief becomes ready. Never raises."""
+    disclosure_id = row.get("disclosure_id")
+    try:
+        symbol = str(row.get("symbol") or "").strip()
+        brief_text = brief.strip()
+        if not symbol or not brief_text:
+            return
+        rules_fn = getattr(storage, "active_rules_for_symbols", None)
+        if rules_fn is None:
+            return
+        rules = await rules_fn([symbol])
+        telegram_ids = _disclosure_telegram_ids(list(rules or []), symbol=symbol)
+        if not telegram_ids:
+            return
+        message = format_brief_followup(
+            symbol=symbol,
+            brief=brief_text,
+            title=str(row.get("title") or "") or None,
+            url=str(row.get("url") or "") or None,
+        )
+        for telegram_id in telegram_ids:
+            try:
+                await notify(telegram_id, message)
+                log.info(
+                    "brief_followup_sent",
+                    disclosure_id=disclosure_id,
+                    symbol=symbol,
+                    telegram_id=telegram_id,
+                )
+            except Exception as exc:
+                log.warning(
+                    "brief_followup_send_failed",
+                    disclosure_id=disclosure_id,
+                    symbol=symbol,
+                    telegram_id=telegram_id,
+                    error=str(exc),
+                )
+    except Exception as exc:
+        log.warning(
+            "brief_followup_failed",
+            disclosure_id=disclosure_id,
+            error=str(exc),
+        )
+
+
 async def claim_pending_briefs(
     storage: _BriefDrainStorage,
     *,
@@ -140,6 +224,7 @@ async def claim_pending_briefs(
     provider: BriefProvider | None = None,
     limit: int = 5,
     http_client: httpx.AsyncClient | None = None,
+    notify: BriefNotifyFunc | None = None,
 ) -> int:
     """Load pending rows, call provider, mark ready/failed.
 
@@ -147,6 +232,11 @@ async def claim_pending_briefs(
     ``PDF_MAX_BYTES`` cap) and extracts text for the prompt. No-op (returns 0)
     when briefs are disabled, the daily cap is hit, or there are no pending
     rows. Honours ``max_briefs_per_day`` as a hard ceiling.
+
+    When ``notify`` is provided and ``mark_brief_ready`` succeeds, sends a
+    fail-soft Telegram follow-up to users with active disclosure rules on the
+    symbol (covers the case where the disclosure alert fired before the brief
+    was ready). Notify failures never fail the drain.
     """
     cfg = settings or BriefSettings.from_env()
     if not briefs_enabled(cfg):
@@ -179,7 +269,7 @@ async def claim_pending_briefs(
             text = await _input_text_for_row(row, cfg=cfg, client=http)
             try:
                 brief = await prov.summarize(text)
-                await storage.mark_brief_ready(
+                marked = await storage.mark_brief_ready(
                     disclosure_id,
                     brief=brief,
                     model=cfg.model,
@@ -188,7 +278,15 @@ async def claim_pending_briefs(
                     "brief_ready",
                     disclosure_id=disclosure_id,
                     model=cfg.model,
+                    marked=marked,
                 )
+                if marked and notify is not None:
+                    await _notify_brief_followups(
+                        storage,
+                        notify=notify,
+                        row=row,
+                        brief=brief,
+                    )
             except Exception as exc:
                 await storage.mark_brief_failed(
                     disclosure_id,

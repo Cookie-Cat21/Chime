@@ -39,6 +39,10 @@ Competitive gap in CSE: Tracker Pro owns portfolio; InvestNow/Rovana own analysi
 2. PDF fetch + text extract (size/rate capped).
 3. Free-tier LLM brief (Gemini Flash default) on **new** disclosures only.
 4. Append brief to Telegram disclosure alert when ready (or follow-up message).
+   **Landed (wave4):** primary alert attaches a ready brief at claim time; if the
+   brief becomes ready later, `claim_pending_briefs` optionally sends a follow-up
+   via the poller’s `notify`/`send` callback to users with active disclosure
+   rules on that symbol (fail-soft; always NFA-suffixed).
 5. Dash symbol page shows brief when `status=ready`.
 6. Optional: category filter on `/alert SYMBOL disclosure [CATEGORY]`.
 
@@ -146,4 +150,5 @@ User can: browse CSE symbols in dash → watch → set disclosure alert → get 
 | `GET /api/v1/symbols` + `/market` Browse | landed |
 | `pdf_url` + `disclosure_briefs` + `chime/briefs/` stub | landed (`AI_BRIEFS_ENABLED=0`) |
 | Improve-loop / CI green on touched paths | in progress |
-| Phase 2 PDF enricher + LLM briefs | not started |
+| Phase 2 PDF enricher + LLM briefs | in progress (Gemini stub + attach + PDF extract) |
+| Brief Telegram follow-up when ready after alert | landed — `claim_pending_briefs(..., notify=)`; poller passes `send`; fail-soft + NFA |

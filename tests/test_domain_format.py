@@ -9,6 +9,7 @@ from chime.domain import (
     AlertType,
     disclaimer,
     format_alert_message,
+    format_brief_followup,
     format_dead_letter_notify,
     truncate_disclosure_title,
 )
@@ -134,6 +135,30 @@ def test_truncate_disclosure_title(title: str, max_len: int, expected: str) -> N
     assert truncate_disclosure_title(title, max_len) == expected
 
 
+
+
+def test_format_brief_followup_includes_brief_and_nfa() -> None:
+    brief = "AGM scheduled for 15 August. No dividend declared."
+    msg = format_brief_followup(
+        symbol="JKH.N0000",
+        brief=brief,
+        title="AGM Notice",
+        url="https://www.cse.lk/announcements#99",
+    )
+    assert "JKH.N0000" in msg
+    assert "Filing brief ready" in msg
+    assert brief in msg
+    assert disclaimer() in msg
+    assert msg.index(brief) < msg.index(disclaimer())
+
+
+def test_format_brief_followup_omits_blank_optional_fields() -> None:
+    msg = format_brief_followup(symbol="COMB.N0000", brief="  Short summary.  ")
+    assert "COMB.N0000" in msg
+    assert "Short summary." in msg
+    assert "Disclosure:" not in msg
+    assert disclaimer() in msg
+
 @pytest.mark.parametrize(
     "msg",
     [
@@ -148,6 +173,11 @@ def test_truncate_disclosure_title(title: str, max_len: int, expected: str) -> N
         format_alert_message(
             _disclosure_event(),
             filing_brief="Kwarg brief paragraph for NFA guard.",
+        ),
+        format_brief_followup(
+            symbol="JKH.N0000",
+            brief="Follow-up brief for NFA guard.",
+            title="Rights Issue",
         ),
         format_dead_letter_notify("JKH.N0000", 5),
         format_dead_letter_notify("COMB.N0000", 1),
