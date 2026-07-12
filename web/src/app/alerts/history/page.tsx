@@ -5,8 +5,14 @@ import { EmptyState } from "@/components/empty-state";
 import { NfaFooter } from "@/components/nfa-footer";
 import { NfaInline } from "@/components/nfa-inline";
 import { Button } from "@/components/ui/button";
+import {
+  MAX_HISTORY_EVENT_KEY_LENGTH,
+  MAX_HISTORY_SYMBOL_LENGTH,
+  sanitizeDisclosureText,
+} from "@/lib/api/disclosure-safe";
+import { toNonNegativeSafeInt, toSafePositiveInt } from "@/lib/api/safe-int";
 import { serverApiGet } from "@/lib/api/server-fetch";
-import { normalizeSymbol } from "@/lib/api/symbol";
+import { isAlertType, normalizeSymbol } from "@/lib/api/symbol";
 import { requirePageSession } from "@/lib/auth/page-session";
 import { alertTypeLabel, formatTs } from "@/lib/format";
 
@@ -113,9 +119,87 @@ export default async function AlertHistoryPage({
   if (symbolFilter) qs.set("symbol", symbolFilter);
 
   const res = await serverApiGet(`/api/v1/alerts/history?${qs.toString()}`);
-  const payload: HistoryPayload | null = res.ok
-    ? ((await res.json()) as HistoryPayload)
-    : null;
+  let payload: HistoryPayload | null = null;
+  if (res.ok) {
+    try {
+      const body: unknown = await res.json();
+      const eventsRaw =
+        body && typeof body === "object" && !Array.isArray(body)
+          ? (body as { events?: unknown }).events
+          : null;
+      if (Array.isArray(eventsRaw)) {
+        const events: HistoryPayload["events"] = [];
+        for (const row of eventsRaw) {
+          if (row == null || typeof row !== "object" || Array.isArray(row)) {
+            continue;
+          }
+          const r = row as Record<string, unknown>;
+          const id = toSafePositiveInt(r.id);
+          const rule_id = toSafePositiveInt(r.rule_id);
+          if (id == null || rule_id == null) continue;
+          if (!isAlertType(r.type)) continue;
+          const symbol =
+            sanitizeDisclosureText(
+              typeof r.symbol === "string" ? r.symbol : null,
+              MAX_HISTORY_SYMBOL_LENGTH,
+            ) ?? "";
+          if (!symbol) continue;
+          const statusRaw =
+            typeof r.delivery_status === "string" ? r.delivery_status : "";
+          const delivery_status: DeliveryStatus | null =
+            statusRaw === "sent" ||
+            statusRaw === "retrying" ||
+            statusRaw === "dead_lettered" ||
+            statusRaw === "delivered_unmarked"
+              ? statusRaw
+              : null;
+          if (!delivery_status) continue;
+          const attempt_count = toNonNegativeSafeInt(r.attempt_count, 0);
+          const event_key =
+            sanitizeDisclosureText(
+              typeof r.event_key === "string" ? r.event_key : null,
+              MAX_HISTORY_EVENT_KEY_LENGTH,
+            ) ?? "";
+          const message_text =
+            typeof r.message_text === "string"
+              ? sanitizeDisclosureText(r.message_text, 4_000)
+              : null;
+          events.push({
+            id,
+            rule_id,
+            symbol,
+            type: r.type,
+            fired_at: typeof r.fired_at === "string" && r.fired_at ? r.fired_at : null,
+            message_sent: Boolean(r.message_sent),
+            dead_lettered: Boolean(r.dead_lettered),
+            attempt_count,
+            delivery_status,
+            message_text,
+            event_key,
+          });
+        }
+        const limitOut = toNonNegativeSafeInt(
+          body && typeof body === "object" && !Array.isArray(body)
+            ? (body as { limit?: unknown }).limit
+            : limit,
+          limit,
+        );
+        const offsetOut = toNonNegativeSafeInt(
+          body && typeof body === "object" && !Array.isArray(body)
+            ? (body as { offset?: unknown }).offset
+            : 0,
+          0,
+        );
+        payload = {
+          events,
+          limit: Math.min(Math.max(limitOut, 1), 200),
+          offset: offsetOut,
+        };
+      }
+    } catch {
+      payload = null;
+    }
+  }
 
   return (
     <div className="flex min-h-full flex-1 flex-col bg-background">

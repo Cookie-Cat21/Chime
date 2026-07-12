@@ -7,6 +7,7 @@ import { InlineError } from "@/components/inline-error";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { toSafePositiveInt } from "@/lib/api/safe-int";
 import { NFA_INLINE } from "@/lib/nfa";
 
 type Props = {
@@ -50,8 +51,8 @@ export function LoginForm({ allowlist, defaultTelegramId, demoEnabled }: Props) 
     setError(null);
     setPending(true);
     try {
-      const id = Number(telegramId.trim());
-      if (!Number.isSafeInteger(id) || id <= 0) {
+      const id = toSafePositiveInt(telegramId.trim());
+      if (id == null) {
         setError(loginError("Almost there — enter a valid Telegram ID."));
         return;
       }

@@ -18,7 +18,7 @@ export async function DELETE(request: NextRequest, context: RouteContext) {
   if (!gated.ok) return gated.response;
 
   const { symbol: raw } = await context.params;
-  const symbol = normalizeSymbol(raw);
+  const symbol = normalizeSymbol(decodeURIComponent(raw));
   if (!symbol) {
     return jsonError(400, "invalid_symbol", "Invalid CSE symbol.");
   }
