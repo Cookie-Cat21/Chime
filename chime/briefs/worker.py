@@ -1,12 +1,17 @@
-"""Phase 1 stub worker — no LLM calls until AI_BRIEFS_ENABLED=1 (Phase 2)."""
+"""Filing brief worker — enqueue stub + pending drain skeleton.
+
+Phase 1: schema + disabled-by-default stub.
+Phase 2 stub: ``claim_pending_briefs`` calls the Gemini provider when enabled.
+"""
 
 from __future__ import annotations
 
-from typing import Protocol
+from typing import Any, Protocol
 
 import structlog
 
 from chime.briefs import BriefSettings, BriefStatus, briefs_enabled
+from chime.briefs.provider import BriefProvider, GeminiBriefProvider, make_brief_provider
 
 log = structlog.get_logger("chime.briefs")
 
@@ -18,6 +23,30 @@ class _BriefEnqueuer(Protocol):
         *,
         status: str = "pending",
     ) -> bool: ...
+
+
+class _BriefDrainStorage(Protocol):
+    async def claim_pending_briefs(self, *, limit: int = 5) -> list[dict[str, Any]]: ...
+
+    async def mark_brief_ready(
+        self,
+        disclosure_id: int,
+        *,
+        brief: str,
+        model: str,
+        tokens_in: int | None = None,
+        tokens_out: int | None = None,
+    ) -> bool: ...
+
+    async def mark_brief_failed(
+        self,
+        disclosure_id: int,
+        *,
+        error: str,
+        model: str | None = None,
+    ) -> bool: ...
+
+    async def count_briefs_today(self) -> int: ...
 
 
 async def enqueue_or_skip_brief(
@@ -58,3 +87,81 @@ async def enqueue_or_skip_brief(
             model=cfg.model,
         )
     return status
+
+
+def _stub_input_text(row: dict[str, Any]) -> str:
+    """Skeleton input until PDF text extraction lands — title (+ symbol)."""
+    symbol = str(row.get("symbol") or "").strip()
+    title = str(row.get("title") or "").strip()
+    if symbol and title:
+        return f"{symbol}: {title}"
+    return title or symbol
+
+
+async def claim_pending_briefs(
+    storage: _BriefDrainStorage,
+    *,
+    settings: BriefSettings | None = None,
+    provider: BriefProvider | None = None,
+    limit: int = 5,
+) -> int:
+    """Load pending rows, call provider, mark ready/failed.
+
+    No-op (returns 0) when briefs are disabled, the daily cap is hit, or there
+    are no pending rows. Honours ``max_briefs_per_day`` as a hard ceiling.
+    """
+    cfg = settings or BriefSettings.from_env()
+    if not briefs_enabled(cfg):
+        log.debug("brief_drain_skipped_disabled")
+        return 0
+
+    used = await storage.count_briefs_today()
+    remaining = max(0, int(cfg.max_briefs_per_day) - used)
+    if remaining <= 0:
+        log.info(
+            "brief_drain_daily_cap",
+            used=used,
+            max_briefs_per_day=cfg.max_briefs_per_day,
+        )
+        return 0
+
+    batch = min(max(1, limit), remaining)
+    rows = await storage.claim_pending_briefs(limit=batch)
+    if not rows:
+        return 0
+
+    owns_provider = provider is None
+    prov: BriefProvider = provider or make_brief_provider(cfg)
+    processed = 0
+    try:
+        for row in rows:
+            disclosure_id = int(row["disclosure_id"])
+            text = _stub_input_text(row)
+            try:
+                brief = await prov.summarize(text)
+                await storage.mark_brief_ready(
+                    disclosure_id,
+                    brief=brief,
+                    model=cfg.model,
+                )
+                log.info(
+                    "brief_ready",
+                    disclosure_id=disclosure_id,
+                    model=cfg.model,
+                )
+            except Exception as exc:
+                await storage.mark_brief_failed(
+                    disclosure_id,
+                    error=str(exc),
+                    model=cfg.model,
+                )
+                log.warning(
+                    "brief_failed",
+                    disclosure_id=disclosure_id,
+                    error=str(exc),
+                )
+            processed += 1
+    finally:
+        if owns_provider and isinstance(prov, GeminiBriefProvider):
+            await prov.aclose()
+    return processed

@@ -285,6 +285,110 @@ class Storage:
             ).fetchone()
         return row is not None
 
+    async def claim_pending_briefs(self, *, limit: int = 5) -> list[dict[str, Any]]:
+        """Load pending brief rows joined with disclosure title/symbol (skeleton).
+
+        Uses ``FOR UPDATE SKIP LOCKED`` so concurrent drainers do not double-claim.
+        Caller must mark ready/failed; rows stay ``pending`` until then.
+        """
+        if limit <= 0:
+            return []
+        async with self._pool.connection() as conn, conn.transaction():
+            rows = await (
+                await conn.execute(
+                    """
+                    SELECT
+                        b.disclosure_id,
+                        d.symbol,
+                        d.title,
+                        d.pdf_url
+                    FROM disclosure_briefs b
+                    JOIN disclosures d ON d.id = b.disclosure_id
+                    WHERE b.status = 'pending'
+                    ORDER BY b.created_at ASC
+                    LIMIT %s
+                    FOR UPDATE OF b SKIP LOCKED
+                    """,
+                    (limit,),
+                )
+            ).fetchall()
+        return _as_rows(rows)
+
+    async def mark_brief_ready(
+        self,
+        disclosure_id: int,
+        *,
+        brief: str,
+        model: str,
+        tokens_in: int | None = None,
+        tokens_out: int | None = None,
+    ) -> bool:
+        """Mark a pending brief row ready with generated text."""
+        async with self._pool.connection() as conn:
+            row = await (
+                await conn.execute(
+                    """
+                    UPDATE disclosure_briefs
+                    SET
+                        status = 'ready',
+                        brief = %s,
+                        model = %s,
+                        tokens_in = %s,
+                        tokens_out = %s,
+                        error = NULL,
+                        updated_at = now()
+                    WHERE disclosure_id = %s AND status = 'pending'
+                    RETURNING disclosure_id
+                    """,
+                    (brief, model, tokens_in, tokens_out, disclosure_id),
+                )
+            ).fetchone()
+        return row is not None
+
+    async def mark_brief_failed(
+        self,
+        disclosure_id: int,
+        *,
+        error: str,
+        model: str | None = None,
+    ) -> bool:
+        """Mark a pending brief row failed (keeps prior brief null)."""
+        err = (error or "unknown")[:2000]
+        async with self._pool.connection() as conn:
+            row = await (
+                await conn.execute(
+                    """
+                    UPDATE disclosure_briefs
+                    SET
+                        status = 'failed',
+                        error = %s,
+                        model = COALESCE(%s, model),
+                        updated_at = now()
+                    WHERE disclosure_id = %s AND status = 'pending'
+                    RETURNING disclosure_id
+                    """,
+                    (err, model, disclosure_id),
+                )
+            ).fetchone()
+        return row is not None
+
+    async def count_briefs_today(self) -> int:
+        """Count ready/failed briefs updated since UTC midnight (daily cap)."""
+        async with self._pool.connection() as conn:
+            row = await (
+                await conn.execute(
+                    """
+                    SELECT COUNT(*)::int AS n
+                    FROM disclosure_briefs
+                    WHERE status IN ('ready', 'failed')
+                      AND updated_at >= date_trunc('day', now() AT TIME ZONE 'UTC')
+                    """
+                )
+            ).fetchone()
+        if row is None:
+            return 0
+        return int(_as_row(row).get("n") or 0)
+
     async def upsert_disclosure(self, disc: Disclosure) -> Disclosure:
         """Insert or update disclosure; always return it with a DB id.
 
@@ -433,8 +537,8 @@ class Storage:
             brief = data.get("brief")
             if not isinstance(brief, str):
                 return None
-            text_out = brief.strip()
-            return text_out or None
+            text = brief.strip()
+            return text or None
         except Exception:
             return None
 
