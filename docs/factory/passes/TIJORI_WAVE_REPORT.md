@@ -1,10 +1,10 @@
-# Tijori CSE — Waves 1–16 report
+# Tijori CSE — Waves 1–17 report
 
 **Branch:** `cursor/tijori-cse-phase1-e44e`  
 **Date:** 2026-07-12  
 **Plan:** [TIJORI_CSE_PLAN.md](../TIJORI_CSE_PLAN.md)  
 **Ops:** [docs/runbooks/TIJORI.md](../../runbooks/TIJORI.md)  
-**Range:** `a802cb7` … wave 16 (**100% `chime` coverage milestone**)
+**Range:** `a802cb7` … wave 17 (post-100% harden → soft ~100)
 
 ---
 
@@ -23,7 +23,7 @@ Matches the plan constraint note in [TIJORI_CSE_PLAN.md](../TIJORI_CSE_PLAN.md).
 
 ## Verdict
 
-Phase 1 foundations and Phase 2 Tijori-core plumbing are **landed** across waves 1–5. Waves 6–7 add sectors browse, storage/SQL harden, retention/sectors coverage, Groq provider, disclosure baseline watermark, and briefs PDF grace / late follow-up sweep. Waves 8–9 add OpenRouter provider, brief drain pacing, market UX/a11y polish, adversarial grace/storage close, env-example completeness, storage brief-method coverage, and a Phase 3 scenario stub fence (`AI_SCENARIOS_ENABLED=0`). Wave 10 hardens briefs ops (smoke, rate limits, CDN requeue, poller/disclosure coverage) and audits poll↔brief advisory locks as a non-issue. Wave 11 aligns `/brief` empty-state test copy with AI-off messaging. Wave 12 records parallelism honesty (plus follow-on fix/docs/test lanes). Wave 13 closes browse API examples, env sync, Telegram/dash URL egress caps, web adversarial harden, and coverage pushes (migrate / storage / CSE / poller / bot). Wave 14 ships coverage/harden lanes (web regress, health/circuit, config/migrate, main, rules format fuzz, worker) plus fail-closed non-finite float env knobs. Wave 15 adds `make tijori-report`, briefs extra-install docs, help-budget / web movers / briefs / residual coverage, and ops-knob harden. **Wave 16 milestone:** full-package `pytest --cov=chime` at **100%** (3427 stmts / 0 miss) — coverage ratchet complete; further improve-loops are harden/ops, not cov gap-fill. Live LLM briefs remain **flag/key gated** (`AI_BRIEFS_ENABLED=0` default; `AI_PROVIDER=gemini|groq|openrouter`). Phase 3 scenario AI is **stub only** — no LLM wiring yet.
+Phase 1 foundations and Phase 2 Tijori-core plumbing are **landed** across waves 1–5. Waves 6–7 add sectors browse, storage/SQL harden, retention/sectors coverage, Groq provider, disclosure baseline watermark, and briefs PDF grace / late follow-up sweep. Waves 8–9 add OpenRouter provider, brief drain pacing, market UX/a11y polish, adversarial grace/storage close, env-example completeness, storage brief-method coverage, and a Phase 3 scenario stub fence (`AI_SCENARIOS_ENABLED=0`). Wave 10 hardens briefs ops (smoke, rate limits, CDN requeue, poller/disclosure coverage) and audits poll↔brief advisory locks as a non-issue. Wave 11 aligns `/brief` empty-state test copy with AI-off messaging. Wave 12 records parallelism honesty (plus follow-on fix/docs/test lanes). Wave 13 closes browse API examples, env sync, Telegram/dash URL egress caps, web adversarial harden, and coverage pushes (migrate / storage / CSE / poller / bot). Wave 14 ships coverage/harden lanes (web regress, health/circuit, config/migrate, main, rules format fuzz, worker) plus fail-closed non-finite float env knobs. Wave 15 adds `make tijori-report`, briefs extra-install docs, help-budget / web movers / briefs / residual coverage, and ops-knob harden. **Wave 16 milestone:** full-package `pytest --cov=chime` at **100%** (3427 stmts / 0 miss) — coverage ratchet complete; post-milestone CSE pacing, brief egress, NFA chrome, and integration-collect harden. **Wave 17** continues quality-gated harden/ops (loop status, storage NaN defense, CSE pace concurrency, login a11y, factory verify) toward the soft ~100 horizon — not cov gap-fill. Live LLM briefs remain **flag/key gated** (`AI_BRIEFS_ENABLED=0` default; `AI_PROVIDER=gemini|groq|openrouter`). Phase 3 scenario AI is **stub only** — no LLM wiring yet.
 
 | Track | Status |
 |---|---|
@@ -31,7 +31,7 @@ Phase 1 foundations and Phase 2 Tijori-core plumbing are **landed** across waves
 | Phase 2 Tijori core | ◐ mostly done — live LLM still off until keyed |
 | Phase 3 scenario AI | ◐ stub fence only (`AI_SCENARIOS_ENABLED=0`) |
 | `chime` unit coverage | ✅ **100%** (wave 16 milestone) |
-| Improve-loop / CI on touched paths | ongoing — post-100% harden → soft ~100 loops |
+| Improve-loop / CI on touched paths | ongoing — wave 17 post-100% harden → soft ~100 loops |
 
 ---
 
@@ -415,22 +415,50 @@ Phase 1 foundations and Phase 2 Tijori-core plumbing are **landed** across waves
 
 ## Wave 16 — 100% coverage milestone + CSE soft pacing
 
-**Theme:** Record the full-package coverage milestone after wave 15 residual push; post-milestone harden/ops (CSE soft pacing).
+**Theme:** Record the full-package coverage milestone after wave 15 residual push; post-milestone harden/ops (CSE soft pacing, egress, NFA, integration collect).
 
 | SHA | Commit |
 |---|---|
-| `72e3e3e` | docs(w16): report push |
-| `e6f55cf` | fix(w16): scripts lint |
 | `5130bb4` | feat(w16): watchlist CTA polish |
+| `e6f55cf` | fix(w16): scripts lint |
+| `72e3e3e` | docs(w16): report push |
 | `314bdc4` | fix(w16): symbol brief a11y push |
-| _(this)_ | feat/docs(w16): cse pacing push |
+| `1af2917` | fix(w16): nfa chrome push |
+| `766b10b` | feat/docs(w16): cse pacing push |
+| `5f6ed7e` | fix(w16): brief egress, HELP category, NaN persist |
+| `552e4f7` | test(w16): integration collect push |
 
 **Shipped**
 
 - **Milestone:** `pytest --cov=chime` → **TOTAL 3427 stmts / 0 miss / 100%** across every `chime` module (adapters, bot, briefs, circuit, config, domain, health, migrate, notify, poller, rules, scenarios, storage, `__main__`).
 - `TIJORI_WAVE_REPORT.md` — close wave 15 inventory; note 100% coverage milestone; post-milestone improve-loops are harden/ops (not cov gap-fill).
 - Floor remains `--cov-fail-under=85` in `pyproject.toml` (ratchet-to-100 measured here; keep CI floor unless a later lane intentionally raises it).
-- **`CSE_MIN_INTERVAL_SECONDS`** — soft gap between cse.lk HTTP calls on shared `CSEClient` (default `0` = off; raise under rate-limit). Wired Settings → adapter `_pace()`; docs in `.env.example` + `docs/runbooks/TIJORI.md`. Distinct from `PDF_ENRICH_SLEEP_SECONDS`.
+- Watchlist empty-state CTA aligns with Browse nav; `scripts/` in factory-verify ruff; symbol brief a11y (`aria-labelledby` + filing-link announce).
+- Dash NFA chrome on home + list skeletons; **`CSE_MIN_INTERVAL_SECONDS`** soft gap on shared `CSEClient` (default off).
+- Brief Telegram hard-clamp / hostile-symbol strip; HELP CATEGORY copy; skip non-finite market persist; pytest `integration` mark + CI no-skip collect gate.
+
+---
+
+## Wave 17 — Post-100% harden continue
+
+**Theme:** Next bounded quality-gated lane after wave 16 close (STOP on CLEAN×2; no empty farming). Loop status, storage NaN defense, CSE pace concurrency, login a11y, factory verify.
+
+| SHA | Commit |
+|---|---|
+| `63555b4` | docs(w17): loop status push |
+| `f781df7` | test(w17): storage line 145 push |
+| `0f3b8d7` | test(w17): cse pace concurrent push |
+| `2692a1b` | fix(w17): login a11y push |
+| `fe1c2fc` | fix(w17): factory verify push |
+| _(this)_ | docs(w17): report push |
+
+**Shipped**
+
+- [LOOP_STATUS.md](LOOP_STATUS.md) — waves-completed / coverage / loop-posture snapshot pointing at this report.
+- Storage unit coverage: `persist_market_snapshots` skips NaN/±Inf prices (defense-in-depth after adapter filter).
+- CSE `_pace()` concurrent coverage; login a11y (explainer list, Telegram ID `aria-describedby`/`aria-invalid`, busy submit, DASH_IA pins).
+- Factory-verify harden push.
+- `TIJORI_WAVE_REPORT.md` — close wave 16 inventory; open wave 17 continue toward soft ~100.
 
 ---
 
@@ -453,7 +481,8 @@ Phase 1 foundations and Phase 2 Tijori-core plumbing are **landed** across waves
 | 13 (`wave13` / `w13`) | 9 |
 | 14 (`w14`) | 8 |
 | 15 (`w15`) | 8 |
-| 16 (`w16`) | 5+ (100% coverage + CSE pacing / harden) |
+| 16 (`w16`) | 8 (100% coverage + CSE pacing / harden) |
+| 17 (`w17`) | 5+ (loop status + harden continue) |
 | **Total** | **100+** |
 
 ---
@@ -478,8 +507,9 @@ Phase 1 foundations and Phase 2 Tijori-core plumbing are **landed** across waves
 
 ### Suggested next improve-loop focus
 
-- Post-100% coverage: harden/ops only (STOP early on CLEAN×2); do not farm commits to pad loops.
+- Wave 17+ post-100% harden/ops only (STOP early on CLEAN×2); do not farm commits to pad loops.
 - Optionally raise `--cov-fail-under` toward 100 once CI owners agree (measured 100% already).
 - Controlled briefs-on soak (not default-on in prod).
 - Keep `AI_SCENARIOS_ENABLED=0` until Phase 2 live brief path is proven.
 - Prefer quality-gated max-width waves over empty concurrency theater.
+- Keep [LOOP_STATUS.md](LOOP_STATUS.md) honest as the soft ~100 horizon advances.
