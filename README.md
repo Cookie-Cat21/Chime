@@ -16,6 +16,10 @@ push stays primary. Full product plan: [CLAUDE.md](CLAUDE.md). Tijori plan:
 ```bash
 python -m venv .venv && source .venv/bin/activate
 pip install -e ".[dev]"
+# Optional: PDF text extract for AI filing briefs (pypdf) — needed when
+# AI_BRIEFS_ENABLED=1 and the poller drains disclosure_briefs:
+#   pip install -e ".[briefs]"
+#   # or combined: pip install -e ".[dev,briefs]"
 cp .env.example .env   # fill TELEGRAM_BOT_TOKEN + DATABASE_URL
 python -m chime migrate
 python -m chime both   # or: bot | poller | tick --force
