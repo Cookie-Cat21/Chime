@@ -164,6 +164,32 @@ def test_dashboard_price_surfaces_render_nfa_inline() -> None:
     assert missing == []
 
 
+def test_login_page_a11y_contract() -> None:
+    """W17 a11y: labelled explainer list, form associations, busy submit."""
+    page = WEB / "src" / "app" / "login" / "page.tsx"
+    form = WEB / "src" / "components" / "login-form.tsx"
+    assert page.is_file()
+    assert form.is_file()
+    page_src = page.read_text(encoding="utf-8")
+    form_src = form.read_text(encoding="utf-8")
+
+    assert 'id="main-content"' in page_src
+    assert 'aria-label="Chime home"' in page_src
+    assert 'id="login-explainer"' in page_src
+    assert 'aria-labelledby="login-explainer"' in page_src
+    assert 'list-disc' in page_src
+    assert "<li>- " not in page_src
+
+    assert 'aria-labelledby="login-sign-in-heading"' in form_src
+    assert 'id="login-sign-in-heading"' in form_src
+    assert "aria-describedby={describedBy}" in form_src
+    assert "aria-invalid={error ? true : undefined}" in form_src
+    assert "aria-busy={pending || undefined}" in form_src
+    assert "InlineError" in form_src
+    assert 'role="status"' in form_src
+    assert 'autoComplete="username"' in form_src
+
+
 def test_list_loading_skeleton_keeps_nfa_footer() -> None:
     """Watchlist/alerts loading shells keep NFA footer while content pulses."""
     skeleton = WEB / "src" / "components" / "skeleton.tsx"

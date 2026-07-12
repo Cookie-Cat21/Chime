@@ -1,8 +1,9 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { useState } from "react";
+import { useId, useState } from "react";
 
+import { InlineError } from "@/components/inline-error";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -20,6 +21,10 @@ function loginError(message: string) {
 
 export function LoginForm({ allowlist, defaultTelegramId, demoEnabled }: Props) {
   const router = useRouter();
+  const reactId = useId();
+  const fieldId = `telegram_id-${reactId}`;
+  const helpId = `telegram_id_help-${reactId}`;
+  const errorId = `telegram_id_error-${reactId}`;
   const preset =
     defaultTelegramId && allowlist.includes(defaultTelegramId)
       ? String(defaultTelegramId)
@@ -33,7 +38,7 @@ export function LoginForm({ allowlist, defaultTelegramId, demoEnabled }: Props) 
 
   if (!demoEnabled) {
     return (
-      <p className="text-sm text-muted-foreground">
+      <p role="status" className="text-sm text-muted-foreground">
         Demo sign-in is off. Set <code className="font-mono text-xs">DASH_DEMO_AUTH=1</code>{" "}
         to enable local dashboard access.
       </p>
@@ -75,17 +80,33 @@ export function LoginForm({ allowlist, defaultTelegramId, demoEnabled }: Props) 
     }
   }
 
+  const describedBy = error ? `${helpId} ${errorId}` : helpId;
+
   return (
-    <form onSubmit={onSubmit} className="flex w-full max-w-sm flex-col gap-4">
+    <form
+      onSubmit={onSubmit}
+      className="flex w-full max-w-sm flex-col gap-4"
+      aria-labelledby="login-sign-in-heading"
+      noValidate
+    >
+      <h2 id="login-sign-in-heading" className="sr-only">
+        Sign in
+      </h2>
       <div className="flex flex-col gap-2">
-        <Label htmlFor="telegram_id">Demo Telegram ID</Label>
+        <Label htmlFor={fieldId}>Demo Telegram ID</Label>
         {allowlist.length > 1 ? (
           <select
-            id="telegram_id"
-            className="border-input bg-background h-9 rounded-lg border px-3 text-sm"
+            id={fieldId}
+            name="telegram_id"
+            className="border-input bg-background h-9 rounded-lg border px-3 text-sm outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 aria-invalid:border-destructive aria-invalid:ring-3 aria-invalid:ring-destructive/20"
             value={telegramId}
-            onChange={(e) => setTelegramId(e.target.value)}
+            onChange={(e) => {
+              setTelegramId(e.target.value);
+              if (error) setError(null);
+            }}
             required
+            aria-invalid={error ? true : undefined}
+            aria-describedby={describedBy}
           >
             <option value="" disabled>
               Select allowlisted ID
@@ -98,27 +119,33 @@ export function LoginForm({ allowlist, defaultTelegramId, demoEnabled }: Props) 
           </select>
         ) : (
           <Input
-            id="telegram_id"
+            id={fieldId}
             name="telegram_id"
             inputMode="numeric"
-            autoComplete="off"
+            autoComplete="username"
             placeholder="123456789"
             value={telegramId}
-            onChange={(e) => setTelegramId(e.target.value)}
+            onChange={(e) => {
+              setTelegramId(e.target.value);
+              if (error) setError(null);
+            }}
             required
+            aria-invalid={error ? true : undefined}
+            aria-describedby={describedBy}
           />
         )}
-        <p className="text-xs text-muted-foreground">
+        <p id={helpId} className="text-xs text-muted-foreground">
           Must be in <code className="font-mono">DASH_DEMO_TELEGRAM_IDS</code>. Not
           financial advice.
         </p>
       </div>
-      {error ? (
-        <p className="text-sm text-destructive" role="alert">
-          {error}
-        </p>
-      ) : null}
-      <Button type="submit" disabled={pending} size="lg">
+      <InlineError id={errorId} message={error} />
+      <Button
+        type="submit"
+        disabled={pending}
+        size="lg"
+        aria-busy={pending || undefined}
+      >
         {pending ? "Signing in…" : "Sign in"}
       </Button>
     </form>

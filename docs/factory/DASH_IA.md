@@ -29,9 +29,10 @@ No nested app shell beyond a single top nav: Browse · Watchlist · Alerts · Hi
 ## 2. Wireframe notes (bullet layout)
 
 ### `/login`
-- Brand wordmark “Chime” (hero-level, not nav-only)
+- Brand wordmark “Chime” (hero-level, not nav-only); home link labelled `Chime home`
 - One line: manage watchlist & alerts; pushes still go to Telegram
-- Primary CTA: sign in (demo user select / token)
+- Rule explainer list uses `aria-labelledby` the explainer paragraph (no decorative “- ” prefixes)
+- Primary CTA: demo sign-in form (`aria-labelledby` sr-only “Sign in”); Telegram ID field wires help + error via `aria-describedby` / `aria-invalid`; submit `aria-busy` while pending
 - Footer NFA line
 - No marketing sections, stats, or feature grids
 
