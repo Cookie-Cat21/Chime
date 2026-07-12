@@ -35,7 +35,6 @@ type SectorRow = {
 
 function toSafeSectorId(raw: unknown): number | null {
   const n = typeof raw === "number" ? raw : Number(raw);
-  // Drop non-safe / non-positive ids — floats and unsafe ints alias wrong rows.
   if (!Number.isSafeInteger(n) || n <= 0) return null;
   return n;
 }
@@ -63,9 +62,11 @@ export async function GET(request: NextRequest) {
 
     const items = result.rows.flatMap((row) => {
       const sector_id = toSafeSectorId(row.sector_id);
+      // Drop non-safe ids — JSON.stringify(NaN) becomes null; unsafe ints
+      // lose precision and can alias the wrong sector row.
       if (sector_id == null) return [];
       const name = sanitizeDisclosureText(row.name, MAX_SECTOR_NAME_LENGTH);
-      // Blank names are useless on the thin board — drop rather than egress "".
+      // Blank / control-only names are useless — drop rather than egress "".
       if (!name) return [];
       const symbol = sanitizeDisclosureText(
         row.symbol,
