@@ -1,10 +1,10 @@
-# Tijori CSE — Waves 1–13 report
+# Tijori CSE — Waves 1–14 report
 
 **Branch:** `cursor/tijori-cse-phase1-e44e`  
 **Date:** 2026-07-12  
 **Plan:** [TIJORI_CSE_PLAN.md](../TIJORI_CSE_PLAN.md)  
 **Ops:** [docs/runbooks/TIJORI.md](../../runbooks/TIJORI.md)  
-**Range:** `a802cb7` … wave 13 (start)
+**Range:** `a802cb7` … wave 14 (continue → ~100 loops)
 
 ---
 
@@ -12,9 +12,10 @@
 
 This Tijori multi-wave was **not** “1000 concurrent agents × 100 empty loops.” Actual shape:
 
-- **~12 max-width waves** of bounded parallel agents (disjoint `OWNED_FILES` per lane; factory soft caps still apply unless a wave explicitly raised them).
-- **~90+ agent tasks** across the scoped `wave` / `waveN` inventory below — real commits that ship code, tests, or docs, not empty improve-loop iterations.
+- **~14 max-width waves** of bounded parallel agents (disjoint `OWNED_FILES` per lane; factory soft caps still apply unless a wave explicitly raised them).
+- **~100+ agent tasks** across the scoped `wave` / `waveN` / `wN` inventory below — real commits that ship code, tests, or docs, not empty improve-loop iterations.
 - **Quality-gated:** one concern per commit; stop when gates are green / two passes find nothing above minor — no always-on swarm or commit farming.
+- **Wave 14+:** continue the same bounded improve loop toward a soft ~100 quality-gated loop horizon (discover → implement → test → fix → re-test). Not empty concurrency theater; early STOP still wins when CLEAN×2.
 
 Matches the plan constraint note in [TIJORI_CSE_PLAN.md](../TIJORI_CSE_PLAN.md). Treat any “1000×100” framing as aspiration rhetoric, not an execution log.
 
@@ -22,14 +23,14 @@ Matches the plan constraint note in [TIJORI_CSE_PLAN.md](../TIJORI_CSE_PLAN.md).
 
 ## Verdict
 
-Phase 1 foundations and Phase 2 Tijori-core plumbing are **landed** across waves 1–5. Waves 6–7 add sectors browse, storage/SQL harden, retention/sectors coverage, Groq provider, disclosure baseline watermark, and briefs PDF grace / late follow-up sweep. Waves 8–9 add OpenRouter provider, brief drain pacing, market UX/a11y polish, adversarial grace/storage close, env-example completeness, storage brief-method coverage, and a Phase 3 scenario stub fence (`AI_SCENARIOS_ENABLED=0`). Wave 10 hardens briefs ops (smoke, rate limits, CDN requeue, poller/disclosure coverage) and audits poll↔brief advisory locks as a non-issue. Wave 11 aligns `/brief` empty-state test copy with AI-off messaging. Wave 12 records parallelism honesty (plus follow-on fix/docs/test lanes). Wave 13 is **starting** — browse API curl examples + env-example sync vs `Settings` / `BriefSettings`. Live LLM briefs remain **flag/key gated** (`AI_BRIEFS_ENABLED=0` default; `AI_PROVIDER=gemini|groq|openrouter`). Phase 3 scenario AI is **stub only** — no LLM wiring yet.
+Phase 1 foundations and Phase 2 Tijori-core plumbing are **landed** across waves 1–5. Waves 6–7 add sectors browse, storage/SQL harden, retention/sectors coverage, Groq provider, disclosure baseline watermark, and briefs PDF grace / late follow-up sweep. Waves 8–9 add OpenRouter provider, brief drain pacing, market UX/a11y polish, adversarial grace/storage close, env-example completeness, storage brief-method coverage, and a Phase 3 scenario stub fence (`AI_SCENARIOS_ENABLED=0`). Wave 10 hardens briefs ops (smoke, rate limits, CDN requeue, poller/disclosure coverage) and audits poll↔brief advisory locks as a non-issue. Wave 11 aligns `/brief` empty-state test copy with AI-off messaging. Wave 12 records parallelism honesty (plus follow-on fix/docs/test lanes). Wave 13 closes browse API examples, env sync, Telegram/dash URL egress caps, web adversarial harden, and coverage pushes (migrate / storage / CSE / poller / bot). Wave 14 **opens** the continue-to-~100 quality-gated improve-loop horizon. Live LLM briefs remain **flag/key gated** (`AI_BRIEFS_ENABLED=0` default; `AI_PROVIDER=gemini|groq|openrouter`). Phase 3 scenario AI is **stub only** — no LLM wiring yet.
 
 | Track | Status |
 |---|---|
 | Phase 1 foundations | ✅ done |
 | Phase 2 Tijori core | ◐ mostly done — live LLM still off until keyed |
 | Phase 3 scenario AI | ◐ stub fence only (`AI_SCENARIOS_ENABLED=0`) |
-| Improve-loop / CI on touched paths | ongoing |
+| Improve-loop / CI on touched paths | ongoing — wave 14 → ~100 loops |
 
 ---
 
@@ -328,24 +329,48 @@ Phase 1 foundations and Phase 2 Tijori-core plumbing are **landed** across waves
 
 **Shipped**
 
-- Honest parallelism note at top of this report: ~12 max-width waves, ~90+ agent tasks, quality-gated — not 1000 concurrent × 100 empty loops.
+- Honest parallelism note at top of this report: bounded max-width waves, real agent tasks, quality-gated — not 1000 concurrent × 100 empty loops (counts refreshed in later waves).
 
 ---
 
-## Wave 13 — Start (browse examples + env sync)
+## Wave 13 — Browse examples, egress, coverage
 
-**Theme:** Open wave 13 — thin browse API curl examples; keep `.env.example` aligned with `Settings` / `BriefSettings` (and the web “do not copy” checklist).
+**Theme:** Thin browse API curl examples; env sync; Telegram/dash URL egress caps; web adversarial harden; migrate/storage/CSE/poller/bot coverage.
 
 | SHA | Commit |
 |---|---|
 | `b06d960` | docs(wave13): browse api examples |
-| _(this)_ | docs(w13): wave report start + env sync |
+| `9c65e59` | test(w13): migrate sanity |
+| `4cf7d66` | docs(w13): wave report start + env sync |
+| `c853677` | test(w13): storage coverage push |
+| `75aceb1` | test(w13): cse coverage push |
+| `f22081c` | fix(w13): Telegram brief/PDF URL egress caps |
+| `86b7f32` | fix(w13): web push |
+| `24b3f58` | test(w13): poller coverage push |
+| `cd6cd73` | test(w13): bot coverage push |
+
+**Shipped**
+
+- [API_BROWSE_EXAMPLES.md](../API_BROWSE_EXAMPLES.md) — session + `/api/v1/symbols|market|sectors` curl companions to the v1 contract.
+- Root `.env.example` aligned with `Settings` / `BriefSettings`; `web/.env.example` gained `BRIEF_CDN_BACKOFF_SECONDS` on the poller/briefs exclusion list.
+- Migrate sanity without `DATABASE_URL`; storage / CSE adapter / poller / bot coverage pushes.
+- Telegram brief/PDF URL egress caps (length/control rejects; title strip; 4096 body budget); mirrored on dash egress.
+- Web adversarial close for `/market`, `/scenarios`, movers, and sectors (coerce JSON, movers sides/sign, bound sectors).
+
+---
+
+## Wave 14 — Continue to ~100 loops
+
+**Theme:** Open the long improve-loop continuation toward a soft ~100 quality-gated loop horizon (plan override: max parallelism + long loops; still STOP on CLEAN×2).
+
+| SHA | Commit |
+|---|---|
+| _(this)_ | docs(w14): push |
 
 **Shipped (start)**
 
-- [API_BROWSE_EXAMPLES.md](../API_BROWSE_EXAMPLES.md) — session + `/api/v1/symbols|market|sectors` curl companions to the v1 contract.
-- Root `.env.example` re-checked against `chime.config.Settings` + `BriefSettings` (no missing keys).
-- `web/.env.example` poller/briefs exclusion list gained `BRIEF_CDN_BACKOFF_SECONDS`.
+- `TIJORI_WAVE_REPORT.md` — close wave 13 inventory; open wave 14 continue-to-~100 framing (honest: real commits only; no empty loop farming).
+- Next lanes: keep CI green on touched paths; coverage/harden gaps still inside the Tijori fence; controlled briefs-on soak remains ops, not default-on.
 
 ---
 
@@ -365,8 +390,9 @@ Phase 1 foundations and Phase 2 Tijori-core plumbing are **landed** across waves
 | 10 (`wave10`) | 8 |
 | 11 (`wave11`) | 5+ |
 | 12 (`wave12`) | 1+ (docs + follow-ons) |
-| 13 (`wave13` / `w13`) | 2+ (start) |
-| **Total** | **92+** |
+| 13 (`wave13` / `w13`) | 9 |
+| 14 (`w14`) | 1+ (start → ~100 loops) |
+| **Total** | **100+** |
 
 ---
 
@@ -385,11 +411,13 @@ Phase 1 foundations and Phase 2 Tijori-core plumbing are **landed** across waves
 | Phase 3 scenario AI (beyond stub) | On-demand only; daily caps; legal review before MiroFish-style reuse |
 | Portfolio / P&L / tax / screener / TA / payments / native app | Explicit non-goals |
 | Always-on swarm / commit farming | Factory fence; stop when gates green — see [Parallelism honesty](#parallelism-honesty-wave-12) |
+| Empty “100 loops” theater | Soft horizon only; wave 14+ continues quality-gated loops, not pad-to-N |
 | Poll↔brief advisory deadlock “fix” | Audited non-issue; keep distinct lock IDs ([ADVISORY_LOCK_DEADLOCK.md](ADVISORY_LOCK_DEADLOCK.md)) |
 
 ### Suggested next improve-loop focus
 
-- CI green on touched Python/web paths after wave 11+ / wave 13 lanes.
+- Wave 14+ quality-gated lanes toward ~100 loops (STOP early on CLEAN×2).
+- CI green on touched Python/web paths after wave 13 harden/coverage.
 - Controlled briefs-on soak (not default-on in prod).
 - Keep `AI_SCENARIOS_ENABLED=0` until Phase 2 live brief path is proven.
 - Prefer quality-gated max-width waves over empty concurrency theater.
