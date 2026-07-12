@@ -182,24 +182,40 @@ export default async function AlertsPage({
               ) : (
                 <>
                   Use the create form above to add a price cross, daily move, or
-                  disclosure rule. Telegram gets the push when it fires. Same
-                  command path:{" "}
+                  disclosure rule.{" "}
+                  <Link
+                    href="/market"
+                    className="rounded-sm underline underline-offset-4 focus-visible:ring-2 focus-visible:ring-ring/50 focus-visible:outline-none"
+                  >
+                    Browse
+                  </Link>{" "}
+                  to pick a CSE ticker, or use{" "}
                   <code className="font-mono text-xs">
                     /alert SYMBOL above PRICE
-                  </code>
-                  .
+                  </code>{" "}
+                  in Telegram — Chime pushes when it fires.
                 </>
               )
             }
             action={
               symbolFilter ? (
-                <Button asChild variant="outline">
-                  <Link href="/alerts">Clear filter</Link>
-                </Button>
+                <div className="flex flex-wrap gap-2">
+                  <Button asChild>
+                    <a href="#alert_symbol">Create an alert</a>
+                  </Button>
+                  <Button asChild variant="outline">
+                    <Link href="/alerts">Clear filter</Link>
+                  </Button>
+                </div>
               ) : (
-                <Button asChild>
-                  <a href="#alert_symbol">Create an alert</a>
-                </Button>
+                <div className="flex flex-wrap gap-2">
+                  <Button asChild>
+                    <a href="#alert_symbol">Create an alert</a>
+                  </Button>
+                  <Button asChild variant="outline">
+                    <Link href="/market">Browse</Link>
+                  </Button>
+                </div>
               )
             }
           />

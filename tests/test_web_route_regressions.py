@@ -406,10 +406,11 @@ def test_symbols_list_query_validation_unit() -> None:
 
 
 def test_market_page_and_nav_browse_link() -> None:
-    """P1-D: /market page exists; nav exposes Browse; empty watchlist points at it."""
+    """P1-D: /market page exists; nav exposes Browse; empty watchlist/alerts point at it."""
     market = WEB / "src" / "app" / "market" / "page.tsx"
     nav = WEB / "src" / "components" / "app-nav.tsx"
     watchlist = WEB / "src" / "app" / "watchlist" / "page.tsx"
+    alerts = WEB / "src" / "app" / "alerts" / "page.tsx"
     assert market.is_file()
     market_src = market.read_text(encoding="utf-8")
     assert "/api/v1/symbols" in market_src
@@ -437,6 +438,10 @@ def test_market_page_and_nav_browse_link() -> None:
     assert 'href="/market"' in watch_src
     assert '<Link href="/market">Browse</Link>' in watch_src
     assert "Browse symbols" not in watch_src
+    alerts_src = alerts.read_text(encoding="utf-8")
+    assert 'href="/market"' in alerts_src
+    assert '<Link href="/market">Browse</Link>' in alerts_src
+    assert 'href="#alert_symbol">Create an alert</a>' in alerts_src
 
 
 def test_market_page_fence_no_screener_or_quote_board() -> None:
