@@ -73,6 +73,9 @@ def allowed_cdn_pdf_url(url: str | None) -> str | None:
     """
     if url is None:
         return None
+    # Fail closed — non-strings used to throw on .strip mid Telegram / enrich.
+    if not isinstance(url, str):
+        return None
     raw = url.strip()
     if not raw:
         return None
@@ -104,6 +107,9 @@ def allowed_filing_url(url: str | None) -> str | None:
     as an auto-linked Telegram href or blow past Telegram's 4096 limit.
     """
     if url is None:
+        return None
+    # Fail closed — non-strings used to throw on .strip mid alert format.
+    if not isinstance(url, str):
         return None
     raw = url.strip()
     if not raw:
@@ -144,6 +150,9 @@ def resolve_pdf_url(file_path: str | None) -> str | None:
     https). Empty / null / hostile paths yield ``None``.
     """
     if file_path is None:
+        return None
+    # Fail closed — non-strings used to throw on .strip mid PDF enrich.
+    if not isinstance(file_path, str):
         return None
     path = file_path.strip()
     if not path:

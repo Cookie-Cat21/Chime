@@ -38,12 +38,16 @@ function sign(data: string, secret: string): string {
 
 export function mintSessionToken(
   userId: number,
-  secret: string,
+  secret: unknown,
   ttlSeconds: number = SESSION_TTL_SECONDS,
 ): { token: string; payload: SessionPayload } {
   // Fail closed — float / ≤0 / unsafe ids must not mint a signed session.
   if (!Number.isSafeInteger(userId) || userId <= 0) {
     throw new Error("userId must be a positive SafeInteger");
+  }
+  // Fail closed — non-string / empty secret used to throw deep in HMAC.
+  if (typeof secret !== "string" || !secret) {
+    throw new Error("secret must be a non-empty string");
   }
   // Fail closed — NaN/±Inf/≤0 TTL used to mint exp that skews verify.
   if (!Number.isSafeInteger(ttlSeconds) || ttlSeconds <= 0) {

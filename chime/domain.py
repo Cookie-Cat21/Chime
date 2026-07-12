@@ -346,7 +346,10 @@ def format_dead_letter_notify(symbol: str, attempts: int) -> str:
     Telegram's 4096 limit — an oversize dead-letter notify would itself fail
     to send. Non-finite / unconvertible ``attempts`` fail closed to ``0``.
     """
-    clean = _CTRL_RE.sub("", symbol or "").strip() or "?"
+    # Fail closed — non-strings used to throw on re.sub mid dead-letter notify.
+    if not isinstance(symbol, str):
+        symbol = ""
+    clean = _CTRL_RE.sub("", symbol).strip() or "?"
     if len(clean) > 32:
         clean = clean[:31].rstrip() + "…"
     try:
@@ -379,6 +382,9 @@ def format_brief_followup(
     # Lazy import: adapters.cse imports domain at module load.
     from chime.adapters.cse import allowed_filing_url
 
+    # Fail closed — non-strings used to throw on re.sub mid brief follow-up.
+    if not isinstance(symbol, str):
+        symbol = ""
     clean_symbol = _CTRL_RE.sub("", symbol).strip() or "?"
     lines = [
         f"🔔 {clean_symbol}",
