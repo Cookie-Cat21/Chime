@@ -341,7 +341,8 @@ def test_market_movers_route_static() -> None:
     # Market page fails closed on bad JSON / missing items[].
     assert "readJsonPayload" in market_src
     assert "asMarketItems" in market_src
-    assert "finiteOrNull" in market_src
+    assert "toFiniteNumber" in market_src
+    assert "finiteOrNull" not in market_src
     # Both movers sides must succeed — do not paint API failure as empty gainers.
     assert "gainerItems !== null && loserItems !== null" in market_src
     assert "cse.lk" not in source.lower() or all(

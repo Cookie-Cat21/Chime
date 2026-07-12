@@ -15,6 +15,7 @@ import {
   MAX_MARKET_Q_LENGTH,
   normalizeMarketQuery,
 } from "@/lib/api/market-query";
+import { toFiniteNumber } from "@/lib/api/finite-number";
 import { toSafePositiveInt } from "@/lib/api/safe-int";
 import { serverApiGet } from "@/lib/api/server-fetch";
 import { normalizeSymbol } from "@/lib/api/symbol";
@@ -66,11 +67,6 @@ async function readJsonPayload<T>(
   }
 }
 
-/** Accept finite number primitives only — no string Number() coercion. */
-function finiteOrNull(value: unknown): number | null {
-  return typeof value === "number" && Number.isFinite(value) ? value : null;
-}
-
 /**
  * Fail-closed browse rows: SYMBOL_RE symbols (no sanitize fallback), sanitize
  * name/sector, coerce numerics. Raw string change_pct must not reach formatPct.
@@ -99,9 +95,9 @@ function asMarketItems(body: unknown): MarketItem[] | null {
         typeof r.sector === "string" ? r.sector : null,
         MAX_STOCK_SECTOR_LENGTH,
       ),
-      price: finiteOrNull(r.price),
-      change: finiteOrNull(r.change),
-      change_pct: finiteOrNull(r.change_pct),
+      price: toFiniteNumber(r.price),
+      change: toFiniteNumber(r.change),
+      change_pct: toFiniteNumber(r.change_pct),
       // Fail-closed ISO — no raw overlong / control-laden ts echo.
       ts: toIso(r.ts),
     });
@@ -132,7 +128,7 @@ function asSectorItems(body: unknown): SectorItem[] | null {
     out.push({
       sector_id: sectorId,
       name,
-      change_pct: finiteOrNull(r.change_pct),
+      change_pct: toFiniteNumber(r.change_pct),
     });
   }
   return out;

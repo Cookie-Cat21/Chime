@@ -22,6 +22,7 @@ import {
   sanitizeBriefText,
   sanitizeDisclosureText,
 } from "@/lib/api/disclosure-safe";
+import { toFiniteNumber } from "@/lib/api/finite-number";
 import { toSafePositiveInt } from "@/lib/api/safe-int";
 import { serverApiGet } from "@/lib/api/server-fetch";
 import { normalizeSymbol, normalizeSymbolParam } from "@/lib/api/symbol";
@@ -43,10 +44,6 @@ function isStaleTs(ts: string | null | undefined): boolean {
   const t = Date.parse(ts);
   if (Number.isNaN(t)) return false;
   return Date.now() - t > STALE_MS;
-}
-
-function finiteOrNull(value: unknown): number | null {
-  return typeof value === "number" && Number.isFinite(value) ? value : null;
 }
 
 export async function generateMetadata({
@@ -113,14 +110,14 @@ function parseSymbolPayload(body: unknown): SymbolPayload | null {
   let last: SymbolPayload["last"] = null;
   if (r.last != null && typeof r.last === "object" && !Array.isArray(r.last)) {
     const L = r.last as Record<string, unknown>;
-    const price = finiteOrNull(L.price);
+    const price = toFiniteNumber(L.price);
     // Require a finite price — null-only last stubs confuse the quote strip.
     if (price != null) {
       last = {
         price,
-        change: finiteOrNull(L.change),
-        change_pct: finiteOrNull(L.change_pct),
-        volume: finiteOrNull(L.volume),
+        change: toFiniteNumber(L.change),
+        change_pct: toFiniteNumber(L.change_pct),
+        volume: toFiniteNumber(L.volume),
         // Fail-closed ISO — no raw overlong / control-laden ts echo.
         ts: toIso(L.ts),
       };
@@ -156,8 +153,8 @@ function parseSnapshotsPayload(body: unknown): SnapshotsPayload {
     points.push({
       // Fail-closed ISO — no raw overlong / control-laden ts echo.
       ts: toIso(r.ts),
-      price: finiteOrNull(r.price),
-      change_pct: finiteOrNull(r.change_pct),
+      price: toFiniteNumber(r.price),
+      change_pct: toFiniteNumber(r.change_pct),
     });
   }
   return { points };

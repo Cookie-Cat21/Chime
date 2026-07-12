@@ -30,7 +30,9 @@ def test_session_exp_safe_integer_and_hex_sid() -> None:
 def test_market_finite_or_null_numbers_only() -> None:
     page = WEB / "src" / "app" / "market" / "page.tsx"
     source = page.read_text(encoding="utf-8")
-    assert "typeof value === \"number\" && Number.isFinite(value)" in source
+    # W60: abs-capped toFiniteNumber replaced local finiteOrNull.
+    assert "toFiniteNumber" in source
+    assert "finiteOrNull" not in source
     assert "Number(value)" not in source
 
 
