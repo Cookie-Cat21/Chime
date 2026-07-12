@@ -301,6 +301,7 @@ class Storage:
                         b.disclosure_id,
                         d.symbol,
                         d.title,
+                        d.url,
                         d.pdf_url
                     FROM disclosure_briefs b
                     JOIN disclosures d ON d.id = b.disclosure_id

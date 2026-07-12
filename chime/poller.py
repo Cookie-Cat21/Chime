@@ -761,7 +761,7 @@ class Poller:
     async def _drain_briefs_safe(self) -> None:
         try:
             async with self._brief_drain_lock:
-                n = await claim_pending_briefs(self.storage)
+                n = await claim_pending_briefs(self.storage, notify=self.send)
                 if n:
                     log.info("brief_drain_done", processed=n)
         except asyncio.CancelledError:

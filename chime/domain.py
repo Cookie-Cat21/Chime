@@ -169,5 +169,33 @@ def format_dead_letter_notify(symbol: str, attempts: int) -> str:
     )
 
 
+def format_brief_followup(
+    *,
+    symbol: str,
+    brief: str,
+    title: str | None = None,
+    url: str | None = None,
+) -> str:
+    """Telegram follow-up when a filing brief becomes ready after the alert.
+
+    Always ends with NFA. Callers supply precomputed brief text only.
+    """
+    lines = [
+        f"🔔 {symbol}",
+        "Filing brief ready",
+    ]
+    if title and title.strip():
+        lines.append(f"Disclosure: {truncate_disclosure_title(title)}")
+    if url and str(url).strip():
+        lines.append(str(url).strip())
+    brief_text = brief.strip()
+    if brief_text:
+        lines.append("")
+        lines.append(brief_text)
+    lines.append("")
+    lines.append(disclaimer())
+    return "\n".join(lines)
+
+
 def as_dict(model: BaseModel) -> dict[str, Any]:
     return model.model_dump()
