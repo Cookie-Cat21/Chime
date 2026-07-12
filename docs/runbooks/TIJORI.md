@@ -25,8 +25,8 @@ AI_BRIEFS_ENABLED=0          # leave off in prod until Phase 2
 # Phase 2 live:
 # AI_BRIEFS_ENABLED=1
 # AI_API_KEY=…               # required; briefs_enabled() needs both
-# AI_PROVIDER=gemini
-# AI_MODEL=gemini-2.0-flash
+# AI_PROVIDER=gemini         # or: groq (OpenAI-compatible chat completions)
+# AI_MODEL=gemini-2.0-flash  # groq e.g. llama-3.3-70b-versatile
 ```
 
 ## PDF enrich sleep (`PDF_ENRICH_SLEEP_SECONDS`)

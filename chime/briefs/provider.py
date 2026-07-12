@@ -1,11 +1,14 @@
-"""LLM brief providers (Gemini HTTP stub).
+"""LLM brief providers (Gemini + Groq HTTP).
 
 ``summarize(text) -> str`` is the only Phase-2 surface. Default off:
 ``AI_BRIEFS_ENABLED`` must be ``1`` and ``AI_API_KEY`` set, or
 ``summarize`` raises ``RuntimeError`` (never silently invents text).
 
 Hardening (wave4): bounded HTTP timeout, non-JSON / empty-candidate fails,
-and filing text isolated via ``systemInstruction`` + delimiters.
+and filing text isolated via system instruction + delimiters.
+
+``AI_PROVIDER=gemini`` → Gemini ``generateContent``.
+``AI_PROVIDER=groq`` → Groq OpenAI-compatible ``/chat/completions``.
 """
 
 from __future__ import annotations
@@ -23,6 +26,7 @@ log = structlog.get_logger("chime.briefs.provider")
 GEMINI_GENERATE_URL = (
     "https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent"
 )
+GROQ_CHAT_COMPLETIONS_URL = "https://api.groq.com/openai/v1/chat/completions"
 
 _DEFAULT_TIMEOUT_SECONDS = 30.0
 _MAX_OUTPUT_TOKENS = 512
@@ -37,8 +41,8 @@ class BriefsDisabledError(RuntimeError):
     """Raised when summarize is called while AI briefs are off / unkeyed."""
 
 
-class GeminiBriefProvider:
-    """Gemini ``generateContent`` via httpx (no official SDK)."""
+class _HttpBriefProviderBase:
+    """Shared httpx client lifecycle + filing sanitize for HTTP providers."""
 
     def __init__(
         self,
@@ -62,12 +66,6 @@ class GeminiBriefProvider:
         if self._owns_client:
             await self._client.aclose()
 
-    async def __aenter__(self) -> GeminiBriefProvider:
-        return self
-
-    async def __aexit__(self, *args: object) -> None:
-        await self.aclose()
-
     def _require_enabled(self) -> None:
         if not briefs_enabled(self._settings):
             raise BriefsDisabledError(
@@ -85,6 +83,16 @@ class GeminiBriefProvider:
         if "<<<FILING>>>" in body and "<<<END_FILING>>>" in body:
             return body
         return f"<<<FILING>>>\n{body}\n<<<END_FILING>>>"
+
+
+class GeminiBriefProvider(_HttpBriefProviderBase):
+    """Gemini ``generateContent`` via httpx (no official SDK)."""
+
+    async def __aenter__(self) -> GeminiBriefProvider:
+        return self
+
+    async def __aexit__(self, *args: object) -> None:
+        await self.aclose()
 
     async def summarize(self, text: str) -> str:
         self._require_enabled()
@@ -143,6 +151,70 @@ class GeminiBriefProvider:
         return brief
 
 
+class GroqBriefProvider(_HttpBriefProviderBase):
+    """Groq OpenAI-compatible ``/chat/completions`` via httpx."""
+
+    async def __aenter__(self) -> GroqBriefProvider:
+        return self
+
+    async def __aexit__(self, *args: object) -> None:
+        await self.aclose()
+
+    async def summarize(self, text: str) -> str:
+        self._require_enabled()
+        body = self._sanitize_user_text(text)
+
+        payload: dict[str, Any] = {
+            "model": self._settings.model,
+            "messages": [
+                {"role": "system", "content": BRIEF_SYSTEM_INSTRUCTION},
+                {"role": "user", "content": body},
+            ],
+            "temperature": 0.2,
+            "max_tokens": _MAX_OUTPUT_TOKENS,
+        }
+        headers = {
+            "Content-Type": "application/json",
+            "Authorization": f"Bearer {self._settings.api_key}",
+        }
+        log.info(
+            "groq_summarize_request",
+            model=self._settings.model,
+            input_chars=len(body),
+        )
+        try:
+            response = await self._client.post(
+                GROQ_CHAT_COMPLETIONS_URL,
+                headers=headers,
+                json=payload,
+                timeout=self._timeout,
+            )
+        except httpx.TimeoutException as exc:
+            raise RuntimeError(f"Groq request timed out: {exc}") from exc
+        except httpx.HTTPError as exc:
+            raise RuntimeError(f"Groq transport error: {exc}") from exc
+
+        try:
+            response.raise_for_status()
+        except httpx.HTTPStatusError as exc:
+            raise RuntimeError(
+                f"Groq HTTP {exc.response.status_code}: {exc.response.text[:300]}"
+            ) from exc
+
+        try:
+            data = response.json()
+        except (json.JSONDecodeError, ValueError) as exc:
+            raise RuntimeError(
+                f"Groq response was not JSON: {response.text[:300]!r}"
+            ) from exc
+
+        brief = _extract_openai_chat_text(data)
+        if not brief:
+            reason = _openai_chat_failure_reason(data)
+            raise RuntimeError(f"Groq response missing message content ({reason})")
+        return brief
+
+
 def _gemini_failure_reason(data: Any) -> str:
     if not isinstance(data, dict):
         return f"non-object body type={type(data).__name__}"
@@ -187,13 +259,59 @@ def _extract_gemini_text(data: Any) -> str:
     return "\n".join(chunks).strip()
 
 
+def _openai_chat_failure_reason(data: Any) -> str:
+    if not isinstance(data, dict):
+        return f"non-object body type={type(data).__name__}"
+    err = data.get("error")
+    if isinstance(err, dict):
+        msg = err.get("message")
+        if isinstance(msg, str) and msg.strip():
+            return f"error.message={msg.strip()[:200]}"
+        code = err.get("code")
+        if code is not None:
+            return f"error.code={code}"
+    choices = data.get("choices")
+    if not isinstance(choices, list) or not choices:
+        return "empty choices"
+    first = choices[0]
+    if not isinstance(first, dict):
+        return "choice not an object"
+    finish = first.get("finish_reason")
+    if finish:
+        return f"finish_reason={finish}"
+    return "no message content"
+
+
+def _extract_openai_chat_text(data: Any) -> str:
+    if not isinstance(data, dict):
+        return ""
+    choices = data.get("choices")
+    if not isinstance(choices, list) or not choices:
+        return ""
+    first = choices[0]
+    if not isinstance(first, dict):
+        return ""
+    message = first.get("message")
+    if not isinstance(message, dict):
+        return ""
+    content = message.get("content")
+    if isinstance(content, str):
+        return content.strip()
+    return ""
+
+
 def make_brief_provider(
     settings: BriefSettings | None = None,
     *,
     client: httpx.AsyncClient | None = None,
 ) -> BriefProvider:
-    """Build a provider. Disabled settings still return Gemini provider that raises."""
+    """Build a provider from ``AI_PROVIDER`` (``gemini`` or ``groq``)."""
     cfg = settings or BriefSettings.from_env()
-    if cfg.provider and cfg.provider != "gemini":
-        raise RuntimeError(f"Unsupported AI_PROVIDER={cfg.provider!r} (only gemini)")
-    return GeminiBriefProvider(cfg, client=client)
+    provider = (cfg.provider or "gemini").strip().lower()
+    if provider == "gemini":
+        return GeminiBriefProvider(cfg, client=client)
+    if provider == "groq":
+        return GroqBriefProvider(cfg, client=client)
+    raise RuntimeError(
+        f"Unsupported AI_PROVIDER={cfg.provider!r} (gemini|groq)"
+    )
