@@ -4,7 +4,7 @@
 **Date:** 2026-07-12  
 **Plan:** [TIJORI_CSE_PLAN.md](../TIJORI_CSE_PLAN.md)  
 **Ops:** [docs/runbooks/TIJORI.md](../../runbooks/TIJORI.md)  
-**Range:** `a802cb7` … `d46e3ea` (+ this wave-9 report refresh)
+**Range:** `a802cb7` … `b67c559` (+ this wave-9 report refresh)
 
 ---
 
@@ -235,18 +235,20 @@ Phase 1 foundations and Phase 2 Tijori-core plumbing are **landed** across waves
 
 ---
 
-## Wave 9 — Format sweep + wave report refresh
+## Wave 9 — Format sweep + env docs + wave report
 
-**Theme:** Ruff format across chime/tests; refresh this rollup through waves 8–9.
+**Theme:** Ruff format across chime/tests; complete `.env.example` knobs; refresh this rollup through waves 8–9.
 
 | SHA | Commit |
 |---|---|
 | `d46e3ea` | style(wave9): ruff format chime and tests |
+| `b67c559` | chore(wave9): env example complete |
 | _(this)_ | docs(wave9): wave report refresh |
 
 **Shipped**
 
 - `ruff format` over `chime/` and related tests (style-only).
+- Root + `web/.env.example`: remaining `Settings` knobs (`HTTP_TIMEOUT_SECONDS`, `MARKET_*`) and annotated `BriefSettings` AI/PDF/BRIEF flags.
 - `TIJORI_WAVE_REPORT.md` — waves 8–9 inventory + updated totals.
 
 ---
@@ -263,8 +265,8 @@ Phase 1 foundations and Phase 2 Tijori-core plumbing are **landed** across waves
 | 6 (`wave6`) | 8 |
 | 7 (`wave7`) | 7 |
 | 8 (`wave8`) | 9 |
-| 9 (`wave9` + this report) | 2 |
-| **Total** | **70** |
+| 9 (`wave9` + this report) | 3 |
+| **Total** | **71** |
 
 ---
 
