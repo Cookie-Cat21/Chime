@@ -60,7 +60,11 @@ export function isLoopbackHost(host: unknown): boolean {
 export function resolveInternalOrigin(
   env: NodeJS.ProcessEnv = process.env,
 ): string {
-  const fromEnv = (env.DASH_INTERNAL_ORIGIN ?? "").trim();
+  // Fail closed — non-string env mocks used to throw on .trim mid SSR origin
+  // (parity getDashAuthConfig / cookieSecure typeof guards).
+  const fromEnvRaw = env.DASH_INTERNAL_ORIGIN;
+  const fromEnv =
+    typeof fromEnvRaw === "string" ? fromEnvRaw.trim() : "";
   if (fromEnv) {
     try {
       const u = new URL(fromEnv);
@@ -77,7 +81,8 @@ export function resolveInternalOrigin(
       /* fall through */
     }
   }
-  const portRaw = (env.PORT ?? "").trim();
+  const portEnv = env.PORT;
+  const portRaw = typeof portEnv === "string" ? portEnv.trim() : "";
   const port = /^\d{1,5}$/.test(portRaw) ? portRaw : "3000";
   const n = Number(port);
   if (!Number.isInteger(n) || n < 1 || n > 65535) {

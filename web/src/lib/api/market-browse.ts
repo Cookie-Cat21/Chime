@@ -67,7 +67,9 @@ export async function queryMarketBrowse(
 ): Promise<MarketBrowseRow[]> {
   const params: unknown[] = [];
   const whereParts: string[] = [];
-  const q = opts.q?.trim() ?? "";
+  // Fail closed — non-string q used to throw on .trim mid browse (parity
+  // normalizeMarketQuery typeof / firstSearchParam guards).
+  const q = typeof opts.q === "string" ? opts.q.trim() : "";
   if (q) {
     params.push(`%${escapeLikePattern(q.toUpperCase())}%`);
     whereParts.push(

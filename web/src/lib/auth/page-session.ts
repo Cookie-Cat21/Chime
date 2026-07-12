@@ -10,13 +10,18 @@ export async function requirePageSession(): Promise<SessionPayload> {
   const cfg = getDashAuthConfig();
   const jar = await cookies();
   const raw = jar.get(SESSION_COOKIE)?.value;
+  // Fail closed — non-string cookie mocks used to reach verify with junk
+  // (parity verifySessionToken typeof guard; soft-truthy objects must not).
   const session =
-    raw && cfg.sessionSecret
+    typeof raw === "string" && raw && cfg.sessionSecret
       ? verifySessionToken(raw, cfg.sessionSecret)
       : null;
   if (!session) {
     // Cookie present but invalid/expired → tell login why; bare miss → /login.
-    redirect(raw ? LOGIN_EXPIRED_PATH : "/login");
+    // Fail closed — only a real string cookie counts as "present".
+    redirect(
+      typeof raw === "string" && raw ? LOGIN_EXPIRED_PATH : "/login",
+    );
   }
   return session;
 }

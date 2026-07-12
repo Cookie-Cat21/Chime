@@ -21,7 +21,10 @@ export const HEALTH_PROXY_TIMEOUT_MS_DEFAULT = 3000;
 
 /** Bound HEALTH_URL proxy. Fail-closed on bad/non-positive env → default. */
 export function healthProxyTimeoutMs(): number {
-  const raw = (process.env.HEALTH_PROXY_TIMEOUT_MS ?? "").trim();
+  // Fail closed — non-string env mocks used to throw on .trim mid timeout parse
+  // (parity getDashAuthConfig / resolveInternalOrigin typeof guards).
+  const rawEnv = process.env.HEALTH_PROXY_TIMEOUT_MS;
+  const raw = typeof rawEnv === "string" ? rawEnv.trim() : "";
   if (!raw) return HEALTH_PROXY_TIMEOUT_MS_DEFAULT;
   // Digits-only SafeInteger — Number("3e3") / floats must not soft-accept.
   const n = toSafePositiveInt(raw);
@@ -268,7 +271,11 @@ export async function GET(request: NextRequest) {
     dbOk = false;
   }
 
-  const healthUrl = (process.env.HEALTH_URL ?? "").trim();
+  // Fail closed — non-string HEALTH_URL mocks used to throw on .trim before
+  // the loopback allowlist gate (parity isAllowedHealthProxyUrl typeof).
+  const healthUrlEnv = process.env.HEALTH_URL;
+  const healthUrl =
+    typeof healthUrlEnv === "string" ? healthUrlEnv.trim() : "";
   if (healthUrl) {
     // Fail closed — non-loopback / https / credentialed URLs must not fetch.
     if (!isAllowedHealthProxyUrl(healthUrl)) {

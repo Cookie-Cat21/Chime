@@ -48,20 +48,24 @@ def nfa_suffix() -> str:
     return disclaimer()
 
 
-def contains_buy_sell_language(text: str) -> bool:
+def contains_buy_sell_language(text: object) -> bool:
     """True when ``text`` contains buy/sell or adjacent advice phrasing."""
-    if not text or not str(text).strip():
+    # Fail closed — non-strings must not coerce via str() into false hits.
+    if not isinstance(text, str) or not text.strip():
         return False
-    return _BUY_SELL_RE.search(str(text)) is not None
+    return _BUY_SELL_RE.search(text) is not None
 
 
-def assert_safe_scenario_output(text: str) -> str:
+def assert_safe_scenario_output(text: object) -> str:
     """Return stripped text if safe; raise ``GuardrailViolation`` otherwise.
 
     Empty/whitespace-only output is rejected. Buy/sell advice language is
     rejected. Does not call an LLM and does not mutate beyond strip.
     """
-    cleaned = (text or "").replace("\x00", "").strip()
+    # Fail closed — non-strings used to throw on .replace mid scenario gate.
+    if not isinstance(text, str):
+        raise GuardrailViolation("scenario output is empty")
+    cleaned = text.replace("\x00", "").strip()
     if not cleaned:
         raise GuardrailViolation("scenario output is empty")
     match = _BUY_SELL_RE.search(cleaned)

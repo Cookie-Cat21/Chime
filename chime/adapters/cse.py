@@ -496,6 +496,9 @@ def announcement_to_disclosure(
 
 def normalize_company_name(name: str) -> str:
     """Collapse whitespace + uppercase for company-name → symbol matching."""
+    # Fail closed — non-strings used to throw on .split mid bulk name map.
+    if not isinstance(name, str):
+        return ""
     return " ".join(name.split()).upper()
 
 
@@ -510,7 +513,8 @@ def build_unique_company_name_map(
     """
     buckets: dict[str, set[str]] = {}
     for symbol, name in pairs:
-        if name is None:
+        # Fail closed — non-string pairs used to throw on .strip mid bulk map.
+        if not isinstance(symbol, str) or not isinstance(name, str):
             continue
         sym = symbol.strip().upper()
         if not sym or not name.strip():

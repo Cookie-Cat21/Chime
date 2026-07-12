@@ -12,7 +12,10 @@ const globalForPg = globalThis as typeof globalThis & {
 };
 
 export function getPool(): Pool {
-  const url = (process.env.DATABASE_URL ?? "").trim();
+  // Fail closed — non-string env mocks used to throw on .trim mid pool init
+  // (parity getDashAuthConfig / resolveInternalOrigin typeof guards).
+  const urlEnv = process.env.DATABASE_URL;
+  const url = typeof urlEnv === "string" ? urlEnv.trim() : "";
   if (!url) {
     throw new Error("DATABASE_URL is not set");
   }

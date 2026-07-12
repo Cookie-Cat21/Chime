@@ -14,7 +14,9 @@ load_dotenv(_ROOT / ".env")
 
 
 def _require(name: str) -> str:
-    value = os.getenv(name, "").strip()
+    raw = os.getenv(name, "")
+    # Fail closed — non-string mocks used to throw on .strip mid process boot.
+    value = raw.strip() if isinstance(raw, str) else ""
     if not value:
         raise RuntimeError(f"Missing required environment variable: {name}")
     return value
@@ -27,7 +29,8 @@ def _float(name: str, default: float) -> float:
     cannot silently become non-finite and break APScheduler / sleep loops.
     """
     raw = os.getenv(name)
-    if raw is None or raw.strip() == "":
+    # Fail closed — non-string mocks used to throw on .strip mid Settings load.
+    if raw is None or not isinstance(raw, str) or raw.strip() == "":
         return default
     try:
         value = float(raw)
@@ -40,7 +43,8 @@ def _float(name: str, default: float) -> float:
 
 def _int(name: str, default: int) -> int:
     raw = os.getenv(name)
-    if raw is None or raw.strip() == "":
+    # Fail closed — non-string mocks used to throw on .strip mid Settings load.
+    if raw is None or not isinstance(raw, str) or raw.strip() == "":
         return default
     try:
         return int(raw)
@@ -120,9 +124,12 @@ class Settings:
 
     @classmethod
     def from_env(cls, *, require_token: bool = True) -> Settings:
-        token = (
-            _require("TELEGRAM_BOT_TOKEN") if require_token else os.getenv("TELEGRAM_BOT_TOKEN", "")
-        )
+        if require_token:
+            token = _require("TELEGRAM_BOT_TOKEN")
+        else:
+            token_raw = os.getenv("TELEGRAM_BOT_TOKEN", "")
+            # Fail closed — non-string mocks must not reach Settings as token.
+            token = token_raw if isinstance(token_raw, str) else ""
         health_port = _int("HEALTH_PORT", 8080)
         if not (1 <= health_port <= 65535):
             health_port = 8080
@@ -130,10 +137,19 @@ class Settings:
         bot_rate = _int("BOT_CMD_RATE_PER_MINUTE", 20)
         if bot_rate < 0:
             bot_rate = 20
+
+        def _env_str(name: str, default: str) -> str:
+            raw = os.getenv(name, default)
+            return raw if isinstance(raw, str) else default
+
+        cse_base = _env_str("CSE_BASE_URL", "https://www.cse.lk/api")
+        log_raw = _env_str("LOG_LEVEL", "INFO")
+        bulk_raw = _env_str("DISCLOSURE_BULK_FEED", "0")
+        sectors_raw = _env_str("SECTORS_INGEST", "0")
         return cls(
             telegram_bot_token=token,
             database_url=_require("DATABASE_URL"),
-            cse_base_url=os.getenv("CSE_BASE_URL", "https://www.cse.lk/api").rstrip("/"),
+            cse_base_url=cse_base.rstrip("/"),
             # ≤0 or <5s poll interval → IntervalTrigger hammer; reject.
             poll_interval_seconds=_positive_float_at_least(
                 "POLL_INTERVAL_SECONDS", 60.0, _MIN_POLL_INTERVAL_SECONDS
@@ -147,17 +163,17 @@ class Settings:
                 "CIRCUIT_RESET_SECONDS", 60.0, _MIN_CIRCUIT_RESET_SECONDS
             ),
             cse_min_interval_seconds=_nonneg_float("CSE_MIN_INTERVAL_SECONDS", 0.0),
-            health_host=os.getenv("HEALTH_HOST", "127.0.0.1"),
+            health_host=_env_str("HEALTH_HOST", "127.0.0.1"),
             health_port=health_port,
-            log_level=os.getenv("LOG_LEVEL", "INFO").upper(),
-            market_tz=os.getenv("MARKET_TZ", "Asia/Colombo"),
-            market_open=os.getenv("MARKET_OPEN", "09:30"),
-            market_close=os.getenv("MARKET_CLOSE", "14:30"),
+            log_level=log_raw.upper(),
+            market_tz=_env_str("MARKET_TZ", "Asia/Colombo"),
+            market_open=_env_str("MARKET_OPEN", "09:30"),
+            market_close=_env_str("MARKET_CLOSE", "14:30"),
             bot_cmd_rate_per_minute=bot_rate,
             pdf_enrich_sleep_seconds=_nonneg_float("PDF_ENRICH_SLEEP_SECONDS", 0.5),
-            disclosure_bulk_feed=os.getenv("DISCLOSURE_BULK_FEED", "0").strip() == "1",
+            disclosure_bulk_feed=bulk_raw.strip() == "1",
             snapshot_retention_days=max(0, _int("SNAPSHOT_RETENTION_DAYS", 0)),
-            sectors_ingest=os.getenv("SECTORS_INGEST", "0").strip() == "1",
+            sectors_ingest=sectors_raw.strip() == "1",
         )
 
 

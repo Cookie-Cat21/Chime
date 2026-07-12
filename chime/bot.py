@@ -179,6 +179,9 @@ class ParsedAlert:
 
 
 def normalize_symbol(raw: str) -> str | None:
+    # Fail closed — non-strings used to throw on .strip mid /watch|/alert|/brief.
+    if not isinstance(raw, str):
+        return None
     s = raw.strip().upper()
     if not s or not SYMBOL_RE.match(s):
         return None
@@ -431,6 +434,9 @@ def parse_cancel_alert_id(raw: str) -> int | None:
     pathological DB param. Digits-only + ≤18 digits stays under bigint range and
     keeps confirm/error replies well under Telegram's 4096 limit.
     """
+    # Fail closed — non-strings used to throw on .lstrip mid /cancel.
+    if not isinstance(raw, str):
+        return None
     cleaned = raw.lstrip("#").strip()
     if not cleaned.isdigit() or len(cleaned) > 18:
         return None
@@ -566,12 +572,17 @@ def format_brief_lookup_reply(
     DB symbol must not inject nulls or blow past the cap. Distinguishes AI-off
     from none-yet when ``ai_enabled`` is provided.
     """
-    clean_symbol = _CTRL_RE.sub("", symbol or "").strip() or "?"
+    # Fail closed — non-strings used to throw on re.sub mid /brief reply
+    # (parity format_brief_followup / format_dead_letter_notify).
+    if not isinstance(symbol, str):
+        symbol = ""
+    clean_symbol = _CTRL_RE.sub("", symbol).strip() or "?"
     # CSE tickers are short; cap so a hostile DB row cannot starve the brief budget.
     if len(clean_symbol) > 32:
         clean_symbol = clean_symbol[:31].rstrip() + "…"
     lines = [f"{clean_symbol} filing brief"]
-    if title and title.strip():
+    # Fail closed — non-string truthy title used to throw on .strip mid /brief.
+    if isinstance(title, str) and title.strip():
         clean_title = truncate_disclosure_title(title)
         if clean_title:
             lines.append(f"Disclosure: {clean_title}")

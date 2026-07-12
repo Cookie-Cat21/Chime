@@ -102,9 +102,12 @@ def _normalize_send_result(result: SendResult | bool) -> SendResult:
     return result
 
 
-def _symbol_from_alert_message(message: str) -> str | None:
+def _symbol_from_alert_message(message: object) -> str | None:
     """Best-effort parse of ``format_alert_message`` first line (``🔔 SYMBOL``)."""
-    first = (message or "").split("\n", 1)[0].strip()
+    # Fail closed — non-strings used to throw on .split mid dead-letter notify.
+    if not isinstance(message, str):
+        return None
+    first = message.split("\n", 1)[0].strip()
     if first.startswith("🔔"):
         symbol = first.removeprefix("🔔").strip()
         return symbol or None
@@ -123,7 +126,10 @@ def _delivery_ok_token(
     return f"{log_id}:{rule_part}:{telegram_id}:{digest}"
 
 
-def parse_hhmm(value: str) -> time:
+def parse_hhmm(value: object) -> time:
+    # Fail closed — non-strings used to throw on .split mid market-hours gate.
+    if not isinstance(value, str):
+        raise ValueError("market open/close must be HH:MM string")
     hour, minute = value.split(":")
     return time(int(hour), int(minute))
 

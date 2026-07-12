@@ -10,7 +10,11 @@ from threading import Thread
 from typing import Any
 
 
-def _is_loopback_host(host: str) -> bool:
+def _is_loopback_host(host: object) -> bool:
+    # Fail closed — non-strings used to throw on .strip mid health bind
+    # (parity web isLoopbackHost typeof guard).
+    if not isinstance(host, str):
+        return False
     h = host.strip().lower()
     if h.startswith("[") and h.endswith("]"):
         h = h[1:-1]

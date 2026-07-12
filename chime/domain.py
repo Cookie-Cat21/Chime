@@ -258,6 +258,9 @@ def sanitize_brief_body(
 
 def format_price_lkr(price: float) -> str:
     """Compact LKR price for Telegram — avoids pathological ``.2f`` on huge floats."""
+    # Fail closed — non-numeric / bool used to throw in math.isfinite mid alert.
+    if isinstance(price, bool) or not isinstance(price, (int, float)):
+        return "n/a"
     if not math.isfinite(price):
         return "n/a"
     if abs(price) >= 1_000_000_000:
@@ -311,8 +314,12 @@ def format_alert_message(
     # Lazy import: adapters.cse imports domain at module load.
     from chime.adapters.cse import allowed_filing_url
 
-    symbol = _CTRL_RE.sub("", event.symbol).strip() or "?"
-    trigger = _CTRL_RE.sub("", event.trigger).strip() or "alert"
+    # Fail closed — non-string symbol/trigger used to throw on re.sub mid
+    # Telegram alert egress (parity dead-letter / brief-followup).
+    raw_symbol = event.symbol if isinstance(event.symbol, str) else ""
+    raw_trigger = event.trigger if isinstance(event.trigger, str) else ""
+    symbol = _CTRL_RE.sub("", raw_symbol).strip() or "?"
+    trigger = _CTRL_RE.sub("", raw_trigger).strip() or "alert"
     lines = [
         f"🔔 {symbol}",
         f"Trigger: {trigger}",
@@ -390,7 +397,8 @@ def format_brief_followup(
         f"🔔 {clean_symbol}",
         "Filing brief ready",
     ]
-    if title and title.strip():
+    # Fail closed — non-string title used to throw on .strip before truncate.
+    if isinstance(title, str) and title.strip():
         clean_title = truncate_disclosure_title(title)
         if clean_title:
             lines.append(f"Disclosure: {clean_title}")
