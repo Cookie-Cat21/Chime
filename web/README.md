@@ -45,7 +45,7 @@ mutations (including `POST /api/v1/auth/logout`) require matching
 |---|---|---|
 | `GET` | `/api/v1/me` | |
 | `GET` | `/api/v1/watchlist` | |
-| `POST` | `/api/v1/watchlist` | CSRF; known `stocks` only |
+| `POST` | `/api/v1/watchlist` | CSRF; known `stocks` only; `created` soft flag (200 if already watched) |
 | `DELETE` | `/api/v1/watchlist/{symbol}` | CSRF; deactivates rules |
 | `GET` | `/api/v1/alerts` | |
 | `POST` | `/api/v1/alerts` | CSRF; auto-watch; idempotent |

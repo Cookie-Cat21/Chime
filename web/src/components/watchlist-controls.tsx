@@ -38,7 +38,19 @@ export function WatchlistAddForm() {
         return;
       }
       setSymbol("");
-      toast.success(`Watching ${trimmed}. Pushes still go to Telegram.`);
+      // Soft duplicate messaging: body.created (or 200) means already watching.
+      const created =
+        data &&
+        typeof data === "object" &&
+        "created" in data &&
+        typeof (data as { created: unknown }).created === "boolean"
+          ? (data as { created: boolean }).created
+          : status === 201;
+      toast.success(
+        created
+          ? `Watching ${trimmed}. Pushes still go to Telegram.`
+          : `Already watching ${trimmed}. Pushes still go to Telegram.`,
+      );
       router.refresh();
     } catch {
       const msg = "Network error. Try again.";

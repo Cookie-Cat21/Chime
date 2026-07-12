@@ -100,7 +100,7 @@ Base: `/api/v1`. JSON request/response. User routes scoped by **session** `user_
 | Method | Path | Request | Response |
 |---|---|---|---|
 | `GET` | `/api/v1/watchlist` | — | `{ "items": [{ "symbol", "name", "sector", "price", "change", "change_pct", "ts" }] }` |
-| `POST` | `/api/v1/watchlist` | `{ "symbol": string }` | `{ "symbol", "name" }` (Postgres `stocks` only — no CSE from dash) |
+| `POST` | `/api/v1/watchlist` | `{ "symbol": string }` | `{ "symbol", "name", "created" }` — `201`/`created:true` new; `200`/`created:false` already watched (Postgres `stocks` only — no CSE from dash) |
 | `DELETE` | `/api/v1/watchlist/{symbol}` | — | `{ "removed": bool, "deactivated_alerts": number }` |
 
 ### Alerts

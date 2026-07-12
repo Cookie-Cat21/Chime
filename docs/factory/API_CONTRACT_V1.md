@@ -197,9 +197,12 @@ Latest `price_snapshots` join (e.g. `DISTINCT ON (symbol)`). Missing snapshot �
 ```json
 {
   "symbol": "JKH.N0000",
-  "name": "John Keells Holdings PLC"
+  "name": "John Keells Holdings PLC",
+  "created": true
 }
 ```
+
+Idempotent: if already on the watchlist, return `200` with `created: false` (same soft-messaging pattern as DELETE `removed: false`) — never hard `409`.
 
 **Postgres only:** symbol must already exist in `stocks` (poller/bot upserted) **or** be accepted as a normalized symbol with a `stocks` stub row if product chooses upsert-without-CSE — **never** call cse.lk from this handler. Prefer: require known `stocks` row → `404 not_found` if unknown.
 

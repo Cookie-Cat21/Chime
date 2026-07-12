@@ -691,3 +691,21 @@ def test_disclosures_route_brief_pdf_unit() -> None:
             f"stdout:\n{proc.stdout}\nstderr:\n{proc.stderr}"
         )
     assert "WEB_DISCLOSURES_ROUTE_UNIT_OK" in proc.stdout
+
+
+def test_post_watchlist_duplicate_soft_messaging() -> None:
+    """w18: POST /watchlist exposes created; UI distinguishes already-watching toast."""
+    route = WEB / "src" / "app" / "api" / "v1" / "watchlist" / "route.ts"
+    controls = WEB / "src" / "components" / "watchlist-controls.tsx"
+    assert route.is_file()
+    assert controls.is_file()
+    route_src = route.read_text(encoding="utf-8")
+    controls_src = controls.read_text(encoding="utf-8")
+    # API: body includes created; 201 only when newly inserted.
+    assert "created" in route_src
+    assert "created ? 201 : 200" in route_src
+    assert "Soft messaging" in route_src
+    # UI: distinct toast for duplicate vs new watch.
+    assert "Already watching" in controls_src
+    assert "Pushes still go to Telegram" in controls_src
+    assert '"created"' in controls_src or "created" in controls_src

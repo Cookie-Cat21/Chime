@@ -70,6 +70,7 @@ export async function GET(request: NextRequest) {
 
 /**
  * POST /api/v1/watchlist — add symbol (CSRF). Postgres stocks only; no cse.lk.
+ * Soft messaging: 200 with created:false when already watched (parity DELETE removed).
  */
 export async function POST(request: NextRequest) {
   const gated = requireSessionAndCsrf(request);
@@ -97,10 +98,10 @@ export async function POST(request: NextRequest) {
       return jsonError(404, "not_found", "Unknown symbol.");
     }
 
-    const inserted = await addWatch(gated.session.user_id, symbol);
+    const created = await addWatch(gated.session.user_id, symbol);
     return jsonOk(
-      { symbol: stock.symbol, name: stock.name },
-      inserted ? 201 : 200,
+      { symbol: stock.symbol, name: stock.name, created },
+      created ? 201 : 200,
     );
   } catch (err) {
     console.error("POST /watchlist failed", err);
