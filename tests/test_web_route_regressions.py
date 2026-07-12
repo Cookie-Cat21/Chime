@@ -332,7 +332,8 @@ def test_market_page_and_nav_browse_link() -> None:
     assert "{open ? (" not in nav_src
     watch_src = watchlist.read_text(encoding="utf-8")
     assert 'href="/market"' in watch_src
-    assert "Browse symbols" in watch_src
+    assert '<Link href="/market">Browse</Link>' in watch_src
+    assert "Browse symbols" not in watch_src
 
 
 def test_market_page_fence_no_screener_or_quote_board() -> None:

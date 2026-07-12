@@ -83,7 +83,7 @@ export default async function WatchlistPage() {
                   href="/market"
                   className="rounded-sm underline underline-offset-4 focus-visible:ring-2 focus-visible:ring-ring/50 focus-visible:outline-none"
                 >
-                  Browse symbols
+                  Browse
                 </Link>{" "}
                 to discover tickers, or use{" "}
                 <code className="font-mono text-xs">/watch SYMBOL</code> in
@@ -92,8 +92,8 @@ export default async function WatchlistPage() {
             }
             action={
               <div className="flex flex-wrap gap-2">
-                <Button asChild variant="outline">
-                  <Link href="/market">Browse symbols</Link>
+                <Button asChild>
+                  <Link href="/market">Browse</Link>
                 </Button>
                 <Button asChild variant="outline">
                   <a href="#watch_symbol">Add a symbol</a>
