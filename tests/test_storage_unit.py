@@ -10,7 +10,7 @@ from unittest.mock import AsyncMock
 import pytest
 from psycopg.errors import UniqueViolation
 
-from chime.domain import AlertEvent, AlertType, Disclosure, PriceSnapshot
+from chime.domain import AlertEvent, AlertType, Disclosure, PriceSnapshot, SectorSnapshot
 from chime.storage import Storage, _row_to_rule, _row_to_snapshot
 
 
@@ -165,15 +165,16 @@ async def test_persist_market_snapshots_empty_and_batch() -> None:
     assert len(conn.sql) == 2
     assert sum(1 for s in conn.sql if "INSERT INTO stocks" in s) == 1
     assert sum(1 for s in conn.sql if "price_snapshots" in s) == 1
-    assert conn.sql[0].count("(%s, %s, %s)") == 2
+    assert "UNNEST" in conn.sql[0]
+    assert "UNNEST" in conn.sql[1]
     assert "RETURNING id" in conn.sql[1]
-    # Flattened params: 3 per stock, 13 per snapshot.
-    assert conn.params[0][0] == "JKH.N0000"
-    assert conn.params[0][3] == "COMB.N0000"
-    assert conn.params[1][0] == "JKH.N0000"
-    assert conn.params[1][1] == 100.0
-    assert conn.params[1][13] == "COMB.N0000"
-    assert conn.params[1][14] == 90.0
+    assert "VALUES (" not in conn.sql[0]
+    assert "VALUES (" not in conn.sql[1]
+    # Column-wise arrays (no dynamic VALUES concat).
+    assert conn.params[0][0] == ["JKH.N0000", "COMB.N0000"]
+    assert conn.params[0][1] == ["John Keells", "John Keells"]
+    assert conn.params[1][0] == ["JKH.N0000", "COMB.N0000"]
+    assert conn.params[1][1] == [100.0, 90.0]
 
 
 @pytest.mark.asyncio
@@ -191,10 +192,10 @@ async def test_persist_market_snapshots_last_wins_dedupes_symbol() -> None:
     assert out[0].id == 10
     assert out[0].symbol == "JKH.N0000"
     assert out[0].price == 101.0
-    assert conn.sql[0].count("(%s, %s, %s)") == 1
-    assert conn.params[0] == ["JKH.N0000", "Second", None]
-    assert conn.sql[1].count("(%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)") == 1
-    assert conn.params[1][1] == 101.0
+    assert "UNNEST" in conn.sql[0] and "UNNEST" in conn.sql[1]
+    assert conn.params[0] == (["JKH.N0000"], ["Second"], [None])
+    assert conn.params[1][0] == ["JKH.N0000"]
+    assert conn.params[1][1] == [101.0]
 
 
 @pytest.mark.asyncio
@@ -232,9 +233,10 @@ async def test_persist_market_snapshots_scales_to_board_size() -> None:
     assert out[0].id == 1 and out[-1].id == n
     assert out[0].symbol == "S0000.N0000"
     assert len(conn.sql) == 2
-    assert conn.sql[0].count("(%s, %s, %s)") == n
-    assert len(conn.params[0]) == n * 3
-    assert len(conn.params[1]) == n * 13
+    assert "UNNEST" in conn.sql[0] and "UNNEST" in conn.sql[1]
+    assert len(conn.params[0][0]) == n
+    assert len(conn.params[1][0]) == n
+    assert len(conn.params[1][1]) == n
 
 
 @pytest.mark.asyncio
@@ -265,6 +267,58 @@ async def test_delete_old_non_watchlist_snapshots_null_row_returns_zero() -> Non
     conn = _Conn([None])
     store = _store(conn)
     assert await store.delete_old_non_watchlist_snapshots(1) == 0
+
+
+def _sector(**kwargs: Any) -> SectorSnapshot:
+    base = dict(
+        sector_id=1,
+        symbol="BFI.I0000",
+        name="Banks Finance and Insurance",
+        index_code="BFI",
+        index_code_sp=None,
+        index_name="Banks Finance and Insurance",
+        index_value=100.0,
+        change=1.0,
+        change_pct=1.0,
+        trade_today=10.0,
+        volume_today=1000.0,
+        turnover_today=1e5,
+        previous_close=99.0,
+        ts=datetime(2026, 7, 11, 6, 0, 0, tzinfo=UTC),
+        cse_row_id=7,
+    )
+    base.update(kwargs)
+    return SectorSnapshot(**base)
+
+
+@pytest.mark.asyncio
+async def test_persist_sectors_empty_blank_and_unnest() -> None:
+    store = _store(_Conn([]))
+    assert await store.persist_sectors([]) == []
+    assert await store.persist_sectors([_sector(symbol="  ")]) == []
+
+    conn = _Conn([None])
+    store = _store(conn)
+    out = await store.persist_sectors(
+        [
+            _sector(sector_id=1, symbol="bfi.i0000", name="First"),
+            _sector(sector_id=1, symbol="BFI.I0000", name="Last", index_value=101.0),
+            _sector(sector_id=2, symbol="  "),
+            _sector(sector_id=3, symbol="CON.I0000", name="Construction"),
+        ]
+    )
+    assert len(out) == 2
+    assert out[0].sector_id == 1 and out[0].name == "Last" and out[0].index_value == 101.0
+    assert out[1].sector_id == 3 and out[1].symbol == "CON.I0000"
+    assert len(conn.sql) == 1
+    assert "INSERT INTO sectors" in conn.sql[0]
+    assert "UNNEST" in conn.sql[0]
+    assert "%s::" in conn.sql[0]
+    assert "VALUES (" not in conn.sql[0]
+    assert conn.params[0][0] == [1, 3]
+    assert conn.params[0][1] == ["BFI.I0000", "CON.I0000"]
+    assert conn.params[0][2] == ["Last", "Construction"]
+    assert conn.params[0][6] == [101.0, 100.0]
 
 
 @pytest.mark.asyncio

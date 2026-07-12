@@ -139,57 +139,86 @@ class Storage:
             return []
 
         normalized: list[tuple[str, PriceSnapshot]] = list(by_symbol.items())
-        stock_values = ",".join(["(%s, %s, %s)"] * len(normalized))
-        stock_params: list[Any] = []
-        for symbol, snap in normalized:
-            stock_params.extend([symbol, snap.name, None])
-
-        snap_values = ",".join(
-            ["(%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)"] * len(normalized)
-        )
-        snap_params: list[Any] = []
-        for symbol, snap in normalized:
-            snap_params.extend(
-                [
-                    symbol,
-                    snap.price,
-                    snap.change,
-                    snap.change_pct,
-                    snap.previous_close,
-                    snap.volume,
-                    snap.trade_count,
-                    snap.turnover,
-                    snap.high,
-                    snap.low,
-                    snap.open,
-                    snap.market_cap,
-                    snap.ts,
-                ]
-            )
+        # Column-wise arrays + UNNEST: static SQL only (no f-string / concat VALUES).
+        stock_symbols = [symbol for symbol, _ in normalized]
+        stock_names = [snap.name for _, snap in normalized]
+        stock_sectors = [None] * len(normalized)
+        snap_symbols = list(stock_symbols)
+        snap_prices = [snap.price for _, snap in normalized]
+        snap_changes = [snap.change for _, snap in normalized]
+        snap_change_pcts = [snap.change_pct for _, snap in normalized]
+        snap_prev_closes = [snap.previous_close for _, snap in normalized]
+        snap_volumes = [snap.volume for _, snap in normalized]
+        snap_trade_counts = [snap.trade_count for _, snap in normalized]
+        snap_turnovers = [snap.turnover for _, snap in normalized]
+        snap_highs = [snap.high for _, snap in normalized]
+        snap_lows = [snap.low for _, snap in normalized]
+        snap_opens = [snap.open for _, snap in normalized]
+        snap_market_caps = [snap.market_cap for _, snap in normalized]
+        snap_ts = [snap.ts for _, snap in normalized]
 
         async with self._pool.connection() as conn, conn.transaction():
             await conn.execute(
-                f"""
+                """
                 INSERT INTO stocks (symbol, name, sector)
-                VALUES {stock_values}
+                SELECT symbol, name, sector
+                FROM UNNEST(%s::text[], %s::text[], %s::text[])
+                    AS t(symbol, name, sector)
                 ON CONFLICT (symbol) DO UPDATE SET
                     name = COALESCE(EXCLUDED.name, stocks.name),
                     sector = COALESCE(EXCLUDED.sector, stocks.sector),
                     updated_at = now()
                 """,
-                stock_params,
+                (stock_symbols, stock_names, stock_sectors),
             )
             rows = await (
                 await conn.execute(
-                    f"""
+                    """
                     INSERT INTO price_snapshots (
                         symbol, price, change, change_pct, previous_close,
                         volume, trade_count, turnover, high, low, open,
                         market_cap, ts
-                    ) VALUES {snap_values}
+                    )
+                    SELECT
+                        symbol, price, change, change_pct, previous_close,
+                        volume, trade_count, turnover, high, low, open,
+                        market_cap, ts
+                    FROM UNNEST(
+                        %s::text[],
+                        %s::double precision[],
+                        %s::double precision[],
+                        %s::double precision[],
+                        %s::double precision[],
+                        %s::double precision[],
+                        %s::double precision[],
+                        %s::double precision[],
+                        %s::double precision[],
+                        %s::double precision[],
+                        %s::double precision[],
+                        %s::double precision[],
+                        %s::timestamptz[]
+                    ) AS t(
+                        symbol, price, change, change_pct, previous_close,
+                        volume, trade_count, turnover, high, low, open,
+                        market_cap, ts
+                    )
                     RETURNING id
                     """,
-                    snap_params,
+                    (
+                        snap_symbols,
+                        snap_prices,
+                        snap_changes,
+                        snap_change_pcts,
+                        snap_prev_closes,
+                        snap_volumes,
+                        snap_trade_counts,
+                        snap_turnovers,
+                        snap_highs,
+                        snap_lows,
+                        snap_opens,
+                        snap_market_caps,
+                        snap_ts,
+                    ),
                 )
             ).fetchall()
 
@@ -250,39 +279,40 @@ class Storage:
             return []
 
         rows = list(by_id.values())
-        values = ",".join(
-            ["(%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)"] * len(rows)
-        )
-        params: list[Any] = []
-        for sector in rows:
-            params.extend(
-                [
-                    sector.sector_id,
-                    sector.symbol,
-                    sector.name,
-                    sector.index_code,
-                    sector.index_code_sp,
-                    sector.index_name,
-                    sector.index_value,
-                    sector.change,
-                    sector.change_pct,
-                    sector.trade_today,
-                    sector.volume_today,
-                    sector.turnover_today,
-                    sector.previous_close,
-                    sector.ts,
-                    sector.cse_row_id,
-                ]
-            )
-
+        # Column-wise arrays + UNNEST: static SQL only (no f-string / concat VALUES).
         async with self._pool.connection() as conn:
             await conn.execute(
-                f"""
+                """
                 INSERT INTO sectors (
                     sector_id, symbol, name, index_code, index_code_sp, index_name,
                     index_value, change, change_pct, trade_today, volume_today,
                     turnover_today, previous_close, ts, cse_row_id
-                ) VALUES {values}
+                )
+                SELECT
+                    sector_id, symbol, name, index_code, index_code_sp, index_name,
+                    index_value, change, change_pct, trade_today, volume_today,
+                    turnover_today, previous_close, ts, cse_row_id
+                FROM UNNEST(
+                    %s::integer[],
+                    %s::text[],
+                    %s::text[],
+                    %s::text[],
+                    %s::text[],
+                    %s::text[],
+                    %s::double precision[],
+                    %s::double precision[],
+                    %s::double precision[],
+                    %s::double precision[],
+                    %s::double precision[],
+                    %s::double precision[],
+                    %s::double precision[],
+                    %s::timestamptz[],
+                    %s::integer[]
+                ) AS t(
+                    sector_id, symbol, name, index_code, index_code_sp, index_name,
+                    index_value, change, change_pct, trade_today, volume_today,
+                    turnover_today, previous_close, ts, cse_row_id
+                )
                 ON CONFLICT (sector_id) DO UPDATE SET
                     symbol = EXCLUDED.symbol,
                     name = EXCLUDED.name,
@@ -300,7 +330,23 @@ class Storage:
                     cse_row_id = EXCLUDED.cse_row_id,
                     ingested_at = now()
                 """,
-                params,
+                (
+                    [s.sector_id for s in rows],
+                    [s.symbol for s in rows],
+                    [s.name for s in rows],
+                    [s.index_code for s in rows],
+                    [s.index_code_sp for s in rows],
+                    [s.index_name for s in rows],
+                    [s.index_value for s in rows],
+                    [s.change for s in rows],
+                    [s.change_pct for s in rows],
+                    [s.trade_today for s in rows],
+                    [s.volume_today for s in rows],
+                    [s.turnover_today for s in rows],
+                    [s.previous_close for s in rows],
+                    [s.ts for s in rows],
+                    [s.cse_row_id for s in rows],
+                ),
             )
         return rows
 
