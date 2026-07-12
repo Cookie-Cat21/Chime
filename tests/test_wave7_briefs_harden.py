@@ -99,6 +99,8 @@ async def test_list_ready_briefs_for_followup_sweep_sql() -> None:
     assert len(rows) == 1
     assert rows[0]["disclosure_id"] == 7
     assert "status = 'ready'" in conn.sql[0]
+    assert "brief_followup:" in conn.sql[0]
+    assert "ORDER BY b.updated_at ASC" in conn.sql[0]
     assert conn.params[0] == (7, 10)
 
 

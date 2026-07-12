@@ -741,6 +741,23 @@ def test_extract_openai_chat_text_edge_cases() -> None:
         )
         == "hello"
     )
+    assert (
+        _extract_openai_chat_text(
+            {
+                "choices": [
+                    {
+                        "message": {
+                            "content": [
+                                {"type": "text", "text": "Part A."},
+                                {"type": "text", "text": "Part B."},
+                            ]
+                        }
+                    }
+                ]
+            }
+        )
+        == "Part A.\nPart B."
+    )
 
 
 @pytest.mark.asyncio
@@ -940,10 +957,12 @@ async def test_storage_claim_pending_briefs_sql() -> None:
     assert any("pg_advisory_xact_lock" in s for s in conn.sql)
     assert any("status = 'processing'" in s for s in conn.sql)
     assert any("FOR UPDATE OF b SKIP LOCKED" in s for s in conn.sql)
-    # PDF grace: join disclosures + wait for pdf_url or age past grace.
+    # PDF grace: join disclosures + wait for pdf_url or age past grace on updated_at
+    # (promote restarts grace; empty-string pdf_url must not skip the wait).
     claim_sql = next(s for s in conn.sql if "FOR UPDATE OF b SKIP LOCKED" in s)
     assert "JOIN disclosures d ON d.id = b.disclosure_id" in claim_sql
-    assert "d.pdf_url IS NOT NULL" in claim_sql
+    assert "NULLIF(btrim(d.pdf_url), '') IS NOT NULL" in claim_sql
+    assert "b.updated_at" in claim_sql
     assert "interval '1 second'" in claim_sql
     # Follow-up notify needs announcement URL + external_id for alert_log keys.
     assert any("d.url" in s for s in conn.sql)
