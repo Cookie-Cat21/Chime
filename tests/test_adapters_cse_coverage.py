@@ -1,22 +1,32 @@
-"""Wave11: unit coverage push for cse adapter legacy / PDF / sectors branches."""
+"""Wave11/13: unit coverage push for cse adapter untested branches."""
 
 from __future__ import annotations
 
+import asyncio
 from datetime import UTC, datetime, timedelta
 from unittest.mock import AsyncMock
 
+import httpx
 import pytest
 from structlog.testing import capture_logs
 
 from chime.adapters.cse import (
     CDN_BASE,
+    AnnouncementRow,
     CSEClient,
     LegacyAnnouncementRow,
     SectorRow,
+    SymbolInfo,
+    _ms_to_dt,
+    _parse_date_of_announcement,
+    _retryable,
     allowed_cdn_pdf_url,
     allowed_filing_url,
+    build_unique_company_name_map,
     legacy_pdf_urls_by_id,
+    resolve_announcement_symbol,
     sector_row_to_snapshot,
+    symbol_info_to_snapshot,
 )
 from chime.circuit import CircuitOpenError
 
@@ -146,3 +156,320 @@ def test_sector_row_to_snapshot_defaults_ts_when_now_omitted() -> None:
     after = datetime.now(UTC) + timedelta(seconds=1)
     assert before <= snap.ts <= after
     assert snap.symbol == "EGY"
+
+
+# --- Wave13: remaining untested branches ---
+
+
+def test_retryable_http_status_and_non_retryable() -> None:
+    req = httpx.Request("POST", "https://www.cse.lk/api/tradeSummary")
+    err_429 = httpx.HTTPStatusError(
+        "429", request=req, response=httpx.Response(429, request=req)
+    )
+    err_503 = httpx.HTTPStatusError(
+        "503", request=req, response=httpx.Response(503, request=req)
+    )
+    err_400 = httpx.HTTPStatusError(
+        "400", request=req, response=httpx.Response(400, request=req)
+    )
+    assert _retryable(err_429)
+    assert _retryable(err_503)
+    assert not _retryable(err_400)
+    assert not _retryable(ValueError("nope"))
+
+
+def test_ms_to_dt_none_is_unix_epoch() -> None:
+    assert _ms_to_dt(None) == datetime(1970, 1, 1, tzinfo=UTC)
+
+
+def test_parse_date_of_announcement_blank_after_strip() -> None:
+    assert _parse_date_of_announcement("   ") is None
+
+
+def test_symbol_info_to_snapshot_maps_fields() -> None:
+    now = datetime(2026, 7, 12, 10, 0, 0, tzinfo=UTC)
+    info = SymbolInfo(
+        symbol="jkh.n0000",
+        name="John Keells",
+        lastTradedPrice=185.5,
+        previousClose=180.0,
+        change=5.5,
+        changePercentage=3.06,
+        tdyShareVolume=12000,
+        tdyTradeVolume=45,
+        tdyTurnover=2_200_000,
+        hiTrade=186.0,
+        lowTrade=179.0,
+        marketCap=1e11,
+    )
+    snap = symbol_info_to_snapshot(info, now=now)
+    assert snap.symbol == "JKH.N0000"
+    assert snap.price == 185.5
+    assert snap.previous_close == 180.0
+    assert snap.change == 5.5
+    assert snap.change_pct == 3.06
+    assert snap.volume == 12000
+    assert snap.trade_count == 45
+    assert snap.turnover == 2_200_000
+    assert snap.high == 186.0
+    assert snap.low == 179.0
+    assert snap.open is None
+    assert snap.market_cap == 1e11
+    assert snap.name == "John Keells"
+    assert snap.ts == now
+
+
+def test_build_unique_company_name_map_skips_null_and_blank() -> None:
+    mapping = build_unique_company_name_map(
+        [
+            ("JKH.N0000", None),
+            ("   ", "Blank Symbol PLC"),
+            ("COMB.N0000", "   "),
+            ("LOLC.N0000", "LOLC Holdings PLC"),
+        ]
+    )
+    assert mapping == {"LOLC HOLDINGS PLC": "LOLC.N0000"}
+
+
+def test_resolve_announcement_symbol_blank_company_returns_none() -> None:
+    name_map = {"JOHN KEELLS HOLDINGS PLC": "JKH.N0000"}
+    allowed = {"JKH.N0000"}
+    blank = AnnouncementRow(announcementId=1, company="   ", symbol=None)
+    assert resolve_announcement_symbol(blank, name_map=name_map, allowed_symbols=allowed) is None
+    missing = AnnouncementRow(announcementId=2, company=None, symbol=None)
+    assert resolve_announcement_symbol(missing, name_map=name_map, allowed_symbols=allowed) is None
+
+
+@pytest.mark.asyncio
+async def test_cse_client_owns_client_aclose_and_context_manager() -> None:
+    http = AsyncMock()
+    http.aclose = AsyncMock()
+    client = CSEClient(client=http)
+    assert client._owns_client is False
+    await client.aclose()
+    http.aclose.assert_not_awaited()
+
+    owned = CSEClient(client=None)
+    owned._client.aclose = AsyncMock()  # type: ignore[method-assign]
+    assert owned._owns_client is True
+    await owned.aclose()
+    owned._client.aclose.assert_awaited_once()
+
+    ctx_http = AsyncMock()
+    ctx_http.aclose = AsyncMock()
+    async with CSEClient(client=ctx_http) as entered:
+        assert entered is not None
+        assert entered._owns_client is False
+    ctx_http.aclose.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_request_http_error_raises_and_logs(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(asyncio, "sleep", AsyncMock())
+    req = httpx.Request("POST", "https://www.cse.lk/api/tradeSummary")
+    response = httpx.Response(500, text="<html>boom</html>", request=req)
+    http = AsyncMock()
+    http.request = AsyncMock(return_value=response)
+    client = CSEClient(fail_max=99, reset_timeout=60.0, client=http)
+
+    with capture_logs() as logs, pytest.raises(httpx.HTTPStatusError):
+        await client._request("POST", "/tradeSummary", json_body={})
+
+    assert any(e.get("event") == "cse_http_error" for e in logs)
+    assert http.request.await_count == 3
+
+
+@pytest.mark.asyncio
+async def test_request_non_json_raises(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(asyncio, "sleep", AsyncMock())
+    req = httpx.Request("POST", "https://www.cse.lk/api/tradeSummary")
+    response = httpx.Response(
+        200,
+        text="<html>not json</html>",
+        headers={"content-type": "text/html"},
+        request=req,
+    )
+    http = AsyncMock()
+    http.request = AsyncMock(return_value=response)
+    client = CSEClient(fail_max=99, reset_timeout=60.0, client=http)
+
+    with capture_logs() as logs, pytest.raises(httpx.HTTPStatusError, match="non-json"):
+        await client._request("POST", "/tradeSummary", json_body={})
+
+    assert any(e.get("event") == "cse_non_json" for e in logs)
+
+
+@pytest.mark.asyncio
+async def test_request_json_success() -> None:
+    req = httpx.Request("POST", "https://www.cse.lk/api/tradeSummary")
+    response = httpx.Response(
+        200,
+        json={"ok": True},
+        headers={"content-type": "application/json"},
+        request=req,
+    )
+    http = AsyncMock()
+    http.request = AsyncMock(return_value=response)
+    client = CSEClient(client=http)
+    assert await client._request("POST", "/tradeSummary", json_body={}) == {"ok": True}
+
+
+@pytest.mark.asyncio
+async def test_fetch_trade_summary_rejects_non_object() -> None:
+    client = CSEClient(client=AsyncMock())
+    client._request = AsyncMock(return_value=["not", "object"])  # type: ignore[method-assign]
+
+    with capture_logs() as logs, pytest.raises(ValueError, match="expected JSON object"):
+        await client.fetch_trade_summary()
+
+    assert any(
+        e.get("event") == "cse_schema_error" and e.get("endpoint") == "tradeSummary" for e in logs
+    )
+
+
+@pytest.mark.asyncio
+async def test_fetch_trade_summary_rejects_non_list_rows() -> None:
+    client = CSEClient(client=AsyncMock())
+    client._request = AsyncMock(  # type: ignore[method-assign]
+        return_value={"reqTradeSummery": "oops"}
+    )
+
+    with capture_logs() as logs, pytest.raises(ValueError, match="not a list"):
+        await client.fetch_trade_summary()
+
+    assert any(
+        e.get("event") == "cse_schema_error" and "not a list" in str(e.get("error", ""))
+        for e in logs
+    )
+
+
+@pytest.mark.asyncio
+async def test_fetch_trade_summary_skips_invalid_rows() -> None:
+    client = CSEClient(client=AsyncMock())
+    client._request = AsyncMock(  # type: ignore[method-assign]
+        return_value={
+            "reqTradeSummery": [
+                {"symbol": "BAD"},  # missing price → ValidationError
+                {
+                    "symbol": "jkh.n0000",
+                    "price": 185.5,
+                    "lastTradedTime": 1_720_000_000_000,
+                },
+            ]
+        }
+    )
+
+    with capture_logs() as logs:
+        out = await client.fetch_trade_summary()
+
+    assert len(out) == 1
+    assert out[0].symbol == "JKH.N0000"
+    assert out[0].price == 185.5
+    assert any(e.get("event") == "cse_trade_row_skipped" for e in logs)
+
+
+@pytest.mark.asyncio
+async def test_fetch_company_info_success_and_schema_miss() -> None:
+    client = CSEClient(client=AsyncMock())
+    client._request = AsyncMock(  # type: ignore[method-assign]
+        return_value={
+            "reqSymbolInfo": {
+                "symbol": "comb.n0000",
+                "lastTradedPrice": 95.0,
+                "name": "Commercial Bank",
+            }
+        }
+    )
+    snap = await client.fetch_company_info("comb.n0000")
+    assert snap is not None
+    assert snap.symbol == "COMB.N0000"
+    assert snap.price == 95.0
+
+    client._request = AsyncMock(return_value={"unexpected": True})  # type: ignore[method-assign]
+    with capture_logs() as logs:
+        assert await client.fetch_company_info("MISSING.N0000") is None
+    assert any(
+        e.get("event") == "cse_schema_error" and e.get("endpoint") == "companyInfoSummery"
+        for e in logs
+    )
+
+
+@pytest.mark.asyncio
+async def test_fetch_announcements_for_symbol_with_dates_and_rows() -> None:
+    client = CSEClient(client=AsyncMock())
+    client._request = AsyncMock(  # type: ignore[method-assign]
+        return_value={
+            "reqCompanyAnnouncement": [
+                {
+                    "announcementId": 99,
+                    "announcementCategory": "Financial",
+                    "createdDate": 1_720_000_000_000,
+                    "remarks": "Q1",
+                },
+                {
+                    # no id → skipped by announcement_to_disclosure
+                    "announcementCategory": "Other",
+                },
+            ]
+        }
+    )
+
+    out = await client.fetch_announcements_for_symbol(
+        "jkh.n0000",
+        from_date="2026-01-01",
+        to_date="2026-07-12",
+    )
+    assert len(out) == 1
+    assert out[0].external_id == "99"
+    assert out[0].symbol == "JKH.N0000"
+    assert out[0].title == "Financial: Q1"
+    client._request.assert_awaited_once()
+    call_kwargs = client._request.await_args.kwargs
+    assert call_kwargs["data"]["fromDate"] == "2026-01-01"
+    assert call_kwargs["data"]["toDate"] == "2026-07-12"
+
+
+@pytest.mark.asyncio
+async def test_fetch_announcements_for_symbol_schema_error() -> None:
+    from pydantic import ValidationError
+
+    client = CSEClient(client=AsyncMock())
+    client._request = AsyncMock(return_value=["bad"])  # type: ignore[method-assign]
+
+    with capture_logs() as logs, pytest.raises(ValidationError):
+        await client.fetch_announcements_for_symbol("JKH.N0000")
+
+    assert any(
+        e.get("event") == "cse_schema_error"
+        and e.get("endpoint") == "getAnnouncementByCompany"
+        for e in logs
+    )
+
+
+@pytest.mark.asyncio
+async def test_fetch_approved_announcements_success_and_schema_error() -> None:
+    from pydantic import ValidationError
+
+    client = CSEClient(client=AsyncMock())
+    client._request = AsyncMock(  # type: ignore[method-assign]
+        return_value={
+            "approvedAnnouncements": [
+                {"announcementId": 1, "company": "John Keells Holdings PLC"},
+            ]
+        }
+    )
+    rows = await client.fetch_approved_announcements()
+    assert len(rows) == 1
+    assert rows[0].announcementId == 1
+
+    client._request = AsyncMock(return_value=["bad"])  # type: ignore[method-assign]
+    with capture_logs() as logs, pytest.raises(ValidationError):
+        await client.fetch_approved_announcements()
+    assert any(
+        e.get("event") == "cse_schema_error" and e.get("endpoint") == "approvedAnnouncement"
+        for e in logs
+    )
