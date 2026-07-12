@@ -220,3 +220,181 @@ def test_parse_alert_args_rejects_trailing_junk(args: list[str]) -> None:
     assert parsed is None
     assert err is not None
     assert "unexpected extra text" in err.lower()
+
+
+# Wave7: fuzz / weird-string corpus — parse_alert_args must never raise.
+_WEIRD_TOKENS = [
+    "",
+    " ",
+    "\t",
+    "\n",
+    "\r\n",
+    "\x00",
+    "\x01\x02",
+    "\ufffd",
+    "🚀",
+    "ราคา",
+    "مبلغ",
+    "above\u200b",  # zero-width space
+    "below\ufeff",  # BOM
+    "move\u00a0",  # nbsp
+    "a" * 10_000,
+    "1" * 5000,
+    "0" * 100,
+    "-0",
+    "+0",
+    "0",
+    "0.0",
+    "-0.0",
+    "--1",
+    "++1",
+    "1..2",
+    "..5",
+    "1.2.3",
+    "1e",
+    "e10",
+    "1e-",
+    "1e+",
+    "0x10",
+    "0b10",
+    "0o10",
+    "1_000",
+    "1 000",
+    "$100",
+    "100%",
+    "100Rs",
+    "₹100",
+    "(100)",
+    "[100]",
+    "{100}",
+    "100;",
+    "100--",
+    "';100",
+    "null",
+    "None",
+    "undefined",
+    "true",
+    "false",
+    "NaN%",
+    "inf.",
+    ".inf",
+    "∞",
+    "１",  # fullwidth digit
+    "١٠",  # Arabic-Indic digits
+    "' OR 1=1 --",
+    '"; DROP TABLE alert_rules;--',
+    "<script>alert(1)</script>",
+    "${IFS}",
+    "$(whoami)",
+    "`id`",
+    "../../../etc/passwd",
+    "%s%s%s%s",
+    "%n",
+    "{{7*7}}",
+    "\u202eabove",  # RTL override
+    "above\u202c",
+    "\u0000above",
+    "a\tb\tc",
+    "👍" * 100,
+]
+
+_WEIRD_KINDS = [
+    "",
+    " ",
+    "above",
+    "below",
+    "move",
+    "disclosure",
+    "announcement",
+    "ABOVE",
+    "BeLoW",
+    "sideways",
+    "price",
+    "alert",
+    "🔥",
+    "a" * 256,
+    "above\nbelow",
+    "disclos ure",
+]
+
+
+@pytest.mark.parametrize(
+    "args",
+    [
+        # Sparse / malformed shapes
+        [],
+        [""],
+        [" "],
+        ["\x00"],
+        ["JKH.N0000"],
+        ["", ""],
+        ["JKH.N0000", ""],
+        ["JKH.N0000", " ", "100"],
+        ["JKH.N0000", "above", ""],
+        ["JKH.N0000", "above", " "],
+        ["JKH.N0000", "above", "\t\n"],
+        ["JKH.N0000", "below", "\x00"],
+        ["JKH.N0000", "move", "🚀"],
+        ["JKH.N0000", "disclosure", "\x00"],
+        ["JKH.N0000", "announcement", "<script>"],
+        # Extra / odd arity
+        ["JKH.N0000", "above", "100", ""],
+        ["JKH.N0000", "above", "100", "\x00"],
+        ["JKH.N0000", "move", "5", "💥", "more"],
+        ["", "above", "100"],
+        ["\ufffd", "below", "1"],
+        # Long / unicode symbol slot still must not throw
+        ["🚀" * 50, "above", "1"],
+        ["A" * 10_000, "move", "1"],
+        *[
+            ["JKH.N0000", kind, token]
+            for kind in ("above", "below", "move")
+            for token in _WEIRD_TOKENS
+        ],
+        *[["JKH.N0000", kind] for kind in _WEIRD_KINDS],
+        *[
+            ["JKH.N0000", kind, "Financial", "💣"]
+            for kind in ("disclosure", "announcement")
+        ],
+    ],
+    ids=lambda a: repr(a)[:80],
+)
+def test_parse_alert_args_fuzz_never_raises(args: list[str]) -> None:
+    """Wave7: weird / adversarial arg lists must not throw — only return errors."""
+    try:
+        parsed, err = parse_alert_args(args)
+    except Exception as exc:  # pragma: no cover - failure path for the invariant
+        pytest.fail(f"parse_alert_args raised {type(exc).__name__}: {exc!r} for {args!r}")
+    # Contract: success → (ParsedAlert, None); failure → (None, str). Never both/neither.
+    if err is None:
+        assert parsed is not None
+        assert parsed.alert_type in AlertType
+        if parsed.alert_type == AlertType.DISCLOSURE:
+            assert parsed.threshold is None
+        else:
+            assert parsed.threshold is not None
+            assert parsed.threshold > 0
+            assert parsed.threshold == parsed.threshold  # not NaN
+    else:
+        assert parsed is None
+        assert isinstance(err, str)
+        assert err.strip() != ""
+
+
+def test_parse_alert_args_fuzz_cartesian_kinds_thresholds() -> None:
+    """Wave7 property-ish: every weird kind×threshold pair returns without raising."""
+    thresholds = _WEIRD_TOKENS + ["100", "50.5", "1,000", "0.01"]
+    for kind in _WEIRD_KINDS + ["above", "below", "move", "disclosure", "announcement"]:
+        for thr in thresholds:
+            args = ["JKH.N0000", kind, thr]
+            try:
+                parsed, err = parse_alert_args(args)
+            except Exception as exc:  # pragma: no cover
+                pytest.fail(
+                    f"parse_alert_args raised {type(exc).__name__}: {exc!r} for {args!r}"
+                )
+            assert (parsed is None) ^ (err is None)
+            if err is not None:
+                assert isinstance(err, str) and err
+            else:
+                assert parsed is not None
