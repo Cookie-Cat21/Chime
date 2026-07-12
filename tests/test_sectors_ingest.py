@@ -141,7 +141,9 @@ async def test_poll_sectors_fail_soft_on_fetch_error() -> None:
 
 
 @pytest.mark.asyncio
-async def test_poll_sectors_fail_soft_on_persist_error() -> None:
+async def test_poll_sectors_fail_soft_on_persist_error(
+    capsys: pytest.CaptureFixture[str],
+) -> None:
     board = [
         SectorSnapshot(
             sector_id=223,
@@ -159,3 +161,106 @@ async def test_poll_sectors_fail_soft_on_persist_error() -> None:
     await poller._poll_sectors()  # must not raise
 
     storage.persist_sectors.assert_awaited_once()
+    assert "sectors_persist_failed" in capsys.readouterr().out
+
+
+@pytest.mark.asyncio
+async def test_poll_sectors_logs_ok_on_success(
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    board = [
+        SectorSnapshot(
+            sector_id=223,
+            symbol="EGY",
+            name="Energy",
+            ts=datetime.now(UTC),
+        )
+    ]
+    cse = AsyncMock()
+    cse.fetch_all_sectors = AsyncMock(return_value=board)
+    storage = AsyncMock()
+    storage.persist_sectors = AsyncMock(return_value=board)
+    poller = Poller(_settings(sectors_ingest=True), storage, cse, AsyncMock())
+
+    await poller._poll_sectors()
+
+    assert "sectors_persist_ok" in capsys.readouterr().out
+
+
+@pytest.mark.asyncio
+async def test_poll_sectors_fail_soft_on_fetch_logs(
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    cse = AsyncMock()
+    cse.fetch_all_sectors = AsyncMock(side_effect=RuntimeError("boom"))
+    storage = AsyncMock()
+    storage.persist_sectors = AsyncMock()
+    poller = Poller(_settings(sectors_ingest=True), storage, cse, AsyncMock())
+
+    await poller._poll_sectors()
+
+    assert "sectors_poll_failed" in capsys.readouterr().out
+    storage.persist_sectors.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_run_once_invokes_sectors_ingest_when_enabled() -> None:
+    """Tick path wires _poll_sectors after price/disclosure polls."""
+    storage = AsyncMock()
+    storage.try_advisory_lock = AsyncMock(return_value=True)
+    storage.advisory_unlock = AsyncMock()
+    storage.watched_symbols = AsyncMock(return_value=[])
+    storage.active_rules_for_symbols = AsyncMock(return_value=[])
+    storage.persist_market_snapshots = AsyncMock(return_value=[])
+    storage.claim_unsent_batch = AsyncMock(return_value=[])
+    storage.persist_sectors = AsyncMock(return_value=[])
+
+    board = [
+        SectorSnapshot(
+            sector_id=223,
+            symbol="EGY",
+            name="Energy",
+            ts=datetime.now(UTC),
+        )
+    ]
+    cse = AsyncMock()
+    cse.fetch_trade_summary = AsyncMock(return_value=[])
+    cse.fetch_all_sectors = AsyncMock(return_value=board)
+
+    poller = Poller(_settings(sectors_ingest=True), storage, cse, AsyncMock(return_value=True))
+    await poller.run_once(force=True)
+
+    cse.fetch_all_sectors.assert_awaited_once()
+    storage.persist_sectors.assert_awaited_once_with(board)
+
+
+@pytest.mark.asyncio
+async def test_fetch_all_sectors_rejects_non_array() -> None:
+    client = CSEClient(client=AsyncMock())
+    client._request = AsyncMock(return_value={"sectors": []})  # type: ignore[method-assign]
+
+    with pytest.raises(ValueError, match="expected JSON array"):
+        await client.fetch_all_sectors()
+
+
+@pytest.mark.asyncio
+async def test_fetch_all_sectors_empty_array_ok() -> None:
+    client = CSEClient(client=AsyncMock())
+    client._request = AsyncMock(return_value=[])  # type: ignore[method-assign]
+
+    out = await client.fetch_all_sectors()
+    assert out == []
+
+
+def test_sector_row_to_snapshot_uses_now_when_no_transaction_time() -> None:
+    now = datetime(2026, 7, 12, 10, 0, tzinfo=UTC)
+    row = SectorRow(
+        sectorId=1,
+        symbol="egy",
+        name="Energy",
+        indexValue=10.0,
+        transactionTime=None,
+    )
+    snap = sector_row_to_snapshot(row, now=now)
+    assert snap.ts == now
+    assert snap.symbol == "EGY"

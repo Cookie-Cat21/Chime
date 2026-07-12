@@ -289,7 +289,9 @@ async def test_retention_off_skips_cleanup() -> None:
 
 
 @pytest.mark.asyncio
-async def test_retention_runs_after_successful_persist() -> None:
+async def test_retention_runs_after_successful_persist(
+    capsys: pytest.CaptureFixture[str],
+) -> None:
     storage = AsyncMock()
     storage.watched_symbols = AsyncMock(return_value=["JKH.N0000"])
     storage.active_rules_for_symbols = AsyncMock(return_value=[])
@@ -316,6 +318,35 @@ async def test_retention_runs_after_successful_persist() -> None:
     assert price_ok is True
     storage.persist_market_snapshots.assert_awaited_once_with(board)
     storage.delete_old_non_watchlist_snapshots.assert_awaited_once_with(7)
+    assert "snapshot_retention_deleted" in capsys.readouterr().out
+
+
+@pytest.mark.asyncio
+async def test_retention_zero_deleted_skips_info_log(
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """deleted=0 still runs cleanup but must not emit snapshot_retention_deleted."""
+    storage = AsyncMock()
+    storage.watched_symbols = AsyncMock(return_value=[])
+    storage.persist_market_snapshots = AsyncMock(side_effect=_persist_with_ids)
+    storage.delete_old_non_watchlist_snapshots = AsyncMock(return_value=0)
+
+    cse = AsyncMock()
+    cse.fetch_trade_summary = AsyncMock(return_value=[_snap("JKH.N0000")])
+
+    settings = Settings(
+        telegram_bot_token="x",
+        database_url="postgresql://x",
+        poll_jitter_seconds=0,
+        snapshot_retention_days=7,
+    )
+    poller = Poller(settings, storage, cse, AsyncMock(return_value=True))
+    events, price_ok = await poller._poll_prices()
+
+    assert events == []
+    assert price_ok is True
+    storage.delete_old_non_watchlist_snapshots.assert_awaited_once_with(7)
+    assert "snapshot_retention_deleted" not in capsys.readouterr().out
 
 
 @pytest.mark.asyncio
