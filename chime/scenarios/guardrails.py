@@ -27,6 +27,12 @@ _BUY_SELL_RE = re.compile(
     r"recommend(?:s|ed|ing|ation|ations)?|"
     r"price\s*targets?|"
     r"overweight|underweight|"
+    r"accumulat(?:e|es|ed|ing)|"
+    r"take\s+profits?|"
+    r"(?:go|going|went)\s+(?:long|short)\b|"
+    r"short\s+(?:the\s+)?(?:stocks?|shares?|positions?|names?)|"
+    r"long\s+(?:the\s+)?(?:stocks?|shares?|positions?|names?)|"
+    r"exit\s+(?:the\s+)?(?:stocks?|shares?|positions?)|"
     r"hold(?:s|ing)?\s+(?:the\s+)?(?:stocks?|shares?|positions?|securit(?:y|ies))"
     r")\b",
     re.IGNORECASE,

@@ -822,6 +822,37 @@ class Storage:
             ).fetchone()
         return row is not None
 
+    async def requeue_brief_pending(
+        self,
+        disclosure_id: int,
+        *,
+        error: str,
+    ) -> bool:
+        """Return a claimed brief to ``pending`` for a later retry.
+
+        Used for transient CDN fetch misses so we do not burn the daily cap
+        on a permanent ``failed`` row (``failed`` counts toward
+        ``max_briefs_per_day``; ``pending`` does not).
+        """
+        err = (error or "unknown")[:2000]
+        async with self._pool.connection() as conn:
+            row = await (
+                await conn.execute(
+                    """
+                    UPDATE disclosure_briefs
+                    SET
+                        status = 'pending',
+                        error = %s,
+                        updated_at = now()
+                    WHERE disclosure_id = %s
+                      AND status IN ('pending', 'processing')
+                    RETURNING disclosure_id
+                    """,
+                    (err, disclosure_id),
+                )
+            ).fetchone()
+        return row is not None
+
     async def count_briefs_today(self, *, stale_processing_minutes: int = 15) -> int:
         """Count today's completed briefs plus non-stale in-flight processing."""
         async with self._pool.connection() as conn:

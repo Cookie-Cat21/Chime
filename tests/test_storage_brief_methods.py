@@ -208,6 +208,22 @@ async def test_mark_brief_failed_truncates_error_and_coalesces_model() -> None:
 
 
 @pytest.mark.asyncio
+async def test_requeue_brief_pending_sql_and_truncate() -> None:
+    conn = _Conn([{"disclosure_id": 42}])
+    store = _store(conn)
+    long_err = "cdn" * 800
+    assert await store.requeue_brief_pending(42, error=long_err) is True
+    sql = conn.sql[0]
+    assert "status = 'pending'" in sql
+    assert "AND status IN ('pending', 'processing')" in sql
+    assert conn.params[0][0] == long_err[:2000]
+    assert conn.params[0][1] == 42
+
+    store2 = _store(_Conn([None]))
+    assert await store2.requeue_brief_pending(99, error="miss") is False
+
+
+@pytest.mark.asyncio
 async def test_mark_brief_ready_passes_token_counts() -> None:
     conn = _Conn([{"disclosure_id": 3}])
     store = _store(conn)

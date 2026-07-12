@@ -41,6 +41,7 @@ DEFAULT_HEADERS = {
 }
 
 ANNOUNCEMENTS_PAGE = "https://www.cse.lk/announcements"
+ANNOUNCEMENTS_HOST = "www.cse.lk"
 CDN_HOST = "cdn.cse.lk"
 CDN_BASE = f"https://{CDN_HOST}"
 TRADE_SUMMARY_ENDPOINT = "tradeSummary"
@@ -80,6 +81,40 @@ def allowed_cdn_pdf_url(url: str | None) -> str | None:
         return None
     normalized_path = "/" + "/".join(segments) if segments else "/"
     return f"{CDN_BASE}{normalized_path}"
+
+
+def allowed_filing_url(url: str | None) -> str | None:
+    """Telegram/dash egress: CDN PDF or ``www.cse.lk`` announcement page only.
+
+    Rejects ``javascript:`` / credentials / off-allowlist hosts so bot replies
+    never echo a hostile DB ``url`` as an auto-linked Telegram href.
+    """
+    if url is None:
+        return None
+    raw = url.strip()
+    if not raw:
+        return None
+    cdn = allowed_cdn_pdf_url(raw)
+    if cdn is not None:
+        return cdn
+    parsed = urlparse(raw)
+    if parsed.scheme != "https":
+        return None
+    if parsed.hostname != ANNOUNCEMENTS_HOST:
+        return None
+    if parsed.username is not None or parsed.password is not None:
+        return None
+    path = parsed.path or "/"
+    segments = [s for s in path.split("/") if s != ""]
+    if any(seg == ".." or seg == "." for seg in segments):
+        return None
+    normalized_path = "/" + "/".join(segments) if segments else "/"
+    out = f"https://{ANNOUNCEMENTS_HOST}{normalized_path}"
+    if parsed.query:
+        out = f"{out}?{parsed.query}"
+    if parsed.fragment:
+        out = f"{out}#{parsed.fragment}"
+    return out
 
 
 def resolve_pdf_url(file_path: str | None) -> str | None:

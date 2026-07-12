@@ -89,8 +89,8 @@ async def test_sanitize_preserves_end_marker_when_truncating_wrapped() -> None:
 
 
 @pytest.mark.asyncio
-async def test_claim_pending_briefs_cdn_fetch_fail_marks_failed_not_title_only() -> None:
-    """pdf_url set + CDN miss must fail (retryable), not burn cap on title-only."""
+async def test_claim_pending_briefs_cdn_fetch_fail_requeues_not_failed() -> None:
+    """pdf_url set + CDN miss must requeue pending (no daily-cap burn), not fail."""
     storage = MagicMock()
     storage.promote_recent_skipped_briefs = AsyncMock(return_value=0)
     storage.count_briefs_today = AsyncMock(return_value=0)
@@ -107,6 +107,7 @@ async def test_claim_pending_briefs_cdn_fetch_fail_marks_failed_not_title_only()
     )
     storage.mark_brief_ready = AsyncMock(return_value=True)
     storage.mark_brief_failed = AsyncMock(return_value=True)
+    storage.requeue_brief_pending = AsyncMock(return_value=True)
 
     provider = AsyncMock()
     provider.summarize = AsyncMock(return_value="should not run")
@@ -122,6 +123,46 @@ async def test_claim_pending_briefs_cdn_fetch_fail_marks_failed_not_title_only()
     assert n == 1
     provider.summarize.assert_not_awaited()
     storage.mark_brief_ready.assert_not_awaited()
+    storage.mark_brief_failed.assert_not_awaited()
+    storage.requeue_brief_pending.assert_awaited_once()
+    err = storage.requeue_brief_pending.await_args.kwargs["error"]
+    assert "CDN PDF fetch failed" in err
+
+
+@pytest.mark.asyncio
+async def test_claim_pending_briefs_hostile_pdf_url_marks_failed() -> None:
+    """Non-CDN pdf_url must permanent-fail (no requeue poison loop)."""
+    storage = MagicMock()
+    storage.promote_recent_skipped_briefs = AsyncMock(return_value=0)
+    storage.count_briefs_today = AsyncMock(return_value=0)
+    storage.claim_pending_briefs = AsyncMock(
+        return_value=[
+            {
+                "disclosure_id": 43,
+                "symbol": "JKH.N0000",
+                "title": "AGM Notice",
+                "external_id": "100",
+                "pdf_url": "https://evil.example/steal.pdf",
+            }
+        ]
+    )
+    storage.mark_brief_ready = AsyncMock(return_value=True)
+    storage.mark_brief_failed = AsyncMock(return_value=True)
+    storage.requeue_brief_pending = AsyncMock(return_value=True)
+
+    provider = AsyncMock()
+    provider.summarize = AsyncMock(return_value="should not run")
+
+    n = await claim_pending_briefs(
+        storage,
+        settings=_enabled_settings(),
+        provider=provider,
+        http_client=AsyncMock(),
+    )
+
+    assert n == 1
+    provider.summarize.assert_not_awaited()
+    storage.requeue_brief_pending.assert_not_awaited()
     storage.mark_brief_failed.assert_awaited_once()
     err = storage.mark_brief_failed.await_args.kwargs["error"]
-    assert "CDN PDF fetch failed" in err
+    assert "not allowlisted" in err

@@ -355,9 +355,13 @@ async def test_cmd_mywatchlist_empty_and_list() -> None:
 
 
 @pytest.mark.asyncio
-async def test_cmd_brief_usage_bad_symbol_and_none_yet() -> None:
+async def test_cmd_brief_usage_bad_symbol_and_none_yet(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     storage = AsyncMock()
     storage.get_latest_ready_brief = AsyncMock(return_value=None)
+    monkeypatch.setenv("AI_BRIEFS_ENABLED", "0")
+    monkeypatch.delenv("AI_API_KEY", raising=False)
 
     update, context = _make_update_context(args=[], storage=storage)
     await cmd_brief(update, context)
@@ -374,9 +378,26 @@ async def test_cmd_brief_usage_bad_symbol_and_none_yet() -> None:
     await cmd_brief(update3, context3)
     storage.get_latest_ready_brief.assert_awaited_once_with("JKH.N0000")
     none_reply = update3.effective_message.reply_text.await_args.args[0]
-    assert "JKH.N0000: none yet / AI off" in none_reply
+    assert "JKH.N0000: AI briefs are off" in none_reply
     assert disclaimer() in none_reply
     storage.ensure_user.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_cmd_brief_none_yet_when_ai_enabled(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    storage = AsyncMock()
+    storage.get_latest_ready_brief = AsyncMock(return_value=None)
+    monkeypatch.setenv("AI_BRIEFS_ENABLED", "1")
+    monkeypatch.setenv("AI_API_KEY", "test-key")
+
+    update, context = _make_update_context(args=["JKH.N0000"], storage=storage)
+    await cmd_brief(update, context)
+    none_reply = update.effective_message.reply_text.await_args.args[0]
+    assert "JKH.N0000: none yet" in none_reply
+    assert "AI briefs are off" not in none_reply
+    assert disclaimer() in none_reply
 
 
 @pytest.mark.asyncio
@@ -402,6 +423,34 @@ async def test_cmd_brief_returns_latest_ready() -> None:
     assert "cdn.cse.lk" in reply
     assert disclaimer() in reply
     storage.ensure_user.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_cmd_brief_strips_hostile_url() -> None:
+    from chime.bot import format_brief_lookup_reply
+
+    text = format_brief_lookup_reply(
+        symbol="JKH.N0000",
+        brief="Dividend declared.",
+        title="Notice",
+        url="javascript:alert(1)",
+    )
+    assert "javascript:" not in text
+    assert "Dividend declared." in text
+    assert disclaimer() in text
+
+    ok = format_brief_lookup_reply(
+        symbol="JKH.N0000",
+        brief="Dividend declared.",
+        url="https://www.cse.lk/announcements#99",
+    )
+    assert "https://www.cse.lk/announcements#99" in ok
+
+    long_body = "X" * 5000
+    capped = format_brief_lookup_reply(symbol="JKH.N0000", brief=long_body)
+    assert len(capped) < 4096
+    assert capped.endswith(disclaimer()) or disclaimer() in capped
+    assert "…" in capped
 
 @pytest.mark.asyncio
 async def test_cmd_alert_disclosure_category() -> None:

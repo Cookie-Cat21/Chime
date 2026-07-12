@@ -17,7 +17,8 @@ from typing import Any
 from telegram import Update
 from telegram.ext import Application, CommandHandler, ContextTypes
 
-from chime.adapters.cse import CSEClient
+from chime.adapters.cse import CSEClient, allowed_filing_url
+from chime.briefs import briefs_enabled
 from chime.domain import AlertType, PriceSnapshot, disclaimer, truncate_disclosure_title
 from chime.logging_setup import get_logger
 from chime.storage import Storage
@@ -25,6 +26,10 @@ from chime.storage import Storage
 log = get_logger(__name__)
 
 SYMBOL_RE = re.compile(r"^[A-Za-z0-9]{1,12}(\.[A-Za-z0-9]{1,8})?$")
+
+# Telegram hard cap is 4096; leave headroom for title/URL/NFA framing.
+_BRIEF_LOOKUP_BODY_MAX = 3500
+_CTRL_RE = re.compile(r"[\x00-\x1f\x7f-\x9f]")
 
 # Per telegram_id sliding-window timestamps (monotonic seconds). No DB.
 _cmd_timestamps: dict[int, deque[float]] = defaultdict(deque)
@@ -147,7 +152,8 @@ BRIEF_USAGE = (
     "Example: /brief JKH.N0000\n"
     f"{disclaimer()}"
 )
-BRIEF_NONE_YET = "none yet / AI off"
+BRIEF_NONE_YET = "none yet"
+BRIEF_AI_OFF = "AI briefs are off"
 
 
 @dataclass(frozen=True)
@@ -478,17 +484,29 @@ def format_brief_lookup_reply(
     brief: str | None,
     title: str | None = None,
     url: str | None = None,
+    ai_enabled: bool | None = None,
 ) -> str:
-    """Read-only /brief reply body. Always ends with NFA."""
-    if not brief or not brief.strip():
+    """Read-only /brief reply body. Always ends with NFA.
+
+    Egress-hardens filing URLs (CDN / www.cse.lk only), strips control chars,
+    and caps brief body length so Telegram's 4096 limit is not exceeded.
+    Distinguishes AI-off from none-yet when ``ai_enabled`` is provided.
+    """
+    if not brief or not _CTRL_RE.sub("", brief).strip():
+        if ai_enabled is False:
+            return f"{symbol}: {BRIEF_AI_OFF}\n{disclaimer()}"
         return f"{symbol}: {BRIEF_NONE_YET}\n{disclaimer()}"
     lines = [f"{symbol} filing brief"]
     if title and title.strip():
         lines.append(f"Disclosure: {truncate_disclosure_title(title)}")
-    if url and str(url).strip():
-        lines.append(str(url).strip())
+    safe_url = allowed_filing_url(url) if url else None
+    if safe_url:
+        lines.append(safe_url)
     lines.append("")
-    lines.append(brief.strip())
+    body = _CTRL_RE.sub("", brief).strip()
+    if len(body) > _BRIEF_LOOKUP_BODY_MAX:
+        body = body[: _BRIEF_LOOKUP_BODY_MAX - 1].rstrip() + "…"
+    lines.append(body)
     lines.append("")
     lines.append(disclaimer())
     return "\n".join(lines)
@@ -509,9 +527,10 @@ async def cmd_brief(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         await update.effective_message.reply_text(BAD_SYMBOL_HINT)
         return
     row = await storage.get_latest_ready_brief(symbol)
+    ai_on = briefs_enabled()
     if row is None:
         await update.effective_message.reply_text(
-            format_brief_lookup_reply(symbol=symbol, brief=None)
+            format_brief_lookup_reply(symbol=symbol, brief=None, ai_enabled=ai_on)
         )
         return
     await update.effective_message.reply_text(
@@ -520,6 +539,7 @@ async def cmd_brief(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
             brief=str(row.get("brief") or ""),
             title=row.get("title") if isinstance(row.get("title"), str) else None,
             url=row.get("url") if isinstance(row.get("url"), str) else None,
+            ai_enabled=ai_on,
         )
     )
 

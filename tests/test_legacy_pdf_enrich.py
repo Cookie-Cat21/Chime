@@ -74,6 +74,19 @@ def test_resolve_pdf_url_rejects_non_cdn_ssrf() -> None:
     assert allowed_cdn_pdf_url("https://not-cdn.cse.lk/ok.pdf") is None
 
 
+def test_allowed_filing_url_announcements_and_hostile() -> None:
+    from chime.adapters.cse import allowed_filing_url
+
+    assert (
+        allowed_filing_url("https://www.cse.lk/announcements#99")
+        == "https://www.cse.lk/announcements#99"
+    )
+    assert allowed_filing_url("https://cdn.cse.lk/a.pdf") == f"{CDN_BASE}/a.pdf"
+    assert allowed_filing_url("javascript:alert(1)") is None
+    assert allowed_filing_url("https://evil.example/x") is None
+    assert allowed_filing_url("http://www.cse.lk/announcements") is None
+
+
 def test_legacy_pdf_urls_by_id_skips_hostile_paths() -> None:
     rows = [
         LegacyAnnouncementRow(announcementId=1, filePath="https://evil.example/a.pdf"),

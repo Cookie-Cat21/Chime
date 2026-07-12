@@ -67,6 +67,11 @@ def test_safe_scenario_output_passes(text: str) -> None:
         "We recommend accumulating on dips.",
         "Price target: 200.",
         "Fund is overweight banks.",
+        "Accumulate on weakness.",
+        "Go long the shares into the close.",
+        "Short the stock on the gap.",
+        "Exit the position before the close.",
+        "Take profits into strength.",
     ],
 )
 def test_buy_sell_language_rejected(text: str) -> None:

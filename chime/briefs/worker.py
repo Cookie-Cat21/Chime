@@ -21,6 +21,7 @@ from typing import Any, Protocol
 import httpx
 import structlog
 
+from chime.adapters.cse import allowed_cdn_pdf_url
 from chime.briefs import BriefSettings, BriefStatus, briefs_enabled, build_brief_prompt
 from chime.briefs.extract import extract_pdf_text, fetch_cdn_pdf
 from chime.briefs.provider import BriefProvider, make_brief_provider
@@ -30,6 +31,10 @@ from chime.notify import SendResult
 log = structlog.get_logger("chime.briefs")
 
 BriefNotifyFunc = Callable[[int, str], Awaitable[Any]]
+
+
+class BriefCdnTransientError(RuntimeError):
+    """CDN PDF fetch failed transiently — requeue pending, do not burn daily cap."""
 
 
 async def _maybe_await(value: Any) -> Any:
@@ -81,6 +86,13 @@ class _BriefDrainStorage(Protocol):
         *,
         error: str,
         model: str | None = None,
+    ) -> bool: ...
+
+    async def requeue_brief_pending(
+        self,
+        disclosure_id: int,
+        *,
+        error: str,
     ) -> bool: ...
 
     async def count_briefs_today(self, *, stale_processing_minutes: int = 15) -> int: ...
@@ -171,23 +183,27 @@ async def _input_text_for_row(
 ) -> str:
     """Build provider input: CDN PDF extract when ``pdf_url`` set, else title.
 
-    When ``pdf_url`` is set, a failed CDN fetch raises so the row stays
-    reclaimable (``mark_brief_failed`` / stale ``processing``) instead of
-    burning the daily cap on a silent title-only summarize. Empty extract
-    after a successful fetch still falls back to title (image-only PDFs).
+    When ``pdf_url`` is set, a failed CDN fetch raises ``BriefCdnTransientError``
+    so the drain requeues ``pending`` (no daily-cap burn) instead of a silent
+    title-only summarize or a permanent ``failed``. Non-allowlisted hosts raise
+    a plain ``RuntimeError`` (permanent fail). Empty extract after a successful
+    fetch still falls back to title (image-only PDFs).
     """
     symbol = str(row.get("symbol") or "").strip()
     title = str(row.get("title") or "").strip()
     max_chars = int(cfg.max_input_chars)
     pdf_url = row.get("pdf_url")
     if isinstance(pdf_url, str) and pdf_url.strip():
+        url = pdf_url.strip()
+        if allowed_cdn_pdf_url(url) is None:
+            raise RuntimeError(f"CDN PDF URL rejected (not allowlisted): {url!r}")
         raw = await fetch_cdn_pdf(
-            pdf_url.strip(),
+            url,
             max_bytes=cfg.pdf_max_bytes,
             client=client,
         )
         if raw is None:
-            raise RuntimeError(f"CDN PDF fetch failed for {pdf_url.strip()!r}")
+            raise BriefCdnTransientError(f"CDN PDF fetch failed for {url!r}")
         extracted = extract_pdf_text(raw)
         if extracted:
             return build_brief_prompt(
@@ -448,6 +464,23 @@ async def claim_pending_briefs(
                                 row=row,
                                 brief=brief,
                             )
+                    except BriefCdnTransientError as exc:
+                        # Transient CDN miss: requeue pending so the next drain
+                        # retries without burning max_briefs_per_day on failed.
+                        requeue = getattr(storage, "requeue_brief_pending", None)
+                        if requeue is not None:
+                            await requeue(disclosure_id, error=str(exc))
+                        else:
+                            await storage.mark_brief_failed(
+                                disclosure_id,
+                                error=str(exc),
+                                model=cfg.model,
+                            )
+                        log.warning(
+                            "brief_cdn_requeued",
+                            disclosure_id=disclosure_id,
+                            error=str(exc),
+                        )
                     except Exception as exc:
                         await storage.mark_brief_failed(
                             disclosure_id,
