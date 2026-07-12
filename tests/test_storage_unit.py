@@ -137,14 +137,16 @@ async def test_upsert_stock_normalizes_symbol() -> None:
 
 @pytest.mark.asyncio
 async def test_insert_snapshot_returns_id() -> None:
-    # upsert_stock execute + insert RETURNING (via persist_market_snapshots)
-    conn = _Conn([None, {"id": 42}])
+    # one stocks upsert + one snapshots INSERT RETURNING (via persist_market_snapshots)
+    conn = _Conn([None, [{"id": 42}]])
     store = _store(conn)
     out = await store.insert_snapshot(_snap())
     assert out.id == 42
     assert out.symbol == "JKH.N0000"
-    assert any("price_snapshots" in s for s in conn.sql)
-    assert any("INSERT INTO stocks" in s for s in conn.sql)
+    assert len(conn.sql) == 2
+    assert "INSERT INTO stocks" in conn.sql[0]
+    assert "price_snapshots" in conn.sql[1]
+    assert "RETURNING id" in conn.sql[1]
 
 
 @pytest.mark.asyncio
@@ -152,15 +154,62 @@ async def test_persist_market_snapshots_empty_and_batch() -> None:
     store = _store(_Conn([]))
     assert await store.persist_market_snapshots([]) == []
 
-    conn = _Conn([None, {"id": 1}, None, {"id": 2}])
+    # Two round-trips total regardless of board size: stocks upsert + snapshots RETURNING.
+    conn = _Conn([None, [{"id": 1}, {"id": 2}]])
     store = _store(conn)
     out = await store.persist_market_snapshots(
         [_snap(symbol="jkh.n0000"), _snap(symbol="comb.n0000", price=90.0)]
     )
     assert [s.id for s in out] == [1, 2]
     assert [s.symbol for s in out] == ["JKH.N0000", "COMB.N0000"]
-    assert sum(1 for s in conn.sql if "INSERT INTO stocks" in s) == 2
-    assert sum(1 for s in conn.sql if "price_snapshots" in s) == 2
+    assert len(conn.sql) == 2
+    assert sum(1 for s in conn.sql if "INSERT INTO stocks" in s) == 1
+    assert sum(1 for s in conn.sql if "price_snapshots" in s) == 1
+    assert conn.sql[0].count("(%s, %s, %s)") == 2
+    assert "RETURNING id" in conn.sql[1]
+    # Flattened params: 3 per stock, 13 per snapshot.
+    assert conn.params[0][0] == "JKH.N0000"
+    assert conn.params[0][3] == "COMB.N0000"
+    assert conn.params[1][0] == "JKH.N0000"
+    assert conn.params[1][1] == 100.0
+    assert conn.params[1][13] == "COMB.N0000"
+    assert conn.params[1][14] == 90.0
+
+
+@pytest.mark.asyncio
+async def test_persist_market_snapshots_dedupes_stocks_keeps_all_snaps() -> None:
+    """Duplicate symbols in one board: one stock row, two snapshot inserts."""
+    conn = _Conn([None, [{"id": 10}, {"id": 11}]])
+    store = _store(conn)
+    out = await store.persist_market_snapshots(
+        [
+            _snap(symbol="jkh.n0000", price=100.0, name="First"),
+            _snap(symbol="JKH.N0000", price=101.0, name="Second"),
+        ]
+    )
+    assert [s.id for s in out] == [10, 11]
+    assert all(s.symbol == "JKH.N0000" for s in out)
+    assert conn.sql[0].count("(%s, %s, %s)") == 1
+    assert conn.params[0] == ["JKH.N0000", "Second", None]
+    assert conn.sql[1].count("(%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)") == 2
+
+
+@pytest.mark.asyncio
+async def test_persist_market_snapshots_scales_to_board_size() -> None:
+    """~300-symbol tradeSummary board stays two SQL round-trips."""
+    n = 300
+    board = [_snap(symbol=f"S{i:04d}.N0000", price=float(i)) for i in range(n)]
+    ids = [{"id": i + 1} for i in range(n)]
+    conn = _Conn([None, ids])
+    store = _store(conn)
+    out = await store.persist_market_snapshots(board)
+    assert len(out) == n
+    assert out[0].id == 1 and out[-1].id == n
+    assert out[0].symbol == "S0000.N0000"
+    assert len(conn.sql) == 2
+    assert conn.sql[0].count("(%s, %s, %s)") == n
+    assert len(conn.params[0]) == n * 3
+    assert len(conn.params[1]) == n * 13
 
 
 @pytest.mark.asyncio

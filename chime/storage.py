@@ -92,59 +92,83 @@ class Storage:
 
         Used by the poller to keep a market-wide browse layer in Postgres while
         rule evaluation stays watchlist-scoped. Empty input is a no-op.
+
+        Batches ~300 symbols into two multi-row statements (stocks upsert, then
+        snapshots ``INSERT … RETURNING id``) inside one transaction. Returned
+        snapshots keep input order with assigned ids.
         """
         if not snaps:
             return []
-        out: list[PriceSnapshot] = []
+
+        normalized: list[tuple[str, PriceSnapshot]] = [
+            (snap.symbol.strip().upper(), snap) for snap in snaps
+        ]
+        # ON CONFLICT DO UPDATE cannot touch the same row twice in one statement.
+        stock_by_symbol: dict[str, str | None] = {}
+        for symbol, snap in normalized:
+            stock_by_symbol[symbol] = snap.name
+
+        stock_symbols = list(stock_by_symbol.keys())
+        stock_values = ",".join(["(%s, %s, %s)"] * len(stock_symbols))
+        stock_params: list[Any] = []
+        for symbol in stock_symbols:
+            stock_params.extend([symbol, stock_by_symbol[symbol], None])
+
+        snap_values = ",".join(
+            ["(%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)"] * len(normalized)
+        )
+        snap_params: list[Any] = []
+        for symbol, snap in normalized:
+            snap_params.extend(
+                [
+                    symbol,
+                    snap.price,
+                    snap.change,
+                    snap.change_pct,
+                    snap.previous_close,
+                    snap.volume,
+                    snap.trade_count,
+                    snap.turnover,
+                    snap.high,
+                    snap.low,
+                    snap.open,
+                    snap.market_cap,
+                    snap.ts,
+                ]
+            )
+
         async with self._pool.connection() as conn, conn.transaction():
-            for snap in snaps:
-                symbol = snap.symbol.strip().upper()
+            await conn.execute(
+                f"""
+                INSERT INTO stocks (symbol, name, sector)
+                VALUES {stock_values}
+                ON CONFLICT (symbol) DO UPDATE SET
+                    name = COALESCE(EXCLUDED.name, stocks.name),
+                    sector = COALESCE(EXCLUDED.sector, stocks.sector),
+                    updated_at = now()
+                """,
+                stock_params,
+            )
+            rows = await (
                 await conn.execute(
-                    """
-                    INSERT INTO stocks (symbol, name, sector)
-                    VALUES (%s, %s, %s)
-                    ON CONFLICT (symbol) DO UPDATE SET
-                        name = COALESCE(EXCLUDED.name, stocks.name),
-                        sector = COALESCE(EXCLUDED.sector, stocks.sector),
-                        updated_at = now()
+                    f"""
+                    INSERT INTO price_snapshots (
+                        symbol, price, change, change_pct, previous_close,
+                        volume, trade_count, turnover, high, low, open,
+                        market_cap, ts
+                    ) VALUES {snap_values}
+                    RETURNING id
                     """,
-                    (symbol, snap.name, None),
+                    snap_params,
                 )
-                row = await (
-                    await conn.execute(
-                        """
-                        INSERT INTO price_snapshots (
-                            symbol, price, change, change_pct, previous_close,
-                            volume, trade_count, turnover, high, low, open,
-                            market_cap, ts
-                        ) VALUES (
-                            %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s
-                        )
-                        RETURNING id
-                        """,
-                        (
-                            symbol,
-                            snap.price,
-                            snap.change,
-                            snap.change_pct,
-                            snap.previous_close,
-                            snap.volume,
-                            snap.trade_count,
-                            snap.turnover,
-                            snap.high,
-                            snap.low,
-                            snap.open,
-                            snap.market_cap,
-                            snap.ts,
-                        ),
-                    )
-                ).fetchone()
-                assert row is not None
-                out.append(
-                    snap.model_copy(
-                        update={"id": int(_as_row(row)["id"]), "symbol": symbol}
-                    )
-                )
+            ).fetchall()
+
+        assert len(rows) == len(normalized)
+        out: list[PriceSnapshot] = []
+        for (symbol, snap), row in zip(normalized, _as_rows(rows), strict=True):
+            out.append(
+                snap.model_copy(update={"id": int(row["id"]), "symbol": symbol})
+            )
         return out
 
     async def latest_snapshot(self, symbol: str) -> PriceSnapshot | None:
@@ -206,15 +230,47 @@ class Storage:
             move_fired_keys=move_keys,
         )
 
+    async def enqueue_disclosure_brief(
+        self,
+        disclosure_id: int,
+        *,
+        status: str = "pending",
+    ) -> bool:
+        """Insert a disclosure_briefs ledger row; no-op if one already exists.
+
+        Returns True when a row was inserted. Default status is ``pending``;
+        callers that honour ``briefs_enabled()`` pass ``skipped`` when AI
+        briefs are off so Phase 2 can still see the row.
+        """
+        async with self._pool.connection() as conn:
+            row = await (
+                await conn.execute(
+                    """
+                    INSERT INTO disclosure_briefs (disclosure_id, status)
+                    VALUES (%s, %s)
+                    ON CONFLICT (disclosure_id) DO NOTHING
+                    RETURNING disclosure_id
+                    """,
+                    (disclosure_id, status),
+                )
+            ).fetchone()
+        return row is not None
+
     async def upsert_disclosure(self, disc: Disclosure) -> Disclosure:
         """Insert or update disclosure; always return it with a DB id.
 
         ON CONFLICT updates title so RETURNING id always yields a row — callers
         can re-evaluate rules after a crash between insert and claim without
         permanently skipping the disclosure.
+
+        On a true insert (``xmax = 0``), enqueues a ``disclosure_briefs`` row:
+        ``pending`` when briefs are enabled, ``skipped`` otherwise. Updates
+        never enqueue again (idempotent with ON CONFLICT DO NOTHING).
         """
+        from chime.briefs import BriefStatus, briefs_enabled
+
         await self.upsert_stock(disc.symbol, disc.company_name)
-        async with self._pool.connection() as conn:
+        async with self._pool.connection() as conn, conn.transaction():
             row = await (
                 await conn.execute(
                     """
@@ -224,7 +280,7 @@ class Storage:
                     ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
                     ON CONFLICT (external_id, symbol) DO UPDATE SET
                         title = EXCLUDED.title
-                    RETURNING id
+                    RETURNING id, (xmax = 0) AS inserted
                     """,
                     (
                         disc.external_id,
@@ -238,8 +294,24 @@ class Storage:
                     ),
                 )
             ).fetchone()
-        assert row is not None
-        return disc.model_copy(update={"id": int(_as_row(row)["id"])})
+            assert row is not None
+            data = _as_row(row)
+            disclosure_id = int(data["id"])
+            if data.get("inserted"):
+                brief_status = (
+                    BriefStatus.PENDING
+                    if briefs_enabled()
+                    else BriefStatus.SKIPPED
+                )
+                await conn.execute(
+                    """
+                    INSERT INTO disclosure_briefs (disclosure_id, status)
+                    VALUES (%s, %s)
+                    ON CONFLICT (disclosure_id) DO NOTHING
+                    """,
+                    (disclosure_id, brief_status.value),
+                )
+        return disc.model_copy(update={"id": disclosure_id})
 
     async def insert_disclosure_if_new(self, disc: Disclosure) -> Disclosure | None:
         """Compat wrapper — prefer upsert_disclosure.
