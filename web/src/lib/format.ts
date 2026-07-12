@@ -10,6 +10,14 @@ const CTRL_RE = /[\u0000-\u001F\u007F-\u009F]/;
 /** Cap fraction digits — hostile / huge values used to throw in toLocaleString. */
 export const MAX_FORMAT_FRACTION_DIGITS = 8;
 
+/**
+ * Cap absolute magnitude for display formatters.
+ * Hostile finite extremes (e.g. ``1e308``) used to balloon ``toLocaleString`` /
+ * ``toFixed`` into multi-hundred-char strings in price/pct UI.
+ * CSE quotes never need more than this; fail closed to em dash.
+ */
+export const MAX_FORMAT_ABS_VALUE = 1e15;
+
 /** Format a number for display; empty when nullish or non-finite. */
 export function formatNumber(
   value: number | null | undefined,
@@ -17,6 +25,8 @@ export function formatNumber(
 ): string {
   // Guard non-numbers: string prices must not reach toLocaleString via bad JSON.
   if (!isFiniteNumber(value)) return "—";
+  // Fail closed — absurd magnitudes balloon locale output.
+  if (Math.abs(value) > MAX_FORMAT_ABS_VALUE) return "—";
   // Fail closed — NaN / negative / oversized digits throw RangeError in V8.
   const frac =
     typeof digits === "number" &&
@@ -34,6 +44,8 @@ export function formatNumber(
 export function formatPct(value: number | null | undefined): string {
   // Fail closed: string/boolean/NaN/±Infinity must not throw on toFixed.
   if (!isFiniteNumber(value)) return "—";
+  // Fail closed — absurd magnitudes balloon toFixed into multi-KB pct labels.
+  if (Math.abs(value) > MAX_FORMAT_ABS_VALUE) return "—";
   const sign = value > 0 ? "+" : "";
   return `${sign}${value.toFixed(2)}%`;
 }
@@ -53,7 +65,9 @@ export function formatTs(iso: string | null | undefined): string {
   });
 }
 
-export function alertTypeLabel(type: string): string {
+export function alertTypeLabel(type: unknown): string {
+  // Fail closed — non-strings must not fall through switch oddly.
+  if (typeof type !== "string") return "Unknown";
   switch (type) {
     case "price_above":
       return "Above";
