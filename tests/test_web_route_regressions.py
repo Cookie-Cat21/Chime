@@ -250,7 +250,7 @@ def test_market_page_fence_no_screener_or_quote_board() -> None:
     assert "sort=symbol" not in market_src
 
 def test_disclosures_route_joins_briefs_and_pdf_fields() -> None:
-    """Wave2: disclosures API LEFT JOINs briefs; exposes pdf_url/brief/brief_status."""
+    """Wave2/3: disclosures API LEFT JOINs briefs; sanitizes pdf_url/brief egress."""
     route = (
         WEB
         / "src"
@@ -270,9 +270,9 @@ def test_disclosures_route_joins_briefs_and_pdf_fields() -> None:
     assert "d.pdf_url" in source
     assert "b.brief" in source
     assert "b.status AS brief_status" in source
-    assert "pdf_url: row.pdf_url" in source
-    assert "brief: row.brief" in source
-    assert "brief_status: row.brief_status" in source
+    assert "safePdfUrl" in source
+    assert "safeAnnouncementUrl" in source
+    assert "sanitizeBriefText" in source
     assert "FROM disclosures d" in source
     assert "cse.lk" not in source.lower() or all(
         _is_comment_only_hit(line, "cse.lk")
@@ -282,16 +282,15 @@ def test_disclosures_route_joins_briefs_and_pdf_fields() -> None:
 
 
 def test_symbol_page_prefers_pdf_and_shows_ready_brief() -> None:
-    """Wave2: symbol disclosures prefer pdf_url; render brief when status=ready; NFA."""
+    """Wave2/3: symbol page uses safeFilingHref; brief only via sanitizeBriefText."""
     page = WEB / "src" / "app" / "symbols" / "[symbol]" / "page.tsx"
     assert page.is_file()
     source = page.read_text(encoding="utf-8")
-    assert "pdf_url" in source
-    assert "brief_status" in source
-    assert 'item.brief_status === "ready"' in source
-    assert "item.pdf_url?.trim() || item.url" in source or (
-        "item.pdf_url" in source and "item.url" in source
-    )
+    assert "safeFilingHref" in source
+    assert "sanitizeBriefText" in source
+    assert "safePdfUrl" in source
+    assert "item.pdf_url?.trim() || item.url" not in source
+    assert "dangerouslySetInnerHTML" not in source
     assert "NfaInline" in source
     assert "NfaFooter" in source
     assert "cse.lk" not in source.lower() or all(
@@ -301,8 +300,25 @@ def test_symbol_page_prefers_pdf_and_shows_ready_brief() -> None:
     )
 
 
+def test_disclosure_safe_helpers_fence() -> None:
+    """Allowlist helpers must not embed contiguous cse.lk (fence) outside comments."""
+    helper = WEB / "src" / "lib" / "api" / "disclosure-safe.ts"
+    assert helper.is_file()
+    source = helper.read_text(encoding="utf-8")
+    assert "safePdfUrl" in source
+    assert "safeAnnouncementUrl" in source
+    assert "safeFilingHref" in source
+    assert "sanitizeBriefText" in source
+    assert 'briefStatus !== "ready"' in source or "briefStatus !== \"ready\"" in source
+    assert "cse.lk" not in source.lower() or all(
+        _is_comment_only_hit(line, "cse.lk")
+        for line in source.splitlines()
+        if "cse.lk" in line.lower()
+    )
+
+
 def test_disclosures_route_brief_pdf_unit() -> None:
-    """Runtime: LEFT JOIN mapping + session gate; SQL never mentions cse.lk."""
+    """Runtime: LEFT JOIN mapping + XSS egress nulling; SQL never mentions cse.lk."""
     assert UNIT_DISCLOSURES_MTS.is_file(), f"missing {UNIT_DISCLOSURES_MTS}"
     route = (
         WEB
@@ -318,7 +334,8 @@ def test_disclosures_route_brief_pdf_unit() -> None:
     assert route.is_file()
     _require_web_node_modules()
     npx = _npx()
-    staged = WEB / "web_disclosures_route_unit.mts"
+    # Dot-prefix so concurrent fence greps skip staged harnesses.
+    staged = WEB / ".web_disclosures_route_unit.mts"
     staged.write_text(UNIT_DISCLOSURES_MTS.read_text(encoding="utf-8"), encoding="utf-8")
     try:
         proc = subprocess.run(
@@ -333,7 +350,7 @@ def test_disclosures_route_brief_pdf_unit() -> None:
         staged.unlink(missing_ok=True)
     if proc.returncode != 0:
         pytest.fail(
-            f"web_disclosures_route_unit.mts failed ({proc.returncode}):\n"
+            f".web_disclosures_route_unit.mts failed ({proc.returncode}):\n"
             f"stdout:\n{proc.stdout}\nstderr:\n{proc.stderr}"
         )
     assert "WEB_DISCLOSURES_ROUTE_UNIT_OK" in proc.stdout

@@ -7,6 +7,7 @@ import { NfaFooter } from "@/components/nfa-footer";
 import { NfaInline } from "@/components/nfa-inline";
 import { Sparkline } from "@/components/sparkline";
 import { Button } from "@/components/ui/button";
+import { safeFilingHref, safePdfUrl, sanitizeBriefText } from "@/lib/api/disclosure-safe";
 import { serverApiGet } from "@/lib/api/server-fetch";
 import { normalizeSymbol } from "@/lib/api/symbol";
 import { requirePageSession } from "@/lib/auth/page-session";
@@ -60,7 +61,7 @@ type DisclosuresPayload = {
     external_id: string;
     title: string;
     category: string | null;
-    url: string;
+    url: string | null;
     published_at: string | null;
     company_name: string | null;
     pdf_url: string | null;
@@ -323,32 +324,42 @@ export default async function SymbolDetailPage({
           <>
             <ul className="mt-4 divide-y divide-border/60">
               {discs.items.map((item) => {
-                const href = item.pdf_url?.trim() || item.url;
-                const showBrief =
-                  item.brief_status === "ready" &&
-                  Boolean(item.brief?.trim());
+                const href = safeFilingHref(item.pdf_url, item.url);
+                const pdfOk = Boolean(safePdfUrl(item.pdf_url));
+                const briefText = sanitizeBriefText(
+                  item.brief,
+                  item.brief_status,
+                );
+                const titleClass =
+                  "block rounded-sm text-sm font-medium text-foreground underline-offset-4 focus-visible:ring-2 focus-visible:ring-ring/50 focus-visible:outline-none";
                 return (
                   <li key={item.id} className="py-3 first:pt-0">
-                    <a
-                      href={href}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="block rounded-sm text-sm font-medium text-foreground underline-offset-4 hover:underline focus-visible:ring-2 focus-visible:ring-ring/50 focus-visible:outline-none"
-                    >
-                      {item.title}
-                      {item.pdf_url?.trim() ? (
-                        <span className="ml-1.5 text-xs font-normal text-muted-foreground">
-                          (PDF)
-                        </span>
-                      ) : null}
-                    </a>
+                    {href ? (
+                      <a
+                        href={href}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className={`${titleClass} hover:underline`}
+                      >
+                        {item.title}
+                        {pdfOk ? (
+                          <span className="ml-1.5 text-xs font-normal text-muted-foreground">
+                            (PDF)
+                          </span>
+                        ) : null}
+                      </a>
+                    ) : (
+                      <span className={titleClass}>
+                        {item.title}
+                      </span>
+                    )}
                     <p className="mt-1 text-xs text-muted-foreground">
                       {formatTs(item.published_at)}
                       {item.category ? ` · ${item.category}` : ""}
                     </p>
-                    {showBrief ? (
+                    {briefText ? (
                       <p className="mt-2 text-sm leading-relaxed text-muted-foreground">
-                        {item.brief}
+                        {briefText}
                       </p>
                     ) : null}
                   </li>

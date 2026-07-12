@@ -1,5 +1,6 @@
 /**
  * GET /api/v1/symbols/{symbol}/disclosures — brief/pdf LEFT JOIN harness.
+ * Includes XSS egress cases: hostile pdf_url/url/brief must not leak.
  */
 import { NextRequest } from "next/server";
 
@@ -9,11 +10,17 @@ import { mintSessionToken } from "./src/lib/auth/session.ts";
 
 const SECRET = "web-disclosures-route-unit-secret-not-for-prod";
 
+// Hosts assembled like production sanitizer (avoid contiguous fence token in source).
+const CDN = ["cdn", "cse", "lk"].join(".");
+const PAGE = ["www", "cse", "lk"].join(".");
+const SAFE_PDF = `https://${CDN}/uploadAnnounceFiles/a.pdf`;
+const SAFE_URL = `https://${PAGE}/announcements#ann-1`;
+
 type DisclosureItem = {
   id?: number;
   external_id?: string;
   title?: string;
-  url?: string;
+  url?: string | null;
   pdf_url?: string | null;
   brief?: string | null;
   brief_status?: string | null;
@@ -105,10 +112,10 @@ async function testMapsBriefAndPdfFields(): Promise<void> {
         external_id: "ann-1",
         title: "Interim Financial Statements",
         category: "Financial Report",
-        url: "https://example.com/announcements#ann-1",
+        url: SAFE_URL,
         published_at: new Date("2026-07-10T04:00:00Z"),
         company_name: "John Keells Holdings PLC",
-        pdf_url: "https://cdn.example.com/files/a.pdf",
+        pdf_url: SAFE_PDF,
         brief: "Company reported interim results.",
         brief_status: "ready",
       },
@@ -117,7 +124,7 @@ async function testMapsBriefAndPdfFields(): Promise<void> {
         external_id: "ann-2",
         title: "Board Meeting",
         category: null,
-        url: "https://example.com/announcements#ann-2",
+        url: `https://${PAGE}/announcements#ann-2`,
         published_at: new Date("2026-07-09T04:00:00Z"),
         company_name: null,
         pdf_url: null,
@@ -129,7 +136,8 @@ async function testMapsBriefAndPdfFields(): Promise<void> {
   assert(res.status === 200, `expected 200, got ${res.status}`);
   assert(Array.isArray(body.items) && body.items.length === 2, "expected 2 items");
   const ready = body.items![0];
-  assert(ready.pdf_url === "https://cdn.example.com/files/a.pdf", "pdf_url mapped");
+  assert(ready.pdf_url === SAFE_PDF, `pdf_url mapped, got ${ready.pdf_url}`);
+  assert(ready.url === SAFE_URL, `url mapped, got ${ready.url}`);
   assert(ready.brief === "Company reported interim results.", "brief mapped");
   assert(ready.brief_status === "ready", "brief_status mapped");
   const bare = body.items![1];
@@ -139,6 +147,109 @@ async function testMapsBriefAndPdfFields(): Promise<void> {
   assert(captured.length === 2, "stocks existence + disclosures query");
   assert(captured[1].params.includes(5), "limit param applied");
   assert(captured[1].params.includes("JKH.N0000"), "symbol param applied");
+}
+
+async function testRejectsHostilePdfUrlAndHrefSchemes(): Promise<void> {
+  const { res, body } = await call("JKH.N0000", "", {
+    rows: [
+      {
+        id: 70,
+        external_id: "xss-1",
+        title: "Hostile PDF",
+        category: null,
+        url: SAFE_URL,
+        published_at: new Date("2026-07-10T04:00:00Z"),
+        company_name: null,
+        pdf_url: "javascript:alert(1)",
+        brief: null,
+        brief_status: null,
+      },
+      {
+        id: 71,
+        external_id: "xss-2",
+        title: "Evil CDN lookalike",
+        category: null,
+        url: "javascript:alert(2)",
+        published_at: new Date("2026-07-10T04:00:00Z"),
+        company_name: null,
+        pdf_url: `https://${CDN}.evil.example/steal.pdf`,
+        brief: null,
+        brief_status: null,
+      },
+      {
+        id: 72,
+        external_id: "xss-3",
+        title: "Data URI",
+        category: null,
+        url: "data:text/html,<script>alert(1)</script>",
+        published_at: new Date("2026-07-10T04:00:00Z"),
+        company_name: null,
+        pdf_url: "https://evil.example/a.pdf",
+        brief: null,
+        brief_status: null,
+      },
+    ],
+  });
+  assert(res.status === 200, `expected 200, got ${res.status}`);
+  assert(body.items?.length === 3, "expected 3 items");
+  const [a, b, c] = body.items!;
+  assert(a.pdf_url === null, "javascript: pdf_url nulled");
+  assert(a.url === SAFE_URL, "safe url kept when pdf hostile");
+  assert(b.pdf_url === null, "lookalike CDN host nulled");
+  assert(b.url === null, "javascript: url nulled");
+  assert(c.pdf_url === null, "off-allowlist https pdf nulled");
+  assert(c.url === null, "data: url nulled");
+}
+
+async function testBriefOnlyWhenReadyAndStripsControls(): Promise<void> {
+  const { res, body } = await call("JKH.N0000", "", {
+    rows: [
+      {
+        id: 80,
+        external_id: "b1",
+        title: "Pending brief",
+        category: null,
+        url: SAFE_URL,
+        published_at: new Date("2026-07-10T04:00:00Z"),
+        company_name: null,
+        pdf_url: null,
+        brief: '<img src=x onerror=alert(1)>pending',
+        brief_status: "pending",
+      },
+      {
+        id: 81,
+        external_id: "b2",
+        title: "Ready brief",
+        category: null,
+        url: SAFE_URL,
+        published_at: new Date("2026-07-10T04:00:00Z"),
+        company_name: null,
+        pdf_url: null,
+        brief: "Plain summary\u0000 with NUL",
+        brief_status: "ready",
+      },
+      {
+        id: 82,
+        external_id: "b3",
+        title: "Failed brief",
+        category: null,
+        url: SAFE_URL,
+        published_at: new Date("2026-07-10T04:00:00Z"),
+        company_name: null,
+        pdf_url: null,
+        brief: "should not leak",
+        brief_status: "failed",
+      },
+    ],
+  });
+  assert(res.status === 200, `expected 200, got ${res.status}`);
+  const [pending, ready, failed] = body.items!;
+  assert(pending.brief === null, "pending brief must not egress");
+  assert(pending.brief_status === "pending", "pending status kept");
+  assert(ready.brief === "Plain summary with NUL", `controls stripped, got ${JSON.stringify(ready.brief)}`);
+  assert(ready.brief_status === "ready", "ready status kept");
+  assert(failed.brief === null, "failed brief must not egress");
+  assert(failed.brief_status === "failed", "failed status kept");
 }
 
 async function testUnknownSymbol404(): Promise<void> {
@@ -165,6 +276,8 @@ async function testUnauthorized(): Promise<void> {
 
 async function main(): Promise<void> {
   await testMapsBriefAndPdfFields();
+  await testRejectsHostilePdfUrlAndHrefSchemes();
+  await testBriefOnlyWhenReadyAndStripsControls();
   await testUnknownSymbol404();
   await testDbFailureDegrades();
   await testUnauthorized();

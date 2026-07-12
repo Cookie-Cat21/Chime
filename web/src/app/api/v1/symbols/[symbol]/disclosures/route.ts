@@ -1,5 +1,11 @@
 import type { NextRequest } from "next/server";
 
+import {
+  normalizeBriefStatus,
+  safeAnnouncementUrl,
+  safePdfUrl,
+  sanitizeBriefText,
+} from "@/lib/api/disclosure-safe";
 import { normalizeSymbol } from "@/lib/api/symbol";
 import { toIso } from "@/lib/api/time";
 import { jsonError, jsonOk } from "@/lib/auth/errors";
@@ -10,12 +16,11 @@ export const runtime = "nodejs";
 
 type RouteContext = { params: Promise<{ symbol: string }> };
 
-type BriefStatus = "pending" | "ready" | "failed" | "skipped";
-
 /**
  * GET /api/v1/symbols/{symbol}/disclosures — recent filings from Postgres.
  * LEFT JOIN disclosure_briefs for brief / brief_status when present.
  * pdf_url comes from disclosures (enricher); never fetches upstream from web.
+ * Egress: allowlist pdf_url/url; expose brief only when brief_status=ready.
  */
 export async function GET(request: NextRequest, context: RouteContext) {
   const gated = requireSession(request);
@@ -57,7 +62,7 @@ export async function GET(request: NextRequest, context: RouteContext) {
       company_name: string | null;
       pdf_url: string | null;
       brief: string | null;
-      brief_status: BriefStatus | null;
+      brief_status: string | null;
     }>(
       `SELECT d.id, d.external_id, d.title, d.category, d.url, d.published_at,
               d.company_name, d.pdf_url,
@@ -70,18 +75,21 @@ export async function GET(request: NextRequest, context: RouteContext) {
       [symbol, limit],
     );
 
-    const items = result.rows.map((row) => ({
-      id: Number(row.id),
-      external_id: row.external_id,
-      title: row.title,
-      category: row.category,
-      url: row.url,
-      published_at: toIso(row.published_at),
-      company_name: row.company_name,
-      pdf_url: row.pdf_url,
-      brief: row.brief,
-      brief_status: row.brief_status,
-    }));
+    const items = result.rows.map((row) => {
+      const brief_status = normalizeBriefStatus(row.brief_status);
+      return {
+        id: Number(row.id),
+        external_id: row.external_id,
+        title: row.title,
+        category: row.category,
+        url: safeAnnouncementUrl(row.url),
+        published_at: toIso(row.published_at),
+        company_name: row.company_name,
+        pdf_url: safePdfUrl(row.pdf_url),
+        brief: sanitizeBriefText(row.brief, brief_status),
+        brief_status,
+      };
+    });
 
     return jsonOk({ items });
   } catch (err) {
