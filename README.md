@@ -47,8 +47,23 @@ Bot and `both` start Telegram long-polling with `drop_pending_updates=True`, so
 queued messages from downtime are discarded on restart (avoids replaying stale
 `/watch` / `/alert` commands after a deploy).
 
-Telegram: `/watch`, `/unwatch`, `/alert …`, `/cancel ALERT_ID`, `/myalerts`
-(active alerts only — cancelled rules are omitted), `/mywatchlist`, `/help`.
+### Bot commands (Telegram)
+
+| Command | What it does |
+|---|---|
+| `/start` | Register user, short explainer + NFA |
+| `/help` | List commands + disclosure/alert notes + NFA |
+| `/watch SYMBOL` | Add symbol to watchlist |
+| `/unwatch SYMBOL` | Remove symbol; deactivates that user’s rules for it |
+| `/alert SYMBOL above PRICE` | Fire when last price crosses above threshold |
+| `/alert SYMBOL below PRICE` | Fire when last price crosses below threshold |
+| `/alert SYMBOL move PERCENT` | Fire when daily % move exceeds threshold |
+| `/alert SYMBOL disclosure [CATEGORY]` | Fire on new filing (optional title substring) |
+| `/cancel ALERT_ID` | Soft-cancel an active rule |
+| `/myalerts` | List active alerts only (cancelled omitted) |
+| `/mywatchlist` | List watched symbols |
+| `/brief SYMBOL` | Read-only latest ready AI filing brief (DB only; no LLM call). Empty → “AI briefs are off” or “none yet” |
+
 
 ## Latency SLO
 

@@ -31,6 +31,20 @@ AI_BRIEFS_ENABLED=0          # leave off in prod until Phase 2
 # AI_MODEL=gemini-2.0-flash  # groq: llama-3.3-70b-versatile; openrouter: openai/gpt-4o-mini
 ```
 
+### Telegram `/brief SYMBOL`
+
+Read-only lookup of the latest **ready** filing brief for a symbol from Postgres (`get_latest_ready_brief`). Does **not** call an LLM and does not enqueue work.
+
+| Reply | When |
+|---|---|
+| Usage + example | Missing args |
+| Bad-symbol hint | Symbol fails normalize |
+| `{SYMBOL}: AI briefs are off` + NFA | No ready row and `briefs_enabled()` is false |
+| `{SYMBOL}: none yet` + NFA | No ready row and AI is enabled |
+| Title + allowed filing URL + brief body + NFA | Ready brief found |
+
+Rate-limited with other bot commands. Ops: leave `AI_BRIEFS_ENABLED=0` until a controlled soak; `/brief` still works for already-ready rows when AI is on.
+
 ## Advisory locks (poll vs brief claim)
 
 Poll tick uses session `pg_try_advisory_lock(4_201_337)`; brief daily-cap claim uses transaction `pg_advisory_xact_lock(4_201_339)`. Wave 10 audit: **no deadlock** between them (distinct keys; brief drain after poll unlock; claim uses `SKIP LOCKED`). Do **not** unify the IDs — same key + `max_size=2` can pool-deadlock. Detail: [ADVISORY_LOCK_DEADLOCK.md](../factory/passes/ADVISORY_LOCK_DEADLOCK.md).
