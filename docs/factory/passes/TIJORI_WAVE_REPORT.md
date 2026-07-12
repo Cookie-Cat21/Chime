@@ -1,16 +1,28 @@
-# Tijori CSE — Waves 1–11 report
+# Tijori CSE — Waves 1–12 report
 
 **Branch:** `cursor/tijori-cse-phase1-e44e`  
 **Date:** 2026-07-12  
 **Plan:** [TIJORI_CSE_PLAN.md](../TIJORI_CSE_PLAN.md)  
 **Ops:** [docs/runbooks/TIJORI.md](../../runbooks/TIJORI.md)  
-**Range:** `a802cb7` … wave 11 (wave-10 harden + `/brief` empty-state align)
+**Range:** `a802cb7` … wave 12 (parallelism honesty)
+
+---
+
+## Parallelism honesty (wave 12)
+
+This Tijori multi-wave was **not** “1000 concurrent agents × 100 empty loops.” Actual shape:
+
+- **~12 max-width waves** of bounded parallel agents (disjoint `OWNED_FILES` per lane; factory soft caps still apply unless a wave explicitly raised them).
+- **~90+ agent tasks** across the scoped `wave` / `waveN` inventory below — real commits that ship code, tests, or docs, not empty improve-loop iterations.
+- **Quality-gated:** one concern per commit; stop when gates are green / two passes find nothing above minor — no always-on swarm or commit farming.
+
+Matches the plan constraint note in [TIJORI_CSE_PLAN.md](../TIJORI_CSE_PLAN.md). Treat any “1000×100” framing as aspiration rhetoric, not an execution log.
 
 ---
 
 ## Verdict
 
-Phase 1 foundations and Phase 2 Tijori-core plumbing are **landed** across waves 1–5. Waves 6–7 add sectors browse, storage/SQL harden, retention/sectors coverage, Groq provider, disclosure baseline watermark, and briefs PDF grace / late follow-up sweep. Waves 8–9 add OpenRouter provider, brief drain pacing, market UX/a11y polish, adversarial grace/storage close, env-example completeness, storage brief-method coverage, and a Phase 3 scenario stub fence (`AI_SCENARIOS_ENABLED=0`). Wave 10 hardens briefs ops (smoke, rate limits, CDN requeue, poller/disclosure coverage) and audits poll↔brief advisory locks as a non-issue. Wave 11 aligns `/brief` empty-state test copy with AI-off messaging. Live LLM briefs remain **flag/key gated** (`AI_BRIEFS_ENABLED=0` default; `AI_PROVIDER=gemini|groq|openrouter`). Phase 3 scenario AI is **stub only** — no LLM wiring yet.
+Phase 1 foundations and Phase 2 Tijori-core plumbing are **landed** across waves 1–5. Waves 6–7 add sectors browse, storage/SQL harden, retention/sectors coverage, Groq provider, disclosure baseline watermark, and briefs PDF grace / late follow-up sweep. Waves 8–9 add OpenRouter provider, brief drain pacing, market UX/a11y polish, adversarial grace/storage close, env-example completeness, storage brief-method coverage, and a Phase 3 scenario stub fence (`AI_SCENARIOS_ENABLED=0`). Wave 10 hardens briefs ops (smoke, rate limits, CDN requeue, poller/disclosure coverage) and audits poll↔brief advisory locks as a non-issue. Wave 11 aligns `/brief` empty-state test copy with AI-off messaging. Wave 12 records parallelism honesty only (no product surface change). Live LLM briefs remain **flag/key gated** (`AI_BRIEFS_ENABLED=0` default; `AI_PROVIDER=gemini|groq|openrouter`). Phase 3 scenario AI is **stub only** — no LLM wiring yet.
 
 | Track | Status |
 |---|---|
@@ -306,6 +318,20 @@ Phase 1 foundations and Phase 2 Tijori-core plumbing are **landed** across waves
 
 ---
 
+## Wave 12 — Parallelism honesty
+
+**Theme:** Document actual multi-wave shape vs “1000 concurrent / 100 empty loops” rhetoric.
+
+| SHA | Commit |
+|---|---|
+| _(this)_ | docs(wave12): parallelism honesty |
+
+**Shipped**
+
+- Honest parallelism note at top of this report: ~12 max-width waves, ~90+ agent tasks, quality-gated — not 1000 concurrent × 100 empty loops.
+
+---
+
 ## Commit counts
 
 | Wave | Commits (scoped) |
@@ -321,7 +347,8 @@ Phase 1 foundations and Phase 2 Tijori-core plumbing are **landed** across waves
 | 9 (`wave9`) | 7 |
 | 10 (`wave10`) | 8 |
 | 11 (`wave11`) | 5+ |
-| **Total** | **88+** |
+| 12 (`wave12`) | 1 (docs) |
+| **Total** | **90+** |
 
 ---
 
@@ -339,11 +366,12 @@ Phase 1 foundations and Phase 2 Tijori-core plumbing are **landed** across waves
 |---|---|
 | Phase 3 scenario AI (beyond stub) | On-demand only; daily caps; legal review before MiroFish-style reuse |
 | Portfolio / P&L / tax / screener / TA / payments / native app | Explicit non-goals |
-| Always-on swarm / commit farming | Factory fence; stop when gates green |
+| Always-on swarm / commit farming | Factory fence; stop when gates green — see [Parallelism honesty](#parallelism-honesty-wave-12) |
 | Poll↔brief advisory deadlock “fix” | Audited non-issue; keep distinct lock IDs ([ADVISORY_LOCK_DEADLOCK.md](ADVISORY_LOCK_DEADLOCK.md)) |
 
 ### Suggested next improve-loop focus
 
-- CI green on touched Python/web paths after wave 11.
+- CI green on touched Python/web paths after wave 11+.
 - Controlled briefs-on soak (not default-on in prod).
 - Keep `AI_SCENARIOS_ENABLED=0` until Phase 2 live brief path is proven.
+- Prefer quality-gated max-width waves over empty concurrency theater.
