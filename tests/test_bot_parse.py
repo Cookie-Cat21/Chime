@@ -125,6 +125,7 @@ def test_help_text_lists_alert_syntax_and_nfa() -> None:
     assert "/myalerts — active only" in HELP_TEXT
     assert "/brief SYMBOL" in HELP_TEXT
     assert "Browse dash" in HELP_TEXT
+    assert "scenarios disabled" in HELP_TEXT
     assert "optional AI brief" in HELP_TEXT
     assert "Disclosure alerts:" in HELP_TEXT
     assert disclaimer() in HELP_TEXT

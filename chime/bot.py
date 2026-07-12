@@ -130,6 +130,7 @@ START_TEXT = (
 # E11-A01: disclosure alerts skip filings at/before rule create (fail-closed).
 # Wave5: Browse dash + CATEGORY + optional AI brief.
 # Wave9: /brief SYMBOL — read-only latest ready brief (or none yet / AI off).
+# Wave12: scenarios disabled note (Phase 3 stub fence).
 HELP_TEXT = (
     "Commands:\n"
     "/watch SYMBOL\n"
@@ -140,7 +141,7 @@ HELP_TEXT = (
     "/alert SYMBOL disclosure [CATEGORY]\n"
     "/cancel ALERT_ID\n"
     "/myalerts — active only · /mywatchlist · /brief SYMBOL\n"
-    "Browse dash: market symbols + watchlists (thin UI).\n"
+    "Browse dash thin UI; scenarios disabled (Phase 3 stub).\n"
     "Disclosure alerts: new filings after the rule only "
     "(missing publish time → no fire; CATEGORY = title substring; "
     "optional AI brief when enabled).\n"
