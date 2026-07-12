@@ -10,6 +10,9 @@ import { toIso } from "@/lib/api/time";
 
 export type MarketBrowseSort = "change_pct" | "change_pct_asc" | "symbol";
 
+/** Movers sign filter: only strictly positive (up) or negative (down) %. */
+export type MarketBrowseDirection = "up" | "down";
+
 export type MarketBrowseRow = {
   symbol: string;
   name: string | null;
@@ -26,6 +29,11 @@ export type MarketBrowseQuery = {
   /** Already normalized (or empty). */
   q?: string;
   sort: MarketBrowseSort;
+  /**
+   * Optional movers fence: `up` ⇒ change_pct > 0, `down` ⇒ change_pct < 0.
+   * Excludes flats/nulls so "gainers"/"losers" cannot mislabel opposite moves.
+   */
+  direction?: MarketBrowseDirection;
 };
 
 function orderClause(sort: MarketBrowseSort): string {
@@ -36,25 +44,43 @@ function orderClause(sort: MarketBrowseSort): string {
   return "ps.change_pct DESC NULLS LAST, s.symbol ASC";
 }
 
+/** Coerce PG numerics to finite numbers; NaN/±Infinity → null (safe JSON egress). */
+export function toFiniteNumber(value: unknown): number | null {
+  if (value == null) return null;
+  const n = typeof value === "number" ? value : Number(value);
+  return Number.isFinite(n) ? n : null;
+}
+
 /**
  * Latest snapshot per stock (INNER JOIN). Optional `q` substring on symbol/name.
+ * Optional `direction` sign filter for thin movers (not a screener).
  */
 export async function queryMarketBrowse(
   pool: Pool,
   opts: MarketBrowseQuery,
 ): Promise<MarketBrowseRow[]> {
   const params: unknown[] = [];
-  let where = "";
+  const whereParts: string[] = [];
   const q = opts.q?.trim() ?? "";
   if (q) {
     params.push(`%${escapeLikePattern(q.toUpperCase())}%`);
-    where = `WHERE UPPER(s.symbol) LIKE $1 ESCAPE '\\' OR UPPER(COALESCE(s.name, '')) LIKE $1 ESCAPE '\\'`;
+    whereParts.push(
+      `(UPPER(s.symbol) LIKE $${params.length} ESCAPE '\\' OR UPPER(COALESCE(s.name, '')) LIKE $${params.length} ESCAPE '\\')`,
+    );
+  }
+  if (opts.direction === "up") {
+    whereParts.push("ps.change_pct > 0");
+  } else if (opts.direction === "down") {
+    whereParts.push("ps.change_pct < 0");
   }
 
   params.push(opts.limit);
   const limitIdx = params.length;
   params.push(opts.offset);
   const offsetIdx = params.length;
+
+  const where =
+    whereParts.length > 0 ? `WHERE ${whereParts.join(" AND ")}` : "";
 
   const result = await pool.query<{
     symbol: string;
@@ -91,9 +117,9 @@ export async function queryMarketBrowse(
     symbol: row.symbol,
     name: row.name,
     sector: row.sector,
-    price: row.price == null ? null : Number(row.price),
-    change: row.change == null ? null : Number(row.change),
-    change_pct: row.change_pct == null ? null : Number(row.change_pct),
+    price: toFiniteNumber(row.price),
+    change: toFiniteNumber(row.change),
+    change_pct: toFiniteNumber(row.change_pct),
     ts: toIso(row.ts),
   }));
 }

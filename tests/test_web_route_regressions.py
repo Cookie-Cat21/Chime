@@ -12,6 +12,7 @@ ROOT = Path(__file__).resolve().parents[1]
 WEB = ROOT / "web"
 UNIT_MTS = Path(__file__).resolve().parent / "web_health_route_unit.mts"
 UNIT_SYMBOLS_MTS = Path(__file__).resolve().parent / "web_symbols_route_unit.mts"
+UNIT_MOVERS_MTS = Path(__file__).resolve().parent / "web_movers_route_unit.mts"
 UNIT_DISCLOSURES_MTS = Path(__file__).resolve().parent / "web_disclosures_route_unit.mts"
 
 RUNTIME_SUFFIXES = {".js", ".jsx", ".mjs", ".cjs", ".ts", ".tsx", ".mts", ".cts"}
@@ -190,18 +191,22 @@ def test_symbols_list_query_validation_static() -> None:
 
 
 def test_market_movers_route_static() -> None:
-    """Wave4: GET /api/v1/market/movers reuses browse query; session; thin fence."""
+    """Wave5: GET /api/v1/market/movers reuses browse; sign-filtered; thin fence."""
     route = WEB / "src" / "app" / "api" / "v1" / "market" / "movers" / "route.ts"
     browse = WEB / "src" / "lib" / "api" / "market-browse.ts"
+    market = WEB / "src" / "app" / "market" / "page.tsx"
     assert route.is_file()
     assert browse.is_file()
     source = route.read_text(encoding="utf-8")
     browse_src = browse.read_text(encoding="utf-8")
+    market_src = market.read_text(encoding="utf-8")
     assert "requireSession" in source
     assert "requireSessionAndCsrf" not in source
     assert "queryMarketBrowse" in source
-    assert 'directionRaw === "down" ? "down" : "up"' in source
     assert 'direction === "down" ? "change_pct_asc" : "change_pct"' in source
+    assert "direction," in source  # pass sign filter into browse query
+    assert 'validation_error"' in source
+    assert "direction must be up or down." in source
     assert "const DEFAULT_LIMIT = 20;" in source
     assert "const MAX_LIMIT = 50;" in source
     assert "Math.min(limit, MAX_LIMIT)" in source
@@ -217,11 +222,46 @@ def test_market_movers_route_static() -> None:
     assert "INNER JOIN LATERAL" in browse_src
     assert "change_pct_asc" in browse_src
     assert "ps.change_pct ASC NULLS LAST" in browse_src
+    assert "ps.change_pct > 0" in browse_src
+    assert "ps.change_pct < 0" in browse_src
+    assert "toFiniteNumber" in browse_src
+    # Market page fails closed on bad JSON / missing items[].
+    assert "readJsonPayload" in market_src
+    assert "asMarketItems" in market_src
     assert "cse.lk" not in source.lower() or all(
         _is_comment_only_hit(line, "cse.lk")
         for line in source.splitlines()
         if "cse.lk" in line.lower()
     )
+
+
+def test_market_movers_route_unit() -> None:
+    """Runtime: sign filter, invalid direction 400, finite egress, session/CSRF."""
+    assert UNIT_MOVERS_MTS.is_file(), f"missing {UNIT_MOVERS_MTS}"
+    assert (
+        WEB / "src" / "app" / "api" / "v1" / "market" / "movers" / "route.ts"
+    ).is_file()
+    _require_web_node_modules()
+    npx = _npx()
+    staged = WEB / ".web_movers_route_unit.mts"
+    staged.write_text(UNIT_MOVERS_MTS.read_text(encoding="utf-8"), encoding="utf-8")
+    try:
+        proc = subprocess.run(
+            [npx, "--yes", "tsx", str(staged.name)],
+            cwd=str(WEB),
+            capture_output=True,
+            text=True,
+            check=False,
+            timeout=120,
+        )
+    finally:
+        staged.unlink(missing_ok=True)
+    if proc.returncode != 0:
+        pytest.fail(
+            f"web_movers_route_unit.mts failed ({proc.returncode}):\n"
+            f"stdout:\n{proc.stdout}\nstderr:\n{proc.stderr}"
+        )
+    assert "WEB_MOVERS_ROUTE_UNIT_OK" in proc.stdout
 
 
 def test_symbols_list_query_validation_unit() -> None:

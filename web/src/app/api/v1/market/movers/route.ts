@@ -13,6 +13,7 @@ const MAX_LIMIT = 50;
 /**
  * GET /api/v1/market/movers — thin top movers from the same browse query.
  * Query: direction=up|down (default up), limit (default 20, max 50).
+ * Sign-filtered: up ⇒ change_pct > 0, down ⇒ change_pct < 0 (no flats/nulls).
  * Session required; CSRF not required (safe GET). Postgres only.
  * Not a screener — no sector/volume/q filters, no multi-sort UI.
  */
@@ -21,8 +22,19 @@ export async function GET(request: NextRequest) {
   if (!gated.ok) return gated.response;
 
   const sp = request.nextUrl.searchParams;
-  const directionRaw = (sp.get("direction") ?? "up").trim().toLowerCase();
-  const direction = directionRaw === "down" ? "down" : "up";
+  const directionParam = sp.get("direction");
+  let direction: "up" | "down" = "up";
+  if (directionParam != null && directionParam.trim() !== "") {
+    const directionRaw = directionParam.trim().toLowerCase();
+    if (directionRaw !== "up" && directionRaw !== "down") {
+      return jsonError(
+        400,
+        "validation_error",
+        "direction must be up or down.",
+      );
+    }
+    direction = directionRaw;
+  }
 
   let limit = Number.parseInt(sp.get("limit") ?? String(DEFAULT_LIMIT), 10);
   if (!Number.isFinite(limit) || limit < 1) limit = DEFAULT_LIMIT;
@@ -36,6 +48,7 @@ export async function GET(request: NextRequest) {
       limit,
       offset: 0,
       sort,
+      direction,
     });
 
     return jsonOk({

@@ -31,17 +31,32 @@ type MarketItem = {
   ts: string | null;
 };
 
-type MarketPayload = {
-  items: MarketItem[];
-  limit: number;
-  offset: number;
-};
+/** Fail closed on non-JSON / wrong shape so a bad movers body cannot 500 the page. */
+async function readJsonPayload<T>(
+  res: Response | null,
+  pickItems: (body: unknown) => T | null,
+): Promise<T | null> {
+  if (!res || !res.ok) return null;
+  try {
+    const body: unknown = await res.json();
+    return pickItems(body);
+  } catch {
+    return null;
+  }
+}
 
-type MoversPayload = {
-  items: MarketItem[];
-  direction: "up" | "down";
-  limit: number;
-};
+function asMarketItems(body: unknown): MarketItem[] | null {
+  if (body == null || typeof body !== "object") return null;
+  const items = (body as { items?: unknown }).items;
+  if (!Array.isArray(items)) return null;
+  return items.filter(
+    (row): row is MarketItem =>
+      row != null &&
+      typeof row === "object" &&
+      typeof (row as MarketItem).symbol === "string" &&
+      (row as MarketItem).symbol.length > 0,
+  );
+}
 
 function MoversList({
   title,
@@ -117,18 +132,10 @@ export default async function MarketPage({
       : serverApiGet("/api/v1/market/movers?direction=down&limit=5"),
   ]);
 
-  const payload: MarketPayload | null = res.ok
-    ? ((await res.json()) as MarketPayload)
-    : null;
-  const gainers: MoversPayload | null =
-    gainersRes && gainersRes.ok
-      ? ((await gainersRes.json()) as MoversPayload)
-      : null;
-  const losers: MoversPayload | null =
-    losersRes && losersRes.ok
-      ? ((await losersRes.json()) as MoversPayload)
-      : null;
-  const showMovers = !q && (gainers !== null || losers !== null);
+  const marketItems = await readJsonPayload(res, asMarketItems);
+  const gainerItems = await readJsonPayload(gainersRes, asMarketItems);
+  const loserItems = await readJsonPayload(losersRes, asMarketItems);
+  const showMovers = !q && (gainerItems !== null || loserItems !== null);
 
   return (
     <div className="flex min-h-full flex-1 flex-col bg-background">
@@ -189,19 +196,19 @@ export default async function MarketPage({
             <div className="mt-4 flex flex-col gap-6 sm:flex-row sm:gap-10">
               <MoversList
                 title="Gainers"
-                items={gainers?.items ?? []}
+                items={gainerItems ?? []}
                 emptyLabel="No gainers yet."
               />
               <MoversList
                 title="Losers"
-                items={losers?.items ?? []}
+                items={loserItems ?? []}
                 emptyLabel="No losers yet."
               />
             </div>
           </section>
         ) : null}
 
-        {!payload ? (
+        {marketItems === null ? (
           <EmptyState
             title="Couldn’t load market list"
             description="Chime couldn’t read snapshot data just now. Retry in a moment, or check Health if this keeps happening."
@@ -213,7 +220,7 @@ export default async function MarketPage({
               </Button>
             }
           />
-        ) : payload.items.length === 0 ? (
+        ) : marketItems.length === 0 ? (
           <EmptyState
             title="No symbols yet"
             description={
@@ -234,7 +241,7 @@ export default async function MarketPage({
             className="mt-8 divide-y divide-border/60"
             aria-label="Market symbols"
           >
-            {payload.items.map((item) => {
+            {marketItems.map((item) => {
               const pct = item.change_pct;
               const tone =
                 pct == null

@@ -1,6 +1,7 @@
 /**
- * Shared sanitizers for GET /api/v1/symbols, /api/v1/market/movers, and /market.
- * Keeps q length-bounded, control-char-free, and LIKE-safe (no wildcard injection).
+ * Shared sanitizers for GET /api/v1/symbols and /market browse `q`.
+ * Movers intentionally omits `q` (thin fence). Keeps length-bounded,
+ * control-char-free, and LIKE-safe (no wildcard injection).
  */
 
 export const MAX_MARKET_Q_LENGTH = 64;
