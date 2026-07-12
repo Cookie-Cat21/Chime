@@ -5,6 +5,7 @@ import {
   MAX_HISTORY_SYMBOL_LENGTH,
   sanitizeDisclosureText,
 } from "@/lib/api/disclosure-safe";
+import { normalizeSymbol } from "@/lib/api/symbol";
 import { toIso } from "@/lib/api/time";
 import { jsonError, jsonOk } from "@/lib/auth/errors";
 import { requireSession } from "@/lib/auth/guard";
@@ -44,8 +45,13 @@ export async function GET(request: NextRequest) {
 
   const url = request.nextUrl;
   const symbolRaw = url.searchParams.get("symbol");
-  const symbol =
-    symbolRaw && symbolRaw.trim() ? symbolRaw.trim().toUpperCase() : null;
+  let symbol: string | null = null;
+  if (symbolRaw != null && symbolRaw.trim()) {
+    symbol = normalizeSymbol(symbolRaw);
+    if (!symbol) {
+      return jsonError(400, "invalid_symbol", "Invalid CSE symbol.");
+    }
+  }
 
   let limit = 50;
   const limitRaw = url.searchParams.get("limit");

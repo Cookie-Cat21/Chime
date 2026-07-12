@@ -6,6 +6,7 @@ import { NfaFooter } from "@/components/nfa-footer";
 import { NfaInline } from "@/components/nfa-inline";
 import { Button } from "@/components/ui/button";
 import { serverApiGet } from "@/lib/api/server-fetch";
+import { normalizeSymbol } from "@/lib/api/symbol";
 import { requirePageSession } from "@/lib/auth/page-session";
 import { alertTypeLabel, formatTs } from "@/lib/format";
 
@@ -87,7 +88,8 @@ export default async function AlertHistoryPage({
 }) {
   await requirePageSession();
   const sp = await searchParams;
-  const symbolFilter = sp.symbol?.trim().toUpperCase() || "";
+  // Drop invalid / hostile filter params — same SYMBOL_RE as the API.
+  const symbolFilter = normalizeSymbol(sp.symbol ?? "") ?? "";
   const limitRaw = Number(sp.limit);
   const limit =
     Number.isSafeInteger(limitRaw) && limitRaw >= 1
