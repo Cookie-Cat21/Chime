@@ -11,7 +11,6 @@ from chime.adapters.cse import AnnouncementRow, LegacyAnnouncementRow
 from chime.config import Settings
 from chime.domain import AlertEvent, AlertType
 from chime.health import HealthState
-from chime.notify import SendResult
 from chime.poller import PendingPdfEnrich, PendingSend, Poller, run_poller_forever
 
 
