@@ -56,7 +56,8 @@ No nested app shell beyond a single top nav: Browse · Watchlist · Alerts · Hi
 
 ### `/alerts`
 - Header: “Alerts” + “New alert” form
-- Form fields: symbol · type (`price_above` \| `price_below` \| `daily_move` \| `disclosure`) · threshold (hidden for disclosure)
+- Form fields: symbol · type (`price_above` \| `price_below` \| `daily_move` \| `disclosure`) · threshold (hidden for disclosure) · optional category (disclosure only)
+- Disclosure category field: help + error via `aria-describedby` / `aria-invalid` (hint stays wired when invalid); submit `aria-busy` while pending
 - List rows: `#id` · symbol · type · threshold · armed/active badges · Cancel
 - Empty state mirrors bot copy
 - NFA under any price-adjacent copy

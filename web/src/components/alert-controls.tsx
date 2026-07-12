@@ -9,6 +9,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { apiErrorMessage, apiMutate } from "@/lib/api/client-fetch";
+import { DISCLOSURE_CATEGORY_MAX } from "@/lib/api/disclosure-safe";
 import {
   ALERT_TYPES,
   type AlertType,
@@ -250,9 +251,12 @@ export function AlertCreateForm() {
               clearField("category");
             }}
             autoComplete="off"
+            maxLength={DISCLOSURE_CATEGORY_MAX}
             aria-invalid={errors.category ? true : undefined}
             aria-describedby={
-              errors.category ? "alert_form_error" : "alert_category_hint"
+              errors.category
+                ? "alert_category_hint alert_form_error"
+                : "alert_category_hint"
             }
           />
           <p id="alert_category_hint" className="text-xs text-muted-foreground">
@@ -263,7 +267,12 @@ export function AlertCreateForm() {
         <div className="hidden lg:block" aria-hidden />
       )}
       <div className="flex flex-col justify-end gap-1.5">
-        <Button type="submit" disabled={pending} className="h-10 w-full sm:w-auto">
+        <Button
+          type="submit"
+          disabled={pending}
+          className="h-10 w-full sm:w-auto"
+          aria-busy={pending || undefined}
+        >
           {pending ? "Creating…" : "Create alert"}
         </Button>
       </div>

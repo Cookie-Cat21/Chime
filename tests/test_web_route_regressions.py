@@ -191,6 +191,23 @@ def test_login_page_a11y_contract() -> None:
     assert 'autoComplete="username"' in form_src
 
 
+def test_alert_create_category_a11y_contract() -> None:
+    """W30 a11y: disclosure category keeps hint + error via aria-describedby."""
+    form = WEB / "src" / "components" / "alert-controls.tsx"
+    assert form.is_file()
+    src = form.read_text(encoding="utf-8")
+
+    assert 'id="alert_category"' in src
+    assert 'htmlFor="alert_category"' in src
+    assert 'id="alert_category_hint"' in src
+    assert 'aria-invalid={errors.category ? true : undefined}' in src
+    assert '"alert_category_hint alert_form_error"' in src
+    assert ': "alert_category_hint"' in src
+    assert "maxLength={DISCLOSURE_CATEGORY_MAX}" in src
+    assert "aria-busy={pending || undefined}" in src
+    assert 'id="alert_form_error"' in src
+
+
 def test_list_loading_skeleton_keeps_nfa_footer() -> None:
     """Watchlist/alerts loading shells keep NFA footer while content pulses."""
     skeleton = WEB / "src" / "components" / "skeleton.tsx"
