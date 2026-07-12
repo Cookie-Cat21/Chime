@@ -40,6 +40,10 @@ export function mintSessionToken(
   if (!Number.isSafeInteger(userId) || userId <= 0) {
     throw new Error("userId must be a positive SafeInteger");
   }
+  // Fail closed — NaN/±Inf/≤0 TTL used to mint exp that skews verify.
+  if (!Number.isSafeInteger(ttlSeconds) || ttlSeconds <= 0) {
+    throw new Error("ttlSeconds must be a positive SafeInteger");
+  }
   const payload: SessionPayload = {
     user_id: userId,
     exp: Math.floor(Date.now() / 1000) + ttlSeconds,

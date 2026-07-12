@@ -16,6 +16,9 @@ type MePayload = {
   csrf_token?: string;
 };
 
+/** Cap /me JSON before parse — payload is tiny (ids + csrf). */
+const MAX_ME_BODY_CHARS = 4_096;
+
 /**
  * Fail-closed /me parse — digits-only SafeInteger ids. Hostile JSON must not
  * mint a chip with precision-lost telegram_id aliases. Timestamps via toIso;
@@ -69,7 +72,16 @@ export function NavSession({ compact = false }: { compact?: boolean }) {
           return;
         }
         if (!res.ok) return;
-        const data = parseMePayload(await res.json());
+        // Bound body before JSON.parse — hostile /me must not OOM the shell.
+        const rawText = await res.text();
+        if (rawText.length > MAX_ME_BODY_CHARS) return;
+        let parsed: unknown = null;
+        try {
+          parsed = rawText ? JSON.parse(rawText) : null;
+        } catch {
+          return;
+        }
+        const data = parseMePayload(parsed);
         if (!cancelled && data) setMe(data);
       } catch {
         /* chip stays empty */
