@@ -63,6 +63,9 @@ type DisclosuresPayload = {
     url: string;
     published_at: string | null;
     company_name: string | null;
+    pdf_url: string | null;
+    brief: string | null;
+    brief_status: "pending" | "ready" | "failed" | "skipped" | null;
   }[];
 };
 
@@ -317,24 +320,43 @@ export default async function SymbolDetailPage({
             }
           />
         ) : (
-          <ul className="mt-4 divide-y divide-border/60">
-            {discs.items.map((item) => (
-              <li key={item.id} className="py-3 first:pt-0">
-                <a
-                  href={item.url}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="block rounded-sm text-sm font-medium text-foreground underline-offset-4 hover:underline focus-visible:ring-2 focus-visible:ring-ring/50 focus-visible:outline-none"
-                >
-                  {item.title}
-                </a>
-                <p className="mt-1 text-xs text-muted-foreground">
-                  {formatTs(item.published_at)}
-                  {item.category ? ` · ${item.category}` : ""}
-                </p>
-              </li>
-            ))}
-          </ul>
+          <>
+            <ul className="mt-4 divide-y divide-border/60">
+              {discs.items.map((item) => {
+                const href = item.pdf_url?.trim() || item.url;
+                const showBrief =
+                  item.brief_status === "ready" &&
+                  Boolean(item.brief?.trim());
+                return (
+                  <li key={item.id} className="py-3 first:pt-0">
+                    <a
+                      href={href}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="block rounded-sm text-sm font-medium text-foreground underline-offset-4 hover:underline focus-visible:ring-2 focus-visible:ring-ring/50 focus-visible:outline-none"
+                    >
+                      {item.title}
+                      {item.pdf_url?.trim() ? (
+                        <span className="ml-1.5 text-xs font-normal text-muted-foreground">
+                          (PDF)
+                        </span>
+                      ) : null}
+                    </a>
+                    <p className="mt-1 text-xs text-muted-foreground">
+                      {formatTs(item.published_at)}
+                      {item.category ? ` · ${item.category}` : ""}
+                    </p>
+                    {showBrief ? (
+                      <p className="mt-2 text-sm leading-relaxed text-muted-foreground">
+                        {item.brief}
+                      </p>
+                    ) : null}
+                  </li>
+                );
+              })}
+            </ul>
+            <NfaInline className="mt-3" />
+          </>
         )}
       </section>
     </Shell>

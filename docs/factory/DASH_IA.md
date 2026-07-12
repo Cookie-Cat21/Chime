@@ -118,7 +118,7 @@ Base: `/api/v1`. JSON request/response. User routes scoped by **session** `user_
 | `GET` | `/api/v1/symbols` | `?limit=&offset=&q=&sort=` | `{ "items": [{ "symbol", "name", "sector", "price", "change", "change_pct", "ts" }], "limit", "offset", "sort", "q" }` (snapshots only) |
 | `GET` | `/api/v1/symbols/{symbol}` | — | `{ "symbol", "name", "sector", "last": SlimLast \| null }` |
 | `GET` | `/api/v1/symbols/{symbol}/snapshots` | `?limit=60` | `{ "points": [{ "ts", "price", "change_pct" }] }` |
-| `GET` | `/api/v1/symbols/{symbol}/disclosures` | `?limit=20` | `{ "items": [{ "id", "external_id", "title", "category", "url", "published_at", "company_name" }] }` |
+| `GET` | `/api/v1/symbols/{symbol}/disclosures` | `?limit=20` | `{ "items": [{ "id", "external_id", "title", "category", "url", "published_at", "company_name", "pdf_url", "brief", "brief_status" }] }` |
 
 `SlimLast` (v1 UI): `price`, `change`, `change_pct`, `volume`, `ts`. Do not render OHLC / market_cap as a quote board even if present in DB.
 

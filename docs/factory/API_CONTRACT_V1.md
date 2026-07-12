@@ -447,13 +447,22 @@ Query: `limit` (default `20`, max `100`).
       "category": "Financial Report",
       "url": "https://www.cse.lk/…",
       "published_at": "2026-07-10T04:00:00+00:00",
-      "company_name": "John Keells Holdings PLC"
+      "company_name": "John Keells Holdings PLC",
+      "pdf_url": "https://cdn.cse.lk/uploadAnnounceFiles/….pdf",
+      "brief": "Interim results summary…",
+      "brief_status": "ready"
     }
   ]
 }
 ```
 
 Both DB `id` and `external_id` are required in the payload (resolves IA↔WAVE naming drift).
+
+`pdf_url` / `brief` / `brief_status` come from `disclosures.pdf_url` LEFT JOIN
+`disclosure_briefs` (`status` exposed as `brief_status`). When no brief row exists,
+all three are `null`. `brief_status` is one of `pending` \| `ready` \| `failed` \|
+`skipped` when present. Dash UI prefers `pdf_url` over `url` for the filing link
+and renders `brief` only when `brief_status === "ready"`.
 
 ### Disclosure alert gating (bot / poller — E11-A01)
 

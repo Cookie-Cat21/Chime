@@ -10,8 +10,12 @@ export const runtime = "nodejs";
 
 type RouteContext = { params: Promise<{ symbol: string }> };
 
+type BriefStatus = "pending" | "ready" | "failed" | "skipped";
+
 /**
- * GET /api/v1/symbols/{symbol}/disclosures — recent CSE filings from Postgres.
+ * GET /api/v1/symbols/{symbol}/disclosures — recent filings from Postgres.
+ * LEFT JOIN disclosure_briefs for brief / brief_status when present.
+ * pdf_url comes from disclosures (enricher); never fetches upstream from web.
  */
 export async function GET(request: NextRequest, context: RouteContext) {
   const gated = requireSession(request);
@@ -51,11 +55,17 @@ export async function GET(request: NextRequest, context: RouteContext) {
       url: string;
       published_at: Date | string;
       company_name: string | null;
+      pdf_url: string | null;
+      brief: string | null;
+      brief_status: BriefStatus | null;
     }>(
-      `SELECT id, external_id, title, category, url, published_at, company_name
-       FROM disclosures
-       WHERE symbol = $1
-       ORDER BY published_at DESC, id DESC
+      `SELECT d.id, d.external_id, d.title, d.category, d.url, d.published_at,
+              d.company_name, d.pdf_url,
+              b.brief, b.status AS brief_status
+       FROM disclosures d
+       LEFT JOIN disclosure_briefs b ON b.disclosure_id = d.id
+       WHERE d.symbol = $1
+       ORDER BY d.published_at DESC, d.id DESC
        LIMIT $2`,
       [symbol, limit],
     );
@@ -68,6 +78,9 @@ export async function GET(request: NextRequest, context: RouteContext) {
       url: row.url,
       published_at: toIso(row.published_at),
       company_name: row.company_name,
+      pdf_url: row.pdf_url,
+      brief: row.brief,
+      brief_status: row.brief_status,
     }));
 
     return jsonOk({ items });

@@ -1,0 +1,177 @@
+/**
+ * GET /api/v1/symbols/{symbol}/disclosures — brief/pdf LEFT JOIN harness.
+ */
+import { NextRequest } from "next/server";
+
+import { GET as disclosuresGet } from "./src/app/api/v1/symbols/[symbol]/disclosures/route.ts";
+import { SESSION_COOKIE } from "./src/lib/auth/config.ts";
+import { mintSessionToken } from "./src/lib/auth/session.ts";
+
+const SECRET = "web-disclosures-route-unit-secret-not-for-prod";
+
+type DisclosureItem = {
+  id?: number;
+  external_id?: string;
+  title?: string;
+  url?: string;
+  pdf_url?: string | null;
+  brief?: string | null;
+  brief_status?: string | null;
+};
+
+type Body = {
+  items?: DisclosureItem[];
+  error?: { code?: string; message?: string } | string;
+};
+
+type CapturedQuery = { sql: string; params: unknown[] };
+
+function fail(msg: string): never {
+  console.error(`FAIL: ${msg}`);
+  process.exit(1);
+}
+
+function assert(cond: unknown, msg: string): asserts cond {
+  if (!cond) fail(msg);
+}
+
+function makeRequest(symbol: string, query = ""): NextRequest {
+  const { token } = mintSessionToken(42, SECRET);
+  const path = `/api/v1/symbols/${encodeURIComponent(symbol)}/disclosures`;
+  const url = `http://127.0.0.1${path}${query ? `?${query}` : ""}`;
+  return new NextRequest(url, {
+    method: "GET",
+    headers: { cookie: `${SESSION_COOKIE}=${token}` },
+  });
+}
+
+function installDbPool(opts: {
+  stockExists?: boolean;
+  rows?: Record<string, unknown>[];
+  mode?: "ok" | "throw";
+}): CapturedQuery[] {
+  process.env.DATABASE_URL = "postgres://unit.test/chime";
+  const captured: CapturedQuery[] = [];
+  const stockExists = opts.stockExists !== false;
+  const rows = opts.rows ?? [];
+  const mode = opts.mode ?? "ok";
+
+  (globalThis as typeof globalThis & { __chimePgPool?: unknown }).__chimePgPool = {
+    query: async (sql: string, params: unknown[] = []) => {
+      captured.push({ sql, params });
+      if (mode === "throw") throw new Error("postgres boom");
+      assert(!sql.toLowerCase().includes("cse.lk"), "SQL must not mention cse.lk");
+      if (sql.includes("FROM stocks")) {
+        return { rows: stockExists ? [{ "?column?": 1 }] : [] };
+      }
+      assert(sql.includes("LEFT JOIN disclosure_briefs"), "must LEFT JOIN disclosure_briefs");
+      assert(sql.includes("d.pdf_url"), "must select d.pdf_url");
+      assert(sql.includes("b.brief"), "must select b.brief");
+      assert(sql.includes("b.status AS brief_status"), "must select brief_status from briefs");
+      assert(sql.includes("FROM disclosures d"), "must query disclosures alias d");
+      return { rows };
+    },
+  };
+  return captured;
+}
+
+async function readBody(res: Response): Promise<Body> {
+  return (await res.json()) as Body;
+}
+
+async function call(
+  symbol: string,
+  query = "",
+  opts: {
+    stockExists?: boolean;
+    rows?: Record<string, unknown>[];
+    mode?: "ok" | "throw";
+  } = {},
+) {
+  const captured = installDbPool(opts);
+  process.env.DASH_SESSION_SECRET = SECRET;
+  const res = await disclosuresGet(makeRequest(symbol, query), {
+    params: Promise.resolve({ symbol }),
+  });
+  const body = await readBody(res);
+  return { res, body, captured };
+}
+
+async function testMapsBriefAndPdfFields(): Promise<void> {
+  const { res, body, captured } = await call("JKH.N0000", "limit=5", {
+    rows: [
+      {
+        id: 55,
+        external_id: "ann-1",
+        title: "Interim Financial Statements",
+        category: "Financial Report",
+        url: "https://example.com/announcements#ann-1",
+        published_at: new Date("2026-07-10T04:00:00Z"),
+        company_name: "John Keells Holdings PLC",
+        pdf_url: "https://cdn.example.com/files/a.pdf",
+        brief: "Company reported interim results.",
+        brief_status: "ready",
+      },
+      {
+        id: 56,
+        external_id: "ann-2",
+        title: "Board Meeting",
+        category: null,
+        url: "https://example.com/announcements#ann-2",
+        published_at: new Date("2026-07-09T04:00:00Z"),
+        company_name: null,
+        pdf_url: null,
+        brief: null,
+        brief_status: null,
+      },
+    ],
+  });
+  assert(res.status === 200, `expected 200, got ${res.status}`);
+  assert(Array.isArray(body.items) && body.items.length === 2, "expected 2 items");
+  const ready = body.items![0];
+  assert(ready.pdf_url === "https://cdn.example.com/files/a.pdf", "pdf_url mapped");
+  assert(ready.brief === "Company reported interim results.", "brief mapped");
+  assert(ready.brief_status === "ready", "brief_status mapped");
+  const bare = body.items![1];
+  assert(bare.pdf_url === null, "null pdf_url preserved");
+  assert(bare.brief === null, "null brief preserved");
+  assert(bare.brief_status === null, "null brief_status preserved");
+  assert(captured.length === 2, "stocks existence + disclosures query");
+  assert(captured[1].params.includes(5), "limit param applied");
+  assert(captured[1].params.includes("JKH.N0000"), "symbol param applied");
+}
+
+async function testUnknownSymbol404(): Promise<void> {
+  const { res, body } = await call("ZZZ.N0000", "", { stockExists: false });
+  assert(res.status === 404, `expected 404, got ${res.status}`);
+  assert(typeof body.error === "object" && body.error?.code === "not_found", "not_found error");
+}
+
+async function testDbFailureDegrades(): Promise<void> {
+  const { res, body } = await call("JKH.N0000", "", { mode: "throw" });
+  assert(res.status === 503, `expected 503, got ${res.status}`);
+  assert(typeof body.error === "object" && body.error?.code === "degraded", "degraded error");
+}
+
+async function testUnauthorized(): Promise<void> {
+  installDbPool({});
+  process.env.DASH_SESSION_SECRET = SECRET;
+  const url = "http://127.0.0.1/api/v1/symbols/JKH.N0000/disclosures";
+  const res = await disclosuresGet(new NextRequest(url, { method: "GET" }), {
+    params: Promise.resolve({ symbol: "JKH.N0000" }),
+  });
+  assert(res.status === 401 || res.status === 403, `expected auth fail, got ${res.status}`);
+}
+
+async function main(): Promise<void> {
+  await testMapsBriefAndPdfFields();
+  await testUnknownSymbol404();
+  await testDbFailureDegrades();
+  await testUnauthorized();
+  console.log("WEB_DISCLOSURES_ROUTE_UNIT_OK");
+}
+
+main().catch((err) => {
+  console.error(err);
+  process.exit(1);
+});
