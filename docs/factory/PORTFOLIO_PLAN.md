@@ -8,7 +8,9 @@ portfolio_score   = Σ repo_score(r)   over all enrolled factories
 
 **Not the KPI:** raw `git rev-list --count`, whitespace farms, split fixes.
 
-**Horizon:** Multi-year climb across many products. Chime is **node 1** (~35 so far).
+**Horizon:** Multi-year climb across many products. Chime is **node 1** (~148 `repo_score` so far).
+
+**50M target:** [SCALE_50M.md](SCALE_50M.md) — `portfolio_score ≥ 50_000_000`, **not** 50M raw commits on Chime.
 
 **Authority:** Each repo still obeys its own constitution (for Chime: `CLAUDE.md` + `COMMIT_FACTORY.md`). Farming banned everywhere.
 
@@ -74,7 +76,7 @@ Pre-seeded epoch ladder (fence-legal only):
 
 When Epoch N clears → open N+1 from this ladder (or `scripts/factory/refill_board.py`).
 
-**Estimated Chime-only proper ceiling:** hundreds–low thousands over months — not millions. Portfolio growth needs **more repos**.
+**Estimated Chime-only proper ceiling:** hundreds–low thousands over months — not millions. Portfolio growth needs **more repos**. See [SCALE_50M.md](SCALE_50M.md) for the 50M math and enrollment ladder.
 
 ---
 
@@ -131,4 +133,4 @@ Resume next session from `docs/factory/HANDOFF.md`.
 | `refuted_fixed_same_wave` | Quality |
 | `raw_commit_count` | **Ignore** for goals |
 
-Climb toward large portfolio numbers **over products and years** — Chime is the template node, not the entire 50M fantasy.
+Climb toward **50M `portfolio_score`** over products and years — Chime is the template node, not the vehicle for raw-commit theater. Full plan: [SCALE_50M.md](SCALE_50M.md).

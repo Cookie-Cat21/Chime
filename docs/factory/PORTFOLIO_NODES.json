@@ -1,12 +1,14 @@
 {
   "portfolio_kpi": "A",
+  "portfolio_target": 50000000,
   "formula": "sum_over_repos(min(proper_commits, clusters_closed))",
+  "scale_plan": "docs/factory/SCALE_50M.md",
   "nodes": [
     {
       "id": "chime",
       "repo": "Cookie-Cat21/Chime",
       "score_file": "docs/factory/SCOREBOARD.json",
-      "branch": "cursor/epoch2-agentic-loop-cb19"
+      "branch": "cursor/epoch11-drain-cb19"
     }
   ]
 }

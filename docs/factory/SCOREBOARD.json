@@ -1,5 +1,7 @@
 {
-  "aspiration": "maximize_lifetime_factory_score",
+  "aspiration": "portfolio_score_50M",
+  "portfolio_target": 50000000,
+  "literal_raw_commit_target_rejected": true,
   "literal_trillion_commits": false,
   "farming_banned": true,
   "concurrency_preferred": 8,
@@ -14,7 +16,7 @@
   "epoch3_done": 10,
   "open_board": "docs/factory/EPOCH18_BOARD.md",
   "loop_spec": "docs/factory/AGENTIC_LOOP.md",
-  "note": "Literal 5T git commits rejected; portfolio_score == chime node while Chime is the only enrolled factory",
+  "note": "Target is portfolio_score>=50M across nodes (SCALE_50M.md); raw git count on Chime rejected; portfolio_score == chime node while solo",
   "epoch4_done": 9,
   "epoch5_done": 7,
   "epoch6_done": 8,

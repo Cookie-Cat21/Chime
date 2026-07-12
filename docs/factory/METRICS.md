@@ -159,7 +159,9 @@ Source of truth: [workstreams/INDEX.md](workstreams/INDEX.md) + wave notes — n
 
 ## 6. KPI: reject vanity volume
 
-**“Trillion commits” (or any raw commit-count KPI) is rejected.** It rewards farming, thrash, and split fixes. It conflicts with the constitution: quality over count.
+**“Trillion commits”, “50M commits on this repo”, or any raw commit-count KPI is rejected.** It rewards farming, thrash, and split fixes. It conflicts with the constitution: quality over count.
+
+The allowed 50M aspiration is **`portfolio_score ≥ 50M`** across enrolled factories — see [SCALE_50M.md](SCALE_50M.md) and [PORTFOLIO_PLAN.md](PORTFOLIO_PLAN.md).
 
 ### Replacement KPIs (report monthly)
 
