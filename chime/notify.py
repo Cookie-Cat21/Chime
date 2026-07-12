@@ -60,8 +60,8 @@ async def send_message(
 
     When ``block_on_retry_after`` is False (poller holds the DB advisory lock),
     a ``RetryAfter`` returns ``SendResult.DEFERRED`` immediately so the lock is
-    not held for the flood wait — ``alert_log.message_sent=False`` lets a later
-    cycle retry without incrementing ``attempt_count``.
+    not held for the flood wait. Callers leave ``alert_log.message_sent=False``
+    and may bump ``attempt_count`` toward ``MAX_DEFERRED_ATTEMPTS``.
     """
     try:
         await bot.send_message(chat_id=chat_id, text=text, **_SEND_KWARGS)

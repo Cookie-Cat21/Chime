@@ -20,9 +20,11 @@ from telegram.ext import Application, CommandHandler, ContextTypes
 from chime.adapters.cse import CSEClient, allowed_filing_url
 from chime.briefs import briefs_enabled
 from chime.domain import (
+    _CTRL_RE,
     BRIEF_BODY_MAX,
     AlertType,
     PriceSnapshot,
+    _clamp_telegram_message,
     brief_budget_for_prefix,
     disclaimer,
     sanitize_brief_body,
@@ -152,7 +154,7 @@ HELP_TEXT = (
     "/myalerts — active only · /mywatchlist · /brief SYMBOL\n"
     "Browse dash thin UI; scenarios disabled (Phase 3 stub).\n"
     "Disclosure alerts: new filings after the rule only "
-    "(missing publish time → no fire; CATEGORY = title substring; "
+    "(missing publish time → no fire; CATEGORY = category substring; "
     "optional AI brief when enabled).\n"
     f"{disclaimer()}"
 )
@@ -498,11 +500,17 @@ def format_brief_lookup_reply(
 ) -> str:
     """Read-only /brief reply body. Always ends with NFA.
 
-    Egress-hardens filing URLs (CDN / www.cse.lk only), strips control chars,
-    and caps brief body length so Telegram's 4096 limit is not exceeded.
-    Distinguishes AI-off from none-yet when ``ai_enabled`` is provided.
+    Egress-hardens filing URLs (CDN / www.cse.lk only), strips control chars
+    from symbol/title/brief, and hard-clamps under Telegram's 4096 limit
+    (matching ``format_alert_message`` / ``format_brief_followup``). A hostile
+    DB symbol must not inject nulls or blow past the cap. Distinguishes AI-off
+    from none-yet when ``ai_enabled`` is provided.
     """
-    lines = [f"{symbol} filing brief"]
+    clean_symbol = _CTRL_RE.sub("", symbol or "").strip() or "?"
+    # CSE tickers are short; cap so a hostile DB row cannot starve the brief budget.
+    if len(clean_symbol) > 32:
+        clean_symbol = clean_symbol[:31].rstrip() + "…"
+    lines = [f"{clean_symbol} filing brief"]
     if title and title.strip():
         clean_title = truncate_disclosure_title(title)
         if clean_title:
@@ -514,13 +522,17 @@ def format_brief_lookup_reply(
     body = sanitize_brief_body(brief, max_len=budget) if budget > 0 else None
     if body is None:
         if ai_enabled is False:
-            return f"{symbol}: {BRIEF_AI_OFF}\n{disclaimer()}"
-        return f"{symbol}: {BRIEF_NONE_YET}\n{disclaimer()}"
+            return _clamp_telegram_message(
+                f"{clean_symbol}: {BRIEF_AI_OFF}\n{disclaimer()}"
+            )
+        return _clamp_telegram_message(
+            f"{clean_symbol}: {BRIEF_NONE_YET}\n{disclaimer()}"
+        )
     lines.append("")
     lines.append(body)
     lines.append("")
     lines.append(disclaimer())
-    return "\n".join(lines)
+    return _clamp_telegram_message("\n".join(lines))
 
 
 async def cmd_brief(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:

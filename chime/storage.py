@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import math
 from collections.abc import AsyncIterator, Sequence
 from contextlib import asynccontextmanager
 from datetime import datetime
@@ -133,11 +134,14 @@ class Storage:
         if not snaps:
             return []
 
-        # Last-wins per normalized symbol; skip blanks (invalid CSE rows).
+        # Last-wins per normalized symbol; skip blanks (invalid CSE rows)
+        # and non-finite prices (NaN/±Inf must not poison price_snapshots).
         by_symbol: dict[str, PriceSnapshot] = {}
         for snap in snaps:
             symbol = snap.symbol.strip().upper()
             if not symbol:
+                continue
+            if not math.isfinite(snap.price):
                 continue
             by_symbol[symbol] = snap
         if not by_symbol:

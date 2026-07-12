@@ -367,10 +367,11 @@ def trade_row_to_snapshot(
     if not math.isfinite(row.price):
         return None
     fallback = now or datetime.now(UTC)
-    if row.lastTradedTime:
-        ts = _try_ms_to_dt(row.lastTradedTime) or fallback
-    else:
-        ts = fallback
+    ts = (
+        _try_ms_to_dt(row.lastTradedTime) or fallback
+        if row.lastTradedTime
+        else fallback
+    )
     return PriceSnapshot(
         symbol=row.symbol.strip().upper(),
         price=row.price,
@@ -392,10 +393,11 @@ def trade_row_to_snapshot(
 def sector_row_to_snapshot(row: SectorRow, *, now: datetime | None = None) -> SectorSnapshot:
     """Normalize an allSectors row; overflow transactionTime → poll time."""
     fallback = now or datetime.now(UTC)
-    if row.transactionTime:
-        ts = _try_ms_to_dt(row.transactionTime) or fallback
-    else:
-        ts = fallback
+    ts = (
+        _try_ms_to_dt(row.transactionTime) or fallback
+        if row.transactionTime
+        else fallback
+    )
     return SectorSnapshot(
         sector_id=row.sectorId,
         symbol=row.symbol.strip().upper(),

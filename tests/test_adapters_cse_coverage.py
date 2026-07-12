@@ -203,6 +203,7 @@ def test_symbol_info_to_snapshot_maps_fields() -> None:
         marketCap=1e11,
     )
     snap = symbol_info_to_snapshot(info, now=now)
+    assert snap is not None
     assert snap.symbol == "JKH.N0000"
     assert snap.price == 185.5
     assert snap.previous_close == 180.0

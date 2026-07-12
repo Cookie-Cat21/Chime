@@ -40,6 +40,7 @@ def test_trade_row_to_snapshot_maps_fields() -> None:
         lastTradedTime=1_720_000_000_000,
     )
     snap = trade_row_to_snapshot(row)
+    assert snap is not None
     assert snap.symbol == "JKH.N0000"
     assert snap.price == 185.5
     assert snap.previous_close == 180.0
@@ -60,6 +61,7 @@ def test_trade_row_uses_now_when_no_last_traded_time() -> None:
     now = datetime(2026, 7, 11, 9, 0, 0, tzinfo=UTC)
     row = TradeSummaryRow(symbol="COMB.N0000", price=100.0)
     snap = trade_row_to_snapshot(row, now=now)
+    assert snap is not None
     assert snap.ts == now
     assert snap.symbol == "COMB.N0000"
 
