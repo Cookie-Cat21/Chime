@@ -82,38 +82,70 @@ class Storage:
             )
 
     async def insert_snapshot(self, snap: PriceSnapshot) -> PriceSnapshot:
-        await self.upsert_stock(snap.symbol, snap.name)
-        async with self._pool.connection() as conn:
-            row = await (
+        stored = await self.persist_market_snapshots([snap])
+        return stored[0]
+
+    async def persist_market_snapshots(
+        self, snaps: list[PriceSnapshot]
+    ) -> list[PriceSnapshot]:
+        """Upsert stocks + insert price_snapshots for a full tradeSummary board.
+
+        Used by the poller to keep a market-wide browse layer in Postgres while
+        rule evaluation stays watchlist-scoped. Empty input is a no-op.
+        """
+        if not snaps:
+            return []
+        out: list[PriceSnapshot] = []
+        async with self._pool.connection() as conn, conn.transaction():
+            for snap in snaps:
+                symbol = snap.symbol.strip().upper()
                 await conn.execute(
                     """
-                    INSERT INTO price_snapshots (
-                        symbol, price, change, change_pct, previous_close,
-                        volume, trade_count, turnover, high, low, open, market_cap, ts
-                    ) VALUES (
-                        %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s
-                    )
-                    RETURNING id
+                    INSERT INTO stocks (symbol, name, sector)
+                    VALUES (%s, %s, %s)
+                    ON CONFLICT (symbol) DO UPDATE SET
+                        name = COALESCE(EXCLUDED.name, stocks.name),
+                        sector = COALESCE(EXCLUDED.sector, stocks.sector),
+                        updated_at = now()
                     """,
-                    (
-                        snap.symbol,
-                        snap.price,
-                        snap.change,
-                        snap.change_pct,
-                        snap.previous_close,
-                        snap.volume,
-                        snap.trade_count,
-                        snap.turnover,
-                        snap.high,
-                        snap.low,
-                        snap.open,
-                        snap.market_cap,
-                        snap.ts,
-                    ),
+                    (symbol, snap.name, None),
                 )
-            ).fetchone()
-        assert row is not None
-        return snap.model_copy(update={"id": int(_as_row(row)["id"])})
+                row = await (
+                    await conn.execute(
+                        """
+                        INSERT INTO price_snapshots (
+                            symbol, price, change, change_pct, previous_close,
+                            volume, trade_count, turnover, high, low, open,
+                            market_cap, ts
+                        ) VALUES (
+                            %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s
+                        )
+                        RETURNING id
+                        """,
+                        (
+                            symbol,
+                            snap.price,
+                            snap.change,
+                            snap.change_pct,
+                            snap.previous_close,
+                            snap.volume,
+                            snap.trade_count,
+                            snap.turnover,
+                            snap.high,
+                            snap.low,
+                            snap.open,
+                            snap.market_cap,
+                            snap.ts,
+                        ),
+                    )
+                ).fetchone()
+                assert row is not None
+                out.append(
+                    snap.model_copy(
+                        update={"id": int(_as_row(row)["id"]), "symbol": symbol}
+                    )
+                )
+        return out
 
     async def latest_snapshot(self, symbol: str) -> PriceSnapshot | None:
         symbol = symbol.strip().upper()

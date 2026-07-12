@@ -13,13 +13,16 @@ Telegram remains the push channel. The dashboard is for CRUD + inspection — no
 |---|---|---|
 | `/` | Redirect → `/watchlist` (or `/login` if unauthenticated) | — |
 | `/login` | Local/demo sign-in (v1); Telegram Login Widget later | public |
+| `/market` | Thin CSE symbol browse (latest snapshots from Postgres) | user |
 | `/watchlist` | User watchlist + last price / change | user |
 | `/alerts` | Active alert rules CRUD | user |
 | `/alerts/history` | Fire history (`alert_log`) | user |
 | `/symbols/[symbol]` | Symbol detail: last tick, sparkline, disclosures | user |
 | `/health` | Ops: poller liveness / last poll (read-only) | ops-gated (session; see ADR 001) |
 
-No nested app shell beyond a single top nav: Watchlist · Alerts · History · (Health).
+No nested app shell beyond a single top nav: Browse · Watchlist · Alerts · History · (Health).
+
+**Browse fence:** `/market` is a slim discovery list (symbol · name · last · change_pct · link to symbol detail). Not a quote board, screener, or trading terminal. Data comes from poller-persisted `price_snapshots` only — no cse.lk from `web/`. See [TIJORI_CSE_PLAN.md](TIJORI_CSE_PLAN.md).
 
 ---
 
@@ -32,11 +35,19 @@ No nested app shell beyond a single top nav: Watchlist · Alerts · History · (
 - Footer NFA line
 - No marketing sections, stats, or feature grids
 
+### `/market`
+- Header: “Browse” + search (symbol/name)
+- List rows: `symbol` · name · last `price` · `change_pct` · link to symbol detail
+- Sorted by `change_pct` desc by default (thin movers view — not a screener)
+- Empty state: poller has not persisted tradeSummary yet
+- NFA under price-adjacent copy
+- Fence: no OHLC board, no multi-column sort UI, no live ticks
+
 ### `/watchlist`
 - Header: “Watchlist” + add-symbol control (input + Add)
 - List rows: `symbol` · name · last `price` · `change_pct` · link to symbol detail
 - Row action: Unwatch
-- Empty state: “No symbols — add one or use `/watch` in Telegram”
+- Empty state: add one, browse `/market` for discovery, or use `/watch` in Telegram
 - Mobile: stacked rows, full-width add form
 
 ### `/alerts`
@@ -103,6 +114,7 @@ Base: `/api/v1`. JSON request/response. User routes scoped by **session** `user_
 
 | Method | Path | Request | Response |
 |---|---|---|---|
+| `GET` | `/api/v1/symbols` | `?limit=&offset=&q=&sort=` | `{ "items": [{ "symbol", "name", "sector", "price", "change", "change_pct", "ts" }], "limit", "offset", "sort", "q" }` (snapshots only) |
 | `GET` | `/api/v1/symbols/{symbol}` | — | `{ "symbol", "name", "sector", "last": SlimLast \| null }` |
 | `GET` | `/api/v1/symbols/{symbol}/snapshots` | `?limit=60` | `{ "points": [{ "ts", "price", "change_pct" }] }` |
 | `GET` | `/api/v1/symbols/{symbol}/disclosures` | `?limit=20` | `{ "items": [{ "id", "external_id", "title", "category", "url", "published_at", "company_name" }] }` |

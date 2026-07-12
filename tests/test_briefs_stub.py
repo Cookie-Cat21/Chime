@@ -27,3 +27,21 @@ async def test_enqueue_or_skip_brief_skipped_when_disabled() -> None:
         settings=BriefSettings(enabled=False, api_key=""),
     )
     assert status is BriefStatus.SKIPPED
+
+
+@pytest.mark.asyncio
+async def test_enqueue_or_skip_brief_pending_when_enabled_with_key() -> None:
+    status = await enqueue_or_skip_brief(
+        disclosure_id=7,
+        settings=BriefSettings(enabled=True, api_key="test-key"),
+    )
+    assert status is BriefStatus.PENDING
+
+
+@pytest.mark.asyncio
+async def test_enqueue_or_skip_brief_skipped_when_enabled_without_key() -> None:
+    status = await enqueue_or_skip_brief(
+        disclosure_id=7,
+        settings=BriefSettings(enabled=True, api_key=""),
+    )
+    assert status is BriefStatus.SKIPPED

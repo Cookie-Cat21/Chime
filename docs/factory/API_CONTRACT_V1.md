@@ -53,7 +53,7 @@ All non-2xx JSON errors:
 |---|---|
 | `POST /auth/demo` | Public (demo gated by env); CSRF-exempt |
 | `POST /auth/logout` | Valid session + CSRF |
-| `GET /me`, watchlist, alerts, symbols, disclosures, history | Valid session |
+| `GET /me`, watchlist, alerts, symbols (list + detail), disclosures, history | Valid session |
 | Mutating watchlist/alerts | Valid session + CSRF |
 | `GET /health` | **Ops-gated** (valid session in v1 demo; not anonymously public by default) |
 
@@ -353,6 +353,43 @@ it adds a label for ops, it must use the derived states above.
 
 UI must not render a Level-1 quote board from optional OHLC fields. Contract surfaces a slim `last` for the page; extra DB columns may exist but are not required for v1 UI.
 
+### `GET /api/v1/symbols`
+
+Thin market browse list (Tijori/CSE Phase 1). Session required. Postgres only.
+
+Query:
+
+| Param | Default | Notes |
+|---|---|---|
+| `limit` | `50` | Max `200` |
+| `offset` | `0` | |
+| `q` | — | Optional symbol/name substring (case-insensitive) |
+| `sort` | `change_pct` | `change_pct` (desc, nulls last) or `symbol` (asc) |
+
+**Response** `200`
+
+```json
+{
+  "items": [
+    {
+      "symbol": "JKH.N0000",
+      "name": "John Keells Holdings PLC",
+      "sector": null,
+      "price": 22.5,
+      "change": 0.3,
+      "change_pct": 1.35,
+      "ts": "2026-07-11T09:00:00+00:00"
+    }
+  ],
+  "limit": 50,
+  "offset": 0,
+  "sort": "change_pct",
+  "q": null
+}
+```
+
+Fence: discovery list for watchlist setup — not a screener or OHLC board. See [TIJORI_CSE_PLAN.md](TIJORI_CSE_PLAN.md).
+
 ### `GET /api/v1/symbols/{symbol}`
 
 **Response** `200`
@@ -450,6 +487,7 @@ applies only to alert fire paths.
 | `POST` | `/api/v1/alerts` | Auto-watch; idempotent return-existing on duplicates |
 | `DELETE` | `/api/v1/alerts/{id}` | Soft cancel by id |
 | `GET` | `/api/v1/alerts/history` | Not `/fires` |
+| `GET` | `/api/v1/symbols` | Market browse list (slim) |
 | `GET` | `/api/v1/symbols/{symbol}` | Slim `last` |
 | `GET` | `/api/v1/symbols/{symbol}/snapshots` | |
 | `GET` | `/api/v1/symbols/{symbol}/disclosures` | `id` + `external_id` |

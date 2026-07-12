@@ -107,9 +107,10 @@ def test_web_runtime_sources_do_not_import_or_call_cse_lk() -> None:
 
 
 def test_dashboard_pages_render_nfa_footer() -> None:
-    """Watchlist, alerts, and health keep the global NFA footer visible."""
+    """Watchlist, alerts, browse, and health keep the global NFA footer visible."""
     page_paths = [
         WEB / "src" / "app" / "watchlist" / "page.tsx",
+        WEB / "src" / "app" / "market" / "page.tsx",
         WEB / "src" / "app" / "alerts" / "page.tsx",
         WEB / "src" / "app" / "health" / "page.tsx",
     ]
@@ -123,3 +124,32 @@ def test_dashboard_pages_render_nfa_footer() -> None:
             missing.append(f"{path.relative_to(ROOT)} missing render")
 
     assert missing == []
+
+
+def test_symbols_list_route_requires_snapshots_and_session() -> None:
+    """P1-C: GET /api/v1/symbols is Postgres browse from snapshots only (INNER JOIN)."""
+    route = WEB / "src" / "app" / "api" / "v1" / "symbols" / "route.ts"
+    assert route.is_file()
+    source = route.read_text(encoding="utf-8")
+    assert "requireSession" in source
+    assert "INNER JOIN LATERAL" in source
+    assert "LEFT JOIN LATERAL" not in source
+    assert "price_snapshots" in source
+    assert "cse.lk" not in source.lower() or all(
+        _is_comment_only_hit(line, "cse.lk")
+        for line in source.splitlines()
+        if "cse.lk" in line.lower()
+    )
+
+
+def test_market_page_and_nav_browse_link() -> None:
+    """P1-D: /market page exists; nav exposes Browse; empty watchlist points at it."""
+    market = WEB / "src" / "app" / "market" / "page.tsx"
+    nav = WEB / "src" / "components" / "app-nav.tsx"
+    watchlist = WEB / "src" / "app" / "watchlist" / "page.tsx"
+    assert market.is_file()
+    market_src = market.read_text(encoding="utf-8")
+    assert "/api/v1/symbols" in market_src
+    assert "NfaInline" in market_src
+    assert 'href: "/market", label: "Browse"' in nav.read_text(encoding="utf-8")
+    assert 'href="/market"' in watchlist.read_text(encoding="utf-8")

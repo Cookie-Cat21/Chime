@@ -54,6 +54,75 @@ async def test_empty_watchlist_persists_market() -> None:
 
 
 @pytest.mark.asyncio
+async def test_empty_watchlist_empty_board_price_ok_false() -> None:
+    """HTTP-OK empty tradeSummary with no watchlist is still a failed browse persist."""
+    storage = AsyncMock()
+    storage.watched_symbols = AsyncMock(return_value=[])
+    storage.persist_market_snapshots = AsyncMock(side_effect=_persist_with_ids)
+
+    cse = AsyncMock()
+    cse.fetch_trade_summary = AsyncMock(return_value=[])
+
+    poller = Poller(_settings(), storage, cse, AsyncMock(return_value=True))
+    events, price_ok = await poller._poll_prices()
+
+    assert events == []
+    assert price_ok is False
+    assert poller.trade_summary_empty_ok is True
+    assert poller.trade_summary_count == 0
+    storage.persist_market_snapshots.assert_awaited_once_with([])
+
+
+@pytest.mark.asyncio
+async def test_empty_watchlist_persist_failure_degrades_tick() -> None:
+    """DB write failure must set last_tick_ok False even with an empty watchlist."""
+    storage = AsyncMock()
+    storage.try_advisory_lock = AsyncMock(return_value=True)
+    storage.advisory_unlock = AsyncMock()
+    storage.watched_symbols = AsyncMock(return_value=[])
+    storage.active_rules_for_symbols = AsyncMock(return_value=[])
+    storage.claim_unsent_batch = AsyncMock(return_value=[])
+    storage.persist_market_snapshots = AsyncMock(side_effect=RuntimeError("db down"))
+
+    cse = AsyncMock()
+    cse.fetch_trade_summary = AsyncMock(return_value=[_snap("JKH.N0000")])
+    cse.fetch_announcements_for_symbol = AsyncMock(return_value=[])
+
+    poller = Poller(_settings(), storage, cse, AsyncMock(return_value=True))
+    events = await poller.run_once(force=True)
+
+    assert events == []
+    assert poller.price_poll_ok is False
+    assert poller.last_tick_ok is False
+    assert poller.last_error == "poll_degraded"
+    assert poller.watched_missing == []
+
+
+@pytest.mark.asyncio
+async def test_circuit_open_empty_watchlist_degrades_tick() -> None:
+    storage = AsyncMock()
+    storage.try_advisory_lock = AsyncMock(return_value=True)
+    storage.advisory_unlock = AsyncMock()
+    storage.watched_symbols = AsyncMock(return_value=[])
+    storage.active_rules_for_symbols = AsyncMock(return_value=[])
+    storage.claim_unsent_batch = AsyncMock(return_value=[])
+
+    cse = AsyncMock()
+    from chime.circuit import CircuitOpenError
+
+    cse.fetch_trade_summary = AsyncMock(side_effect=CircuitOpenError("open"))
+    cse.fetch_announcements_for_symbol = AsyncMock(return_value=[])
+
+    poller = Poller(_settings(), storage, cse, AsyncMock(return_value=True))
+    events = await poller.run_once(force=True)
+
+    assert events == []
+    assert poller.price_poll_ok is False
+    assert poller.last_tick_ok is False
+    assert poller.last_error == "poll_degraded"
+
+
+@pytest.mark.asyncio
 async def test_persist_only_evaluates_watched() -> None:
     """Two snaps in summary, one watched — persist both; evaluate only watched."""
     storage = AsyncMock()

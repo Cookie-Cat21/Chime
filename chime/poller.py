@@ -196,7 +196,9 @@ class Poller:
             rules = await self.storage.active_rules_for_symbols(symbols) if symbols else []
             needs_disclosure = any(r.type.value == "disclosure" for r in rules)
             ok = True
-            if symbols and not price_ok:
+            # Market-wide persist is the browse foundation: degrade on price_ok
+            # False even with an empty watchlist (fetch/persist/empty board).
+            if not price_ok:
                 ok = False
             if needs_disclosure and not disc_ok:
                 ok = False
@@ -375,24 +377,28 @@ class Poller:
             self._forget_durable_delivery_ok(token)
 
     async def _poll_prices(self) -> tuple[list[AlertEvent], bool]:
+        """Fetch full tradeSummary, persist market-wide, evaluate watchlist only.
+
+        Empty watchlist still persists the board so the thin /market browse has
+        data. Rule evaluation and watched_missing checks remain watchlist-scoped.
+        """
         symbols = await self.storage.watched_symbols()
-        if not symbols:
-            self.watched_missing = []
-            self.trade_summary_count = None
-            self.trade_summary_empty_ok = False
-            log.info("poll_no_watchlist")
-            return [], True
+        wanted = set(symbols)
 
         try:
             all_snaps = await self.cse.fetch_trade_summary()
         except CircuitOpenError:
             self.trade_summary_count = None
             self.trade_summary_empty_ok = False
+            if not wanted:
+                self.watched_missing = []
             log.error("price_poll_circuit_open")
             return [], False
         except Exception as exc:
             self.trade_summary_count = None
             self.trade_summary_empty_ok = False
+            if not wanted:
+                self.watched_missing = []
             log.exception("price_poll_failed", error=str(exc))
             return [], False
 
@@ -405,9 +411,28 @@ class Poller:
                 symbols=sorted(symbols),
             )
 
-        wanted = set(symbols)
-        snaps = [s for s in all_snaps if s.symbol in wanted]
-        present = {s.symbol for s in snaps}
+        # Market-wide persist (Tijori/browse foundation). Fail closed on DB errors.
+        try:
+            stored_all = await self.storage.persist_market_snapshots(all_snaps)
+        except Exception as exc:
+            log.exception("market_persist_failed", error=str(exc), count=len(all_snaps))
+            if not wanted:
+                self.watched_missing = []
+            return [], False
+
+        if not wanted:
+            self.watched_missing = []
+            # Empty HTTP-OK board is not a successful browse persist.
+            price_ok = not self.trade_summary_empty_ok
+            log.info(
+                "poll_market_persist_no_watchlist",
+                persisted=len(stored_all),
+                trade_summary_count=self.trade_summary_count,
+                price_ok=price_ok,
+            )
+            return [], price_ok
+
+        present = {s.symbol for s in stored_all}
         missing = sorted(wanted - present)
         self.watched_missing = missing
         price_ok = not missing
@@ -418,6 +443,7 @@ class Poller:
                 symbols=missing,
             )
 
+        snaps = [s for s in stored_all if s.symbol in wanted]
         rules = await self.storage.active_rules_for_symbols(list(wanted))
         rules_by_symbol: dict[str, list[Any]] = {}
         for rule in rules:
@@ -430,9 +456,9 @@ class Poller:
         snaps: list[PriceSnapshot],
         rules_by_symbol: dict[str, list[Any]],
     ) -> list[AlertEvent]:
+        """Evaluate already-persisted watchlist snapshots (ids required)."""
         fired: list[AlertEvent] = []
-        for snap in snaps:
-            stored = await self.storage.insert_snapshot(snap)
+        for stored in snaps:
             assert stored.id is not None
             previous = await self.storage.get_previous_state(stored.symbol, before_id=stored.id)
             symbol_rules = rules_by_symbol.get(stored.symbol, [])

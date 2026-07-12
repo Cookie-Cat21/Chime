@@ -137,12 +137,30 @@ async def test_upsert_stock_normalizes_symbol() -> None:
 
 @pytest.mark.asyncio
 async def test_insert_snapshot_returns_id() -> None:
-    # upsert_stock execute + insert RETURNING
+    # upsert_stock execute + insert RETURNING (via persist_market_snapshots)
     conn = _Conn([None, {"id": 42}])
     store = _store(conn)
     out = await store.insert_snapshot(_snap())
     assert out.id == 42
+    assert out.symbol == "JKH.N0000"
     assert any("price_snapshots" in s for s in conn.sql)
+    assert any("INSERT INTO stocks" in s for s in conn.sql)
+
+
+@pytest.mark.asyncio
+async def test_persist_market_snapshots_empty_and_batch() -> None:
+    store = _store(_Conn([]))
+    assert await store.persist_market_snapshots([]) == []
+
+    conn = _Conn([None, {"id": 1}, None, {"id": 2}])
+    store = _store(conn)
+    out = await store.persist_market_snapshots(
+        [_snap(symbol="jkh.n0000"), _snap(symbol="comb.n0000", price=90.0)]
+    )
+    assert [s.id for s in out] == [1, 2]
+    assert [s.symbol for s in out] == ["JKH.N0000", "COMB.N0000"]
+    assert sum(1 for s in conn.sql if "INSERT INTO stocks" in s) == 2
+    assert sum(1 for s in conn.sql if "price_snapshots" in s) == 2
 
 
 @pytest.mark.asyncio

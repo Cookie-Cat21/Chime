@@ -78,7 +78,11 @@ export default async function WatchlistPage() {
             description={
               <>
                 Add a CSE symbol with the form above to start watching prices
-                and disclosures. Or use{" "}
+                and disclosures. Browse the market list at{" "}
+                <Link href="/market" className="underline underline-offset-4">
+                  /market
+                </Link>{" "}
+                to discover tickers, or use{" "}
                 <code className="font-mono text-xs">/watch SYMBOL</code> in
                 Telegram — Chime keeps the list in sync either way.
               </>

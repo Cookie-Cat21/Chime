@@ -6,6 +6,7 @@ import { useState } from "react";
 import { NavSession } from "@/components/nav-session";
 
 const links = [
+  { href: "/market", label: "Browse" },
   { href: "/watchlist", label: "Watchlist" },
   { href: "/alerts", label: "Alerts" },
   { href: "/alerts/history", label: "History" },
