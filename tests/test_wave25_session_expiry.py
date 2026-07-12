@@ -55,7 +55,10 @@ def test_page_session_expired_query_when_cookie_present() -> None:
         encoding="utf-8"
     )
     assert "LOGIN_EXPIRED_PATH" in src
-    assert 'redirect(raw ? LOGIN_EXPIRED_PATH : "/login")' in src
+    # typeof-guard cookie before treating it as "present" (session harden).
+    assert (
+        'typeof raw === "string" && raw ? LOGIN_EXPIRED_PATH : "/login"' in src
+    )
 
 
 def test_login_page_shows_expired_notice() -> None:
