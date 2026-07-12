@@ -20,10 +20,18 @@ const links = [
  * the current pathname. Longest prefix wins so `/alerts/history` highlights
  * History (not Alerts), and `/scenarios` exact-matches Scenarios.
  */
+/**
+ * Cap nav path strings — multi-MB forged ``active`` / pathname used to burn
+ * CPU in prefix matching before any href could win.
+ */
+export const MAX_NAV_PATH_LENGTH = 512;
+
 export function resolveActiveNavHref(
   current: string | null | undefined,
 ): (typeof links)[number]["href"] | undefined {
-  if (!current) return undefined;
+  // Fail closed — non-strings used to throw on .startsWith / .endsWith.
+  if (typeof current !== "string" || !current) return undefined;
+  if (current.length > MAX_NAV_PATH_LENGTH) return undefined;
   const path =
     current.length > 1 && current.endsWith("/") ? current.slice(0, -1) : current;
   let best: (typeof links)[number]["href"] | undefined;

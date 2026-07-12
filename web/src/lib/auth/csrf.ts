@@ -17,6 +17,11 @@ export function csrfTokensMatch(
   headerToken: string | null,
   cookieToken: string | undefined,
 ): boolean {
+  // Fail closed — non-strings used to hit Buffer.from(number) (allocates
+  // a zero-filled buffer of that size) instead of a clean CSRF reject.
+  if (typeof headerToken !== "string" || typeof cookieToken !== "string") {
+    return false;
+  }
   if (!headerToken || !cookieToken) return false;
   // Fail closed — multi-MB forged tokens must not allocate / compare.
   if (
@@ -35,7 +40,8 @@ export function readCsrfCookie(
   cookies: { get: (name: string) => { value: string } | undefined },
 ): string | undefined {
   const raw = cookies.get(CSRF_COOKIE)?.value;
-  // Fail closed — multi-MB forged cookies must not reach compare / Buffer.
-  if (raw != null && raw.length > MAX_CSRF_TOKEN_LENGTH) return undefined;
+  // Fail closed — non-string / multi-MB forged cookies must not compare.
+  if (typeof raw !== "string") return undefined;
+  if (raw.length > MAX_CSRF_TOKEN_LENGTH) return undefined;
   return raw;
 }

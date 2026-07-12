@@ -8,8 +8,9 @@ import { headers } from "next/headers";
  */
 const SAFE_HOST_RE = /^[A-Za-z0-9.:[\]-]+$/;
 
-export function isSafeInternalHost(host: string): boolean {
-  if (!host || host.length > 253) return false;
+export function isSafeInternalHost(host: unknown): boolean {
+  // Fail closed — non-strings used to throw on .includes / .length.
+  if (typeof host !== "string" || !host || host.length > 253) return false;
   if (host.includes("..") || host.includes("@") || host.includes("/")) {
     return false;
   }
@@ -20,7 +21,9 @@ export function isSafeInternalHost(host: string): boolean {
 /**
  * Strip optional ``:port`` / ``[ipv6]:port`` so loopback checks compare names.
  */
-export function hostnameOnly(host: string): string {
+export function hostnameOnly(host: unknown): string {
+  // Fail closed — non-strings used to throw on .trim mid-origin resolve.
+  if (typeof host !== "string") return "";
   const bare = host.trim().toLowerCase();
   if (!bare) return "";
   if (bare.startsWith("[")) {
@@ -82,11 +85,20 @@ export function resolveInternalOrigin(
 }
 
 /**
+ * Cap SSR API paths before startsWith / regex — multi-MB forged paths used
+ * to burn CPU in ``serverApiGet`` before the /api/v1 gate rejected them.
+ */
+export const MAX_SERVER_API_PATH_LENGTH = 512;
+
+/**
  * Cookie-bearing SSR paths must stay under ``/api/v1/`` — reject ``..`` /
  * backslash / control chars / absolute URLs that used to path-traverse or
  * ship the session cookie off-origin.
  */
-export function isSafeServerApiPath(path: string): boolean {
+export function isSafeServerApiPath(path: unknown): boolean {
+  // Fail closed — non-strings used to throw on .startsWith mid-SSR fetch.
+  if (typeof path !== "string" || !path) return false;
+  if (path.length > MAX_SERVER_API_PATH_LENGTH) return false;
   if (!path.startsWith("/") || path.startsWith("//")) return false;
   if (path.includes("://") || path.includes("\\") || path.includes("..")) {
     return false;

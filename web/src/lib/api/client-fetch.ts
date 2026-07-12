@@ -62,11 +62,20 @@ function unauthorizedBody(): { error: { code: string; message: string } } {
 }
 
 /**
+ * Cap mutation paths before startsWith / regex — multi-MB forged paths used
+ * to burn CPU in ``apiMutate`` before the /api/v1 gate rejected them.
+ */
+export const MAX_CLIENT_API_PATH_LENGTH = 512;
+
+/**
  * Browser mutation paths must stay under ``/api/v1/`` — reject absolute /
  * scheme-relative / ``..`` / off-API paths that used to ship X-CSRF-Token to
  * arbitrary same-origin routes (parity with server ``isSafeServerApiPath``).
  */
-export function isSafeClientApiPath(path: string): boolean {
+export function isSafeClientApiPath(path: unknown): boolean {
+  // Fail closed — non-strings used to throw on .startsWith mid-mutation.
+  if (typeof path !== "string" || !path) return false;
+  if (path.length > MAX_CLIENT_API_PATH_LENGTH) return false;
   if (!path.startsWith("/") || path.startsWith("//")) return false;
   if (path.includes("://") || path.includes("\\") || path.includes("..")) {
     return false;
