@@ -105,6 +105,48 @@ def test_disclosure_equal_created_at_no_fire() -> None:
     assert evaluate_disclosure_rules(disclosure=disc, rules=[rule]) == []
 
 
+def test_new_rule_baseline_skips_historical_batch_fires_only_newer() -> None:
+    """PASS1 / wave7: new disclosure rule must not flood ≥5 historical filings.
+
+    Mirrors create_alert_rule's returned created_at watermark: every filing at or
+    before that instant is baseline; only a strictly newer publish fires.
+    """
+    created = datetime(2026, 7, 11, 12, 0, 0, tzinfo=UTC)
+    rule = make_rule(
+        id=42,
+        type=AlertType.DISCLOSURE,
+        threshold=None,
+        created_at=created,
+    )
+    historical = [
+        make_disclosure(
+            external_id=f"hist-{i}",
+            title=f"Old filing {i}",
+            published_at=created - timedelta(days=i + 1),
+        )
+        for i in range(5)
+    ]
+    for disc in historical:
+        assert evaluate_disclosure_rules(disclosure=disc, rules=[rule]) == []
+
+    # Same-day filing still before the rule watermark → no fire.
+    same_day_before = make_disclosure(
+        external_id="hist-same-day",
+        published_at=created - timedelta(minutes=1),
+    )
+    assert evaluate_disclosure_rules(disclosure=same_day_before, rules=[rule]) == []
+
+    newer = make_disclosure(
+        external_id="fresh-1",
+        title="Post-baseline AGM",
+        published_at=created + timedelta(minutes=1),
+    )
+    events = evaluate_disclosure_rules(disclosure=newer, rules=[rule])
+    assert len(events) == 1
+    assert events[0].event_key == "disclosure:42:fresh-1"
+    assert events[0].disclosure_title == "Post-baseline AGM"
+
+
 def test_missing_rule_created_at_fail_closed() -> None:
     """WS-002: created_at=None must not fire (cannot safely gate backfill)."""
     rule = make_rule(

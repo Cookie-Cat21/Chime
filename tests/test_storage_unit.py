@@ -757,8 +757,11 @@ async def test_create_alert_rule_disclosure_with_category() -> None:
     )
     assert rule.id == 12
     assert rule.category == "Financial"
+    # Baseline watermark for evaluate_disclosure_rules — must survive RETURNING.
+    assert rule.created_at == datetime(2026, 7, 11, 6, 0, 0, tzinfo=UTC)
     insert_sql = [s for s in conn.sql if "INSERT INTO alert_rules" in s][0]
     assert "category" in insert_sql
+    assert "created_at" in insert_sql
     assert conn.params[-2][4] == "Financial" or any(
         isinstance(p, tuple) and len(p) >= 5 and p[4] == "Financial" for p in conn.params
     )
