@@ -1,10 +1,10 @@
-# Tijori CSE — Waves 1–12 report
+# Tijori CSE — Waves 1–13 report
 
 **Branch:** `cursor/tijori-cse-phase1-e44e`  
 **Date:** 2026-07-12  
 **Plan:** [TIJORI_CSE_PLAN.md](../TIJORI_CSE_PLAN.md)  
 **Ops:** [docs/runbooks/TIJORI.md](../../runbooks/TIJORI.md)  
-**Range:** `a802cb7` … wave 12 (parallelism honesty)
+**Range:** `a802cb7` … wave 13 (start)
 
 ---
 
@@ -22,7 +22,7 @@ Matches the plan constraint note in [TIJORI_CSE_PLAN.md](../TIJORI_CSE_PLAN.md).
 
 ## Verdict
 
-Phase 1 foundations and Phase 2 Tijori-core plumbing are **landed** across waves 1–5. Waves 6–7 add sectors browse, storage/SQL harden, retention/sectors coverage, Groq provider, disclosure baseline watermark, and briefs PDF grace / late follow-up sweep. Waves 8–9 add OpenRouter provider, brief drain pacing, market UX/a11y polish, adversarial grace/storage close, env-example completeness, storage brief-method coverage, and a Phase 3 scenario stub fence (`AI_SCENARIOS_ENABLED=0`). Wave 10 hardens briefs ops (smoke, rate limits, CDN requeue, poller/disclosure coverage) and audits poll↔brief advisory locks as a non-issue. Wave 11 aligns `/brief` empty-state test copy with AI-off messaging. Wave 12 records parallelism honesty only (no product surface change). Live LLM briefs remain **flag/key gated** (`AI_BRIEFS_ENABLED=0` default; `AI_PROVIDER=gemini|groq|openrouter`). Phase 3 scenario AI is **stub only** — no LLM wiring yet.
+Phase 1 foundations and Phase 2 Tijori-core plumbing are **landed** across waves 1–5. Waves 6–7 add sectors browse, storage/SQL harden, retention/sectors coverage, Groq provider, disclosure baseline watermark, and briefs PDF grace / late follow-up sweep. Waves 8–9 add OpenRouter provider, brief drain pacing, market UX/a11y polish, adversarial grace/storage close, env-example completeness, storage brief-method coverage, and a Phase 3 scenario stub fence (`AI_SCENARIOS_ENABLED=0`). Wave 10 hardens briefs ops (smoke, rate limits, CDN requeue, poller/disclosure coverage) and audits poll↔brief advisory locks as a non-issue. Wave 11 aligns `/brief` empty-state test copy with AI-off messaging. Wave 12 records parallelism honesty (plus follow-on fix/docs/test lanes). Wave 13 is **starting** — browse API curl examples + env-example sync vs `Settings` / `BriefSettings`. Live LLM briefs remain **flag/key gated** (`AI_BRIEFS_ENABLED=0` default; `AI_PROVIDER=gemini|groq|openrouter`). Phase 3 scenario AI is **stub only** — no LLM wiring yet.
 
 | Track | Status |
 |---|---|
@@ -332,6 +332,23 @@ Phase 1 foundations and Phase 2 Tijori-core plumbing are **landed** across waves
 
 ---
 
+## Wave 13 — Start (browse examples + env sync)
+
+**Theme:** Open wave 13 — thin browse API curl examples; keep `.env.example` aligned with `Settings` / `BriefSettings` (and the web “do not copy” checklist).
+
+| SHA | Commit |
+|---|---|
+| `b06d960` | docs(wave13): browse api examples |
+| _(this)_ | docs(w13): wave report start + env sync |
+
+**Shipped (start)**
+
+- [API_BROWSE_EXAMPLES.md](../API_BROWSE_EXAMPLES.md) — session + `/api/v1/symbols|market|sectors` curl companions to the v1 contract.
+- Root `.env.example` re-checked against `chime.config.Settings` + `BriefSettings` (no missing keys).
+- `web/.env.example` poller/briefs exclusion list gained `BRIEF_CDN_BACKOFF_SECONDS`.
+
+---
+
 ## Commit counts
 
 | Wave | Commits (scoped) |
@@ -347,8 +364,9 @@ Phase 1 foundations and Phase 2 Tijori-core plumbing are **landed** across waves
 | 9 (`wave9`) | 7 |
 | 10 (`wave10`) | 8 |
 | 11 (`wave11`) | 5+ |
-| 12 (`wave12`) | 1 (docs) |
-| **Total** | **90+** |
+| 12 (`wave12`) | 1+ (docs + follow-ons) |
+| 13 (`wave13` / `w13`) | 2+ (start) |
+| **Total** | **92+** |
 
 ---
 
@@ -371,7 +389,7 @@ Phase 1 foundations and Phase 2 Tijori-core plumbing are **landed** across waves
 
 ### Suggested next improve-loop focus
 
-- CI green on touched Python/web paths after wave 11+.
+- CI green on touched Python/web paths after wave 11+ / wave 13 lanes.
 - Controlled briefs-on soak (not default-on in prod).
 - Keep `AI_SCENARIOS_ENABLED=0` until Phase 2 live brief path is proven.
 - Prefer quality-gated max-width waves over empty concurrency theater.
