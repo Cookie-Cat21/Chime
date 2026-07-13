@@ -2,7 +2,7 @@
 
 **Branch:** `cursor/tijori-cse-phase1-e44e`  
 **Date:** 2026-07-13  
-**HEAD (pre-this-commit):** `26a8da00`
+**HEAD (pre-this-commit):** `89d6630d`
 **Report:** [TIJORI_WAVE_REPORT.md](TIJORI_WAVE_REPORT.md)  
 **Plan:** [TIJORI_CSE_PLAN.md](../TIJORI_CSE_PLAN.md)
 
@@ -14,14 +14,14 @@
 |---|---|
 | Waves completed | **91** (`wave` / `waveN` / `wN` through w91) |
 | This status push | **w91** (loop snapshot after sibling fixes landed) |
-| Commits ahead of `main` | **303+** (pre-this-commit) |
+| Commits ahead of `main` | **306+** (pre-this-commit) |
 | `chime` unit coverage | ✅ **100%** (wave 16 milestone — keep `--cov-fail-under=100`) |
 | Horizon | **Continuing to 100 waves** (quality-gated; early STOP on CLEAN×2) |
 | Adversarial (w83) | **CLEAN** — PG claim/lock/health/count soft-accept hunting exhausted |
 | Adversarial (w86) | **CLEAN** — post-CDN re-probe; 0 findings above minor |
 | Adversarial (w87) | **CLEAN** — WS-087 clock-skew claim invariant holds |
 | Adversarial (w89) | **FIXED** — CSE `_request` status/CT + pace soft-accepts |
-| Wave 91 landed | **FIXED** — rule bool numeric coercion; CLI arg soft-accepts; disclosure watermark conflict; health poller merge |
+| Wave 91 landed | **FIXED** — rule bool numeric coercion; CLI arg soft-accepts; disclosure watermark conflict; health poller merge; alert lookup NFA; CSE numeric payload bool reject |
 
 ---
 
@@ -39,7 +39,7 @@ Wave 16 closed the package coverage ratchet: full-package `pytest --cov=chime` a
 - Live LLM briefs remain flag/key gated (`AI_BRIEFS_ENABLED=0` default). Phase 3 scenario AI stays stub-fenced.
 - **Diminishing returns (w83):** PG RETURNING / COUNT / lock / health `int(True)` / `True==1` soft-accept hunting is exhausted (closed across w76–w85).
 - **New fuel (w89):** CSE HTTP classify path still had medium+ soft-accepts (`True >= 400` success, non-str CT, `float(True)` pace) — closed + pinned (`tests/test_wave89_medium_bugs.py`). Distinct from exhausted PG soft-accept lane.
-- **Wave 91:** landed focused fixes for bool numeric rule coercion, CLI/migrate arg soft-accepts, disclosure watermark conflicts, and health poller merge.
+- **Wave 91:** landed focused fixes for bool numeric rule coercion, CLI/migrate arg soft-accepts, disclosure watermark conflicts, health poller merge, alert lookup NFA, and CSE numeric payload bool rejection.
 
 ---
 
