@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import math
 from collections.abc import AsyncIterator, Sequence
 from contextlib import asynccontextmanager
 from datetime import datetime
@@ -19,7 +20,12 @@ from chime.domain import (
     Disclosure,
     PreviousPriceState,
     PriceSnapshot,
+    SectorSnapshot,
+    sanitize_disclosure_category,
 )
+from chime.logging_setup import get_logger
+
+log = get_logger(__name__)
 
 
 def _as_row(row: Any) -> dict[str, Any]:
@@ -28,6 +34,34 @@ def _as_row(row: Any) -> dict[str, Any]:
 
 def _as_rows(rows: Any) -> list[dict[str, Any]]:
     return [cast(dict[str, Any], r) for r in rows]
+
+
+def _require_pg_int(value: Any, *, what: str) -> int:
+    """Fail closed — bool soft-accepts via ``int(True)==1``; lists abort mid path."""
+    if isinstance(value, bool) or not isinstance(value, int):
+        raise ValueError(f"{what} failed validation")
+    return value
+
+
+def _pg_count(value: Any) -> int | None:
+    """Non-negative PG COUNT; None when poisoned (bool / non-int / negative)."""
+    if isinstance(value, bool) or not isinstance(value, int) or value < 0:
+        return None
+    return value
+
+
+def _clean_symbol(value: Any) -> str | None:
+    if not isinstance(value, str):
+        return None
+    symbol = value.strip().upper()
+    return symbol or None
+
+
+# Transaction-scoped daily-cap serializer for claim_pending_briefs.
+# Distinct from poller.POLL_LOCK_ID (4_201_337): same bigint would let a
+# session poll hold block brief xact waiters on a second pool connection and
+# deadlock under max_size=2 (poll waits for pool; brief waits for advisory).
+BRIEF_CAP_LOCK_ID = 4_201_339
 
 
 class Storage:
@@ -67,7 +101,12 @@ class Storage:
     async def upsert_stock(
         self, symbol: str, name: str | None = None, sector: str | None = None
     ) -> None:
+        # Fail closed — non-string symbol used to throw on .strip mid upsert.
+        if not isinstance(symbol, str):
+            return
         symbol = symbol.strip().upper()
+        if not symbol:
+            return
         async with self._pool.connection() as conn:
             await conn.execute(
                 """
@@ -81,42 +120,323 @@ class Storage:
                 (symbol, name, sector),
             )
 
-    async def insert_snapshot(self, snap: PriceSnapshot) -> PriceSnapshot:
-        await self.upsert_stock(snap.symbol, snap.name)
+    async def list_stock_names(self) -> list[tuple[str, str]]:
+        """Return ``(symbol, name)`` for stocks with a non-empty company name.
+
+        Used by optional bulk disclosure discovery to map
+        ``approvedAnnouncement.company`` → watchlist symbol.
+        """
         async with self._pool.connection() as conn:
-            row = await (
+            rows = await (
+                await conn.execute(
+                    """
+                    SELECT symbol, name
+                    FROM stocks
+                    WHERE name IS NOT NULL AND btrim(name) <> ''
+                    """
+                )
+            ).fetchall()
+        out: list[tuple[str, str]] = []
+        for row in _as_rows(rows):
+            # Fail closed — non-string PG values used to soft-accept via str()
+            # (int/None became "123"/"None" symbols in the bulk name map).
+            raw_sym = row["symbol"]
+            raw_name = row["name"]
+            if not isinstance(raw_sym, str) or not isinstance(raw_name, str):
+                continue
+            symbol = raw_sym.strip().upper()
+            name = raw_name.strip()
+            if symbol and name:
+                out.append((symbol, name))
+        return out
+
+    async def insert_snapshot(self, snap: PriceSnapshot) -> PriceSnapshot:
+        stored = await self.persist_market_snapshots([snap])
+        if not stored:
+            raise ValueError(f"invalid snapshot symbol: {snap.symbol!r}")
+        return stored[0]
+
+    async def persist_market_snapshots(self, snaps: list[PriceSnapshot]) -> list[PriceSnapshot]:
+        """Upsert stocks + insert price_snapshots for a full tradeSummary board.
+
+        Used by the poller to keep a market-wide browse layer in Postgres while
+        rule evaluation stays watchlist-scoped. Empty input is a no-op.
+
+        Duplicate symbols in one board collapse to last-wins (one snapshot row
+        per symbol) so rule eval cannot use an intra-tick sibling as
+        ``previous``. Empty/whitespace symbols are skipped. Batches into two
+        multi-row statements inside one transaction.
+        """
+        if not snaps:
+            return []
+
+        # Last-wins per normalized symbol; skip blanks (invalid CSE rows)
+        # and non-finite prices (NaN/±Inf must not poison price_snapshots).
+        by_symbol: dict[str, PriceSnapshot] = {}
+        for snap in snaps:
+            # Fail closed — non-string symbol used to throw on .strip and abort
+            # the whole tradeSummary board persist.
+            if not isinstance(snap.symbol, str):
+                continue
+            symbol = snap.symbol.strip().upper()
+            if not symbol:
+                continue
+            if not math.isfinite(snap.price):
+                continue
+            by_symbol[symbol] = snap
+        if not by_symbol:
+            return []
+
+        normalized: list[tuple[str, PriceSnapshot]] = list(by_symbol.items())
+        # Column-wise arrays + UNNEST: static SQL only (no f-string / concat VALUES).
+        stock_symbols = [symbol for symbol, _ in normalized]
+        stock_names = [snap.name for _, snap in normalized]
+        stock_sectors = [None] * len(normalized)
+        snap_symbols = list(stock_symbols)
+        snap_prices = [snap.price for _, snap in normalized]
+        snap_changes = [snap.change for _, snap in normalized]
+        snap_change_pcts = [snap.change_pct for _, snap in normalized]
+        snap_prev_closes = [snap.previous_close for _, snap in normalized]
+        snap_volumes = [snap.volume for _, snap in normalized]
+        snap_trade_counts = [snap.trade_count for _, snap in normalized]
+        snap_turnovers = [snap.turnover for _, snap in normalized]
+        snap_highs = [snap.high for _, snap in normalized]
+        snap_lows = [snap.low for _, snap in normalized]
+        snap_opens = [snap.open for _, snap in normalized]
+        snap_market_caps = [snap.market_cap for _, snap in normalized]
+        snap_ts = [snap.ts for _, snap in normalized]
+
+        async with self._pool.connection() as conn, conn.transaction():
+            await conn.execute(
+                """
+                INSERT INTO stocks (symbol, name, sector)
+                SELECT symbol, name, sector
+                FROM UNNEST(%s::text[], %s::text[], %s::text[])
+                    AS t(symbol, name, sector)
+                ON CONFLICT (symbol) DO UPDATE SET
+                    name = COALESCE(EXCLUDED.name, stocks.name),
+                    sector = COALESCE(EXCLUDED.sector, stocks.sector),
+                    updated_at = now()
+                """,
+                (stock_symbols, stock_names, stock_sectors),
+            )
+            rows = await (
                 await conn.execute(
                     """
                     INSERT INTO price_snapshots (
                         symbol, price, change, change_pct, previous_close,
-                        volume, trade_count, turnover, high, low, open, market_cap, ts
-                    ) VALUES (
-                        %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s
+                        volume, trade_count, turnover, high, low, open,
+                        market_cap, ts
+                    )
+                    SELECT
+                        symbol, price, change, change_pct, previous_close,
+                        volume, trade_count, turnover, high, low, open,
+                        market_cap, ts
+                    FROM UNNEST(
+                        %s::text[],
+                        %s::double precision[],
+                        %s::double precision[],
+                        %s::double precision[],
+                        %s::double precision[],
+                        %s::double precision[],
+                        %s::double precision[],
+                        %s::double precision[],
+                        %s::double precision[],
+                        %s::double precision[],
+                        %s::double precision[],
+                        %s::double precision[],
+                        %s::timestamptz[]
+                    ) AS t(
+                        symbol, price, change, change_pct, previous_close,
+                        volume, trade_count, turnover, high, low, open,
+                        market_cap, ts
                     )
                     RETURNING id
                     """,
                     (
-                        snap.symbol,
-                        snap.price,
-                        snap.change,
-                        snap.change_pct,
-                        snap.previous_close,
-                        snap.volume,
-                        snap.trade_count,
-                        snap.turnover,
-                        snap.high,
-                        snap.low,
-                        snap.open,
-                        snap.market_cap,
-                        snap.ts,
+                        snap_symbols,
+                        snap_prices,
+                        snap_changes,
+                        snap_change_pcts,
+                        snap_prev_closes,
+                        snap_volumes,
+                        snap_trade_counts,
+                        snap_turnovers,
+                        snap_highs,
+                        snap_lows,
+                        snap_opens,
+                        snap_market_caps,
+                        snap_ts,
                     ),
                 )
+            ).fetchall()
+
+        assert len(rows) == len(normalized)
+        out: list[PriceSnapshot] = []
+        for (symbol, snap), row in zip(normalized, _as_rows(rows), strict=True):
+            # Fail closed — bool ids soft-accept via int(True)==1; lists abort
+            # mid market persist (parity ``_row_to_snapshot`` id guard).
+            raw_id = row.get("id")
+            if isinstance(raw_id, bool) or not isinstance(raw_id, int):
+                log.warning(
+                    "market_persist_row_poisoned_id",
+                    symbol=symbol,
+                    row_id=raw_id,
+                )
+                continue
+            out.append(snap.model_copy(update={"id": raw_id, "symbol": symbol}))
+        return out
+
+    async def delete_old_non_watchlist_snapshots(
+        self,
+        days: int,
+        *,
+        limit: int = 5_000,
+    ) -> int:
+        """Delete ``price_snapshots`` older than ``days`` for non-watchlist symbols.
+
+        Symbols present on any user's watchlist keep full history. ``days <= 0``
+        is a no-op (returns 0). Used by optional ``SNAPSHOT_RETENTION_DAYS``.
+
+        Deletes at most ``limit`` rows per call so a large backlog cannot pin
+        the poll tick (remaining rows drain on subsequent ticks).
+        """
+        if days <= 0:
+            return 0
+        batch = max(1, int(limit))
+        async with self._pool.connection() as conn:
+            row = await (
+                await conn.execute(
+                    """
+                    WITH doomed AS (
+                        SELECT ps.id
+                        FROM price_snapshots ps
+                        WHERE ps.ts < now() - (%s * interval '1 day')
+                          AND NOT EXISTS (
+                              SELECT 1
+                              FROM watchlist_items w
+                              WHERE w.symbol = ps.symbol
+                          )
+                        ORDER BY ps.ts ASC, ps.id ASC
+                        LIMIT %s
+                    ),
+                    deleted AS (
+                        DELETE FROM price_snapshots ps
+                        USING doomed
+                        WHERE ps.id = doomed.id
+                        RETURNING 1
+                    )
+                    SELECT COUNT(*)::int AS n FROM deleted
+                    """,
+                    (days, batch),
+                )
             ).fetchone()
-        assert row is not None
-        return snap.model_copy(update={"id": int(_as_row(row)["id"])})
+        if row is None:
+            return 0
+        # Fail closed — bool soft-accepts via int(True)==1; None/"n" → 0.
+        counted = _pg_count(_as_row(row).get("n"))
+        return 0 if counted is None else counted
+
+    async def persist_sectors(self, sectors: list[SectorSnapshot]) -> list[SectorSnapshot]:
+        """Upsert CSE sector index rows (optional ``SECTORS_INGEST`` path).
+
+        Last-wins per ``sector_id``. Blank symbols skipped. Empty input is a no-op.
+        """
+        if not sectors:
+            return []
+
+        by_id: dict[int, SectorSnapshot] = {}
+        for sector in sectors:
+            # Fail closed — non-string symbol used to throw on .strip and abort
+            # the whole allSectors persist.
+            if not isinstance(sector.symbol, str):
+                continue
+            symbol = sector.symbol.strip().upper()
+            if not symbol:
+                continue
+            by_id[sector.sector_id] = sector.model_copy(update={"symbol": symbol})
+        if not by_id:
+            return []
+
+        rows = list(by_id.values())
+        # Column-wise arrays + UNNEST: static SQL only (no f-string / concat VALUES).
+        async with self._pool.connection() as conn:
+            await conn.execute(
+                """
+                INSERT INTO sectors (
+                    sector_id, symbol, name, index_code, index_code_sp, index_name,
+                    index_value, change, change_pct, trade_today, volume_today,
+                    turnover_today, previous_close, ts, cse_row_id
+                )
+                SELECT
+                    sector_id, symbol, name, index_code, index_code_sp, index_name,
+                    index_value, change, change_pct, trade_today, volume_today,
+                    turnover_today, previous_close, ts, cse_row_id
+                FROM UNNEST(
+                    %s::integer[],
+                    %s::text[],
+                    %s::text[],
+                    %s::text[],
+                    %s::text[],
+                    %s::text[],
+                    %s::double precision[],
+                    %s::double precision[],
+                    %s::double precision[],
+                    %s::double precision[],
+                    %s::double precision[],
+                    %s::double precision[],
+                    %s::double precision[],
+                    %s::timestamptz[],
+                    %s::integer[]
+                ) AS t(
+                    sector_id, symbol, name, index_code, index_code_sp, index_name,
+                    index_value, change, change_pct, trade_today, volume_today,
+                    turnover_today, previous_close, ts, cse_row_id
+                )
+                ON CONFLICT (sector_id) DO UPDATE SET
+                    symbol = EXCLUDED.symbol,
+                    name = EXCLUDED.name,
+                    index_code = EXCLUDED.index_code,
+                    index_code_sp = EXCLUDED.index_code_sp,
+                    index_name = EXCLUDED.index_name,
+                    index_value = EXCLUDED.index_value,
+                    change = EXCLUDED.change,
+                    change_pct = EXCLUDED.change_pct,
+                    trade_today = EXCLUDED.trade_today,
+                    volume_today = EXCLUDED.volume_today,
+                    turnover_today = EXCLUDED.turnover_today,
+                    previous_close = EXCLUDED.previous_close,
+                    ts = EXCLUDED.ts,
+                    cse_row_id = EXCLUDED.cse_row_id,
+                    ingested_at = now()
+                """,
+                (
+                    [s.sector_id for s in rows],
+                    [s.symbol for s in rows],
+                    [s.name for s in rows],
+                    [s.index_code for s in rows],
+                    [s.index_code_sp for s in rows],
+                    [s.index_name for s in rows],
+                    [s.index_value for s in rows],
+                    [s.change for s in rows],
+                    [s.change_pct for s in rows],
+                    [s.trade_today for s in rows],
+                    [s.volume_today for s in rows],
+                    [s.turnover_today for s in rows],
+                    [s.previous_close for s in rows],
+                    [s.ts for s in rows],
+                    [s.cse_row_id for s in rows],
+                ),
+            )
+        return rows
 
     async def latest_snapshot(self, symbol: str) -> PriceSnapshot | None:
+        # Fail closed — non-string symbol used to throw on .strip mid lookup.
+        if not isinstance(symbol, str):
+            return None
         symbol = symbol.strip().upper()
+        if not symbol:
+            return None
         async with self._pool.connection() as conn:
             row = await (
                 await conn.execute(
@@ -134,7 +454,12 @@ class Storage:
         return _row_to_snapshot(_as_row(row))
 
     async def previous_snapshot(self, symbol: str, *, before_id: int) -> PriceSnapshot | None:
+        # Fail closed — non-string symbol used to throw on .strip mid lookup.
+        if not isinstance(symbol, str):
+            return None
         symbol = symbol.strip().upper()
+        if not symbol:
+            return None
         async with self._pool.connection() as conn:
             row = await (
                 await conn.execute(
@@ -152,6 +477,13 @@ class Storage:
         return _row_to_snapshot(_as_row(row))
 
     async def get_previous_state(self, symbol: str, *, before_id: int) -> PreviousPriceState:
+        # Fail closed — non-string symbol used to throw on .strip after
+        # previous_snapshot already returned None (parity previous_snapshot).
+        if not isinstance(symbol, str):
+            return PreviousPriceState(price=None, change_pct=None, move_fired_keys=set())
+        symbol = symbol.strip().upper()
+        if not symbol:
+            return PreviousPriceState(price=None, change_pct=None, move_fired_keys=set())
         prev = await self.previous_snapshot(symbol, before_id=before_id)
         async with self._pool.connection() as conn:
             rows = await (
@@ -162,7 +494,7 @@ class Storage:
                     JOIN alert_rules ar ON ar.id = al.rule_id
                     WHERE ar.symbol = %s AND al.event_key LIKE 'move:%%'
                     """,
-                    (symbol.strip().upper(),),
+                    (symbol,),
                 )
             ).fetchall()
             move_keys = {r["event_key"] for r in _as_rows(rows)}
@@ -174,25 +506,548 @@ class Storage:
             move_fired_keys=move_keys,
         )
 
+    async def enqueue_disclosure_brief(
+        self,
+        disclosure_id: int,
+        *,
+        status: str = "pending",
+    ) -> bool:
+        """Insert a disclosure_briefs ledger row; no-op if one already exists.
+
+        Returns True when a row was inserted. Default status is ``pending``;
+        callers that honour ``briefs_enabled()`` pass ``skipped`` when AI
+        briefs are off so Phase 2 can still see the row.
+        """
+        async with self._pool.connection() as conn:
+            row = await (
+                await conn.execute(
+                    """
+                    INSERT INTO disclosure_briefs (disclosure_id, status)
+                    VALUES (%s, %s)
+                    ON CONFLICT (disclosure_id) DO NOTHING
+                    RETURNING disclosure_id
+                    """,
+                    (disclosure_id, status),
+                )
+            ).fetchone()
+        return row is not None
+
+    async def promote_recent_skipped_briefs(
+        self,
+        *,
+        max_age_hours: int = 24,
+        limit: int = 100,
+    ) -> int:
+        """Re-queue recent ``skipped`` briefs as ``pending`` when AI is enabled.
+
+        Rows enqueued while ``AI_BRIEFS_ENABLED=0`` stay ``skipped`` forever
+        unless promoted. Bounded by age + limit so flipping the flag on cannot
+        dump the entire historical archive into the daily cap.
+        """
+        hours = max(0, int(max_age_hours))
+        if hours <= 0:
+            return 0
+        batch = max(1, int(limit))
+        async with self._pool.connection() as conn:
+            rows = await (
+                await conn.execute(
+                    """
+                    WITH picked AS (
+                        SELECT disclosure_id
+                        FROM disclosure_briefs
+                        WHERE status = 'skipped'
+                          AND created_at >= now() - (%s * interval '1 hour')
+                        ORDER BY created_at ASC
+                        LIMIT %s
+                        FOR UPDATE SKIP LOCKED
+                    )
+                    UPDATE disclosure_briefs b
+                    SET
+                        status = 'pending',
+                        updated_at = now(),
+                        error = NULL
+                    FROM picked
+                    WHERE b.disclosure_id = picked.disclosure_id
+                    RETURNING b.disclosure_id
+                    """,
+                    (hours, batch),
+                )
+            ).fetchall()
+        return len(rows)
+
+    async def list_ready_briefs_for_followup_sweep(
+        self,
+        *,
+        limit: int = 20,
+        max_age_days: int = 7,
+    ) -> list[dict[str, Any]]:
+        """Ready briefs eligible for late Telegram follow-up (idempotent claim).
+
+        Covers the race where a brief became ready while the primary disclosure
+        alert was still undelivered (deferred / unsent). ``claim_brief_followups``
+        remains the durable gate — this only lists candidates that still have at
+        least one delivered primary without a ``brief_followup:`` row (so a
+        newest-N window cannot starve older ready briefs forever).
+        """
+        if limit <= 0:
+            return []
+        days = max(1, int(max_age_days))
+        async with self._pool.connection() as conn:
+            rows = await (
+                await conn.execute(
+                    """
+                    SELECT
+                        b.disclosure_id,
+                        b.brief,
+                        d.external_id,
+                        d.symbol,
+                        d.title,
+                        d.url
+                    FROM disclosure_briefs b
+                    JOIN disclosures d ON d.id = b.disclosure_id
+                    WHERE b.status = 'ready'
+                      AND b.brief IS NOT NULL
+                      AND btrim(b.brief) <> ''
+                      AND b.updated_at >= now() - (%s * interval '1 day')
+                      AND EXISTS (
+                          SELECT 1
+                          FROM alert_rules ar
+                          JOIN alert_log al
+                            ON al.rule_id = ar.id
+                           AND al.event_key = 'disclosure:' || ar.id::text
+                               || ':' || d.external_id
+                          WHERE ar.active
+                            AND ar.type = 'disclosure'
+                            AND ar.symbol = d.symbol
+                            AND (al.message_sent OR al.delivery_attempted_ok)
+                            AND (
+                                al.message_text IS NULL
+                                OR position(
+                                    chr(10) || chr(10) || b.brief
+                                    || chr(10) || chr(10)
+                                    IN al.message_text
+                                ) = 0
+                            )
+                            AND NOT EXISTS (
+                                SELECT 1
+                                FROM alert_log fu
+                                WHERE fu.rule_id = ar.id
+                                  AND fu.event_key = 'brief_followup:'
+                                      || ar.id::text || ':' || d.external_id
+                            )
+                      )
+                    ORDER BY b.updated_at ASC
+                    LIMIT %s
+                    """,
+                    (days, limit),
+                )
+            ).fetchall()
+        return _as_rows(rows)
+
+    async def claim_pending_briefs(
+        self,
+        *,
+        limit: int = 5,
+        max_briefs_per_day: int | None = None,
+        stale_processing_minutes: int = 15,
+        pdf_grace_seconds: int = 120,
+        cdn_backoff_seconds: int = 300,
+    ) -> list[dict[str, Any]]:
+        """Lease pending (or stale processing) briefs as ``processing``.
+
+        Takes a transaction-scoped advisory lock when ``max_briefs_per_day`` is
+        set so concurrent drainers cannot race past the daily cap. Marks rows
+        ``processing`` before returning so FOR UPDATE ending does not allow
+        double-claim. Stale ``processing`` rows older than
+        ``stale_processing_minutes`` are reclaimable after a crash.
+
+        PDF grace: rows without a non-empty ``disclosures.pdf_url`` are skipped
+        until ``updated_at`` is older than ``pdf_grace_seconds`` so legacy enrich
+        can land before a title-only summarize burns the daily cap. Uses
+        ``updated_at`` (not ``created_at``) so ``promote_recent_skipped_briefs``
+        restarts the grace window. ``0`` claims immediately (title-only ok).
+
+        CDN backoff: pending rows that already have an ``error`` (transient CDN
+        miss requeue) and a non-empty ``pdf_url`` are skipped until
+        ``updated_at`` ages past ``cdn_backoff_seconds`` so a flapping CDN
+        cannot starve newer briefs or hammer the host every drain tick.
+        ``0`` disables backoff (immediate reclaim).
+        """
+        if limit <= 0:
+            return []
+        # Fail closed — bool soft-accepts via int(True)==1 shorten grace/backoff.
+        grace = (
+            max(0, pdf_grace_seconds)
+            if isinstance(pdf_grace_seconds, int)
+            and not isinstance(pdf_grace_seconds, bool)
+            else 0
+        )
+        cdn_backoff = (
+            max(0, cdn_backoff_seconds)
+            if isinstance(cdn_backoff_seconds, int)
+            and not isinstance(cdn_backoff_seconds, bool)
+            else 0
+        )
+        async with self._pool.connection() as conn, conn.transaction():
+            if max_briefs_per_day is not None:
+                # Fail closed — bool soft-accepts via int(True)==1 understate the
+                # daily cap and skew remaining batch size.
+                if (
+                    isinstance(max_briefs_per_day, bool)
+                    or not isinstance(max_briefs_per_day, int)
+                    or max_briefs_per_day < 0
+                ):
+                    return []
+                # Must stay distinct from poller.POLL_LOCK_ID (session try-lock).
+                # Same-id would nest session hold + blocking xact wait on a pool
+                # conn and can deadlock under max_size=2. See docs/factory/passes/
+                # ADVISORY_LOCK_DEADLOCK.md (wave10 audit — not a live bug).
+                await conn.execute(
+                    "SELECT pg_advisory_xact_lock(%s)",
+                    (BRIEF_CAP_LOCK_ID,),
+                )
+                used_row = await (
+                    await conn.execute(
+                        """
+                        SELECT COUNT(*)::int AS n
+                        FROM disclosure_briefs
+                        WHERE updated_at >= date_trunc('day', now() AT TIME ZONE 'UTC')
+                          AND (
+                              status IN ('ready', 'failed')
+                              OR (
+                                  status = 'processing'
+                                  AND updated_at
+                                      >= now() - (%s * interval '1 minute')
+                              )
+                          )
+                        """,
+                        (stale_processing_minutes,),
+                    )
+                ).fetchone()
+                # Fail closed — bool soft-accept via int(True)==1 understates
+                # daily use and over-claims past AI_MAX_BRIEFS_PER_DAY.
+                raw_n = _as_row(used_row).get("n") if used_row else 0
+                used = _pg_count(raw_n)
+                if used is None:
+                    return []
+                remaining = max(0, max_briefs_per_day - used)
+                if remaining <= 0:
+                    return []
+                batch = min(limit, remaining)
+            else:
+                batch = limit
+
+            rows = await (
+                await conn.execute(
+                    """
+                    WITH picked AS (
+                        SELECT b.disclosure_id
+                        FROM disclosure_briefs b
+                        JOIN disclosures d ON d.id = b.disclosure_id
+                        WHERE (
+                            b.status = 'pending'
+                            OR (
+                                b.status = 'processing'
+                                AND b.updated_at
+                                    < now() - (%s * interval '1 minute')
+                            )
+                        )
+                        AND (
+                            NULLIF(btrim(d.pdf_url), '') IS NOT NULL
+                            OR b.updated_at
+                                < now() - (%s * interval '1 second')
+                        )
+                        AND (
+                            b.error IS NULL
+                            OR NULLIF(btrim(d.pdf_url), '') IS NULL
+                            OR b.updated_at
+                                < now() - (%s * interval '1 second')
+                        )
+                        ORDER BY b.created_at ASC
+                        LIMIT %s
+                        FOR UPDATE OF b SKIP LOCKED
+                    ),
+                    claimed AS (
+                        UPDATE disclosure_briefs b
+                        SET
+                            status = 'processing',
+                            updated_at = now(),
+                            error = NULL
+                        FROM picked
+                        WHERE b.disclosure_id = picked.disclosure_id
+                        RETURNING b.disclosure_id
+                    )
+                    SELECT
+                        c.disclosure_id,
+                        d.external_id,
+                        d.symbol,
+                        d.title,
+                        d.url,
+                        d.pdf_url
+                    FROM claimed c
+                    JOIN disclosures d ON d.id = c.disclosure_id
+                    """,
+                    (stale_processing_minutes, grace, cdn_backoff, batch),
+                )
+            ).fetchall()
+        return _as_rows(rows)
+
+    async def claim_brief_followups(
+        self,
+        *,
+        external_id: str,
+        symbol: str,
+        brief: str,
+        message_text: str,
+        lease_seconds: int = 120,
+    ) -> list[dict[str, Any]]:
+        """Claim Telegram follow-ups for a ready brief (idempotent, no double send).
+
+        Only targets users who already have a *delivered* primary disclosure alert
+        for this filing (``disclosure:{rule_id}:{external_id}`` with
+        ``message_sent`` or ``delivery_attempted_ok``). Skips recipients whose
+        primary message already embeds the brief as its own paragraph (blank-line
+        delimited — avoids title/URL substring false skips). Inserts
+        ``brief_followup:{rule_id}:{external_id}`` into ``alert_log`` with a
+        delivery lease — concurrent callers and retries collide on
+        UNIQUE(rule_id, event_key).
+        """
+        # Fail closed — non-string args used to throw on .strip mid brief follow-up claim.
+        ext = external_id.strip() if isinstance(external_id, str) else ""
+        sym = symbol.strip().upper() if isinstance(symbol, str) else ""
+        brief_text = brief.strip() if isinstance(brief, str) else ""
+        msg = message_text if isinstance(message_text, str) else ""
+        if not ext or not sym or not brief_text or not msg.strip():
+            return []
+        # Fail closed — bool soft-accepts via int(True)==1 shorten reclaim races.
+        if isinstance(lease_seconds, bool) or not isinstance(lease_seconds, int):
+            lease_seconds = 120
+        lease = max(1, int(lease_seconds))
+        async with self._pool.connection() as conn, conn.transaction():
+            rows = await (
+                await conn.execute(
+                    """
+                    WITH primary_alerts AS (
+                        SELECT
+                            ar.id AS rule_id,
+                            u.telegram_id
+                        FROM alert_rules ar
+                        JOIN users u ON u.id = ar.user_id
+                        JOIN alert_log al
+                          ON al.rule_id = ar.id
+                         AND al.event_key = 'disclosure:' || ar.id::text || ':' || %s
+                        WHERE ar.active
+                          AND ar.type = 'disclosure'
+                          AND ar.symbol = %s
+                          AND (al.message_sent OR al.delivery_attempted_ok)
+                          AND (
+                              al.message_text IS NULL
+                              OR position(
+                                  chr(10) || chr(10) || %s || chr(10) || chr(10)
+                                  IN al.message_text
+                              ) = 0
+                          )
+                    ),
+                    inserted AS (
+                        INSERT INTO alert_log (
+                            rule_id,
+                            snapshot_id,
+                            event_key,
+                            message_sent,
+                            message_text,
+                            delivery_lease_until
+                        )
+                        SELECT
+                            p.rule_id,
+                            NULL,
+                            'brief_followup:' || p.rule_id::text || ':' || %s,
+                            FALSE,
+                            %s,
+                            now() + (%s * interval '1 second')
+                        FROM primary_alerts p
+                        ON CONFLICT (rule_id, event_key) DO NOTHING
+                        RETURNING id, rule_id, message_text
+                    )
+                    SELECT
+                        i.id,
+                        i.rule_id,
+                        i.message_text,
+                        u.telegram_id
+                    FROM inserted i
+                    JOIN alert_rules ar ON ar.id = i.rule_id
+                    JOIN users u ON u.id = ar.user_id
+                    """,
+                    (ext, sym, brief_text, ext, msg, lease),
+                )
+            ).fetchall()
+        return _as_rows(rows)
+
+    async def mark_brief_ready(
+        self,
+        disclosure_id: int,
+        *,
+        brief: str,
+        model: str,
+        tokens_in: int | None = None,
+        tokens_out: int | None = None,
+    ) -> bool:
+        """Mark a claimed (processing) brief row ready with generated text.
+
+        Sanitizes/caps the brief body at write time so a hostile provider
+        response cannot land an unbounded control-laden blob in Postgres
+        (Telegram + dash egress also sanitize, but storage is the choke point).
+        """
+        from chime.domain import sanitize_brief_body
+
+        cleaned = sanitize_brief_body(brief)
+        if cleaned is None:
+            # Fail closed: do not leave status=processing or persist garbage.
+            raise ValueError("brief empty after sanitize")
+        async with self._pool.connection() as conn:
+            row = await (
+                await conn.execute(
+                    """
+                    UPDATE disclosure_briefs
+                    SET
+                        status = 'ready',
+                        brief = %s,
+                        model = %s,
+                        tokens_in = %s,
+                        tokens_out = %s,
+                        error = NULL,
+                        updated_at = now()
+                    WHERE disclosure_id = %s
+                      AND status IN ('pending', 'processing')
+                    RETURNING disclosure_id
+                    """,
+                    (cleaned, model, tokens_in, tokens_out, disclosure_id),
+                )
+            ).fetchone()
+        return row is not None
+
+    async def mark_brief_failed(
+        self,
+        disclosure_id: int,
+        *,
+        error: str,
+        model: str | None = None,
+    ) -> bool:
+        """Mark a claimed brief row failed (keeps prior brief null)."""
+        err = (error or "unknown")[:2000]
+        async with self._pool.connection() as conn:
+            row = await (
+                await conn.execute(
+                    """
+                    UPDATE disclosure_briefs
+                    SET
+                        status = 'failed',
+                        error = %s,
+                        model = COALESCE(%s, model),
+                        updated_at = now()
+                    WHERE disclosure_id = %s
+                      AND status IN ('pending', 'processing')
+                    RETURNING disclosure_id
+                    """,
+                    (err, model, disclosure_id),
+                )
+            ).fetchone()
+        return row is not None
+
+    async def requeue_brief_pending(
+        self,
+        disclosure_id: int,
+        *,
+        error: str,
+    ) -> bool:
+        """Return a claimed brief to ``pending`` for a later retry.
+
+        Used for transient CDN fetch misses so we do not burn the daily cap
+        on a permanent ``failed`` row (``failed`` counts toward
+        ``max_briefs_per_day``; ``pending`` does not).
+        """
+        err = (error or "unknown")[:2000]
+        async with self._pool.connection() as conn:
+            row = await (
+                await conn.execute(
+                    """
+                    UPDATE disclosure_briefs
+                    SET
+                        status = 'pending',
+                        error = %s,
+                        updated_at = now()
+                    WHERE disclosure_id = %s
+                      AND status IN ('pending', 'processing')
+                    RETURNING disclosure_id
+                    """,
+                    (err, disclosure_id),
+                )
+            ).fetchone()
+        return row is not None
+
+    async def count_briefs_today(self, *, stale_processing_minutes: int = 15) -> int:
+        """Count today's completed briefs plus non-stale in-flight processing."""
+        async with self._pool.connection() as conn:
+            row = await (
+                await conn.execute(
+                    """
+                    SELECT COUNT(*)::int AS n
+                    FROM disclosure_briefs
+                    WHERE updated_at >= date_trunc('day', now() AT TIME ZONE 'UTC')
+                      AND (
+                          status IN ('ready', 'failed')
+                          OR (
+                              status = 'processing'
+                              AND updated_at
+                                  >= now() - (%s * interval '1 minute')
+                          )
+                      )
+                    """,
+                    (stale_processing_minutes,),
+                )
+            ).fetchone()
+        if row is None:
+            return 0
+        # Fail closed — bool soft-accept via int(True)==1 understates daily use.
+        counted = _pg_count(_as_row(row).get("n"))
+        if counted is None:
+            raise ValueError("count_briefs_today n failed validation")
+        return counted
+
     async def upsert_disclosure(self, disc: Disclosure) -> Disclosure:
         """Insert or update disclosure; always return it with a DB id.
 
         ON CONFLICT updates title so RETURNING id always yields a row — callers
         can re-evaluate rules after a crash between insert and claim without
-        permanently skipping the disclosure.
+        permanently skipping the disclosure. Existing ``pdf_url`` is preserved
+        and returned so enrichment can skip already-resolved rows.
+
+        On a true insert (``xmax = 0``), enqueues a ``disclosure_briefs`` row:
+        ``pending`` when briefs are enabled, ``skipped`` otherwise. Updates
+        never enqueue again (idempotent with ON CONFLICT DO NOTHING).
         """
+        from chime.briefs import BriefStatus, briefs_enabled
+
         await self.upsert_stock(disc.symbol, disc.company_name)
-        async with self._pool.connection() as conn:
+        async with self._pool.connection() as conn, conn.transaction():
             row = await (
                 await conn.execute(
                     """
                     INSERT INTO disclosures (
                         external_id, symbol, title, category, url, company_name,
-                        published_at, seen_at
-                    ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
+                        published_at, seen_at, pdf_url
+                    ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
                     ON CONFLICT (external_id, symbol) DO UPDATE SET
                         title = EXCLUDED.title
-                    RETURNING id
+                    RETURNING
+                        id,
+                        title,
+                        category,
+                        url,
+                        company_name,
+                        published_at,
+                        seen_at,
+                        pdf_url,
+                        (xmax = 0) AS inserted
                     """,
                     (
                         disc.external_id,
@@ -203,11 +1058,238 @@ class Storage:
                         disc.company_name,
                         disc.published_at,
                         disc.seen_at,
+                        disc.pdf_url,
                     ),
                 )
             ).fetchone()
-        assert row is not None
-        return disc.model_copy(update={"id": int(_as_row(row)["id"])})
+            assert row is not None
+            data = _as_row(row)
+            # Fail closed — bool ids soft-accept via int(True)==1; lists abort
+            # mid disclosure upsert (parity market persist / row mappers).
+            raw_id = data.get("id")
+            if isinstance(raw_id, bool) or not isinstance(raw_id, int):
+                raise ValueError("disclosure row id failed validation")
+            disclosure_id = raw_id
+            existing_pdf = data.get("pdf_url")
+            stored_published_at = data.get("published_at")
+            if not isinstance(stored_published_at, datetime):
+                stored_published_at = disc.published_at
+            stored_seen_at = data.get("seen_at")
+            if not isinstance(stored_seen_at, datetime):
+                stored_seen_at = disc.seen_at
+            stored_title = data.get("title") if "title" in data else disc.title
+            if not isinstance(stored_title, str):
+                stored_title = disc.title
+            stored_category = data.get("category") if "category" in data else disc.category
+            if stored_category is not None and not isinstance(stored_category, str):
+                stored_category = disc.category
+            stored_url = data.get("url") if "url" in data else disc.url
+            if not isinstance(stored_url, str):
+                stored_url = disc.url
+            stored_company_name = (
+                data.get("company_name") if "company_name" in data else disc.company_name
+            )
+            if stored_company_name is not None and not isinstance(stored_company_name, str):
+                stored_company_name = disc.company_name
+            # Fail closed — bool("false")/1 used to soft-accept via bool() and
+            # falsely mark re-upserts as just_inserted (duplicate alert fires).
+            raw_ins = data.get("inserted")
+            just_inserted = raw_ins is True
+            if just_inserted:
+                brief_status = BriefStatus.PENDING if briefs_enabled() else BriefStatus.SKIPPED
+                await conn.execute(
+                    """
+                    INSERT INTO disclosure_briefs (disclosure_id, status)
+                    VALUES (%s, %s)
+                    ON CONFLICT (disclosure_id) DO NOTHING
+                    """,
+                    (disclosure_id, brief_status.value),
+                )
+        return disc.model_copy(
+            update={
+                "id": disclosure_id,
+                "title": stored_title,
+                "category": stored_category,
+                "url": stored_url,
+                "company_name": stored_company_name,
+                "published_at": stored_published_at,
+                "seen_at": stored_seen_at,
+                "pdf_url": (
+                    existing_pdf
+                    if isinstance(existing_pdf, str) and existing_pdf
+                    else disc.pdf_url
+                ),
+                "just_inserted": just_inserted,
+            }
+        )
+
+    async def set_disclosure_pdf_url(self, disclosure_id: int, pdf_url: str) -> bool:
+        """Fill ``disclosures.pdf_url`` when known; never overwrite a real URL.
+
+        Blank / whitespace-only ``pdf_url`` values are treated as missing (same
+        as claim PDF-grace) so enrich can still land. Only
+        ``https://cdn.cse.lk/...`` URLs are persisted (SSRF guard). Returns True
+        if a row was updated. Fail-soft callers treat False / errors as
+        non-blocking for alerts.
+        """
+        from chime.adapters.cse import resolve_pdf_url
+
+        normalized = resolve_pdf_url(pdf_url)
+        if not normalized:
+            return False
+        async with self._pool.connection() as conn:
+            row = await (
+                await conn.execute(
+                    """
+                    UPDATE disclosures
+                    SET pdf_url = %s
+                    WHERE id = %s
+                      AND NULLIF(btrim(pdf_url), '') IS NULL
+                    RETURNING id
+                    """,
+                    (normalized, disclosure_id),
+                )
+            ).fetchone()
+        return row is not None
+
+    async def get_ready_filing_brief(
+        self,
+        *,
+        disclosure_id: int | None = None,
+        external_id: str | None = None,
+        symbol: str | None = None,
+    ) -> str | None:
+        """Return brief text when ``disclosure_briefs.status = ready``.
+
+        Lookup prefers ``disclosure_id``; otherwise ``external_id`` + ``symbol``
+        (unique on disclosures). Returns None when missing, not ready, blank,
+        or on any DB error (fail-soft — alerts must not wait on briefs).
+        """
+        try:
+            if disclosure_id is not None:
+                async with self._pool.connection() as conn:
+                    row = await (
+                        await conn.execute(
+                            """
+                            SELECT brief
+                            FROM disclosure_briefs
+                            WHERE disclosure_id = %s
+                              AND status = 'ready'
+                              AND brief IS NOT NULL
+                              AND btrim(brief) <> ''
+                            """,
+                            (disclosure_id,),
+                        )
+                    ).fetchone()
+            else:
+                # Fail closed — non-string args used to throw on .strip mid brief lookup.
+                ext = external_id.strip() if isinstance(external_id, str) else ""
+                sym = symbol.strip().upper() if isinstance(symbol, str) else ""
+                if not ext or not sym:
+                    return None
+                async with self._pool.connection() as conn:
+                    row = await (
+                        await conn.execute(
+                            """
+                            SELECT b.brief
+                            FROM disclosure_briefs b
+                            JOIN disclosures d ON d.id = b.disclosure_id
+                            WHERE d.external_id = %s
+                              AND d.symbol = %s
+                              AND b.status = 'ready'
+                              AND b.brief IS NOT NULL
+                              AND btrim(b.brief) <> ''
+                            """,
+                            (ext, sym),
+                        )
+                    ).fetchone()
+            if row is None:
+                return None
+            data = _as_row(row)
+            brief = data.get("brief")
+            if not isinstance(brief, str):
+                return None
+            text = brief.strip()
+            return text or None
+        except Exception:
+            return None
+
+    async def get_latest_ready_brief(self, symbol: str) -> dict[str, Any] | None:
+        """Latest ``ready`` filing brief for a symbol (read-only lookup).
+
+        Ordered by disclosure ``published_at`` then ``id`` descending. Returns
+        ``None`` when missing, blank, or on any DB error (fail-soft).
+        """
+        # Fail closed — non-string symbol used to throw on .strip mid /brief lookup.
+        sym = symbol.strip().upper() if isinstance(symbol, str) else ""
+        if not sym:
+            return None
+        try:
+            async with self._pool.connection() as conn:
+                row = await (
+                    await conn.execute(
+                        """
+                        SELECT
+                            b.brief,
+                            d.symbol,
+                            d.title,
+                            d.url,
+                            d.external_id,
+                            b.disclosure_id
+                        FROM disclosure_briefs b
+                        JOIN disclosures d ON d.id = b.disclosure_id
+                        WHERE d.symbol = %s
+                          AND b.status = 'ready'
+                          AND b.brief IS NOT NULL
+                          AND btrim(b.brief) <> ''
+                        ORDER BY d.published_at DESC NULLS LAST, d.id DESC
+                        LIMIT 1
+                        """,
+                        (sym,),
+                    )
+                ).fetchone()
+            if row is None:
+                return None
+            data = _as_row(row)
+            brief = data.get("brief")
+            if not isinstance(brief, str):
+                return None
+            text = brief.strip()
+            if not text:
+                return None
+            # Fail closed — non-string PG fields used to soft-accept via str()
+            # (ints/None became "123"/"None" in /brief lookup egress).
+            raw_sym = data.get("symbol")
+            sym_out = (
+                raw_sym.strip().upper()
+                if isinstance(raw_sym, str) and raw_sym.strip()
+                else sym
+            )
+            raw_title = data.get("title")
+            raw_url = data.get("url")
+            raw_ext = data.get("external_id")
+            return {
+                "brief": text,
+                "symbol": sym_out,
+                "title": (
+                    raw_title.strip()
+                    if isinstance(raw_title, str) and raw_title.strip()
+                    else None
+                ),
+                "url": (
+                    raw_url.strip()
+                    if isinstance(raw_url, str) and raw_url.strip()
+                    else None
+                ),
+                "external_id": (
+                    raw_ext.strip()
+                    if isinstance(raw_ext, str) and raw_ext.strip()
+                    else None
+                ),
+                "disclosure_id": data.get("disclosure_id"),
+            }
+        except Exception:
+            return None
 
     async def insert_disclosure_if_new(self, disc: Disclosure) -> Disclosure | None:
         """Compat wrapper — prefer upsert_disclosure.
@@ -231,10 +1313,16 @@ class Storage:
                 )
             ).fetchone()
         assert row is not None
-        return int(_as_row(row)["id"])
+        # Fail closed — bool ids soft-accept via int(True)==1 mid /start.
+        return _require_pg_int(_as_row(row).get("id"), what="ensure_user RETURNING id")
 
     async def add_watch(self, user_id: int, symbol: str) -> None:
+        # Fail closed — non-string symbol used to throw on .strip mid watch.
+        if not isinstance(symbol, str):
+            return
         symbol = symbol.strip().upper()
+        if not symbol:
+            return
         await self.upsert_stock(symbol)
         async with self._pool.connection() as conn:
             await conn.execute(
@@ -247,7 +1335,12 @@ class Storage:
             )
 
     async def remove_watch(self, user_id: int, symbol: str) -> bool:
+        # Fail closed — non-string symbol used to throw on .strip mid remove.
+        if not isinstance(symbol, str):
+            return False
         symbol = symbol.strip().upper()
+        if not symbol:
+            return False
         async with self._pool.connection() as conn:
             row = await (
                 await conn.execute(
@@ -267,7 +1360,12 @@ class Storage:
         Returns ``(removed_from_watchlist, deactivated_rule_count)`` in one
         transaction so a crash cannot leave active orphans without a watch row.
         """
+        # Fail closed — non-string symbol used to throw on .strip mid unwatch.
+        if not isinstance(symbol, str):
+            return False, 0
         symbol = symbol.strip().upper()
+        if not symbol:
+            return False, 0
         async with self._pool.connection() as conn, conn.transaction():
             row = await (
                 await conn.execute(
@@ -299,21 +1397,38 @@ class Storage:
                     """
                     SELECT symbol FROM watchlist_items
                     WHERE user_id = %s
+                      AND btrim(symbol) <> ''
                     ORDER BY symbol
                     """,
                     (user_id,),
                 )
             ).fetchall()
-        return [r["symbol"] for r in _as_rows(rows)]
+        out: list[str] = []
+        for row in _as_rows(rows):
+            symbol = _clean_symbol(row.get("symbol"))
+            if symbol is not None:
+                out.append(symbol)
+        return out
 
     async def watched_symbols(self) -> list[str]:
         async with self._pool.connection() as conn:
             rows = await (
                 await conn.execute(
-                    "SELECT DISTINCT symbol FROM watchlist_items ORDER BY symbol"
+                    """
+                    SELECT DISTINCT symbol FROM watchlist_items
+                    WHERE btrim(symbol) <> ''
+                    ORDER BY symbol
+                    """
                 )
             ).fetchall()
-        return [r["symbol"] for r in _as_rows(rows)]
+        out: list[str] = []
+        seen: set[str] = set()
+        for row in _as_rows(rows):
+            symbol = _clean_symbol(row.get("symbol"))
+            if symbol is not None and symbol not in seen:
+                seen.add(symbol)
+                out.append(symbol)
+        return out
 
     async def create_alert_rule(
         self,
@@ -321,18 +1436,30 @@ class Storage:
         symbol: str,
         alert_type: AlertType,
         threshold: float | None,
+        category: str | None = None,
     ) -> AlertRule:
         """Create or return an identical active rule (idempotent under concurrency).
 
         Avoids deactivate-then-insert TOCTOU where a parallel caller could
         deactivate the rule id we already returned to the user.
+        ``category`` is for disclosure rules only (substring filter); ignored otherwise.
         """
+        # Fail closed — non-string symbol used to throw on .strip mid create.
+        if not isinstance(symbol, str):
+            raise ValueError("symbol must be a non-empty string")
         symbol = symbol.strip().upper()
+        if not symbol:
+            raise ValueError("symbol must be a non-empty string")
+        cat = (
+            sanitize_disclosure_category(category)
+            if alert_type == AlertType.DISCLOSURE
+            else None
+        )
         await self.upsert_stock(symbol)
         await self.add_watch(user_id, symbol)
         async with self._pool.connection() as conn:
             existing = await self._fetch_active_rule(
-                conn, user_id, symbol, alert_type, threshold
+                conn, user_id, symbol, alert_type, threshold, cat
             )
             if existing is not None:
                 return existing
@@ -340,17 +1467,19 @@ class Storage:
                 row = await (
                     await conn.execute(
                         """
-                        INSERT INTO alert_rules (user_id, symbol, type, threshold, active, armed)
-                        VALUES (%s, %s, %s, %s, TRUE, TRUE)
-                        RETURNING id, user_id, symbol, type, threshold, active, armed, created_at
+                        INSERT INTO alert_rules
+                            (user_id, symbol, type, threshold, category, active, armed)
+                        VALUES (%s, %s, %s, %s, %s, TRUE, TRUE)
+                        RETURNING id, user_id, symbol, type, threshold, category,
+                                  active, armed, created_at
                         """,
-                        (user_id, symbol, alert_type.value, threshold),
+                        (user_id, symbol, alert_type.value, threshold, cat),
                     )
                 ).fetchone()
             except UniqueViolation:
                 await conn.rollback()
                 raced = await self._fetch_active_rule(
-                    conn, user_id, symbol, alert_type, threshold
+                    conn, user_id, symbol, alert_type, threshold, cat
                 )
                 if raced is not None:
                     return raced
@@ -364,20 +1493,14 @@ class Storage:
         assert row is not None and user is not None
         r = _as_row(row)
         u = _as_row(user)
-        created = r.get("created_at")
-        if created is not None and not isinstance(created, datetime):
-            created = datetime.fromisoformat(str(created))
-        return AlertRule(
-            id=int(r["id"]),
-            user_id=int(r["user_id"]),
-            telegram_id=int(u["telegram_id"]),
-            symbol=r["symbol"],
-            type=AlertType(r["type"]),
-            threshold=r["threshold"],
-            active=bool(r["active"]),
-            armed=bool(r["armed"]),
-            created_at=created,
-        )
+        # Reuse _row_to_rule — manual int()/fromisoformat(str()) used to
+        # soft-accept bools (int(True)==1) or abort on poisoned created_at
+        # after a successful INSERT.
+        r["telegram_id"] = u["telegram_id"]
+        rule = _row_to_rule(r)
+        if rule is None:
+            raise ValueError("inserted alert rule row failed validation")
+        return rule
 
     async def _fetch_active_rule(
         self,
@@ -386,6 +1509,7 @@ class Storage:
         symbol: str,
         alert_type: AlertType,
         threshold: float | None,
+        category: str | None = None,
     ) -> AlertRule | None:
         row = await (
             await conn.execute(
@@ -394,11 +1518,13 @@ class Storage:
                 FROM alert_rules ar
                 JOIN users u ON u.id = ar.user_id
                 WHERE ar.user_id = %s AND ar.symbol = %s AND ar.type = %s
-                  AND COALESCE(ar.threshold, -1) = COALESCE(%s, -1) AND ar.active
+                  AND COALESCE(ar.threshold, -1) = COALESCE(%s, -1)
+                  AND COALESCE(ar.category, '') = COALESCE(%s, '')
+                  AND ar.active
                 ORDER BY ar.id DESC
                 LIMIT 1
                 """,
-                (user_id, symbol, alert_type.value, threshold),
+                (user_id, symbol, alert_type.value, threshold, category),
             )
         ).fetchone()
         if row is None:
@@ -419,7 +1545,12 @@ class Storage:
                     (user_id,),
                 )
             ).fetchall()
-        return [_row_to_rule(_as_row(r)) for r in rows]
+        out: list[AlertRule] = []
+        for r in rows:
+            rule = _row_to_rule(_as_row(r))
+            if rule is not None:
+                out.append(rule)
+        return out
 
     async def active_rules_for_symbols(self, symbols: Sequence[str]) -> list[AlertRule]:
         if not symbols:
@@ -436,7 +1567,12 @@ class Storage:
                     (list(symbols),),
                 )
             ).fetchall()
-        return [_row_to_rule(_as_row(r)) for r in rows]
+        out: list[AlertRule] = []
+        for r in rows:
+            rule = _row_to_rule(_as_row(r))
+            if rule is not None:
+                out.append(rule)
+        return out
 
     async def set_rule_armed(self, rule_id: int, armed: bool) -> None:
         async with self._pool.connection() as conn:
@@ -463,7 +1599,12 @@ class Storage:
 
     async def deactivate_rules_for_symbol(self, user_id: int, symbol: str) -> int:
         """Deactivate all active rules for user+symbol. Return count."""
+        # Fail closed — non-string symbol used to throw on .strip mid deactivate.
+        if not isinstance(symbol, str):
+            return 0
         symbol = symbol.strip().upper()
+        if not symbol:
+            return 0
         async with self._pool.connection() as conn:
             rows = await (
                 await conn.execute(
@@ -492,7 +1633,9 @@ class Storage:
             row = await (
                 await conn.execute("SELECT pg_try_advisory_lock(%s) AS locked", (lock_id,))
             ).fetchone()
-            locked = bool(row and _as_row(row)["locked"])
+            # Fail closed — bool(1)/"false" used to soft-accept a held lock
+            # (parity upsert_disclosure inserted is True / health ok).
+            locked = bool(row) and _as_row(row).get("locked") is True
         except Exception:
             await cm.__aexit__(None, None, None)
             self._lock_cm = None
@@ -535,7 +1678,13 @@ class Storage:
 
         Sets ``delivery_lease_until`` so concurrent ``claim_unsent_batch`` cannot
         pick up the row while ``_deliver_pending`` is still sending.
+        ``lease_seconds`` is floored to ``>= 1`` so a zero/negative lease cannot
+        race with unsent drain (lease-until == now() is immediately reclaimable).
         """
+        # Fail closed — bool soft-accepts via int(True)==1 shorten reclaim races.
+        if isinstance(lease_seconds, bool) or not isinstance(lease_seconds, int):
+            lease_seconds = 120
+        lease = max(1, int(lease_seconds))
         async with self._pool.connection() as conn:
             row = await (
                 await conn.execute(
@@ -556,13 +1705,14 @@ class Storage:
                         event.snapshot_id,
                         event.event_key,
                         message_text,
-                        lease_seconds,
+                        lease,
                     ),
                 )
             ).fetchone()
         if row is None:
             return None
-        return int(_as_row(row)["id"])
+        # Fail closed — bool ids soft-accept via int(True)==1 mid claim deliver.
+        return _require_pg_int(_as_row(row).get("id"), what="claim_alert RETURNING id")
 
     async def claim_and_disarm(
         self,
@@ -578,7 +1728,12 @@ class Storage:
 
         Sets ``delivery_lease_until`` like ``claim_alert`` so unsent drain cannot
         double-claim during the in-flight Telegram send.
+        ``lease_seconds`` is floored to ``>= 1`` (same as ``claim_alert``).
         """
+        # Fail closed — bool soft-accepts via int(True)==1 shorten reclaim races.
+        if isinstance(lease_seconds, bool) or not isinstance(lease_seconds, int):
+            lease_seconds = 120
+        lease = max(1, int(lease_seconds))
         async with self._pool.connection() as conn, conn.transaction():
             row = await (
                 await conn.execute(
@@ -599,17 +1754,23 @@ class Storage:
                         event.snapshot_id,
                         event.event_key,
                         message_text,
-                        lease_seconds,
+                        lease,
                     ),
                 )
             ).fetchone()
             if row is None:
                 return None
+            # Fail closed — bool ids soft-accept via int(True)==1 mid claim+disarm
+            # (parity claim_alert / ensure_user RETURNING id). Validate before
+            # disarm so a poisoned RETURNING id rolls the transaction back.
+            raw_id = _require_pg_int(
+                _as_row(row).get("id"), what="claim_and_disarm RETURNING id"
+            )
             await conn.execute(
                 "UPDATE alert_rules SET armed = %s WHERE id = %s",
                 (False, event.rule_id),
             )
-            return int(_as_row(row)["id"])
+            return raw_id
 
     async def mark_delivery_attempted_ok(self, alert_log_id: int) -> None:
         """Record that Telegram accepted the send (before message_sent).
@@ -658,7 +1819,12 @@ class Storage:
                 )
             ).fetchone()
         assert row is not None
-        return int(_as_row(row)["attempt_count"])
+        # Fail closed — bool soft-accepts via int(True)==1 undercount attempts
+        # and delay dead-letter (parity format_dead_letter_notify attempts).
+        return _require_pg_int(
+            _as_row(row).get("attempt_count"),
+            what="mark_alert_attempt RETURNING attempt_count",
+        )
 
     async def dead_letter(self, alert_log_id: int) -> None:
         """Mark an unsent alert as abandoned (skip further retries)."""
@@ -710,7 +1876,13 @@ class Storage:
         Locks and leases rows in one short transaction, then returns so Telegram
         send can proceed outside any advisory lock. Concurrent claimers skip
         already-locked or still-leased rows.
+        ``lease_seconds`` is floored to ``>= 1`` so zero/negative cannot make
+        the lease immediately reclaimable (``<= now()``).
         """
+        # Fail closed — bool soft-accepts via int(True)==1 shorten reclaim races.
+        if isinstance(lease_seconds, bool) or not isinstance(lease_seconds, int):
+            lease_seconds = 120
+        lease = max(1, int(lease_seconds))
         async with self._pool.connection() as conn, conn.transaction():
             rows = await (
                 await conn.execute(
@@ -752,7 +1924,7 @@ class Storage:
                         )
                         SELECT * FROM leased
                         """,
-                    (limit, lease_seconds),
+                    (limit, lease),
                 )
             ).fetchall()
         return _as_rows(rows)
@@ -769,12 +1941,34 @@ class Storage:
         exc_info: tuple[Any, BaseException, Any] | tuple[None, None, None] = (None, None, None)
         try:
             row = await (await conn.execute("SELECT 1 AS ok")).fetchone()
-            return bool(row and _as_row(row)["ok"] == 1)
+            # Fail closed — True == 1 soft-accepts a bool ok as healthy.
+            raw_ok = _as_row(row).get("ok") if row else None
+            return isinstance(raw_ok, int) and not isinstance(raw_ok, bool) and raw_ok == 1
         except BaseException as exc:
             exc_info = (type(exc), exc, exc.__traceback__)
             raise
         finally:
             await cm.__aexit__(*exc_info)
+
+    async def count_pending_disclosure_briefs(self) -> int:
+        """Count ``disclosure_briefs`` rows still ``pending`` (ops queue hint)."""
+        async with self._pool.connection() as conn:
+            row = await (
+                await conn.execute(
+                    """
+                    SELECT COUNT(*)::int AS n
+                    FROM disclosure_briefs
+                    WHERE status = 'pending'
+                    """
+                )
+            ).fetchone()
+        if row is None:
+            return 0
+        # Fail closed — bool soft-accept via int(True)==1 mid health hint.
+        counted = _pg_count(_as_row(row).get("n"))
+        if counted is None:
+            raise ValueError("count_pending_disclosure_briefs n failed validation")
+        return counted
 
     def pool_health_snapshot(self) -> dict[str, Any]:
         """Return real pool metrics observed by health checks.
@@ -794,16 +1988,48 @@ class Storage:
             return snapshot
         for key in ("pool_min", "pool_max", "pool_size", "pool_available", "requests_waiting"):
             value = stats.get(key)
-            if isinstance(value, int):
-                snapshot[key] = value
+            # Fail closed — bool soft-accepts via isinstance(True, int).
+            if isinstance(value, bool) or not isinstance(value, int):
+                continue
+            snapshot[key] = value
         return snapshot
 
 
-def _row_to_snapshot(row: dict[str, Any]) -> PriceSnapshot:
+def _row_to_snapshot(row: dict[str, Any]) -> PriceSnapshot | None:
+    # Fail closed — non-string / blank symbol used to coerce via pydantic or
+    # abort latest/previous snapshot reads mid poller.
+    raw_sym = row.get("symbol")
+    if not isinstance(raw_sym, str) or not raw_sym.strip():
+        return None
+    raw_price = row.get("price")
+    # Fail closed — bool soft-accepts via float(True)==1.0.
+    if isinstance(raw_price, bool):
+        return None
+    try:
+        price = float(raw_price)  # type: ignore[arg-type]
+    except (TypeError, ValueError):
+        return None
+    if not math.isfinite(price):
+        return None
+    ts = row.get("ts")
+    if not isinstance(ts, datetime):
+        # Fail closed — never str()-coerce non-string ts (objects used to
+        # soft-accept via a hostile __str__ that looked like ISO).
+        if not isinstance(ts, str):
+            return None
+        try:
+            ts = datetime.fromisoformat(ts)
+        except (TypeError, ValueError):
+            return None
+    # Fail closed — bool ids soft-accept via int(True)==1; lists/None throw
+    # mid latest/previous snapshot reads (parity ``_row_to_rule``).
+    raw_id = row.get("id")
+    if isinstance(raw_id, bool) or not isinstance(raw_id, int):
+        return None
     return PriceSnapshot(
-        id=int(row["id"]),
-        symbol=row["symbol"],
-        price=float(row["price"]),
+        id=raw_id,
+        symbol=raw_sym.strip().upper(),
+        price=price,
         previous_close=row.get("previous_close"),
         change=row.get("change"),
         change_pct=row.get("change_pct"),
@@ -814,22 +2040,72 @@ def _row_to_snapshot(row: dict[str, Any]) -> PriceSnapshot:
         low=row.get("low"),
         open=row.get("open"),
         market_cap=row.get("market_cap"),
-        ts=row["ts"] if isinstance(row["ts"], datetime) else datetime.fromisoformat(str(row["ts"])),
+        ts=ts,
     )
 
 
-def _row_to_rule(row: dict[str, Any]) -> AlertRule:
+def _row_to_rule(row: dict[str, Any]) -> AlertRule | None:
     created = row.get("created_at")
     if created is not None and not isinstance(created, datetime):
-        created = datetime.fromisoformat(str(created))
+        # Fail closed — never str()-coerce non-string created_at.
+        if not isinstance(created, str):
+            created = None
+        else:
+            try:
+                created = datetime.fromisoformat(created)
+            except (TypeError, ValueError):
+                created = None
+    # Legacy / poisoned rows may still hold C0 controls or oversize categories —
+    # sanitize on read so matching + Telegram egress share one egress bar.
+    # Fail closed — never str()-coerce non-string PG values into category
+    # (objects used to become "<...>" and bypass the isinstance guard).
+    raw_cat = row.get("category")
+    cat = sanitize_disclosure_category(
+        raw_cat if isinstance(raw_cat, str) else None
+    )
+    # Fail closed — invalid / non-string type or symbol used to raise mid
+    # list_alerts / active_rules_for_symbols and abort the tick.
+    raw_type = row.get("type")
+    if not isinstance(raw_type, str):
+        return None
+    try:
+        alert_type = AlertType(raw_type)
+    except ValueError:
+        return None
+    raw_sym = row.get("symbol")
+    if not isinstance(raw_sym, str) or not raw_sym.strip():
+        return None
+    # Fail closed — bool ids soft-accept via int(True)==1; lists/None throw
+    # mid list_alerts / active_rules_for_symbols and abort the tick.
+    raw_id = row.get("id")
+    raw_uid = row.get("user_id")
+    raw_tg = row.get("telegram_id")
+    if (
+        isinstance(raw_id, bool)
+        or not isinstance(raw_id, int)
+        or isinstance(raw_uid, bool)
+        or not isinstance(raw_uid, int)
+        or isinstance(raw_tg, bool)
+        or not isinstance(raw_tg, int)
+    ):
+        return None
+    # Fail closed — bool() soft-accept of "false"/1 used to mislabel armed/active
+    # (parity dash ``=== true``).
+    raw_active = row.get("active")
+    if not isinstance(raw_active, bool):
+        return None
+    raw_armed = row.get("armed", True)
+    if not isinstance(raw_armed, bool):
+        return None
     return AlertRule(
-        id=int(row["id"]),
-        user_id=int(row["user_id"]),
-        telegram_id=int(row["telegram_id"]),
-        symbol=row["symbol"],
-        type=AlertType(row["type"]),
+        id=raw_id,
+        user_id=raw_uid,
+        telegram_id=raw_tg,
+        symbol=raw_sym.strip().upper(),
+        type=alert_type,
         threshold=row.get("threshold"),
-        active=bool(row["active"]),
-        armed=bool(row.get("armed", True)),
+        category=cat,
+        active=raw_active,
+        armed=raw_armed,
         created_at=created,
     )

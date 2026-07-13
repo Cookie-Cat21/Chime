@@ -186,6 +186,7 @@ async def test_market_hours_unsent_no_advisory_rehold() -> None:
 
 
 @pytest.mark.asyncio
+@pytest.mark.integration
 @pytest.mark.skipif(not DATABASE_URL, reason="DATABASE_URL not set")
 async def test_claim_unsent_batch_leases_and_excludes() -> None:
     assert DATABASE_URL
@@ -195,9 +196,7 @@ async def test_claim_unsent_batch_leases_and_excludes() -> None:
     try:
         user_id = await store.ensure_user(telegram_id=9_005_001)
         await store.upsert_stock("C05A.N0000", "C05A")
-        rule = await store.create_alert_rule(
-            user_id, "C05A.N0000", AlertType.PRICE_ABOVE, 10.0
-        )
+        rule = await store.create_alert_rule(user_id, "C05A.N0000", AlertType.PRICE_ABOVE, 10.0)
         snap = await store.insert_snapshot(
             PriceSnapshot(
                 symbol="C05A.N0000",
@@ -230,8 +229,22 @@ async def test_claim_unsent_batch_leases_and_excludes() -> None:
         # Expire the claim lease (failed/deferred send clears it via mark_alert_attempt).
         await store.mark_alert_attempt(log_id)
 
-        first = await store.claim_unsent_batch(limit=10, lease_seconds=120)
-        assert any(int(r["id"]) == log_id for r in first)
+        # Drain past older unsent pollution from other integration tests (shared DB).
+        # Clear leases on non-matching rows so we do not strand them for 120s.
+        found = False
+        for _ in range(50):
+            batch = await store.claim_unsent_batch(limit=10, lease_seconds=120)
+            if not batch:
+                break
+            for row in batch:
+                rid = int(row["id"])
+                if rid == log_id:
+                    found = True
+                else:
+                    await store.mark_alert_attempt(rid)
+            if found:
+                break
+        assert found, f"expected claim_unsent to pick log_id={log_id}"
 
         # Active lease from claim_unsent_batch: not in unsent_alerts or a second claim.
         assert all(int(r["id"]) != log_id for r in await store.unsent_alerts())
@@ -245,6 +258,7 @@ async def test_claim_unsent_batch_leases_and_excludes() -> None:
 
 
 @pytest.mark.asyncio
+@pytest.mark.integration
 @pytest.mark.skipif(not DATABASE_URL, reason="DATABASE_URL not set")
 async def test_claim_alert_lease_blocks_claim_unsent_until_ok_or_expiry() -> None:
     """claim_alert lease: claim_unsent_batch empty until delivery_attempted_ok / expiry."""
@@ -255,9 +269,7 @@ async def test_claim_alert_lease_blocks_claim_unsent_until_ok_or_expiry() -> Non
     try:
         user_id = await store.ensure_user(telegram_id=9_005_011)
         await store.upsert_stock("C05C.N0000", "C05C")
-        rule = await store.create_alert_rule(
-            user_id, "C05C.N0000", AlertType.PRICE_ABOVE, 10.0
-        )
+        rule = await store.create_alert_rule(user_id, "C05C.N0000", AlertType.PRICE_ABOVE, 10.0)
         snap = await store.insert_snapshot(
             PriceSnapshot(
                 symbol="C05C.N0000",
@@ -322,6 +334,7 @@ async def test_claim_alert_lease_blocks_claim_unsent_until_ok_or_expiry() -> Non
 
 
 @pytest.mark.asyncio
+@pytest.mark.integration
 @pytest.mark.skipif(not DATABASE_URL, reason="DATABASE_URL not set")
 async def test_claim_unsent_batch_skip_locked_concurrent() -> None:
     """Two concurrent claimers get disjoint rows (SKIP LOCKED)."""
@@ -334,9 +347,7 @@ async def test_claim_unsent_batch_skip_locked_concurrent() -> None:
     try:
         user_id = await store_a.ensure_user(telegram_id=9_005_002)
         await store_a.upsert_stock("C05B.N0000", "C05B")
-        rule = await store_a.create_alert_rule(
-            user_id, "C05B.N0000", AlertType.PRICE_BELOW, 50.0
-        )
+        rule = await store_a.create_alert_rule(user_id, "C05B.N0000", AlertType.PRICE_BELOW, 50.0)
         snap = await store_a.insert_snapshot(
             PriceSnapshot(
                 symbol="C05B.N0000",

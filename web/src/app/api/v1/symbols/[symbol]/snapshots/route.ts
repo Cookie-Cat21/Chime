@@ -1,6 +1,8 @@
 import type { NextRequest } from "next/server";
 
-import { normalizeSymbol } from "@/lib/api/symbol";
+import { toFiniteNumber } from "@/lib/api/market-browse";
+import { toSafePositiveInt } from "@/lib/api/safe-int";
+import { normalizeSymbolParam } from "@/lib/api/symbol";
 import { toIso } from "@/lib/api/time";
 import { jsonError, jsonOk } from "@/lib/auth/errors";
 import { requireSession } from "@/lib/auth/guard";
@@ -18,7 +20,8 @@ export async function GET(request: NextRequest, context: RouteContext) {
   if (!gated.ok) return gated.response;
 
   const { symbol: raw } = await context.params;
-  const symbol = normalizeSymbol(decodeURIComponent(raw));
+  // safeDecode — malformed % sequences must 400, not URIError 500.
+  const symbol = normalizeSymbolParam(raw);
   if (!symbol) {
     return jsonError(400, "invalid_symbol", "Invalid symbol.");
   }
@@ -26,8 +29,9 @@ export async function GET(request: NextRequest, context: RouteContext) {
   let limit = 60;
   const limitRaw = request.nextUrl.searchParams.get("limit");
   if (limitRaw != null) {
-    const n = Number(limitRaw);
-    if (!Number.isSafeInteger(n) || n < 1) {
+    // Digits-only SafeInteger — Number("1e2") / precision-loss must not pass.
+    const n = toSafePositiveInt(limitRaw);
+    if (n == null) {
       return jsonError(400, "validation_error", "limit must be a positive integer.");
     }
     limit = Math.min(n, 200);
@@ -57,12 +61,19 @@ export async function GET(request: NextRequest, context: RouteContext) {
       [symbol, limit],
     );
 
+    // Drop non-finite prices entirely — sparkline needs ≥2 real ticks, not null stubs.
     const points = result.rows
-      .map((row) => ({
-        ts: toIso(row.ts),
-        price: Number(row.price),
-        change_pct: row.change_pct == null ? null : Number(row.change_pct),
-      }))
+      .flatMap((row) => {
+        const price = toFiniteNumber(row.price);
+        if (price == null) return [];
+        return [
+          {
+            ts: toIso(row.ts),
+            price,
+            change_pct: toFiniteNumber(row.change_pct),
+          },
+        ];
+      })
       .reverse();
 
     return jsonOk({ points });

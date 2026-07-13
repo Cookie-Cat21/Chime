@@ -14,6 +14,13 @@ from chime.logging_setup import configure_logging, get_logger
 log = get_logger(__name__)
 
 
+def _nonblank_cli_value(value: str) -> str:
+    cleaned = value.strip()
+    if not cleaned:
+        raise argparse.ArgumentTypeError("must not be blank")
+    return cleaned
+
+
 def apply_migrations(database_url: str, directory: Path | None = None) -> list[str]:
     mig_dir = directory or migrations_dir()
     files = sorted(p for p in mig_dir.glob("*.sql") if p.is_file())
@@ -52,11 +59,14 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument(
         "--database-url",
         default=None,
+        type=_nonblank_cli_value,
         help="Postgres URL (default: DATABASE_URL env)",
     )
     args = parser.parse_args(argv)
     configure_logging()
-    url = args.database_url or Settings.from_env(require_token=False).database_url
+    url = args.database_url if args.database_url is not None else Settings.from_env(
+        require_token=False
+    ).database_url
     applied = apply_migrations(url)
     if applied:
         print(f"Applied: {', '.join(applied)}")

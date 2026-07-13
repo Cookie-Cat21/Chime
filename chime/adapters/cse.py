@@ -7,13 +7,19 @@ with backoff; a per-endpoint circuit breaker short-circuits sustained outages.
 
 from __future__ import annotations
 
+import asyncio
+import math
+import re
+import time
+from collections.abc import Iterable
 from datetime import UTC, datetime
 from typing import Any, cast
+from urllib.parse import unquote, urlparse
 from zoneinfo import ZoneInfo
 
 import httpx
 import structlog
-from pydantic import BaseModel, ConfigDict, Field, ValidationError
+from pydantic import BaseModel, ConfigDict, Field, ValidationError, field_validator
 from tenacity import (
     retry,
     retry_if_exception,
@@ -22,7 +28,7 @@ from tenacity import (
 )
 
 from chime.circuit import CircuitBreaker, CircuitOpenError
-from chime.domain import Disclosure, PriceSnapshot
+from chime.domain import Disclosure, PriceSnapshot, SectorSnapshot
 
 log = structlog.get_logger(__name__)
 
@@ -39,13 +45,166 @@ DEFAULT_HEADERS = {
 }
 
 ANNOUNCEMENTS_PAGE = "https://www.cse.lk/announcements"
+ANNOUNCEMENTS_HOST = "www.cse.lk"
+CDN_HOST = "cdn.cse.lk"
+CDN_BASE = f"https://{CDN_HOST}"
+# Telegram egress budget: unbounded path/fragment must not blow past 4096.
+FILING_URL_MAX = 512
+_URL_CTRL_RE = re.compile(r"[\x00-\x1f\x7f-\x9f]")
+_BAD_PERCENT_ESCAPE_RE = re.compile(r"%(?![0-9A-Fa-f]{2})")
 TRADE_SUMMARY_ENDPOINT = "tradeSummary"
 TRADE_SUMMARY_PATH = "/tradeSummary"
+ALL_SECTORS_ENDPOINT = "allSectors"
+ALL_SECTORS_PATH = "/allSectors"
+LEGACY_ANNOUNCEMENTS_ENDPOINT = "announcements"
+LEGACY_ANNOUNCEMENTS_PATH = "/announcements"
+
+
+def _reject_bool_numeric_value(value: Any) -> Any:
+    """Keep hostile JSON booleans from becoming CSE numeric values."""
+    if isinstance(value, bool):
+        raise ValueError("boolean is not a valid CSE numeric value")
+    return value
 
 
 def _announcement_url(external_id: str) -> str:
     """Public CSE announcement page anchor used in Telegram disclosure alerts."""
     return f"{ANNOUNCEMENTS_PAGE}#{external_id}"
+
+
+def _safe_url_path_segments(path: str) -> list[str] | None:
+    """Return non-empty path segments, rejecting encoded traversal separators."""
+    segments = [s for s in path.split("/") if s != ""]
+    for segment in segments:
+        current = segment
+        for _ in range(5):
+            if _BAD_PERCENT_ESCAPE_RE.search(current):
+                return None
+            if (
+                current in {".", ".."}
+                or "/" in current
+                or "\\" in current
+                or _URL_CTRL_RE.search(current)
+            ):
+                return None
+            try:
+                decoded = unquote(current, errors="strict")
+            except UnicodeDecodeError:
+                return None
+            if decoded == current:
+                break
+            current = decoded
+        else:
+            return None
+    return segments
+
+
+def allowed_cdn_pdf_url(url: str | None) -> str | None:
+    """Normalize to ``https://cdn.cse.lk/...`` or ``None`` (SSRF guard).
+
+    Only the CSE CDN host is accepted. Credentials, non-http(s) schemes,
+    other hosts, path traversal segments, C0/C1 controls, and over-long
+    URLs (``FILING_URL_MAX``) are rejected.
+    """
+    if url is None:
+        return None
+    # Fail closed — non-strings used to throw on .strip mid Telegram / enrich.
+    if not isinstance(url, str):
+        return None
+    raw = url.strip()
+    if not raw:
+        return None
+    if _URL_CTRL_RE.search(raw):
+        return None
+    parsed = urlparse(raw)
+    if parsed.scheme not in ("http", "https"):
+        return None
+    if parsed.hostname != CDN_HOST:
+        return None
+    if parsed.username is not None or parsed.password is not None:
+        return None
+    path = parsed.path or "/"
+    segments = _safe_url_path_segments(path)
+    if segments is None:
+        return None
+    normalized_path = "/" + "/".join(segments) if segments else "/"
+    out = f"{CDN_BASE}{normalized_path}"
+    if len(out) > FILING_URL_MAX:
+        return None
+    return out
+
+
+def allowed_filing_url(url: str | None) -> str | None:
+    """Telegram/dash egress: CDN PDF or ``www.cse.lk`` announcement page only.
+
+    Rejects ``javascript:`` / credentials / off-allowlist hosts / C0–C1
+    controls / over-long URLs so bot replies never echo a hostile DB ``url``
+    as an auto-linked Telegram href or blow past Telegram's 4096 limit.
+    """
+    if url is None:
+        return None
+    # Fail closed — non-strings used to throw on .strip mid alert format.
+    if not isinstance(url, str):
+        return None
+    raw = url.strip()
+    if not raw:
+        return None
+    if _URL_CTRL_RE.search(raw):
+        return None
+    cdn = allowed_cdn_pdf_url(raw)
+    if cdn is not None:
+        return cdn
+    parsed = urlparse(raw)
+    if parsed.scheme != "https":
+        return None
+    if parsed.hostname != ANNOUNCEMENTS_HOST:
+        return None
+    if parsed.username is not None or parsed.password is not None:
+        return None
+    path = parsed.path or "/"
+    segments = _safe_url_path_segments(path)
+    if segments is None:
+        return None
+    normalized_path = "/" + "/".join(segments) if segments else "/"
+    out = f"https://{ANNOUNCEMENTS_HOST}{normalized_path}"
+    if parsed.query:
+        out = f"{out}?{parsed.query}"
+    if parsed.fragment:
+        out = f"{out}#{parsed.fragment}"
+    if len(out) > FILING_URL_MAX:
+        return None
+    return out
+
+
+def resolve_pdf_url(file_path: str | None) -> str | None:
+    """Map legacy ``filePath`` to a public CDN PDF URL.
+
+    Observed shape: ``uploadAnnounceFiles/....pdf`` →
+    ``https://cdn.cse.lk/uploadAnnounceFiles/....pdf``. Absolute http(s) URLs
+    are accepted only when the host is exactly ``cdn.cse.lk`` (normalized to
+    https). Empty / null / hostile paths yield ``None``.
+    """
+    if file_path is None:
+        return None
+    # Fail closed — non-strings used to throw on .strip mid PDF enrich.
+    if not isinstance(file_path, str):
+        return None
+    path = file_path.strip()
+    if not path:
+        return None
+    lower = path.lower()
+    if lower.startswith("https://") or lower.startswith("http://"):
+        return allowed_cdn_pdf_url(path)
+    if path.startswith("//"):
+        return None
+    first = path.split("/", 1)[0]
+    if ":" in first:
+        return None
+    path = path.lstrip("/")
+    segments = _safe_url_path_segments(path)
+    if not segments:
+        return None
+    return allowed_cdn_pdf_url(f"{CDN_BASE}/{'/'.join(segments)}")
 
 
 class TradeSummaryRow(BaseModel):
@@ -66,11 +225,24 @@ class TradeSummaryRow(BaseModel):
     marketCap: float | None = None
     lastTradedTime: int | None = None
 
-
-class TradeSummaryResponse(BaseModel):
-    model_config = ConfigDict(extra="ignore")
-
-    reqTradeSummery: list[TradeSummaryRow] = Field(default_factory=list)
+    @field_validator(
+        "price",
+        "previousClose",
+        "change",
+        "percentageChange",
+        "sharevolume",
+        "tradevolume",
+        "turnover",
+        "high",
+        "low",
+        "open",
+        "marketCap",
+        "lastTradedTime",
+        mode="before",
+    )
+    @classmethod
+    def _reject_bool_numeric(cls, value: Any) -> Any:
+        return _reject_bool_numeric_value(value)
 
 
 class SymbolInfo(BaseModel):
@@ -89,6 +261,24 @@ class SymbolInfo(BaseModel):
     hiTrade: float | None = None
     lowTrade: float | None = None
     marketCap: float | None = None
+
+    @field_validator(
+        "id",
+        "lastTradedPrice",
+        "previousClose",
+        "change",
+        "changePercentage",
+        "tdyShareVolume",
+        "tdyTradeVolume",
+        "tdyTurnover",
+        "hiTrade",
+        "lowTrade",
+        "marketCap",
+        mode="before",
+    )
+    @classmethod
+    def _reject_bool_numeric(cls, value: Any) -> Any:
+        return _reject_bool_numeric_value(value)
 
 
 class CompanyInfoResponse(BaseModel):
@@ -109,6 +299,11 @@ class AnnouncementRow(BaseModel):
     remarks: str | None = None
     symbol: str | None = None
 
+    @field_validator("announcementId", "id", "createdDate", mode="before")
+    @classmethod
+    def _reject_bool_numeric(cls, value: Any) -> Any:
+        return _reject_bool_numeric_value(value)
+
 
 class CompanyAnnouncementResponse(BaseModel):
     model_config = ConfigDict(extra="ignore")
@@ -122,23 +317,141 @@ class ApprovedAnnouncementResponse(BaseModel):
     approvedAnnouncements: list[AnnouncementRow] = Field(default_factory=list)
 
 
+class SectorRow(BaseModel):
+    """Row from ``POST /allSectors`` (see docs/sample_responses/allSectors.json)."""
+
+    model_config = ConfigDict(extra="ignore")
+
+    id: int | None = None
+    sectorId: int
+    symbol: str
+    indexCode: str | None = None
+    indexCodeSp: str | None = None
+    indexName: str | None = None
+    name: str
+    indexValue: float | None = None
+    change: float | None = None
+    percentage: float | None = None
+    sectorTradeToday: float | None = None
+    sectorVolumeToday: float | None = None
+    sectorTurnoverToday: float | None = None
+    sectorPreviousClose: float | None = None
+    transactionTime: int | None = None
+
+    @field_validator(
+        "id",
+        "sectorId",
+        "indexValue",
+        "change",
+        "percentage",
+        "sectorTradeToday",
+        "sectorVolumeToday",
+        "sectorTurnoverToday",
+        "sectorPreviousClose",
+        "transactionTime",
+        mode="before",
+    )
+    @classmethod
+    def _reject_bool_numeric(cls, value: Any) -> Any:
+        return _reject_bool_numeric_value(value)
+
+
+class LegacyAnnouncementRow(BaseModel):
+    """Row from legacy ``POST /announcements`` (PDF archive via ``filePath``)."""
+
+    model_config = ConfigDict(extra="ignore")
+
+    announcementId: int | None = None
+    securityId: int | None = None
+    title: str | None = None
+    body: str | None = None
+    manualDate: int | None = None
+    addedDate: int | None = None
+    edited: int | None = None
+    deleted: int | None = None
+    filePath: str | None = None
+
+    @field_validator(
+        "announcementId",
+        "securityId",
+        "manualDate",
+        "addedDate",
+        "edited",
+        "deleted",
+        mode="before",
+    )
+    @classmethod
+    def _reject_bool_numeric(cls, value: Any) -> Any:
+        return _reject_bool_numeric_value(value)
+
+
+class LegacyAnnouncementResponse(BaseModel):
+    model_config = ConfigDict(extra="ignore")
+
+    infoAnnouncement: list[LegacyAnnouncementRow] = Field(default_factory=list)
+
+
+def legacy_pdf_urls_by_id(rows: list[LegacyAnnouncementRow]) -> dict[str, str]:
+    """Build ``announcementId`` → CDN PDF URL map (skips null / empty paths)."""
+    out: dict[str, str] = {}
+    for row in rows:
+        raw_id = row.announcementId
+        # Fail closed — bool soft-accepts via str(True)=="True" map keys.
+        if isinstance(raw_id, bool) or not isinstance(raw_id, int):
+            continue
+        pdf_url = resolve_pdf_url(row.filePath)
+        if pdf_url is None:
+            continue
+        out[str(raw_id)] = pdf_url
+    return out
+
+
 def _retryable(exc: BaseException) -> bool:
     if isinstance(exc, (httpx.TransportError, httpx.TimeoutException)):
         return True
     if isinstance(exc, httpx.HTTPStatusError):
-        return exc.response.status_code in {429, 500, 502, 503, 504}
+        raw_status = getattr(exc.response, "status_code", None)
+        # Fail closed — bool soft-accepts via ``True in {…}`` never, but
+        # ``int(True)==1`` must not classify a poisoned status as retryable.
+        status = (
+            raw_status
+            if isinstance(raw_status, int) and not isinstance(raw_status, bool)
+            else None
+        )
+        return status in {429, 500, 502, 503, 504}
     return False
+
+
+_UNIX_EPOCH = datetime(1970, 1, 1, tzinfo=UTC)
+
+
+def _try_ms_to_dt(ms: int) -> datetime | None:
+    """Convert CSE millisecond epoch to UTC, or ``None`` on overflow / invalid."""
+    try:
+        return datetime.fromtimestamp(ms / 1000.0, tz=UTC)
+    except (OverflowError, ValueError, OSError):
+        return None
 
 
 def _ms_to_dt(ms: int | None) -> datetime:
     """Convert CSE millisecond epoch to aware UTC datetime.
 
-    ``None`` is treated as the Unix epoch — never ``datetime.now()`` — so a
-    missing timestamp cannot look "fresh" and bypass disclosure backfill gates.
+    ``None`` and unconvertible / overflow values are treated as the Unix
+    epoch — never ``datetime.now()`` — so a missing or hostile timestamp
+    cannot look "fresh" and bypass disclosure backfill gates. Callers that
+    need a poll-time fallback (trade / sector ticks) should use
+    ``_try_ms_to_dt`` instead.
     """
     if ms is None:
-        return datetime(1970, 1, 1, tzinfo=UTC)
-    return datetime.fromtimestamp(ms / 1000.0, tz=UTC)
+        return _UNIX_EPOCH
+    return _try_ms_to_dt(ms) or _UNIX_EPOCH
+
+
+def _finite_or_none(value: float | None) -> float | None:
+    """Pass through finite floats; coerce ``None`` / NaN / ±Inf to ``None``."""
+    if value is None or not math.isfinite(value):
+        return None
+    return value
 
 
 _DATE_OF_ANNOUNCEMENT_FORMATS = (
@@ -154,7 +467,7 @@ def _parse_date_of_announcement(value: str | None) -> datetime | None:
     Calendar-only strings (no time) are local midnight in Colombo, not UTC midnight.
     Returns None if unparseable.
     """
-    if value is None:
+    if not isinstance(value, str):
         return None
     text = value.strip()
     if not text:
@@ -168,40 +481,104 @@ def _parse_date_of_announcement(value: str | None) -> datetime | None:
     return None
 
 
-def trade_row_to_snapshot(row: TradeSummaryRow, *, now: datetime | None = None) -> PriceSnapshot:
-    ts = _ms_to_dt(row.lastTradedTime) if row.lastTradedTime else (now or datetime.now(UTC))
+def trade_row_to_snapshot(
+    row: TradeSummaryRow, *, now: datetime | None = None
+) -> PriceSnapshot | None:
+    """Normalize a tradeSummary row. ``None`` when price is non-finite.
+
+    Overflow ``lastTradedTime`` falls back to ``now`` (board tick time) so one
+    hostile/corrupt ms value cannot abort the whole market persist loop.
+    Optional float fields that are NaN/±Inf become ``None``.
+    """
+    if not math.isfinite(row.price):
+        return None
+    # Fail closed — non-string / blank symbol used to throw on .strip mid board.
+    if not isinstance(row.symbol, str) or not row.symbol.strip():
+        return None
+    fallback = now or datetime.now(UTC)
+    ts = (
+        _try_ms_to_dt(row.lastTradedTime) or fallback
+        if row.lastTradedTime
+        else fallback
+    )
     return PriceSnapshot(
         symbol=row.symbol.strip().upper(),
         price=row.price,
-        previous_close=row.previousClose,
-        change=row.change,
-        change_pct=row.percentageChange,
-        volume=row.sharevolume,
-        trade_count=row.tradevolume,
-        turnover=row.turnover,
-        high=row.high,
-        low=row.low,
-        open=row.open,
-        market_cap=row.marketCap,
+        previous_close=_finite_or_none(row.previousClose),
+        change=_finite_or_none(row.change),
+        change_pct=_finite_or_none(row.percentageChange),
+        volume=_finite_or_none(row.sharevolume),
+        trade_count=_finite_or_none(row.tradevolume),
+        turnover=_finite_or_none(row.turnover),
+        high=_finite_or_none(row.high),
+        low=_finite_or_none(row.low),
+        open=_finite_or_none(row.open),
+        market_cap=_finite_or_none(row.marketCap),
         name=row.name,
         ts=ts,
     )
 
 
-def symbol_info_to_snapshot(info: SymbolInfo, *, now: datetime | None = None) -> PriceSnapshot:
+def sector_row_to_snapshot(
+    row: SectorRow, *, now: datetime | None = None
+) -> SectorSnapshot | None:
+    """Normalize an allSectors row; overflow transactionTime → poll time.
+
+    Returns ``None`` when symbol/name are non-string or blank so one hostile
+    row cannot abort the whole board normalize loop.
+    """
+    # Fail closed — non-string / blank symbol or name used to throw on .strip.
+    if not isinstance(row.symbol, str) or not row.symbol.strip():
+        return None
+    if not isinstance(row.name, str) or not row.name.strip():
+        return None
+    fallback = now or datetime.now(UTC)
+    ts = (
+        _try_ms_to_dt(row.transactionTime) or fallback
+        if row.transactionTime
+        else fallback
+    )
+    return SectorSnapshot(
+        sector_id=row.sectorId,
+        symbol=row.symbol.strip().upper(),
+        name=row.name.strip(),
+        index_code=row.indexCode,
+        index_code_sp=row.indexCodeSp,
+        index_name=row.indexName,
+        index_value=_finite_or_none(row.indexValue),
+        change=_finite_or_none(row.change),
+        change_pct=_finite_or_none(row.percentage),
+        trade_today=_finite_or_none(row.sectorTradeToday),
+        volume_today=_finite_or_none(row.sectorVolumeToday),
+        turnover_today=_finite_or_none(row.sectorTurnoverToday),
+        previous_close=_finite_or_none(row.sectorPreviousClose),
+        ts=ts,
+        cse_row_id=row.id,
+    )
+
+
+def symbol_info_to_snapshot(
+    info: SymbolInfo, *, now: datetime | None = None
+) -> PriceSnapshot | None:
+    """Normalize companyInfoSummery. ``None`` when last price is non-finite."""
+    if not math.isfinite(info.lastTradedPrice):
+        return None
+    # Fail closed — non-string / blank symbol used to throw on .strip mid quote.
+    if not isinstance(info.symbol, str) or not info.symbol.strip():
+        return None
     return PriceSnapshot(
         symbol=info.symbol.strip().upper(),
         price=info.lastTradedPrice,
-        previous_close=info.previousClose,
-        change=info.change,
-        change_pct=info.changePercentage,
-        volume=info.tdyShareVolume,
-        trade_count=info.tdyTradeVolume,
-        turnover=info.tdyTurnover,
-        high=info.hiTrade,
-        low=info.lowTrade,
+        previous_close=_finite_or_none(info.previousClose),
+        change=_finite_or_none(info.change),
+        change_pct=_finite_or_none(info.changePercentage),
+        volume=_finite_or_none(info.tdyShareVolume),
+        trade_count=_finite_or_none(info.tdyTradeVolume),
+        turnover=_finite_or_none(info.tdyTurnover),
+        high=_finite_or_none(info.hiTrade),
+        low=_finite_or_none(info.lowTrade),
         open=None,
-        market_cap=info.marketCap,
+        market_cap=_finite_or_none(info.marketCap),
         name=info.name,
         ts=now or datetime.now(UTC),
     )
@@ -216,21 +593,30 @@ def announcement_to_disclosure(
     external = row.announcementId if row.announcementId is not None else row.id
     if external is None:
         return None
+    # Fail closed — bool soft-accepts via str(True)=="True" mid disclosure
+    # identity / Telegram URL fragment (parity PG id guards).
+    if isinstance(external, bool) or not isinstance(external, int):
+        return None
     # Prefer createdDate (epoch ms) for published_at / alert gating.
     # Treat <=0 as missing. DOA is never used for gating — laggy calendar
     # strings would fire (or miss) disclosure rules incorrectly. Fail-closed
     # to Unix epoch so rules see published_at as stale. Still parse DOA into
     # doa_display for logging / title context.
     doa = _parse_date_of_announcement(row.dateOfAnnouncement)
+    # Fail closed — non-string symbol used to throw on .strip mid disclosure
+    # normalize (poller / bulk path must not abort on one hostile symbol).
+    if not isinstance(symbol, str) or not symbol.strip():
+        return None
+    symbol_norm = symbol.strip().upper()
     if row.createdDate is not None and row.createdDate > 0:
         published = _ms_to_dt(row.createdDate)
     else:
-        published = datetime(1970, 1, 1, tzinfo=UTC)
+        published = _UNIX_EPOCH
         if doa is not None:
             log.warning(
                 "cse_disclosure_doa_display_only",
                 external_id=str(external),
-                symbol=symbol.strip().upper(),
+                symbol=symbol_norm,
                 date_of_announcement=row.dateOfAnnouncement,
                 doa_display=doa.isoformat(),
                 published_at=published.isoformat(),
@@ -240,7 +626,7 @@ def announcement_to_disclosure(
         title = f"{title}: {row.remarks}"
     return Disclosure(
         external_id=str(external),
-        symbol=symbol.strip().upper(),
+        symbol=symbol_norm,
         company_name=row.company,
         title=title,
         category=row.announcementCategory,
@@ -249,6 +635,78 @@ def announcement_to_disclosure(
         seen_at=seen_at or datetime.now(UTC),
         doa_display=doa,
     )
+
+
+def normalize_company_name(name: str) -> str:
+    """Collapse whitespace + uppercase for company-name → symbol matching."""
+    # Fail closed — non-strings used to throw on .split mid bulk name map.
+    if not isinstance(name, str):
+        return ""
+    return " ".join(name.split()).upper()
+
+
+def build_unique_company_name_map(
+    pairs: Iterable[tuple[str, str | None]],
+) -> dict[str, str]:
+    """Build normalized-name → symbol map; drop ambiguous names (multi-symbol).
+
+    ``pairs`` are ``(symbol, name)`` rows from the stocks table. Names that
+    resolve to more than one symbol are excluded so bulk attribution cannot
+    fire the wrong ticker.
+    """
+    buckets: dict[str, set[str]] = {}
+    for symbol, name in pairs:
+        # Fail closed — non-string pairs used to throw on .strip mid bulk map.
+        if not isinstance(symbol, str) or not isinstance(name, str):
+            continue
+        sym = symbol.strip().upper()
+        if not sym or not name.strip():
+            continue
+        key = normalize_company_name(name)
+        buckets.setdefault(key, set()).add(sym)
+
+    out: dict[str, str] = {}
+    for key, symbols in buckets.items():
+        if len(symbols) == 1:
+            out[key] = next(iter(symbols))
+        else:
+            log.warning(
+                "company_name_map_ambiguous",
+                company_name=key,
+                symbols=sorted(symbols),
+            )
+    return out
+
+
+def resolve_announcement_symbol(
+    row: AnnouncementRow,
+    *,
+    name_map: dict[str, str],
+    allowed_symbols: set[str],
+) -> str | None:
+    """Attribute a bulk announcement row to a watched symbol, or None.
+
+    Prefer an explicit ``row.symbol`` when present and allowed; otherwise map
+    ``row.company`` via ``name_map``. Unmatched / ambiguous → None (caller
+    must not invent a ticker).
+    """
+    # Fail closed — non-string members used to throw on .strip mid bulk resolve.
+    allowed = {
+        s.strip().upper()
+        for s in allowed_symbols
+        if isinstance(s, str) and s.strip()
+    }
+    row_sym = row.symbol if isinstance(row.symbol, str) else None
+    if row_sym and row_sym.strip():
+        sym = row_sym.strip().upper()
+        return sym if sym in allowed else None
+    row_company = row.company if isinstance(row.company, str) else None
+    if not row_company or not row_company.strip():
+        return None
+    mapped = name_map.get(normalize_company_name(row_company))
+    if mapped is None:
+        return None
+    return mapped if mapped in allowed else None
 
 
 class CSEClient:
@@ -261,8 +719,12 @@ class CSEClient:
         timeout: float = 15.0,
         fail_max: int = 5,
         reset_timeout: float = 60.0,
+        min_interval_seconds: float = 0.0,
         client: httpx.AsyncClient | None = None,
     ) -> None:
+        # Fail closed — non-string base_url used to throw on .rstrip mid boot.
+        if not isinstance(base_url, str) or not base_url.strip():
+            base_url = "https://www.cse.lk/api"
         self.base_url = base_url.rstrip("/")
         self._owns_client = client is None
         self._client = client or httpx.AsyncClient(
@@ -272,6 +734,21 @@ class CSEClient:
         self._breakers: dict[str, CircuitBreaker] = {}
         self._fail_max = fail_max
         self._reset_timeout = reset_timeout
+        # Soft global pacing between CSE HTTP calls (CSE_MIN_INTERVAL_SECONDS).
+        # 0 = off (default). Spaces bot + poller traffic on a shared client;
+        # distinct from PDF_ENRICH_SLEEP_SECONDS (legacy enrich only).
+        # Fail closed — bool soft-accepts via float(True)==1.0 mid pace;
+        # non-finite / non-numeric → pacing off.
+        if (
+            isinstance(min_interval_seconds, bool)
+            or not isinstance(min_interval_seconds, (int, float))
+            or not math.isfinite(float(min_interval_seconds))
+        ):
+            self._min_interval = 0.0
+        else:
+            self._min_interval = max(0.0, float(min_interval_seconds))
+        self._last_request_at: float | None = None
+        self._pace_lock = asyncio.Lock()
 
     def _breaker(self, endpoint: str) -> CircuitBreaker:
         if endpoint not in self._breakers:
@@ -296,6 +773,24 @@ class CSEClient:
     async def __aexit__(self, *args: object) -> None:
         await self.aclose()
 
+    async def _pace(self) -> None:
+        """Sleep only when needed so consecutive CSE calls respect min interval.
+
+        No sleep before the first call. Concurrent callers serialize on the
+        pace lock so bot + poller sharing one client still honor the gap.
+        """
+        interval = self._min_interval
+        if interval <= 0:
+            return
+        async with self._pace_lock:
+            now = time.monotonic()
+            last = self._last_request_at
+            if last is not None:
+                wait = interval - (now - last)
+                if wait > 0:
+                    await asyncio.sleep(wait)
+            self._last_request_at = time.monotonic()
+
     @retry(
         stop=stop_after_attempt(3),
         wait=wait_exponential_jitter(initial=0.5, max=8),
@@ -311,6 +806,7 @@ class CSEClient:
         json_body: dict[str, Any] | None = None,
         log_context: dict[str, Any] | None = None,
     ) -> Any:
+        await self._pace()
         url = f"{self.base_url}{path}"
         context = log_context or {}
         try:
@@ -321,16 +817,32 @@ class CSEClient:
                 json=json_body,
             )
             # Treat HTML error pages / non-JSON as soft failures
-            content_type = response.headers.get("content-type", "")
-            if response.status_code >= 400:
+            raw_ct = response.headers.get("content-type", "")
+            # Fail closed — non-string CT mocks used to throw on ``"json" not in``.
+            content_type = raw_ct if isinstance(raw_ct, str) else ""
+            raw_status = getattr(response, "status_code", 0)
+            # Fail closed — bool soft-accepts via ``True >= 400`` is False, so a
+            # poisoned status used to soft-accept as HTTP success mid poll.
+            status: int | None = (
+                raw_status
+                if isinstance(raw_status, int) and not isinstance(raw_status, bool)
+                else None
+            )
+            if status is None or status >= 400:
                 log.warning(
                     "cse_http_error",
                     path=path,
-                    status=response.status_code,
+                    status=raw_status,
                     body=response.text[:300],
                     **context,
                 )
-                response.raise_for_status()
+                if status is not None:
+                    response.raise_for_status()
+                raise httpx.HTTPStatusError(
+                    f"invalid CSE status_code={raw_status!r}",
+                    request=response.request,
+                    response=response,
+                )
             if "json" not in content_type and response.text[:1] not in ("{", "["):
                 log.warning("cse_non_json", path=path, content_type=content_type, **context)
                 raise httpx.HTTPStatusError(
@@ -396,13 +908,71 @@ class CSEClient:
                         row=str(item)[:200],
                     )
                     continue
-                out.append(trade_row_to_snapshot(row, now=now))
+                snap = trade_row_to_snapshot(row, now=now)
+                if snap is None:
+                    log.warning(
+                        "cse_trade_row_skipped",
+                        endpoint=TRADE_SUMMARY_ENDPOINT,
+                        error="non-finite price",
+                        row=str(item)[:200],
+                    )
+                    continue
+                out.append(snap)
             return out
 
         return cast(list[PriceSnapshot], await self._guarded(TRADE_SUMMARY_ENDPOINT, _call))
 
+    async def fetch_all_sectors(self) -> list[SectorSnapshot]:
+        """Fetch CSE sector index board (``POST /allSectors``, top-level array)."""
+
+        async def _call() -> list[SectorSnapshot]:
+            raw = await self._request("POST", ALL_SECTORS_PATH, json_body={})
+            if not isinstance(raw, list):
+                log.error(
+                    "cse_schema_error",
+                    endpoint=ALL_SECTORS_ENDPOINT,
+                    error="expected array",
+                )
+                raise ValueError(f"{ALL_SECTORS_ENDPOINT}: expected JSON array")
+            if not raw:
+                log.warning(
+                    "cse_all_sectors_empty_ok",
+                    endpoint=ALL_SECTORS_ENDPOINT,
+                )
+            now = datetime.now(UTC)
+            out: list[SectorSnapshot] = []
+            for item in raw:
+                try:
+                    row = SectorRow.model_validate(item)
+                except ValidationError as exc:
+                    log.warning(
+                        "cse_sector_row_skipped",
+                        endpoint=ALL_SECTORS_ENDPOINT,
+                        error=str(exc),
+                        row=str(item)[:200],
+                    )
+                    continue
+                snap = sector_row_to_snapshot(row, now=now)
+                if snap is None:
+                    log.warning(
+                        "cse_sector_row_skipped",
+                        endpoint=ALL_SECTORS_ENDPOINT,
+                        error="blank symbol or name",
+                        row=str(item)[:200],
+                    )
+                    continue
+                out.append(snap)
+            return out
+
+        return cast(list[SectorSnapshot], await self._guarded(ALL_SECTORS_ENDPOINT, _call))
+
     async def fetch_company_info(self, symbol: str) -> PriceSnapshot | None:
+        # Fail closed — non-string symbol used to throw on .strip mid quote fetch.
+        if not isinstance(symbol, str):
+            return None
         symbol = symbol.strip().upper()
+        if not symbol:
+            return None
 
         async def _call() -> PriceSnapshot | None:
             raw = await self._request(
@@ -434,7 +1004,12 @@ class CSEClient:
         from_date: str | None = None,
         to_date: str | None = None,
     ) -> list[Disclosure]:
+        # Fail closed — non-string symbol used to throw on .strip mid disclosure fetch.
+        if not isinstance(symbol, str):
+            return []
         symbol = symbol.strip().upper()
+        if not symbol:
+            return []
         form: dict[str, Any] = {"symbol": symbol}
         if from_date:
             form["fromDate"] = from_date
@@ -482,6 +1057,39 @@ class CSEClient:
         # CircuitOpenError propagates (do not swallow as [] — empty means HTTP OK)
         return cast(list[AnnouncementRow], await self._guarded("approvedAnnouncement", _call))
 
-    async def symbol_exists(self, symbol: str) -> bool:
-        snap = await self.fetch_company_info(symbol)
-        return snap is not None
+    async def fetch_legacy_announcements(self, symbol: str) -> list[LegacyAnnouncementRow]:
+        """Fetch legacy ``POST /announcements`` archive (includes ``filePath`` PDFs).
+
+        Prefer ``fetch_announcements_for_symbol`` for structured categories; use
+        this only to resolve CDN PDF URLs for enrichment.
+        """
+        # Fail closed — non-string symbol used to throw on .strip mid legacy PDF fetch.
+        if not isinstance(symbol, str):
+            return []
+        symbol = symbol.strip().upper()
+        if not symbol:
+            return []
+
+        async def _call() -> list[LegacyAnnouncementRow]:
+            raw = await self._request(
+                "POST",
+                LEGACY_ANNOUNCEMENTS_PATH,
+                data={"symbol": symbol},
+                log_context={"symbol": symbol},
+            )
+            try:
+                parsed = LegacyAnnouncementResponse.model_validate(raw)
+            except ValidationError as exc:
+                log.error(
+                    "cse_schema_error",
+                    endpoint=LEGACY_ANNOUNCEMENTS_ENDPOINT,
+                    symbol=symbol,
+                    error=str(exc),
+                )
+                raise
+            return list(parsed.infoAnnouncement)
+
+        return cast(
+            list[LegacyAnnouncementRow],
+            await self._guarded(LEGACY_ANNOUNCEMENTS_ENDPOINT, _call),
+        )

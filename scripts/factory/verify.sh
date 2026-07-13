@@ -3,7 +3,8 @@
 set -euo pipefail
 cd "$(dirname "$0")/../.."
 echo "HEAD=$(git rev-parse HEAD)"
-ruff check chime tests
+# Include scripts/ — CI/make lint use `ruff check .`; keep factory verify in parity.
+ruff check chime tests scripts
 mypy chime
 if [[ -f web/package.json ]]; then
   if [[ -d web/node_modules ]]; then

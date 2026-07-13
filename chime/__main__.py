@@ -13,7 +13,7 @@ from telegram import Bot
 from chime.adapters.cse import CSEClient
 from chime.bot import build_application
 from chime.config import Settings
-from chime.health import HealthState, start_health_server
+from chime.health import HealthState, brief_queue_health_hint, start_health_server
 from chime.logging_setup import configure_logging, get_logger
 from chime.migrate import apply_migrations
 from chime.notify import SendResult, send_message
@@ -46,7 +46,11 @@ async def _refresh_bot_health(storage: Storage, health: HealthState) -> None:
     except Exception as exc:
         last_error = str(exc)
         log.warning("health_db_failed", error=str(exc))
-    health.update(ok=db_ok, db_ok=db_ok, last_error=last_error)
+    details: dict[str, object] = dict(ok=db_ok, db_ok=db_ok, last_error=last_error)
+    brief_queue = await brief_queue_health_hint(storage=storage)
+    if brief_queue:
+        details["brief_queue"] = brief_queue
+    health.update(**details)
 
 
 def _circuits_for_health(poller: Poller) -> dict[str, object]:
@@ -95,9 +99,7 @@ def _pool_for_health(storage: Storage) -> dict[str, object]:
         "requests_waiting",
     ):
         value = raw.get(key)
-        if value is None or (
-            isinstance(value, int | float) and not isinstance(value, bool)
-        ):
+        if value is None or (isinstance(value, int | float) and not isinstance(value, bool)):
             snapshot[key] = value
     return snapshot
 
@@ -157,6 +159,9 @@ async def _refresh_both_health(storage: Storage, health: HealthState, poller: Po
     )
     if pool:
         details["db_pool"] = pool
+    brief_queue = await brief_queue_health_hint(storage=storage, poller=poller)
+    if brief_queue:
+        details["brief_queue"] = brief_queue
     health.update(**details)
 
 
@@ -168,6 +173,7 @@ async def _run_both(settings: Settings) -> None:
         timeout=settings.http_timeout_seconds,
         fail_max=settings.circuit_fail_max,
         reset_timeout=settings.circuit_reset_seconds,
+        min_interval_seconds=settings.cse_min_interval_seconds,
     )
     bot = Bot(settings.telegram_bot_token)
 
@@ -226,6 +232,7 @@ async def _run_poller(settings: Settings) -> None:
         timeout=settings.http_timeout_seconds,
         fail_max=settings.circuit_fail_max,
         reset_timeout=settings.circuit_reset_seconds,
+        min_interval_seconds=settings.cse_min_interval_seconds,
     )
     bot = Bot(settings.telegram_bot_token)
 
@@ -251,6 +258,7 @@ async def _run_bot(settings: Settings) -> None:
         timeout=settings.http_timeout_seconds,
         fail_max=settings.circuit_fail_max,
         reset_timeout=settings.circuit_reset_seconds,
+        min_interval_seconds=settings.cse_min_interval_seconds,
     )
     health = HealthState()
     server = start_health_server(settings.health_host, settings.health_port, health)
@@ -294,6 +302,8 @@ def main(argv: list[str] | None = None) -> None:
     )
     parser.add_argument("--force", action="store_true", help="For tick: ignore market hours")
     args = parser.parse_args(argv)
+    if args.force and args.command != "tick":
+        parser.error("--force is only valid for tick")
 
     if args.command == "migrate":
         configure_logging()
@@ -316,7 +326,13 @@ def main(argv: list[str] | None = None) -> None:
         async def _tick() -> None:
             storage = Storage(settings.database_url)
             await storage.open()
-            cse = CSEClient(base_url=settings.cse_base_url)
+            cse = CSEClient(
+                base_url=settings.cse_base_url,
+                timeout=settings.http_timeout_seconds,
+                fail_max=settings.circuit_fail_max,
+                reset_timeout=settings.circuit_reset_seconds,
+                min_interval_seconds=settings.cse_min_interval_seconds,
+            )
             bot = Bot(settings.telegram_bot_token)
 
             async def send(chat_id: int, text: str) -> SendResult:

@@ -9,7 +9,21 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { apiErrorMessage, apiMutate } from "@/lib/api/client-fetch";
-import { ALERT_TYPES, type AlertType } from "@/lib/api/symbol";
+import {
+  DISCLOSURE_CATEGORY_MAX,
+  sanitizeDisclosureCategory,
+} from "@/lib/api/disclosure-safe";
+import {
+  MAX_ALERT_THRESHOLD,
+  toFiniteNumber,
+} from "@/lib/api/finite-number";
+import { toSafePositiveInt } from "@/lib/api/safe-int";
+import {
+  ALERT_TYPES,
+  type AlertType,
+  isAlertType,
+  normalizeSymbol,
+} from "@/lib/api/symbol";
 
 const TYPE_OPTIONS: { value: AlertType; label: string }[] = [
   { value: "price_above", label: "Above price" },
@@ -22,6 +36,7 @@ type FieldErrors = {
   symbol?: string;
   type?: string;
   threshold?: string;
+  category?: string;
   form?: string;
 };
 
@@ -31,10 +46,12 @@ export function AlertCreateForm() {
   const [symbol, setSymbol] = useState("");
   const [type, setType] = useState<AlertType>("price_above");
   const [threshold, setThreshold] = useState("");
+  const [category, setCategory] = useState("");
   const [errors, setErrors] = useState<FieldErrors>({});
   const [pending, setPending] = useState(false);
 
   const needsThreshold = type !== "disclosure";
+  const showCategory = type === "disclosure";
 
   function clearField(key: keyof FieldErrors) {
     setErrors((prev) => {
@@ -52,8 +69,8 @@ export function AlertCreateForm() {
     setPending(true);
     try {
       const next: FieldErrors = {};
-      const trimmed = symbol.trim().toUpperCase();
-      if (!trimmed) {
+      const normalized = normalizeSymbol(symbol);
+      if (!normalized) {
         next.symbol = "Enter a CSE symbol (e.g. JKH.N0000).";
       }
       if (!ALERT_TYPES.includes(type)) {
@@ -64,7 +81,8 @@ export function AlertCreateForm() {
         symbol: string;
         type: AlertType;
         threshold?: number;
-      } = { symbol: trimmed, type };
+        category?: string;
+      } = { symbol: normalized ?? "", type };
 
       if (needsThreshold) {
         const raw = threshold.trim();
@@ -74,8 +92,10 @@ export function AlertCreateForm() {
               ? "Enter a percent move (e.g. 5)."
               : "Enter a price threshold.";
         } else {
-          const n = Number(raw);
-          if (!Number.isFinite(n)) {
+          // Decimal-only via toFiniteNumber — Number("1e2") / Number("")→0
+          // used to soft-accept sci-notation and empty thresholds.
+          const n = toFiniteNumber(raw);
+          if (n == null) {
             next.threshold = "Threshold must be a number.";
           } else if (type === "daily_move" && n <= 0) {
             next.threshold = "Daily move percent must be greater than zero.";
@@ -84,9 +104,16 @@ export function AlertCreateForm() {
             n <= 0
           ) {
             next.threshold = "Price threshold must be greater than zero.";
+          } else if (n > MAX_ALERT_THRESHOLD) {
+            next.threshold = "Threshold is too large.";
           } else {
             body.threshold = n;
           }
+        }
+      } else {
+        const cat = sanitizeDisclosureCategory(category);
+        if (cat) {
+          body.category = cat;
         }
       }
 
@@ -102,19 +129,24 @@ export function AlertCreateForm() {
       if (!ok) {
         const msg = apiErrorMessage(data, `Could not create (${status}).`);
         // Map common API codes to fields when possible
-        const code =
+        const codeRaw =
           data &&
           typeof data === "object" &&
           "error" in data &&
           data.error &&
           typeof data.error === "object" &&
           "code" in data.error
-            ? String((data.error as { code?: string }).code ?? "")
-            : "";
+            ? (data.error as { code?: unknown }).code
+            : undefined;
+        // Fail closed — never String()-coerce non-string error codes (objects
+        // used to become "[object Object]" and mis-route field errors).
+        const code = typeof codeRaw === "string" ? codeRaw : "";
         if (code === "invalid_symbol" || code === "not_found") {
           setErrors({ symbol: msg });
         } else if (msg.toLowerCase().includes("threshold")) {
           setErrors({ threshold: msg });
+        } else if (msg.toLowerCase().includes("category")) {
+          setErrors({ category: msg });
         } else if (msg.toLowerCase().includes("type")) {
           setErrors({ type: msg });
         } else {
@@ -125,8 +157,9 @@ export function AlertCreateForm() {
       }
       setSymbol("");
       setThreshold("");
+      setCategory("");
       toast.success(
-        `Alert set for ${trimmed}. Telegram will ping when it fires.`,
+        `Alert set for ${normalized}. Telegram will ping when it fires.`,
       );
       router.refresh();
     } catch {
@@ -143,6 +176,7 @@ export function AlertCreateForm() {
     errors.symbol ??
     errors.type ??
     errors.threshold ??
+    errors.category ??
     null;
 
   return (
@@ -176,13 +210,18 @@ export function AlertCreateForm() {
           className="border-input bg-background h-10 rounded-lg border px-3 text-sm outline-none focus-visible:border-ring focus-visible:ring-2 focus-visible:ring-ring/40"
           value={type}
           onChange={(e) => {
-            const nextType = e.target.value as AlertType;
+            // Fail closed — tampered <option> values must not cast into state.
+            if (!isAlertType(e.target.value)) return;
+            const nextType = e.target.value;
             setType(nextType);
             if (nextType === "disclosure") {
               setThreshold("");
+            } else {
+              setCategory("");
             }
             clearField("type");
             clearField("threshold");
+            clearField("category");
           }}
           aria-invalid={errors.type ? true : undefined}
         >
@@ -216,11 +255,42 @@ export function AlertCreateForm() {
             required
           />
         </div>
+      ) : showCategory ? (
+        <div className="flex flex-col gap-1.5">
+          <Label htmlFor="alert_category">Category (optional)</Label>
+          <Input
+            id="alert_category"
+            name="category"
+            className="h-10"
+            placeholder="e.g. Financial Report"
+            value={category}
+            onChange={(e) => {
+              setCategory(e.target.value);
+              clearField("category");
+            }}
+            autoComplete="off"
+            maxLength={DISCLOSURE_CATEGORY_MAX}
+            aria-invalid={errors.category ? true : undefined}
+            aria-describedby={
+              errors.category
+                ? "alert_category_hint alert_form_error"
+                : "alert_category_hint"
+            }
+          />
+          <p id="alert_category_hint" className="text-xs text-muted-foreground">
+            Leave blank for any filing; substring match when set.
+          </p>
+        </div>
       ) : (
         <div className="hidden lg:block" aria-hidden />
       )}
       <div className="flex flex-col justify-end gap-1.5">
-        <Button type="submit" disabled={pending} className="h-10 w-full sm:w-auto">
+        <Button
+          type="submit"
+          disabled={pending}
+          className="h-10 w-full sm:w-auto"
+          aria-busy={pending || undefined}
+        >
           {pending ? "Creating…" : "Create alert"}
         </Button>
       </div>
@@ -241,9 +311,17 @@ export function CancelAlertButton({ ruleId }: { ruleId: number }) {
 
   async function onClick() {
     setError(null);
+    // Fail closed — NaN / float / ≤0 must not hit DELETE /alerts/{id}.
+    const id = toSafePositiveInt(ruleId);
+    if (id == null) {
+      const msg = "Invalid alert id.";
+      setError(msg);
+      toast.error(msg);
+      return;
+    }
     setPending(true);
     try {
-      const { ok, status, data } = await apiMutate(`/api/v1/alerts/${ruleId}`, {
+      const { ok, status, data } = await apiMutate(`/api/v1/alerts/${id}`, {
         method: "DELETE",
       });
       if (!ok) {
@@ -252,7 +330,7 @@ export function CancelAlertButton({ ruleId }: { ruleId: number }) {
         toast.error(msg);
         return;
       }
-      toast.success(`Cancelled alert #${ruleId}.`);
+      toast.success(`Cancelled alert #${id}.`);
       router.refresh();
     } catch {
       const msg = "Network error.";

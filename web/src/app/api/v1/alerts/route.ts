@@ -1,5 +1,13 @@
 import type { NextRequest } from "next/server";
 
+import { sanitizeDisclosureCategory } from "@/lib/api/disclosure-safe";
+import { toFiniteNumber } from "@/lib/api/market-browse";
+import {
+  cappedAlertThreshold,
+  MAX_ALERT_THRESHOLD,
+} from "@/lib/api/finite-number";
+import { readJsonBody } from "@/lib/api/read-json-body";
+import { toSafePositiveInt } from "@/lib/api/safe-int";
 import { toIso } from "@/lib/api/time";
 import { isAlertType, normalizeSymbol } from "@/lib/api/symbol";
 import { jsonError, jsonOk } from "@/lib/auth/errors";
@@ -7,6 +15,9 @@ import { requireSession, requireSessionAndCsrf } from "@/lib/auth/guard";
 import { createAlertRule, getPool, getStock } from "@/lib/db";
 
 export const runtime = "nodejs";
+
+/** Cap alert_rules list — unbounded SELECT used to OOM SSR / balloon JSON. */
+export const MAX_ALERT_RULES = 500;
 
 /**
  * GET /api/v1/alerts — session user's alert rules (active=true by default).
@@ -18,12 +29,35 @@ export async function GET(request: NextRequest) {
 
   const url = request.nextUrl;
   const activeParam = url.searchParams.get("active");
-  // Default true; ?active=false lists cancelled; omit / true → active only.
-  const activeOnly = activeParam === null || activeParam === "true";
+  // Default true; only exact "true"/"false" — junk used to soft-accept as
+  // cancelled (?active=TRUE / ?active=1 listed inactive rules).
+  // Fail closed — non-string searchParams mocks must not soft-match.
+  let activeOnly = true;
+  if (activeParam != null) {
+    if (typeof activeParam !== "string") {
+      return jsonError(
+        400,
+        "validation_error",
+        "active must be true or false.",
+      );
+    }
+    if (activeParam === "true") {
+      activeOnly = true;
+    } else if (activeParam === "false") {
+      activeOnly = false;
+    } else {
+      return jsonError(
+        400,
+        "validation_error",
+        "active must be true or false.",
+      );
+    }
+  }
 
   const symbolRaw = url.searchParams.get("symbol");
   let symbol: string | null = null;
-  if (symbolRaw != null && symbolRaw.trim()) {
+  // Fail closed — non-string searchParams mocks used to throw on .trim.
+  if (typeof symbolRaw === "string" && symbolRaw.trim()) {
     symbol = normalizeSymbol(symbolRaw);
     if (!symbol) {
       return jsonError(400, "invalid_symbol", "Invalid CSE symbol.");
@@ -47,26 +81,45 @@ export async function GET(request: NextRequest) {
       symbol: string;
       type: string;
       threshold: number | null;
+      category: string | null;
       active: boolean;
       armed: boolean;
       created_at: Date | string;
     }>(
-      `SELECT id, symbol, type, threshold, active, armed, created_at
+      `SELECT id, symbol, type, threshold, category, active, armed, created_at
        FROM alert_rules
        WHERE ${clauses.join(" AND ")}
-       ORDER BY id ASC`,
-      params,
+       ORDER BY id ASC
+       LIMIT $${params.length + 1}`,
+      [...params, MAX_ALERT_RULES],
     );
 
-    const rules = result.rows.map((row) => ({
-      id: Number(row.id),
-      symbol: row.symbol,
-      type: row.type,
-      threshold: row.threshold == null ? null : Number(row.threshold),
-      active: Boolean(row.active),
-      armed: Boolean(row.armed),
-      created_at: toIso(row.created_at),
-    }));
+    const rules = result.rows.flatMap((row) => {
+      const id = toSafePositiveInt(row.id);
+      // Drop non-safe ids — Number(oversized) precision-loss used to alias rules.
+      if (id == null) return [];
+      if (!isAlertType(row.type)) return [];
+      // Fail closed — only CSE SYMBOL_RE rows (not sanitize "?" fallback).
+      const symbol = normalizeSymbol(row.symbol);
+      if (!symbol) return [];
+      // Finite + abs cap — upper-bound-only used to egress -1e308.
+      const threshold = cappedAlertThreshold(toFiniteNumber(row.threshold));
+      return [
+        {
+          id,
+          symbol,
+          type: row.type,
+          // Finite-only + cap — NaN/±Inf / absurd magnitudes → null.
+          threshold,
+          // Strip C0/C1 + cap — parity with bot storage read path.
+          category: sanitizeDisclosureCategory(row.category),
+          // Strict === true — Boolean("false") used to mislabel armed/active.
+          active: row.active === true,
+          armed: row.armed === true,
+          created_at: toIso(row.created_at),
+        },
+      ];
+    });
 
     return jsonOk({ rules });
   } catch (err) {
@@ -82,18 +135,18 @@ export async function POST(request: NextRequest) {
   const gated = requireSessionAndCsrf(request);
   if (!gated.ok) return gated.response;
 
-  let body: unknown;
-  try {
-    body = await request.json();
-  } catch {
+  const parsed = await readJsonBody(request);
+  if (!parsed.ok) {
+    if (parsed.reason === "too_large") {
+      return jsonError(400, "validation_error", "Request body too large.");
+    }
     return jsonError(400, "validation_error", "Invalid JSON body.");
   }
-
-  if (typeof body !== "object" || body === null) {
+  if (typeof parsed.value !== "object" || parsed.value === null) {
     return jsonError(400, "validation_error", "Invalid request body.");
   }
 
-  const obj = body as Record<string, unknown>;
+  const obj = parsed.value as Record<string, unknown>;
   const symbol = normalizeSymbol(obj.symbol);
   if (!symbol) {
     return jsonError(400, "invalid_symbol", "Invalid CSE symbol.");
@@ -126,7 +179,40 @@ export async function POST(request: NextRequest) {
         "threshold must be a finite number.",
       );
     }
+    // Mirror bot + dash UI: non-positive thresholds are dead/weird rules
+    // (daily_move thr=0 never crosses; price ≤0 is not a CSE print).
+    if (obj.threshold <= 0) {
+      return jsonError(
+        400,
+        "validation_error",
+        "threshold must be a positive number.",
+      );
+    }
+    // Cap absurd magnitudes — MAX_VALUE / 1e308 used to persist dead rules.
+    if (obj.threshold > MAX_ALERT_THRESHOLD) {
+      return jsonError(
+        400,
+        "validation_error",
+        "threshold is too large.",
+      );
+    }
     threshold = obj.threshold;
+  }
+
+  // Optional disclosure category filter (bot: /alert SYMBOL disclosure [CATEGORY]).
+  // Non-disclosure types ignore category (mirror Storage.create_alert_rule).
+  let category: string | null = null;
+  if (obj.category !== undefined && obj.category !== null) {
+    if (typeof obj.category !== "string") {
+      return jsonError(
+        400,
+        "validation_error",
+        "category must be a string when provided.",
+      );
+    }
+    if (alertType === "disclosure") {
+      category = sanitizeDisclosureCategory(obj.category);
+    }
   }
 
   try {
@@ -140,6 +226,7 @@ export async function POST(request: NextRequest) {
       symbol,
       alertType,
       threshold,
+      category,
     );
     return jsonOk(rule, created ? 201 : 200);
   } catch (err) {

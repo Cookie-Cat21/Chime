@@ -18,7 +18,10 @@ from chime.poller import MAX_SEND_ATTEMPTS, Poller
 from chime.storage import Storage
 
 DATABASE_URL = os.getenv("DATABASE_URL", "").strip()
-pytestmark = pytest.mark.skipif(not DATABASE_URL, reason="DATABASE_URL not set")
+pytestmark = [
+    pytest.mark.integration,
+    pytest.mark.skipif(not DATABASE_URL, reason="DATABASE_URL not set"),
+]
 
 
 @pytest.fixture
@@ -35,9 +38,7 @@ async def storage() -> Storage:
 async def test_dead_letter_excludes_from_unsent_alerts(storage: Storage) -> None:
     user_id = await storage.ensure_user(telegram_id=9_003_001)
     await storage.upsert_stock("DLDB.N0000", "DLDB CO")
-    rule = await storage.create_alert_rule(
-        user_id, "DLDB.N0000", AlertType.PRICE_ABOVE, 100.0
-    )
+    rule = await storage.create_alert_rule(user_id, "DLDB.N0000", AlertType.PRICE_ABOVE, 100.0)
     snap = await storage.insert_snapshot(
         PriceSnapshot(
             symbol="DLDB.N0000",

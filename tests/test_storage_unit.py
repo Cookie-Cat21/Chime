@@ -10,7 +10,7 @@ from unittest.mock import AsyncMock
 import pytest
 from psycopg.errors import UniqueViolation
 
-from chime.domain import AlertEvent, AlertType, Disclosure, PriceSnapshot
+from chime.domain import AlertEvent, AlertType, Disclosure, PriceSnapshot, SectorSnapshot
 from chime.storage import Storage, _row_to_rule, _row_to_snapshot
 
 
@@ -137,12 +137,219 @@ async def test_upsert_stock_normalizes_symbol() -> None:
 
 @pytest.mark.asyncio
 async def test_insert_snapshot_returns_id() -> None:
-    # upsert_stock execute + insert RETURNING
-    conn = _Conn([None, {"id": 42}])
+    # one stocks upsert + one snapshots INSERT RETURNING (via persist_market_snapshots)
+    conn = _Conn([None, [{"id": 42}]])
     store = _store(conn)
     out = await store.insert_snapshot(_snap())
     assert out.id == 42
-    assert any("price_snapshots" in s for s in conn.sql)
+    assert out.symbol == "JKH.N0000"
+    assert len(conn.sql) == 2
+    assert "INSERT INTO stocks" in conn.sql[0]
+    assert "price_snapshots" in conn.sql[1]
+    assert "RETURNING id" in conn.sql[1]
+
+
+@pytest.mark.asyncio
+async def test_persist_market_snapshots_empty_and_batch() -> None:
+    store = _store(_Conn([]))
+    assert await store.persist_market_snapshots([]) == []
+
+    # Two round-trips total regardless of board size: stocks upsert + snapshots RETURNING.
+    conn = _Conn([None, [{"id": 1}, {"id": 2}]])
+    store = _store(conn)
+    out = await store.persist_market_snapshots(
+        [_snap(symbol="jkh.n0000"), _snap(symbol="comb.n0000", price=90.0)]
+    )
+    assert [s.id for s in out] == [1, 2]
+    assert [s.symbol for s in out] == ["JKH.N0000", "COMB.N0000"]
+    assert len(conn.sql) == 2
+    assert sum(1 for s in conn.sql if "INSERT INTO stocks" in s) == 1
+    assert sum(1 for s in conn.sql if "price_snapshots" in s) == 1
+    assert "UNNEST" in conn.sql[0]
+    assert "UNNEST" in conn.sql[1]
+    assert "RETURNING id" in conn.sql[1]
+    assert "VALUES (" not in conn.sql[0]
+    assert "VALUES (" not in conn.sql[1]
+    # Column-wise arrays (no dynamic VALUES concat).
+    assert conn.params[0][0] == ["JKH.N0000", "COMB.N0000"]
+    assert conn.params[0][1] == ["John Keells", "John Keells"]
+    assert conn.params[1][0] == ["JKH.N0000", "COMB.N0000"]
+    assert conn.params[1][1] == [100.0, 90.0]
+
+
+@pytest.mark.asyncio
+async def test_persist_market_snapshots_last_wins_dedupes_symbol() -> None:
+    """Duplicate symbols in one board → one snapshot (last-wins), one stock row."""
+    conn = _Conn([None, [{"id": 10}]])
+    store = _store(conn)
+    out = await store.persist_market_snapshots(
+        [
+            _snap(symbol="jkh.n0000", price=100.0, name="First"),
+            _snap(symbol="JKH.N0000", price=101.0, name="Second"),
+        ]
+    )
+    assert len(out) == 1
+    assert out[0].id == 10
+    assert out[0].symbol == "JKH.N0000"
+    assert out[0].price == 101.0
+    assert "UNNEST" in conn.sql[0] and "UNNEST" in conn.sql[1]
+    assert conn.params[0] == (["JKH.N0000"], ["Second"], [None])
+    assert conn.params[1][0] == ["JKH.N0000"]
+    assert conn.params[1][1] == [101.0]
+
+
+@pytest.mark.asyncio
+async def test_persist_market_snapshots_skips_blank_symbols() -> None:
+    store = _store(_Conn([]))
+    assert (
+        await store.persist_market_snapshots(
+            [_snap(symbol="  ", price=1.0), _snap(symbol="", price=2.0)]
+        )
+        == []
+    )
+
+    conn = _Conn([None, [{"id": 3}]])
+    store = _store(conn)
+    out = await store.persist_market_snapshots(
+        [_snap(symbol="  ", price=1.0), _snap(symbol="COMB.N0000", price=90.0)]
+    )
+    assert len(out) == 1 and out[0].symbol == "COMB.N0000" and out[0].id == 3
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("price", [float("nan"), float("inf"), float("-inf")])
+async def test_persist_market_snapshots_skips_nonfinite_prices(price: float) -> None:
+    """Defense in depth: NaN/±Inf must not reach price_snapshots (storage.py:145)."""
+    store = _store(_Conn([]))
+    assert await store.persist_market_snapshots([_snap(symbol="BAD.N0000", price=price)]) == []
+
+    conn = _Conn([None, [{"id": 4}]])
+    store = _store(conn)
+    out = await store.persist_market_snapshots(
+        [
+            _snap(symbol="BAD.N0000", price=price),
+            _snap(symbol="COMB.N0000", price=90.0),
+        ]
+    )
+    assert len(out) == 1 and out[0].symbol == "COMB.N0000" and out[0].id == 4
+    assert conn.params[1][1] == [90.0]
+
+
+@pytest.mark.asyncio
+async def test_insert_snapshot_rejects_blank_symbol() -> None:
+    store = _store(_Conn([]))
+    with pytest.raises(ValueError, match="invalid snapshot symbol"):
+        await store.insert_snapshot(_snap(symbol="   "))
+
+
+@pytest.mark.asyncio
+async def test_persist_market_snapshots_scales_to_board_size() -> None:
+    """~300-symbol tradeSummary board stays two SQL round-trips."""
+    n = 300
+    board = [_snap(symbol=f"S{i:04d}.N0000", price=float(i)) for i in range(n)]
+    ids = [{"id": i + 1} for i in range(n)]
+    conn = _Conn([None, ids])
+    store = _store(conn)
+    out = await store.persist_market_snapshots(board)
+    assert len(out) == n
+    assert out[0].id == 1 and out[-1].id == n
+    assert out[0].symbol == "S0000.N0000"
+    assert len(conn.sql) == 2
+    assert "UNNEST" in conn.sql[0] and "UNNEST" in conn.sql[1]
+    assert len(conn.params[0][0]) == n
+    assert len(conn.params[1][0]) == n
+    assert len(conn.params[1][1]) == n
+
+
+@pytest.mark.asyncio
+async def test_delete_old_non_watchlist_snapshots_noop_when_days_le_zero() -> None:
+    conn = _Conn([{"n": 99}])
+    store = _store(conn)
+    assert await store.delete_old_non_watchlist_snapshots(0) == 0
+    assert await store.delete_old_non_watchlist_snapshots(-3) == 0
+    assert conn.sql == []
+
+
+@pytest.mark.asyncio
+async def test_delete_old_non_watchlist_snapshots_sql_and_count() -> None:
+    conn = _Conn([{"n": 42}])
+    store = _store(conn)
+    assert await store.delete_old_non_watchlist_snapshots(7) == 42
+    assert len(conn.sql) == 1
+    sql = conn.sql[0]
+    assert "DELETE FROM price_snapshots" in sql
+    assert "watchlist_items" in sql
+    assert "NOT EXISTS" in sql
+    assert "interval '1 day'" in sql
+    assert "LIMIT %s" in sql
+    assert conn.params[0] == (7, 5_000)
+
+
+@pytest.mark.asyncio
+async def test_delete_old_non_watchlist_snapshots_custom_limit() -> None:
+    conn = _Conn([{"n": 3}])
+    store = _store(conn)
+    assert await store.delete_old_non_watchlist_snapshots(14, limit=100) == 3
+    assert conn.params[0] == (14, 100)
+
+
+@pytest.mark.asyncio
+async def test_delete_old_non_watchlist_snapshots_null_row_returns_zero() -> None:
+    conn = _Conn([None])
+    store = _store(conn)
+    assert await store.delete_old_non_watchlist_snapshots(1) == 0
+
+
+def _sector(**kwargs: Any) -> SectorSnapshot:
+    base = dict(
+        sector_id=1,
+        symbol="BFI.I0000",
+        name="Banks Finance and Insurance",
+        index_code="BFI",
+        index_code_sp=None,
+        index_name="Banks Finance and Insurance",
+        index_value=100.0,
+        change=1.0,
+        change_pct=1.0,
+        trade_today=10.0,
+        volume_today=1000.0,
+        turnover_today=1e5,
+        previous_close=99.0,
+        ts=datetime(2026, 7, 11, 6, 0, 0, tzinfo=UTC),
+        cse_row_id=7,
+    )
+    base.update(kwargs)
+    return SectorSnapshot(**base)
+
+
+@pytest.mark.asyncio
+async def test_persist_sectors_empty_blank_and_unnest() -> None:
+    store = _store(_Conn([]))
+    assert await store.persist_sectors([]) == []
+    assert await store.persist_sectors([_sector(symbol="  ")]) == []
+
+    conn = _Conn([None])
+    store = _store(conn)
+    out = await store.persist_sectors(
+        [
+            _sector(sector_id=1, symbol="bfi.i0000", name="First"),
+            _sector(sector_id=1, symbol="BFI.I0000", name="Last", index_value=101.0),
+            _sector(sector_id=2, symbol="  "),
+            _sector(sector_id=3, symbol="CON.I0000", name="Construction"),
+        ]
+    )
+    assert len(out) == 2
+    assert out[0].sector_id == 1 and out[0].name == "Last" and out[0].index_value == 101.0
+    assert out[1].sector_id == 3 and out[1].symbol == "CON.I0000"
+    assert len(conn.sql) == 1
+    assert "INSERT INTO sectors" in conn.sql[0]
+    assert "UNNEST" in conn.sql[0]
+    assert "%s::" in conn.sql[0]
+    assert "VALUES (" not in conn.sql[0]
+    assert conn.params[0][0] == [1, 3]
+    assert conn.params[0][1] == ["BFI.I0000", "CON.I0000"]
+    assert conn.params[0][2] == ["Last", "Construction"]
+    assert conn.params[0][6] == [101.0, 100.0]
 
 
 @pytest.mark.asyncio
@@ -213,17 +420,100 @@ async def test_upsert_disclosure_and_compat_wrapper() -> None:
         seen_at=datetime(2026, 7, 11, 6, 0, 0, tzinfo=UTC),
         company_name="John Keells",
     )
-    # upsert_stock + insert disclosure
-    conn = _Conn([None, {"id": 7}])
+    # upsert_stock + insert disclosure (inserted=True) + briefs enqueue
+    conn = _Conn([None, {"id": 7, "inserted": True}, None])
     store = _store(conn)
     out = await store.upsert_disclosure(disc)
     assert out.id == 7
+    assert out.just_inserted is True
+    assert any("disclosure_briefs" in s for s in conn.sql)
 
-    conn2 = _Conn([None, {"id": 8}])
+    conn2 = _Conn([None, {"id": 8, "inserted": False}])
     store2 = _store(conn2)
     again = await store2.insert_disclosure_if_new(disc)
     assert again is not None and again.id == 8
+    assert again.just_inserted is False
+    assert not any("disclosure_briefs" in s for s in conn2.sql)
 
+
+@pytest.mark.asyncio
+async def test_get_ready_filing_brief_by_disclosure_id() -> None:
+    brief = "Company declared an interim dividend of 1.50 LKR."
+    conn = _Conn([{"brief": brief}])
+    store = _store(conn)
+    assert await store.get_ready_filing_brief(disclosure_id=55) == brief
+    assert "disclosure_briefs" in conn.sql[0]
+    assert "status = 'ready'" in conn.sql[0]
+    assert conn.params[0] == (55,)
+
+
+@pytest.mark.asyncio
+async def test_get_ready_filing_brief_by_external_id() -> None:
+    brief = "Rights issue of 1:10 approved by the board."
+    conn = _Conn([{"brief": brief}])
+    store = _store(conn)
+    out = await store.get_ready_filing_brief(
+        external_id="25040",
+        symbol="jkh.n0000",
+    )
+    assert out == brief
+    assert "JOIN disclosures" in conn.sql[0]
+    assert conn.params[0] == ("25040", "JKH.N0000")
+
+
+@pytest.mark.asyncio
+async def test_get_ready_filing_brief_missing_or_blank_returns_none() -> None:
+    assert await _store(_Conn([None])).get_ready_filing_brief(disclosure_id=1) is None
+    assert await _store(_Conn([{"brief": "   "}])).get_ready_filing_brief(disclosure_id=1) is None
+    # No keys → no query
+    conn = _Conn([{"brief": "x"}])
+    assert await _store(conn).get_ready_filing_brief() is None
+    assert conn.sql == []
+
+
+@pytest.mark.asyncio
+async def test_get_ready_filing_brief_fail_soft_on_db_error() -> None:
+    conn = _Conn([RuntimeError("briefs table missing")])
+    store = _store(conn)
+    assert await store.get_ready_filing_brief(disclosure_id=9) is None
+
+
+
+
+@pytest.mark.asyncio
+async def test_get_latest_ready_brief_for_symbol() -> None:
+    brief = "AGM scheduled for August."
+    conn = _Conn(
+        [
+            {
+                "brief": brief,
+                "symbol": "JKH.N0000",
+                "title": "AGM Notice",
+                "url": "https://cdn.cse.lk/a.pdf",
+                "external_id": "99",
+                "disclosure_id": 7,
+            }
+        ]
+    )
+    store = _store(conn)
+    out = await store.get_latest_ready_brief("jkh.n0000")
+    assert out is not None
+    assert out["brief"] == brief
+    assert out["symbol"] == "JKH.N0000"
+    assert out["title"] == "AGM Notice"
+    assert "disclosure_briefs" in conn.sql[0]
+    assert "status = 'ready'" in conn.sql[0]
+    assert "ORDER BY d.published_at DESC" in conn.sql[0]
+    assert conn.params[0] == ("JKH.N0000",)
+
+
+@pytest.mark.asyncio
+async def test_get_latest_ready_brief_none_or_fail_soft() -> None:
+    assert await _store(_Conn([None])).get_latest_ready_brief("JKH.N0000") is None
+    assert await _store(_Conn([{"brief": "  "}])).get_latest_ready_brief("JKH.N0000") is None
+    assert await _store(_Conn([])).get_latest_ready_brief("") is None
+    conn = _Conn([RuntimeError("db down")])
+    assert await _store(conn).get_latest_ready_brief("JKH.N0000") is None
 
 @pytest.mark.asyncio
 async def test_ensure_user_add_remove_watch_list() -> None:
@@ -357,9 +647,10 @@ async def test_set_armed_deactivate_paths() -> None:
 
     assert await _store(_Conn([{"id": 1}])).deactivate_alert(3, 1) is True
     assert await _store(_Conn([None])).deactivate_alert(3, 99) is False
-    assert await _store(_Conn([[{"id": 1}, {"id": 2}]])).deactivate_rules_for_symbol(
-        3, "jkh.n0000"
-    ) == 2
+    assert (
+        await _store(_Conn([[{"id": 1}, {"id": 2}]])).deactivate_rules_for_symbol(3, "jkh.n0000")
+        == 2
+    )
 
 
 @pytest.mark.asyncio
@@ -501,3 +792,50 @@ def test_row_helpers_parse_iso_created() -> None:
         }
     )
     assert rule.created_at is not None
+
+
+@pytest.mark.asyncio
+async def test_create_alert_rule_disclosure_with_category() -> None:
+    inserted = {
+        "id": 12,
+        "user_id": 3,
+        "symbol": "JKH.N0000",
+        "type": "disclosure",
+        "threshold": None,
+        "category": "Financial",
+        "active": True,
+        "armed": True,
+        "created_at": "2026-07-11T06:00:00+00:00",
+    }
+    conn = _Conn([None, None, None, None, inserted, {"telegram_id": 1001}])
+    store = _store(conn)
+    rule = await store.create_alert_rule(
+        3, "JKH.N0000", AlertType.DISCLOSURE, None, category="Financial"
+    )
+    assert rule.id == 12
+    assert rule.category == "Financial"
+    # Baseline watermark for evaluate_disclosure_rules — must survive RETURNING.
+    assert rule.created_at == datetime(2026, 7, 11, 6, 0, 0, tzinfo=UTC)
+    insert_sql = [s for s in conn.sql if "INSERT INTO alert_rules" in s][0]
+    assert "category" in insert_sql
+    assert "created_at" in insert_sql
+    assert conn.params[-2][4] == "Financial" or any(
+        isinstance(p, tuple) and len(p) >= 5 and p[4] == "Financial" for p in conn.params
+    )
+
+
+def test_row_to_rule_strips_category() -> None:
+    disc_rule = _row_to_rule(
+        {
+            "id": 2,
+            "user_id": 2,
+            "telegram_id": 3,
+            "symbol": "JKH.N0000",
+            "type": "disclosure",
+            "threshold": None,
+            "category": "  Dividend  ",
+            "active": True,
+            "created_at": "2026-07-11T06:00:00+00:00",
+        }
+    )
+    assert disc_rule.category == "Dividend"

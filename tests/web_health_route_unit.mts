@@ -6,7 +6,11 @@
  */
 import { NextRequest } from "next/server";
 
-import { GET as healthGet } from "./src/app/api/v1/health/route.ts";
+import {
+  GET as healthGet,
+  HEALTH_PROXY_TIMEOUT_MS_DEFAULT,
+  healthProxyTimeoutMs,
+} from "./src/app/api/v1/health/route.ts";
 import { SESSION_COOKIE } from "./src/lib/auth/config.ts";
 import { mintSessionToken } from "./src/lib/auth/session.ts";
 
@@ -21,6 +25,14 @@ type HealthBody = {
     disclosure_poll_ok?: boolean;
     last_error?: string | null;
     watched_missing?: string[];
+    brief_queue?: {
+      pending_briefs?: number;
+      pdf_enrich?: {
+        in_flight_tasks?: number;
+        last_batch_size?: number;
+        batches_started?: number;
+      };
+    };
   } | null;
 };
 
@@ -62,7 +74,7 @@ async function readBody(res: Response): Promise<HealthBody> {
 async function testWatchedMissingDegradesRoute(): Promise<void> {
   const queries = installDbPool();
   process.env.DASH_SESSION_SECRET = SECRET;
-  process.env.HEALTH_URL = "http://poller.local/health";
+  process.env.HEALTH_URL = "http://127.0.0.1:8080/health";
 
   const originalFetch = globalThis.fetch;
   const seenUrls: string[] = [];
@@ -106,7 +118,7 @@ async function testWatchedMissingDegradesRoute(): Promise<void> {
 async function testUnreachableHealthUrlDegradesRoute(): Promise<void> {
   installDbPool();
   process.env.DASH_SESSION_SECRET = SECRET;
-  process.env.HEALTH_URL = "http://poller.local/unreachable";
+  process.env.HEALTH_URL = "http://127.0.0.1:8080/unreachable";
 
   const originalFetch = globalThis.fetch;
   const seenUrls: string[] = [];
@@ -134,9 +146,251 @@ async function testUnreachableHealthUrlDegradesRoute(): Promise<void> {
   }
 }
 
+async function testHealthProxyTimeoutAbortsAndDegrades(): Promise<void> {
+  installDbPool();
+  process.env.DASH_SESSION_SECRET = SECRET;
+  process.env.HEALTH_URL = "http://127.0.0.1:8080/slow";
+  process.env.HEALTH_PROXY_TIMEOUT_MS = "40";
+  assert(healthProxyTimeoutMs() === 40, "test timeout env should parse to 40ms");
+
+  const originalFetch = globalThis.fetch;
+  let sawAbort = false;
+  globalThis.fetch = ((
+    _input: RequestInfo | URL,
+    init?: RequestInit,
+  ): Promise<Response> => {
+    const signal = init?.signal;
+    return new Promise((_resolve, reject) => {
+      const fail = () => {
+        sawAbort = true;
+        reject(Object.assign(new Error("aborted"), { name: "AbortError" }));
+      };
+      if (signal?.aborted) {
+        fail();
+        return;
+      }
+      signal?.addEventListener("abort", fail, { once: true });
+    });
+  }) as typeof fetch;
+
+  const started = Date.now();
+  try {
+    const res = await healthGet(makeRequest());
+    const body = await readBody(res);
+    const elapsed = Date.now() - started;
+    assert(res.status === 503, `timeout proxy should return 503, got ${res.status}`);
+    assert(body.status === "degraded", `expected degraded, got ${body.status}`);
+    assert(
+      body.poller?.last_error === "health_url_unreachable",
+      `expected health_url_unreachable, got ${body.poller?.last_error}`,
+    );
+    assert(sawAbort, "fetch mock must observe AbortSignal abort");
+    assert(elapsed < 1500, `proxy timeout should be fast, took ${elapsed}ms`);
+  } finally {
+    globalThis.fetch = originalFetch;
+    delete process.env.HEALTH_PROXY_TIMEOUT_MS;
+  }
+
+  process.env.HEALTH_PROXY_TIMEOUT_MS = "0";
+  assert(
+    healthProxyTimeoutMs() === HEALTH_PROXY_TIMEOUT_MS_DEFAULT,
+    "non-positive HEALTH_PROXY_TIMEOUT_MS must fail closed to default",
+  );
+  process.env.HEALTH_PROXY_TIMEOUT_MS = "nan";
+  assert(
+    healthProxyTimeoutMs() === HEALTH_PROXY_TIMEOUT_MS_DEFAULT,
+    "invalid HEALTH_PROXY_TIMEOUT_MS must fail closed to default",
+  );
+  delete process.env.HEALTH_PROXY_TIMEOUT_MS;
+}
+
+async function testBriefQueueForwardedWithoutDegrading(): Promise<void> {
+  installDbPool();
+  process.env.DASH_SESSION_SECRET = SECRET;
+  process.env.HEALTH_URL = "http://127.0.0.1:8080/health";
+
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = (async (input: RequestInfo | URL) => {
+    const url = String(input);
+    assert(url === process.env.HEALTH_URL, `unexpected health fetch URL ${url}`);
+    return new Response(
+      JSON.stringify({
+        started_at: "2026-07-11T00:00:00.000Z",
+        last_tick_at: "2026-07-11T04:30:00.000Z",
+        last_tick_ok: true,
+        price_poll_ok: true,
+        disclosure_poll_ok: true,
+        last_error: null,
+        watched_missing: [],
+        brief_queue: {
+          pending_briefs: 4,
+          pdf_enrich: {
+            in_flight_tasks: 1,
+            last_batch_size: 3,
+            batches_started: 2,
+          },
+        },
+      }),
+      { status: 200, headers: { "content-type": "application/json" } },
+    );
+  }) as typeof fetch;
+
+  try {
+    const res = await healthGet(makeRequest());
+    const body = await readBody(res);
+    assert(res.status === 200, `brief_queue hint must not degrade, got ${res.status}`);
+    assert(body.status === "ok", `expected ok, got ${body.status}`);
+    assert(body.poller?.brief_queue?.pending_briefs === 4, "pending_briefs forwarded");
+    assert(
+      body.poller?.brief_queue?.pdf_enrich?.in_flight_tasks === 1,
+      "pdf_enrich.in_flight_tasks forwarded",
+    );
+    assert(
+      body.poller?.brief_queue?.pdf_enrich?.last_batch_size === 3,
+      "pdf_enrich.last_batch_size forwarded",
+    );
+    assert(
+      body.poller?.brief_queue?.pdf_enrich?.batches_started === 2,
+      "pdf_enrich.batches_started forwarded",
+    );
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+}
+
+async function testNestedPollerCannotOverwriteSanitizedFields(): Promise<void> {
+  installDbPool();
+  process.env.DASH_SESSION_SECRET = SECRET;
+  process.env.HEALTH_URL = "http://127.0.0.1:8080/health";
+
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = (async (input: RequestInfo | URL) => {
+    const url = String(input);
+    assert(url === process.env.HEALTH_URL, `unexpected health fetch URL ${url}`);
+    return new Response(
+      JSON.stringify({
+        started_at: "2026-07-11T00:00:00.000Z",
+        last_tick_ok: true,
+        price_poll_ok: true,
+        disclosure_poll_ok: true,
+        last_error: null,
+        watched_missing: [],
+        // Hostile nested shape used to raw-spread and clobber typed fields.
+        poller: {
+          last_tick_ok: "yes",
+          price_poll_ok: "nope",
+          watched_missing: [
+            1,
+            null,
+            "COMB\u0000.N0000",
+            "X".repeat(2000),
+            "JKH.N0000",
+          ],
+          last_error: { nested: true },
+          brief_queue: { pending_briefs: Number.NaN },
+        },
+      }),
+      { status: 200, headers: { "content-type": "application/json" } },
+    );
+  }) as typeof fetch;
+
+  try {
+    const res = await healthGet(makeRequest());
+    const body = await readBody(res);
+    // Top-level booleans must survive — nested non-booleans must not overwrite.
+    assert(body.poller?.last_tick_ok === true, "nested string must not clobber last_tick_ok");
+    assert(body.poller?.price_poll_ok === true, "nested string must not clobber price_poll_ok");
+    assert(body.poller?.disclosure_poll_ok === true, "disclosure_poll_ok preserved");
+    // Only CSE SYMBOL_RE kept — controls / oversize / non-tickers dropped.
+    const missing = body.poller?.watched_missing ?? [];
+    assert(missing.length === 1, `expected 1 SYMBOL_RE symbol, got ${missing.length}`);
+    assert(missing[0] === "JKH.N0000", `expected JKH.N0000, got ${missing[0]}`);
+    assert(body.poller?.last_error === null, "nested object last_error must not clobber null");
+    assert(body.poller?.brief_queue === undefined, "NaN brief_queue must be omitted");
+    // Cleaned missing still degrades ops status.
+    assert(res.status === 503, `cleaned watched_missing should degrade, got ${res.status}`);
+    assert(body.status === "degraded", `expected degraded, got ${body.status}`);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+}
+
+async function testAllJunkNestedWatchedMissingDoesNotClearTop(): Promise<void> {
+  installDbPool();
+  process.env.DASH_SESSION_SECRET = SECRET;
+  process.env.HEALTH_URL = "http://127.0.0.1:8080/health";
+
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = (async (input: RequestInfo | URL) => {
+    const url = String(input);
+    assert(url === process.env.HEALTH_URL, `unexpected health fetch URL ${url}`);
+    return new Response(
+      JSON.stringify({
+        started_at: "2026-07-11T00:00:00.000Z",
+        last_tick_ok: true,
+        price_poll_ok: true,
+        disclosure_poll_ok: true,
+        last_error: null,
+        watched_missing: ["COMB.N0000"],
+        poller: {
+          watched_missing: [1, null, "X".repeat(2000)],
+        },
+      }),
+      { status: 200, headers: { "content-type": "application/json" } },
+    );
+  }) as typeof fetch;
+
+  try {
+    const res = await healthGet(makeRequest());
+    const body = await readBody(res);
+    const missing = body.poller?.watched_missing ?? [];
+    assert(
+      missing.length === 1 && missing[0] === "COMB.N0000",
+      `all-junk nested must not clear top watched_missing, got ${JSON.stringify(missing)}`,
+    );
+    assert(res.status === 503, `top watched_missing should degrade, got ${res.status}`);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+}
+
+async function testNonLoopbackHealthUrlRejectedWithoutFetch(): Promise<void> {
+  installDbPool();
+  process.env.DASH_SESSION_SECRET = SECRET;
+  process.env.HEALTH_URL = "http://evil.example/metadata";
+
+  const originalFetch = globalThis.fetch;
+  let fetchCalls = 0;
+  globalThis.fetch = (async () => {
+    fetchCalls += 1;
+    fail("non-loopback HEALTH_URL must not fetch");
+  }) as typeof fetch;
+
+  try {
+    const res = await healthGet(makeRequest());
+    const body = await readBody(res);
+    assert(res.status === 503, `rejected HEALTH_URL should return 503, got ${res.status}`);
+    assert(body.status === "degraded", `expected degraded, got ${body.status}`);
+    assert(body.db_ok === true, "fake DB should be healthy");
+    assert(body.poller?.last_tick_ok === false, "rejected URL marks tick false");
+    assert(
+      body.poller?.last_error === "health_url_unreachable",
+      `expected health_url_unreachable, got ${body.poller?.last_error}`,
+    );
+    assert(fetchCalls === 0, `expected zero fetches, got ${fetchCalls}`);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+}
+
 async function main(): Promise<void> {
   await testWatchedMissingDegradesRoute();
   await testUnreachableHealthUrlDegradesRoute();
+  await testNonLoopbackHealthUrlRejectedWithoutFetch();
+  await testHealthProxyTimeoutAbortsAndDegrades();
+  await testBriefQueueForwardedWithoutDegrading();
+  await testNestedPollerCannotOverwriteSanitizedFields();
+  await testAllJunkNestedWatchedMissingDoesNotClearTop();
   console.log("WEB_HEALTH_ROUTE_UNIT_OK");
 }
 

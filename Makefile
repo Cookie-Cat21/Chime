@@ -1,7 +1,8 @@
 # Thin DX entrypoint for Chime local ops.
 PYTHON ?= python3
+WAVE_REPORT ?= docs/factory/passes/TIJORI_WAVE_REPORT.md
 
-.PHONY: help install lint typecheck test test-unit migrate up-db down-db up down up-web down-web factory-status factory-verify factory-scoreboard factory-refill factory-wave portfolio-sum
+.PHONY: help install lint typecheck test test-unit migrate tick up-db down-db up down up-web down-web factory-status factory-verify factory-scoreboard factory-refill factory-wave portfolio-sum tijori-smoke tijori-report
 
 help:
 	@echo "Chime local targets:"
@@ -15,9 +16,12 @@ help:
 	@echo "  make up-web      Postgres + dash (compose --profile web)"
 	@echo "  make down-web    Stop profile web stack"
 	@echo "  make migrate     Apply SQL migrations (waits for compose health)"
+	@echo "  make tick        Forced poll (tick --force); seeds /market browse"
 	@echo "  make factory-status      Board + scoreboard"
 	@echo "  make factory-verify      ruff/mypy/pytest proof (+ portfolio_sum smoke)"
 	@echo "  make portfolio-sum       Plan A portfolio_sum.py smoke (non-fatal)"
+	@echo "  make tijori-smoke       briefs/scenarios import + migrate --help smoke"
+	@echo "  make tijori-report      Cat TIJORI_WAVE_REPORT.md"
 	@echo "  make factory-scoreboard  Refresh SCOREBOARD.json"
 	@echo "  make factory-refill      Activate next epoch if current empty"
 	@echo "  make factory-wave        Next ≤8 OPEN ids"
@@ -40,6 +44,10 @@ test-unit:
 migrate:
 	@docker compose up -d --wait 2>/dev/null || true
 	$(PYTHON) -m chime.migrate
+
+# One forced poll: persists tradeSummary → stocks + price_snapshots for dash /market.
+tick:
+	$(PYTHON) -m chime tick --force
 
 up-db:
 	docker compose up -d --wait
@@ -66,6 +74,12 @@ factory-verify:
 # E10-O01: Plan A portfolio score smoke; '-' keeps make green on stub gaps.
 portfolio-sum:
 	-$(PYTHON) scripts/factory/portfolio_sum.py
+
+tijori-smoke:
+	bash scripts/tijori_smoke.sh
+
+tijori-report:
+	@cat $(WAVE_REPORT)
 
 factory-scoreboard:
 	$(PYTHON) scripts/factory/update_scoreboard.py --write

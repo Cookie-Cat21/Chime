@@ -1,5 +1,7 @@
 import { NextResponse } from "next/server";
 
+import { readJsonBody } from "@/lib/api/read-json-body";
+import { toSafePositiveInt } from "@/lib/api/safe-int";
 import { CSRF_COOKIE, getDashAuthConfig, SESSION_COOKIE } from "@/lib/auth/config";
 import { jsonError } from "@/lib/auth/errors";
 import {
@@ -43,19 +45,22 @@ export async function POST(request: Request) {
     );
   }
 
-  let body: DemoBody;
-  try {
-    body = (await request.json()) as DemoBody;
-  } catch {
+  const parsed = await readJsonBody(request);
+  if (!parsed.ok) {
+    if (parsed.reason === "too_large") {
+      return jsonError(400, "validation_error", "Request body too large.");
+    }
     return jsonError(400, "validation_error", "Invalid JSON body.");
   }
+  if (typeof parsed.value !== "object" || parsed.value === null) {
+    return jsonError(400, "validation_error", "Invalid JSON body.");
+  }
+  const body = parsed.value as DemoBody;
 
-  const rawId = body.telegram_id;
-  if (
-    typeof rawId !== "number" ||
-    !Number.isSafeInteger(rawId) ||
-    rawId <= 0
-  ) {
+  // Digits-only SafeInteger — Number("9…093") can alias MAX_SAFE_INTEGER and
+  // pass a bare isSafeInteger gate; reject floats / sci-notation / oversized.
+  const telegramId = toSafePositiveInt(body.telegram_id);
+  if (telegramId == null) {
     return jsonError(
       400,
       "validation_error",
@@ -63,7 +68,7 @@ export async function POST(request: Request) {
     );
   }
 
-  if (!cfg.allowlist.has(rawId)) {
+  if (!cfg.allowlist.has(telegramId)) {
     return jsonError(
       403,
       "telegram_id_not_allowlisted",
@@ -73,7 +78,7 @@ export async function POST(request: Request) {
 
   let userId: number;
   try {
-    userId = await ensureUser(rawId);
+    userId = await ensureUser(telegramId);
   } catch (err) {
     console.error("demo auth ensure_user failed", err);
     return jsonError(
@@ -88,7 +93,7 @@ export async function POST(request: Request) {
 
   const res = NextResponse.json(
     {
-      user: { id: userId, telegram_id: rawId },
+      user: { id: userId, telegram_id: telegramId },
       csrf_token: csrf,
     },
     {

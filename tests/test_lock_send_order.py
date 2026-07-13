@@ -83,7 +83,7 @@ async def test_unlock_before_send_on_new_price_claim() -> None:
     storage.advisory_unlock = AsyncMock(side_effect=unlock)
     storage.watched_symbols = AsyncMock(return_value=["JKH.N0000"])
     storage.active_rules_for_symbols = AsyncMock(return_value=[rule])
-    storage.insert_snapshot = AsyncMock(side_effect=lambda s: s)
+    storage.persist_market_snapshots = AsyncMock(side_effect=lambda snaps: list(snaps))
     storage.get_previous_state = AsyncMock(return_value=PreviousPriceState(price=95.0))
     storage.claim_and_disarm = AsyncMock(return_value=501)
     storage.mark_alert_sent = AsyncMock()
@@ -149,7 +149,7 @@ async def test_new_claim_unlocks_before_deferred_send_attempt_mark() -> None:
     storage.advisory_unlock = AsyncMock(side_effect=unlock)
     storage.watched_symbols = AsyncMock(return_value=["JKH.N0000"])
     storage.active_rules_for_symbols = AsyncMock(return_value=[rule])
-    storage.insert_snapshot = AsyncMock(side_effect=lambda s: s)
+    storage.persist_market_snapshots = AsyncMock(side_effect=lambda snaps: list(snaps))
     storage.get_previous_state = AsyncMock(return_value=PreviousPriceState(price=95.0))
     storage.claim_and_disarm = AsyncMock(side_effect=claim_and_disarm)
     storage.mark_alert_attempt = AsyncMock(side_effect=mark_attempt)
@@ -197,6 +197,7 @@ async def test_retry_unsent_no_advisory_rehold() -> None:
     storage.advisory_unlock = AsyncMock(side_effect=unlock)
     storage.watched_symbols = AsyncMock(return_value=[])
     storage.active_rules_for_symbols = AsyncMock(return_value=[])
+    storage.persist_market_snapshots = AsyncMock(side_effect=lambda snaps: list(snaps))
     storage.claim_unsent_batch = claim_unsent_deque(
         [
             {
@@ -211,6 +212,8 @@ async def test_retry_unsent_no_advisory_rehold() -> None:
     storage.mark_alert_sent = AsyncMock()
 
     cse = AsyncMock()
+    cse.fetch_trade_summary = AsyncMock(return_value=[])
+    cse.fetch_announcements_for_symbol = AsyncMock(return_value=[])
     poller = Poller(_settings(), storage, cse, send)
     await poller.run_once(force=True)
 
@@ -271,7 +274,11 @@ async def test_disclosure_fetch_all_then_claim_no_sleep_under_lock(
     storage.advisory_unlock = AsyncMock(side_effect=unlock)
     storage.watched_symbols = AsyncMock(return_value=["COMB.N0000"])
     storage.active_rules_for_symbols = AsyncMock(return_value=[disc_rule])
-    storage.insert_snapshot = AsyncMock(side_effect=lambda s: s.model_copy(update={"id": 1}))
+    storage.persist_market_snapshots = AsyncMock(
+        side_effect=lambda snaps: [
+            s.model_copy(update={"id": i}) for i, s in enumerate(snaps, start=1)
+        ]
+    )
     storage.get_previous_state = AsyncMock(return_value=PreviousPriceState(price=None))
     storage.upsert_disclosure = AsyncMock(return_value=disc)
     storage.claim_alert = AsyncMock(return_value=9001)

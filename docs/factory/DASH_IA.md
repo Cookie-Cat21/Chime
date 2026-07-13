@@ -13,35 +13,51 @@ Telegram remains the push channel. The dashboard is for CRUD + inspection — no
 |---|---|---|
 | `/` | Redirect → `/watchlist` (or `/login` if unauthenticated) | — |
 | `/login` | Local/demo sign-in (v1); Telegram Login Widget later | public |
+| `/market` | Thin CSE symbol browse (latest snapshots from Postgres) | user |
 | `/watchlist` | User watchlist + last price / change | user |
 | `/alerts` | Active alert rules CRUD | user |
 | `/alerts/history` | Fire history (`alert_log`) | user |
 | `/symbols/[symbol]` | Symbol detail: last tick, sparkline, disclosures | user |
 | `/health` | Ops: poller liveness / last poll (read-only) | ops-gated (session; see ADR 001) |
 
-No nested app shell beyond a single top nav: Watchlist · Alerts · History · (Health).
+No nested app shell beyond a single top nav: Browse · Watchlist · Alerts · History · (Health).
+
+**Browse fence:** `/market` is a slim discovery list (symbol · name · last · change_pct · link to symbol detail). Not a quote board, screener, or trading terminal. Data comes from poller-persisted `price_snapshots` only — no cse.lk from `web/`. See [TIJORI_CSE_PLAN.md](TIJORI_CSE_PLAN.md).
 
 ---
 
 ## 2. Wireframe notes (bullet layout)
 
 ### `/login`
-- Brand wordmark “Chime” (hero-level, not nav-only)
+- Brand wordmark “Chime” (hero-level, not nav-only); home link labelled `Chime home`
 - One line: manage watchlist & alerts; pushes still go to Telegram
-- Primary CTA: sign in (demo user select / token)
+- Rule explainer list uses `aria-labelledby` the explainer paragraph (no decorative “- ” prefixes)
+- Primary CTA: demo sign-in form (`aria-labelledby` sr-only “Sign in”); Telegram ID field wires help + error via `aria-describedby` / `aria-invalid`; submit `aria-busy` while pending
 - Footer NFA line
 - No marketing sections, stats, or feature grids
+
+### `/market`
+- Header: “Browse” + search (symbol/name); subtitle: snapshots for watch discovery, alerts stay on Telegram
+- Fetches `GET /api/v1/symbols?limit=100&sort=change_pct` (+ `q` when searching)
+- Top movers strip (gainers/losers): one symbol+Watch link → `/symbols/[symbol]` (unique `aria-label`, no duplicate tab stops; no inline POST/JS), plus “Add via watchlist” note → `/watchlist`
+- Sectors strip (optional): name + change_pct from `GET /api/v1/sectors`; list uses `aria-labelledby` the Sectors heading; truncated names keep `title`
+- List rows: `symbol` (→ `/symbols/[symbol]`) · name · last `price` · `change_pct` · snapshot `ts`
+- Sorted by `change_pct` desc by default (thin movers view — not a screener)
+- Empty state: no snapshots yet — run `make tick` (or leave poller/both running), then refresh; search miss is a separate empty
+- NFA under price-adjacent copy + site footer
+- Fence: no OHLC board, no multi-column sort UI, no live ticks, no cse.lk from `web/`
 
 ### `/watchlist`
 - Header: “Watchlist” + add-symbol control (input + Add)
 - List rows: `symbol` · name · last `price` · `change_pct` · link to symbol detail
 - Row action: Unwatch
-- Empty state: “No symbols — add one or use `/watch` in Telegram”
+- Empty state: add one, browse `/market` for discovery, or use `/watch` in Telegram
 - Mobile: stacked rows, full-width add form
 
 ### `/alerts`
 - Header: “Alerts” + “New alert” form
-- Form fields: symbol · type (`price_above` \| `price_below` \| `daily_move` \| `disclosure`) · threshold (hidden for disclosure)
+- Form fields: symbol · type (`price_above` \| `price_below` \| `daily_move` \| `disclosure`) · threshold (hidden for disclosure) · optional category (disclosure only)
+- Disclosure category field: help + error via `aria-describedby` / `aria-invalid` (hint stays wired when invalid); submit `aria-busy` while pending
 - List rows: `#id` · symbol · type · threshold · armed/active badges · Cancel
 - Empty state mirrors bot copy
 - NFA under any price-adjacent copy
@@ -49,13 +65,15 @@ No nested app shell beyond a single top nav: Watchlist · Alerts · History · (
 ### `/alerts/history`
 - Filter: symbol (optional), limit
 - Rows: fired_at · symbol · type · trigger/message excerpt · message_sent
+- Pagination: `nav` labelled “Fire history pages”; Previous/Next links use `rel` + `aria-label` (“…page of fire history”); unavailable side is a non-link `aria-disabled="true"` span (not tabbable)
 - No charts, no “P&L impact”
 
 ### `/symbols/[symbol]`
 - Title: symbol + name + sector
 - Last snapshot block: price, change, change_pct, volume, ts
 - Sparkline: recent `price_snapshots` (price vs ts only — not TA)
-- Disclosures list: published_at · title · category · external link
+- Disclosures list: published_at · title · category · external link; list uses `aria-labelledby` the Disclosures heading; filing links announce opens-in-new-tab
+- Ready AI brief: labelled “Filing brief” group (`role="group"` + `aria-labelledby`) under the filing row — plain text only when `brief_status === ready`
 - Shortcuts: Add to watchlist · New alert for this symbol
 
 ### `/health`
@@ -84,7 +102,7 @@ Base: `/api/v1`. JSON request/response. User routes scoped by **session** `user_
 | Method | Path | Request | Response |
 |---|---|---|---|
 | `GET` | `/api/v1/watchlist` | — | `{ "items": [{ "symbol", "name", "sector", "price", "change", "change_pct", "ts" }] }` |
-| `POST` | `/api/v1/watchlist` | `{ "symbol": string }` | `{ "symbol", "name" }` (Postgres `stocks` only — no CSE from dash) |
+| `POST` | `/api/v1/watchlist` | `{ "symbol": string }` | `{ "symbol", "name", "created" }` — `201`/`created:true` new; `200`/`created:false` already watched (Postgres `stocks` only — no CSE from dash) |
 | `DELETE` | `/api/v1/watchlist/{symbol}` | — | `{ "removed": bool, "deactivated_alerts": number }` |
 
 ### Alerts
@@ -103,9 +121,10 @@ Base: `/api/v1`. JSON request/response. User routes scoped by **session** `user_
 
 | Method | Path | Request | Response |
 |---|---|---|---|
+| `GET` | `/api/v1/symbols` | `?limit=&offset=&q=&sort=` | `{ "items": [{ "symbol", "name", "sector", "price", "change", "change_pct", "ts" }], "limit", "offset", "sort", "q" }` (snapshots only) |
 | `GET` | `/api/v1/symbols/{symbol}` | — | `{ "symbol", "name", "sector", "last": SlimLast \| null }` |
 | `GET` | `/api/v1/symbols/{symbol}/snapshots` | `?limit=60` | `{ "points": [{ "ts", "price", "change_pct" }] }` |
-| `GET` | `/api/v1/symbols/{symbol}/disclosures` | `?limit=20` | `{ "items": [{ "id", "external_id", "title", "category", "url", "published_at", "company_name" }] }` |
+| `GET` | `/api/v1/symbols/{symbol}/disclosures` | `?limit=20` | `{ "items": [{ "id", "external_id", "title", "category", "url", "published_at", "company_name", "pdf_url", "brief", "brief_status" }] }` |
 
 `SlimLast` (v1 UI): `price`, `change`, `change_pct`, `volume`, `ts`. Do not render OHLC / market_cap as a quote board even if present in DB.
 
@@ -143,6 +162,7 @@ Do not introduce email/password, OAuth providers, or multi-tenant orgs in v1. Da
 | Page | Out of scope |
 |---|---|
 | `/login` | Marketing site, waitlist, payments, multi-provider SSO |
+| `/market` | Screener, OHLC board, multi-sort UI, live ticks, portfolio actions |
 | `/watchlist` | Portfolio quantities, cost basis, P&L, sector allocation |
 | `/alerts` | Complex boolean rules, trailing stops, backtests, quiet hours UI |
 | `/alerts/history` | Analytics funnels, export-to-tax, “would have made” sims |

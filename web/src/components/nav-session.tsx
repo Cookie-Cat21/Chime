@@ -1,10 +1,18 @@
 "use client";
 
-import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 
 import { Button } from "@/components/ui/button";
-import { apiErrorMessage, apiMutate } from "@/lib/api/client-fetch";
+import {
+  apiErrorMessage,
+  apiMutate,
+  CLIENT_API_TIMEOUT_MS,
+} from "@/lib/api/client-fetch";
+import { readBoundedResponseText } from "@/lib/api/read-bounded-text";
+import { toSafePositiveInt } from "@/lib/api/safe-int";
+import { toIso } from "@/lib/api/time";
+import { MAX_CSRF_TOKEN_LENGTH } from "@/lib/auth/config";
+import { redirectToLogin } from "@/lib/auth/session-redirect";
 
 type MePayload = {
   id: number;
@@ -13,20 +21,50 @@ type MePayload = {
   csrf_token?: string;
 };
 
-function chipLabel(me: MePayload): string {
-  if (me.telegram_id != null && Number.isFinite(me.telegram_id)) {
-    return String(me.telegram_id);
+/** Cap /me JSON before parse — payload is tiny (ids + csrf). */
+const MAX_ME_BODY_CHARS = 4_096;
+
+/**
+ * Fail-closed /me parse — digits-only SafeInteger ids. Hostile JSON must not
+ * mint a chip with precision-lost telegram_id aliases. Timestamps via toIso;
+ * CSRF material length-capped (parity with cookie decode).
+ */
+function parseMePayload(body: unknown): MePayload | null {
+  if (body == null || typeof body !== "object" || Array.isArray(body)) {
+    return null;
   }
-  return `user ${me.id}`;
+  const r = body as Record<string, unknown>;
+  const id = toSafePositiveInt(r.id);
+  const telegram_id = toSafePositiveInt(r.telegram_id);
+  if (id == null || telegram_id == null) return null;
+  const created_at = toIso(r.created_at);
+  if (!created_at) return null;
+  let csrf_token: string | undefined;
+  if (typeof r.csrf_token === "string" && r.csrf_token) {
+    if (r.csrf_token.length <= MAX_CSRF_TOKEN_LENGTH) {
+      csrf_token = r.csrf_token;
+    }
+  }
+  return {
+    id,
+    telegram_id,
+    created_at,
+    csrf_token,
+  };
+}
+
+function chipLabel(me: MePayload): string {
+  return String(me.telegram_id);
 }
 
 export function NavSession({ compact = false }: { compact?: boolean }) {
-  const router = useRouter();
   const [me, setMe] = useState<MePayload | null>(null);
   const [pending, setPending] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
+    const ctrl = new AbortController();
+    const timer = setTimeout(() => ctrl.abort(), CLIENT_API_TIMEOUT_MS);
     (async () => {
       try {
         const res = await fetch("/api/v1/me", {
@@ -34,32 +72,52 @@ export function NavSession({ compact = false }: { compact?: boolean }) {
           credentials: "same-origin",
           headers: { Accept: "application/json" },
           cache: "no-store",
+          signal: ctrl.signal,
         });
+        if (res.status === 401) {
+          // Expired/invalid session while shell still mounted — leave cleanly.
+          if (!cancelled) redirectToLogin({ expired: true });
+          return;
+        }
         if (!res.ok) return;
-        const data = (await res.json()) as MePayload;
-        if (!cancelled) setMe(data);
+        // Stream-bound body — missing / understated Content-Length must not
+        // let res.text() allocate past the cap.
+        const bounded = await readBoundedResponseText(res, MAX_ME_BODY_CHARS);
+        if (!bounded.ok) return;
+        let parsed: unknown = null;
+        try {
+          parsed = bounded.text ? JSON.parse(bounded.text) : null;
+        } catch {
+          return;
+        }
+        const data = parseMePayload(parsed);
+        if (!cancelled && data) setMe(data);
       } catch {
-        /* chip stays empty */
+        /* chip stays empty (network / abort) */
       }
     })();
     return () => {
       cancelled = true;
+      ctrl.abort();
+      clearTimeout(timer);
     };
   }, []);
 
   async function onLogout() {
     setPending(true);
     try {
-      const { ok, data } = await apiMutate("/api/v1/auth/logout", {
+      const { ok, status, data } = await apiMutate("/api/v1/auth/logout", {
         method: "POST",
+        authRedirect: false,
       });
-      if (!ok) {
+      // 401 = already unauthenticated — still leave cleanly.
+      if (!ok && status !== 401) {
         console.error(apiErrorMessage(data, "Logout failed."));
         setPending(false);
         return;
       }
-      router.replace("/login");
-      router.refresh();
+      setMe(null);
+      redirectToLogin();
     } catch {
       setPending(false);
     }

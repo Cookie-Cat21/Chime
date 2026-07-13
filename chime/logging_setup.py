@@ -10,10 +10,12 @@ import structlog
 
 
 def configure_logging(level: str = "INFO") -> None:
+    # Fail closed — non-string level used to throw on .upper mid process boot.
+    level_name = level.upper() if isinstance(level, str) else "INFO"
     logging.basicConfig(
         format="%(message)s",
         stream=sys.stdout,
-        level=getattr(logging, level.upper(), logging.INFO),
+        level=getattr(logging, level_name, logging.INFO),
     )
     structlog.configure(
         processors=[
@@ -25,7 +27,7 @@ def configure_logging(level: str = "INFO") -> None:
             structlog.processors.JSONRenderer(),
         ],
         wrapper_class=structlog.make_filtering_bound_logger(
-            getattr(logging, level.upper(), logging.INFO)
+            getattr(logging, level_name, logging.INFO)
         ),
         context_class=dict,
         logger_factory=structlog.PrintLoggerFactory(),

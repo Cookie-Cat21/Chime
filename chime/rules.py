@@ -6,7 +6,9 @@ No I/O inside evaluation.
 
 from __future__ import annotations
 
+import math
 from datetime import UTC, datetime
+from typing import TypeGuard
 from zoneinfo import ZoneInfo
 
 from chime.domain import (
@@ -28,16 +30,28 @@ def _as_utc_aware(dt: datetime) -> datetime:
     return dt.astimezone(UTC)
 
 
+def _finite(value: float | None) -> TypeGuard[float]:
+    """True when value is a real finite float (not None / NaN / ±Inf)."""
+    return value is not None and math.isfinite(value)
+
+
+def _pct_from_previous_close(price: float | None, previous_close: float | None) -> float | None:
+    """Compute daily percent move from previous close when CSE omits it."""
+    if not (_finite(price) and _finite(previous_close)) or previous_close == 0:
+        return None
+    return ((price - previous_close) / previous_close) * 100.0
+
+
 def crossed_above(prev: float | None, curr: float, threshold: float) -> bool:
     """True iff price transitioned from below threshold to at/above threshold."""
-    if prev is None:
+    if prev is None or not (_finite(prev) and _finite(curr) and _finite(threshold)):
         return False
     return prev < threshold <= curr
 
 
 def crossed_below(prev: float | None, curr: float, threshold: float) -> bool:
     """True iff price transitioned from above threshold to at/below threshold."""
-    if prev is None:
+    if prev is None or not (_finite(prev) and _finite(curr) and _finite(threshold)):
         return False
     return prev > threshold >= curr
 
@@ -61,9 +75,16 @@ def _event_key_price(rule: AlertRule, snapshot: PriceSnapshot) -> str:
     return f"price:{rule.id}:{side}:{thr:g}:{minute}:{snapshot.price:g}"
 
 
-def _event_key_move(rule: AlertRule, snapshot: PriceSnapshot) -> str:
-    """One daily-move fire per Colombo calendar day (not UTC midnight)."""
-    day = snapshot.ts.astimezone(_COLOMBO).date().isoformat()
+def _event_key_move(rule: AlertRule, snapshot: PriceSnapshot) -> str | None:
+    """One daily-move fire per Colombo calendar day (not UTC midnight).
+
+    Returns None when the snapshot timestamp cannot be converted (extreme /
+    overflow offsets) so callers fail closed instead of raising.
+    """
+    try:
+        day = snapshot.ts.astimezone(_COLOMBO).date().isoformat()
+    except (OverflowError, ValueError, OSError):
+        return None
     return f"move:{rule.id}:{day}"
 
 
@@ -77,17 +98,23 @@ def evaluate_price_rules(
     previous: PreviousPriceState,
     rules: list[AlertRule],
 ) -> list[AlertEvent]:
-    """Evaluate price_above / price_below / daily_move rules for one snapshot."""
+    """Evaluate price_above / price_below / daily_move rules for one snapshot.
+
+    Non-finite prices / thresholds / pcts and unconvertible timestamps fail
+    closed (skip the rule, never raise).
+    """
     events: list[AlertEvent] = []
     prev_price = previous.price
     curr = snapshot.price
+    if not _finite(curr):
+        return events
 
     for rule in rules:
         if not rule.active or rule.symbol != snapshot.symbol:
             continue
 
         if rule.type == AlertType.PRICE_ABOVE:
-            if rule.threshold is None:
+            if rule.threshold is None or not math.isfinite(rule.threshold):
                 continue
             thr = rule.threshold
             if rule.armed and crossed_above(prev_price, curr, thr):
@@ -124,7 +151,7 @@ def evaluate_price_rules(
                 )
 
         elif rule.type == AlertType.PRICE_BELOW:
-            if rule.threshold is None:
+            if rule.threshold is None or not math.isfinite(rule.threshold):
                 continue
             thr = rule.threshold
             if rule.armed and crossed_below(prev_price, curr, thr):
@@ -161,20 +188,25 @@ def evaluate_price_rules(
                 )
 
         elif rule.type == AlertType.DAILY_MOVE:
-            if rule.threshold is None:
+            if rule.threshold is None or not math.isfinite(rule.threshold):
                 continue
             thr = abs(rule.threshold)
             pct = snapshot.change_pct
-            if pct is None and snapshot.previous_close not in (None, 0):
-                pct = ((curr - snapshot.previous_close) / snapshot.previous_close) * 100.0
-            if pct is None:
+            pct_from_close = pct is None
+            if pct_from_close:
+                pct = _pct_from_previous_close(curr, snapshot.previous_close)
+            if not _finite(pct):
                 continue
             key = _event_key_move(rule, snapshot)
+            if key is None:
+                continue
             if key in previous.move_fired_keys:
                 continue
             # Crossing semantics on |pct|: require previous |pct| below threshold
             prev_pct = previous.change_pct
-            if prev_pct is None:
+            if not _finite(prev_pct) and pct_from_close:
+                prev_pct = _pct_from_previous_close(previous.price, snapshot.previous_close)
+            if not _finite(prev_pct):
                 # Baseline only — do not fire on first observation / already-exceeded
                 continue
             if abs(prev_pct) < thr <= abs(pct):
@@ -197,6 +229,33 @@ def evaluate_price_rules(
     return events
 
 
+def _disclosure_category_matches(rule: AlertRule, disclosure: Disclosure) -> bool:
+    """If rule.category is set, require disclosure.category contains it (case-insensitive)."""
+    # Non-string category → treat as unrestricted (filter only; never throw).
+    if not isinstance(rule.category, str):
+        return True
+    needle = rule.category.strip()
+    if not needle:
+        return True
+    haystack = disclosure.category
+    # Fail closed — non-string category used to soft-accept via str()
+    # (ints/objects became "123"/"<...>" and could false-match filters).
+    if not isinstance(haystack, str):
+        return False
+    hay = haystack
+    if not hay.strip():
+        return False
+    return needle.casefold() in hay.casefold()
+
+
+def _safe_utc_aware(dt: datetime) -> datetime | None:
+    """UTC-normalize; return None on out-of-range / unconvertible timestamps."""
+    try:
+        return _as_utc_aware(dt)
+    except (OverflowError, ValueError, OSError):
+        return None
+
+
 def evaluate_disclosure_rules(
     *,
     disclosure: Disclosure,
@@ -206,9 +265,19 @@ def evaluate_disclosure_rules(
 
     Skips announcements published at or before the rule's created_at so historical
     backfill never floods Telegram. Missing rule.created_at fails closed (no fire).
+    Undated CSE rows (Unix-epoch published_at) and empty external_id never fire.
+    Optional rule.category filters by case-insensitive substring on disclosure.category.
+    Weird / unconvertible timestamps fail closed (never raise).
     """
     events: list[AlertEvent] = []
-    published = _as_utc_aware(disclosure.published_at)
+    if not isinstance(disclosure.external_id, str) or not disclosure.external_id.strip():
+        return events
+    published = _safe_utc_aware(disclosure.published_at)
+    if published is None:
+        return events
+    # Adapter stamps missing/non-positive createdDate as Unix epoch — never fire.
+    if published <= datetime(1970, 1, 1, tzinfo=UTC):
+        return events
     for rule in rules:
         if not rule.active:
             continue
@@ -219,8 +288,12 @@ def evaluate_disclosure_rules(
         # Fail-closed: without created_at we cannot gate backfill safely.
         if rule.created_at is None:
             continue
-        created = _as_utc_aware(rule.created_at)
+        created = _safe_utc_aware(rule.created_at)
+        if created is None:
+            continue
         if published <= created:
+            continue
+        if not _disclosure_category_matches(rule, disclosure):
             continue
         events.append(
             AlertEvent(
@@ -234,6 +307,7 @@ def evaluate_disclosure_rules(
                 current_price=None,
                 disclosure_url=disclosure.url,
                 disclosure_title=disclosure.title,
+                disclosure_id=disclosure.id,
                 snapshot_id=None,
                 event_key=_event_key_disclosure(rule, disclosure),
             )

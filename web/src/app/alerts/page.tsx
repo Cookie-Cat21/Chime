@@ -10,6 +10,14 @@ import { NfaFooter } from "@/components/nfa-footer";
 import { NfaInline } from "@/components/nfa-inline";
 import { Button } from "@/components/ui/button";
 import { serverApiGet } from "@/lib/api/server-fetch";
+import { sanitizeDisclosureCategory } from "@/lib/api/disclosure-safe";
+import {
+  cappedAlertThreshold,
+  toFiniteNumber,
+} from "@/lib/api/finite-number";
+import { toSafePositiveInt } from "@/lib/api/safe-int";
+import { isAlertType, normalizeSymbol } from "@/lib/api/symbol";
+import { toIso } from "@/lib/api/time";
 import { requirePageSession } from "@/lib/auth/page-session";
 import { alertTypeLabel, formatNumber, formatTs } from "@/lib/format";
 
@@ -26,6 +34,7 @@ type AlertsPayload = {
     symbol: string;
     type: string;
     threshold: number | null;
+    category: string | null;
     active: boolean;
     armed: boolean;
     created_at: string | null;
@@ -39,7 +48,8 @@ export default async function AlertsPage({
 }) {
   await requirePageSession();
   const sp = await searchParams;
-  const symbolFilter = sp.symbol?.trim().toUpperCase() || "";
+  // Drop invalid / hostile filter params — same SYMBOL_RE as the API.
+  const symbolFilter = normalizeSymbol(sp.symbol ?? "") ?? "";
 
   const qs = new URLSearchParams();
   if (symbolFilter) qs.set("symbol", symbolFilter);
@@ -47,9 +57,52 @@ export default async function AlertsPage({
     qs.size > 0 ? `/api/v1/alerts?${qs.toString()}` : "/api/v1/alerts";
 
   const res = await serverApiGet(path);
-  const payload: AlertsPayload | null = res.ok
-    ? ((await res.json()) as AlertsPayload)
-    : null;
+  let payload: AlertsPayload | null = null;
+  if (res.ok) {
+    try {
+      const body: unknown = await res.json();
+      const rulesRaw =
+        body && typeof body === "object" && !Array.isArray(body)
+          ? (body as { rules?: unknown }).rules
+          : null;
+      if (Array.isArray(rulesRaw)) {
+        const rules: AlertsPayload["rules"] = [];
+        for (const row of rulesRaw) {
+          if (row == null || typeof row !== "object" || Array.isArray(row)) {
+            continue;
+          }
+          const r = row as Record<string, unknown>;
+          const id = toSafePositiveInt(r.id);
+          if (id == null) continue;
+          if (!isAlertType(r.type)) continue;
+          // Fail closed — only CSE SYMBOL_RE rows (not sanitize-only junk).
+          const symbol = normalizeSymbol(
+            typeof r.symbol === "string" ? r.symbol : null,
+          );
+          if (!symbol) continue;
+          const threshold = cappedAlertThreshold(toFiniteNumber(r.threshold));
+          rules.push({
+            id,
+            symbol,
+            type: r.type,
+            threshold,
+            category: sanitizeDisclosureCategory(
+              typeof r.category === "string" ? r.category : null,
+            ),
+            // Strict === true — Boolean("false") used to show Armed wrongly.
+            active: r.active === true,
+            armed: r.armed === true,
+            created_at: toIso(r.created_at),
+          });
+          // Cap parser — hostile / uncapped API JSON must not balloon SSR.
+          if (rules.length >= 500) break;
+        }
+        payload = { rules };
+      }
+    } catch {
+      payload = null;
+    }
+  }
 
   return (
     <div className="flex min-h-full flex-1 flex-col bg-background">
@@ -129,24 +182,40 @@ export default async function AlertsPage({
               ) : (
                 <>
                   Use the create form above to add a price cross, daily move, or
-                  disclosure rule. Telegram gets the push when it fires. Same
-                  command path:{" "}
+                  disclosure rule.{" "}
+                  <Link
+                    href="/market"
+                    className="rounded-sm underline underline-offset-4 focus-visible:ring-2 focus-visible:ring-ring/50 focus-visible:outline-none"
+                  >
+                    Browse
+                  </Link>{" "}
+                  to pick a CSE ticker, or use{" "}
                   <code className="font-mono text-xs">
                     /alert SYMBOL above PRICE
-                  </code>
-                  .
+                  </code>{" "}
+                  in Telegram — Chime pushes when it fires.
                 </>
               )
             }
             action={
               symbolFilter ? (
-                <Button asChild variant="outline">
-                  <Link href="/alerts">Clear filter</Link>
-                </Button>
+                <div className="flex flex-wrap gap-2">
+                  <Button asChild>
+                    <a href="#alert_symbol">Create an alert</a>
+                  </Button>
+                  <Button asChild variant="outline">
+                    <Link href="/alerts">Clear filter</Link>
+                  </Button>
+                </div>
               ) : (
-                <Button asChild>
-                  <a href="#alert_symbol">Create an alert</a>
-                </Button>
+                <div className="flex flex-wrap gap-2">
+                  <Button asChild>
+                    <a href="#alert_symbol">Create an alert</a>
+                  </Button>
+                  <Button asChild variant="outline">
+                    <Link href="/market">Browse</Link>
+                  </Button>
+                </div>
               )
             }
           />
@@ -169,6 +238,7 @@ export default async function AlertsPage({
                     {rule.threshold != null
                       ? ` · ${formatNumber(rule.threshold)}`
                       : ""}
+                    {rule.category ? ` · ${rule.category}` : ""}
                   </p>
                   <p className="mt-1 text-xs text-muted-foreground">
                     {rule.armed ? "Armed" : "Disarmed"} ·{" "}

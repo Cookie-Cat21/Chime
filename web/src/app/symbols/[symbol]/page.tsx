@@ -6,9 +6,27 @@ import { EmptyState } from "@/components/empty-state";
 import { NfaFooter } from "@/components/nfa-footer";
 import { NfaInline } from "@/components/nfa-inline";
 import { Sparkline } from "@/components/sparkline";
+import { finiteSparklinePoints } from "@/lib/sparkline";
 import { Button } from "@/components/ui/button";
+import {
+  MAX_DISCLOSURE_CATEGORY_LENGTH,
+  MAX_DISCLOSURE_COMPANY_LENGTH,
+  MAX_DISCLOSURE_EXTERNAL_ID_LENGTH,
+  MAX_DISCLOSURE_TITLE_LENGTH,
+  MAX_STOCK_NAME_LENGTH,
+  MAX_STOCK_SECTOR_LENGTH,
+  normalizeBriefStatus,
+  safeAnnouncementUrl,
+  safeFilingHref,
+  safePdfUrl,
+  sanitizeBriefText,
+  sanitizeDisclosureText,
+} from "@/lib/api/disclosure-safe";
+import { toFiniteNumber } from "@/lib/api/finite-number";
+import { toSafePositiveInt } from "@/lib/api/safe-int";
 import { serverApiGet } from "@/lib/api/server-fetch";
-import { normalizeSymbol } from "@/lib/api/symbol";
+import { normalizeSymbol, normalizeSymbolParam } from "@/lib/api/symbol";
+import { toIso } from "@/lib/api/time";
 import { requirePageSession } from "@/lib/auth/page-session";
 import { formatNumber, formatPct, formatTs } from "@/lib/format";
 
@@ -16,11 +34,19 @@ export const dynamic = "force-dynamic";
 
 /** Snapshots older than this are treated as stale for empty-copy (E11-D02). */
 const STALE_MS = 24 * 60 * 60 * 1000;
+/** Cap sparkline points parse — parity with snapshots API max / sparkline bound. */
+const MAX_PAGE_SNAPSHOT_POINTS = 200;
+/** Cap disclosures parse — parity with disclosures API max 100. */
+const MAX_PAGE_DISCLOSURES = 100;
+
+/** ECMAScript Date absolute millisecond bound (parity sparkline / toIso). */
+const MAX_DATE_MS = 8.64e15;
 
 function isStaleTs(ts: string | null | undefined): boolean {
-  if (!ts) return false;
+  // Fail closed — non-strings / out-of-range must not skew the stale banner.
+  if (typeof ts !== "string" || !ts) return false;
   const t = Date.parse(ts);
-  if (Number.isNaN(t)) return false;
+  if (Number.isNaN(t) || Math.abs(t) > MAX_DATE_MS) return false;
   return Date.now() - t > STALE_MS;
 }
 
@@ -30,7 +56,8 @@ export async function generateMetadata({
   params: Promise<{ symbol: string }>;
 }) {
   const { symbol: raw } = await params;
-  const symbol = normalizeSymbol(decodeURIComponent(raw)) ?? raw;
+  // Fail closed — never echo hostile / undecodable raw into <title>.
+  const symbol = normalizeSymbolParam(raw) ?? "Symbol";
   return {
     title: `${symbol} · Chime`,
     description: `Last price and disclosures for ${symbol}.`,
@@ -51,7 +78,7 @@ type SymbolPayload = {
 };
 
 type SnapshotsPayload = {
-  points: { ts: string | null; price: number; change_pct: number | null }[];
+  points: { ts: string | null; price: number | null; change_pct: number | null }[];
 };
 
 type DisclosuresPayload = {
@@ -60,11 +87,141 @@ type DisclosuresPayload = {
     external_id: string;
     title: string;
     category: string | null;
-    url: string;
+    url: string | null;
     published_at: string | null;
     company_name: string | null;
+    pdf_url: string | null;
+    brief: string | null;
+    brief_status:
+      | "pending"
+      | "processing"
+      | "ready"
+      | "failed"
+      | "skipped"
+      | null;
   }[];
 };
+
+/** Fail-closed symbol JSON — never cast the body to SymbolPayload. */
+function parseSymbolPayload(body: unknown): SymbolPayload | null {
+  if (body == null || typeof body !== "object" || Array.isArray(body)) {
+    return null;
+  }
+  const r = body as Record<string, unknown>;
+  // Fail closed — only CSE SYMBOL_RE (no sanitize length-cap fallback).
+  const symbol = normalizeSymbol(r.symbol);
+  if (!symbol) return null;
+  let last: SymbolPayload["last"] = null;
+  if (r.last != null && typeof r.last === "object" && !Array.isArray(r.last)) {
+    const L = r.last as Record<string, unknown>;
+    const price = toFiniteNumber(L.price);
+    // Require a finite price — null-only last stubs confuse the quote strip.
+    if (price != null) {
+      last = {
+        price,
+        change: toFiniteNumber(L.change),
+        change_pct: toFiniteNumber(L.change_pct),
+        volume: toFiniteNumber(L.volume),
+        // Fail-closed ISO — no raw overlong / control-laden ts echo.
+        ts: toIso(L.ts),
+      };
+    }
+  }
+  return {
+    symbol,
+    name: sanitizeDisclosureText(
+      typeof r.name === "string" ? r.name : null,
+      MAX_STOCK_NAME_LENGTH,
+    ),
+    sector: sanitizeDisclosureText(
+      typeof r.sector === "string" ? r.sector : null,
+      MAX_STOCK_SECTOR_LENGTH,
+    ),
+    last,
+  };
+}
+
+/** Fail-closed snapshots JSON — missing/hostile ``points`` must not 500. */
+function parseSnapshotsPayload(body: unknown): SnapshotsPayload {
+  if (body == null || typeof body !== "object" || Array.isArray(body)) {
+    return { points: [] };
+  }
+  const pointsRaw = (body as { points?: unknown }).points;
+  if (!Array.isArray(pointsRaw)) return { points: [] };
+  const points: SnapshotsPayload["points"] = [];
+  for (const row of pointsRaw) {
+    // Cap at API / sparkline max — unbounded points used to allocate before SVG.
+    if (points.length >= MAX_PAGE_SNAPSHOT_POINTS) break;
+    if (row == null || typeof row !== "object" || Array.isArray(row)) continue;
+    const r = row as Record<string, unknown>;
+    points.push({
+      // Fail-closed ISO — no raw overlong / control-laden ts echo.
+      ts: toIso(r.ts),
+      price: toFiniteNumber(r.price),
+      change_pct: toFiniteNumber(r.change_pct),
+    });
+  }
+  return { points };
+}
+
+/** Fail-closed disclosures JSON — SafeInteger ids + sanitized text/urls. */
+function parseDisclosuresPayload(body: unknown): DisclosuresPayload {
+  if (body == null || typeof body !== "object" || Array.isArray(body)) {
+    return { items: [] };
+  }
+  const itemsRaw = (body as { items?: unknown }).items;
+  if (!Array.isArray(itemsRaw)) return { items: [] };
+  const items: DisclosuresPayload["items"] = [];
+  for (const row of itemsRaw) {
+    if (items.length >= MAX_PAGE_DISCLOSURES) break;
+    if (row == null || typeof row !== "object" || Array.isArray(row)) continue;
+    const r = row as Record<string, unknown>;
+    const id = toSafePositiveInt(r.id);
+    if (id == null) continue;
+    const title =
+      sanitizeDisclosureText(
+        typeof r.title === "string" ? r.title : null,
+        MAX_DISCLOSURE_TITLE_LENGTH,
+      ) ?? "";
+    if (!title) continue;
+    const external_id =
+      sanitizeDisclosureText(
+        typeof r.external_id === "string" ? r.external_id : null,
+        MAX_DISCLOSURE_EXTERNAL_ID_LENGTH,
+      ) ?? "";
+    const brief_status = normalizeBriefStatus(
+      typeof r.brief_status === "string" ? r.brief_status : null,
+    );
+    const publishedRaw = r.published_at;
+    // Parse-time allowlist — never soft-accept raw javascript:/data: hrefs
+    // or brief text before render (defense in depth vs API shape drift).
+    const url =
+      typeof r.url === "string" ? safeAnnouncementUrl(r.url) : null;
+    const pdf_url =
+      typeof r.pdf_url === "string" ? safePdfUrl(r.pdf_url) : null;
+    const briefRaw = typeof r.brief === "string" ? r.brief : null;
+    items.push({
+      id,
+      external_id,
+      title,
+      category: sanitizeDisclosureText(
+        typeof r.category === "string" ? r.category : null,
+        MAX_DISCLOSURE_CATEGORY_LENGTH,
+      ),
+      url,
+      // Fail-closed ISO — no raw overlong / control-laden ts echo.
+      published_at: toIso(publishedRaw),
+      company_name: sanitizeDisclosureText(
+        typeof r.company_name === "string" ? r.company_name : null,
+        MAX_DISCLOSURE_COMPANY_LENGTH,
+      ),
+      pdf_url,
+      brief: sanitizeBriefText(briefRaw, brief_status),
+      brief_status,
+    });
+  }
+  return { items };
+}
 
 export default async function SymbolDetailPage({
   params,
@@ -74,7 +231,8 @@ export default async function SymbolDetailPage({
   await requirePageSession();
 
   const { symbol: raw } = await params;
-  const symbol = normalizeSymbol(decodeURIComponent(raw));
+  // safeDecode — malformed % sequences → notFound (not URIError 500).
+  const symbol = normalizeSymbolParam(raw);
   if (!symbol) {
     notFound();
   }
@@ -119,13 +277,44 @@ export default async function SymbolDetailPage({
     );
   }
 
-  const data = (await symRes.json()) as SymbolPayload;
-  const snaps = snapRes.ok
-    ? ((await snapRes.json()) as SnapshotsPayload)
-    : { points: [] };
-  const discs = discRes.ok
-    ? ((await discRes.json()) as DisclosuresPayload)
-    : { items: [] };
+  let data: SymbolPayload | null = null;
+  try {
+    data = parseSymbolPayload(await symRes.json());
+  } catch {
+    data = null;
+  }
+  if (!data) {
+    return (
+      <Shell>
+        <EmptyState
+          title={`Couldn’t load ${symbol}`}
+          description="Chime got an unexpected symbol payload. Retry in a moment."
+          action={
+            <Button asChild variant="outline">
+              <Link href={`/symbols/${encoded}`}>Try again</Link>
+            </Button>
+          }
+        />
+      </Shell>
+    );
+  }
+
+  let snaps: SnapshotsPayload = { points: [] };
+  let discs: DisclosuresPayload = { items: [] };
+  if (snapRes.ok) {
+    try {
+      snaps = parseSnapshotsPayload(await snapRes.json());
+    } catch {
+      snaps = { points: [] };
+    }
+  }
+  if (discRes.ok) {
+    try {
+      discs = parseDisclosuresPayload(await discRes.json());
+    } catch {
+      discs = { items: [] };
+    }
+  }
 
   const snapsFailed = !snapRes.ok;
   const discsFailed = !discRes.ok;
@@ -191,7 +380,7 @@ export default async function SymbolDetailPage({
               value={
                 data.last.volume == null
                   ? "—"
-                  : Math.round(data.last.volume).toLocaleString("en-LK")
+                  : formatNumber(Math.round(data.last.volume), 0)
               }
               mono
             />
@@ -251,7 +440,7 @@ export default async function SymbolDetailPage({
             <p className="text-sm text-muted-foreground" role="status">
               Couldn’t load recent ticks right now.
             </p>
-          ) : snaps.points.length < 2 ? (
+          ) : finiteSparklinePoints(snaps.points).length < 2 ? (
             <EmptyState
               className="mt-1"
               title="Not enough ticks"
@@ -268,8 +457,14 @@ export default async function SymbolDetailPage({
         </div>
       </section>
 
-      <section className="mt-8 border-t border-border/60 pt-6">
-        <h2 className="text-sm font-medium tracking-wide text-muted-foreground uppercase">
+      <section
+        className="mt-8 border-t border-border/60 pt-6"
+        aria-labelledby="disclosures-heading"
+      >
+        <h2
+          id="disclosures-heading"
+          className="text-sm font-medium tracking-wide text-muted-foreground uppercase"
+        >
           Disclosures
         </h2>
         {discsFailed ? (
@@ -317,24 +512,70 @@ export default async function SymbolDetailPage({
             }
           />
         ) : (
-          <ul className="mt-4 divide-y divide-border/60">
-            {discs.items.map((item) => (
-              <li key={item.id} className="py-3 first:pt-0">
-                <a
-                  href={item.url}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="block rounded-sm text-sm font-medium text-foreground underline-offset-4 hover:underline focus-visible:ring-2 focus-visible:ring-ring/50 focus-visible:outline-none"
-                >
-                  {item.title}
-                </a>
-                <p className="mt-1 text-xs text-muted-foreground">
-                  {formatTs(item.published_at)}
-                  {item.category ? ` · ${item.category}` : ""}
-                </p>
-              </li>
-            ))}
-          </ul>
+          <>
+            <ul
+              className="mt-4 divide-y divide-border/60"
+              aria-labelledby="disclosures-heading"
+            >
+              {discs.items.map((item) => {
+                const href = safeFilingHref(item.pdf_url, item.url);
+                const pdfOk = Boolean(safePdfUrl(item.pdf_url));
+                const briefText = sanitizeBriefText(
+                  item.brief,
+                  item.brief_status,
+                );
+                const briefHeadingId = `disclosure-brief-${item.id}`;
+                const titleClass =
+                  "block rounded-sm text-sm font-medium text-foreground underline-offset-4 focus-visible:ring-2 focus-visible:ring-ring/50 focus-visible:outline-none";
+                return (
+                  <li key={item.id} className="py-3 first:pt-0">
+                    {href ? (
+                      <a
+                        href={href}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className={`${titleClass} hover:underline`}
+                      >
+                        {item.title}
+                        {pdfOk ? (
+                          <span className="ml-1.5 text-xs font-normal text-muted-foreground">
+                            (PDF)
+                          </span>
+                        ) : null}
+                        <span className="sr-only"> (opens in new tab)</span>
+                      </a>
+                    ) : (
+                      <span className={titleClass}>
+                        {item.title}
+                      </span>
+                    )}
+                    <p className="mt-1 text-xs text-muted-foreground">
+                      {formatTs(item.published_at)}
+                      {item.category ? ` · ${item.category}` : ""}
+                    </p>
+                    {briefText ? (
+                      <div
+                        className="mt-2"
+                        role="group"
+                        aria-labelledby={briefHeadingId}
+                      >
+                        <p
+                          id={briefHeadingId}
+                          className="text-xs font-medium tracking-wide text-muted-foreground uppercase"
+                        >
+                          Filing brief
+                        </p>
+                        <p className="mt-1 text-sm leading-relaxed text-foreground/90">
+                          {briefText}
+                        </p>
+                      </div>
+                    ) : null}
+                  </li>
+                );
+              })}
+            </ul>
+            <NfaInline className="mt-3" />
+          </>
         )}
       </section>
     </Shell>

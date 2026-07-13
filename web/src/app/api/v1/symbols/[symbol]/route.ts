@@ -1,6 +1,12 @@
 import type { NextRequest } from "next/server";
 
-import { normalizeSymbol } from "@/lib/api/symbol";
+import {
+  MAX_STOCK_NAME_LENGTH,
+  MAX_STOCK_SECTOR_LENGTH,
+  sanitizeDisclosureText,
+} from "@/lib/api/disclosure-safe";
+import { toFiniteNumber } from "@/lib/api/market-browse";
+import { normalizeSymbol, normalizeSymbolParam } from "@/lib/api/symbol";
 import { toIso } from "@/lib/api/time";
 import { jsonError, jsonOk } from "@/lib/auth/errors";
 import { requireSession } from "@/lib/auth/guard";
@@ -19,7 +25,8 @@ export async function GET(request: NextRequest, context: RouteContext) {
   if (!gated.ok) return gated.response;
 
   const { symbol: raw } = await context.params;
-  const symbol = normalizeSymbol(decodeURIComponent(raw));
+  // safeDecode — malformed % sequences must 400, not URIError 500.
+  const symbol = normalizeSymbolParam(raw);
   if (!symbol) {
     return jsonError(400, "invalid_symbol", "Invalid symbol.");
   }
@@ -56,22 +63,19 @@ export async function GET(request: NextRequest, context: RouteContext) {
       snap.rows.length === 0
         ? null
         : {
-            price: Number(snap.rows[0].price),
-            change:
-              snap.rows[0].change == null ? null : Number(snap.rows[0].change),
-            change_pct:
-              snap.rows[0].change_pct == null
-                ? null
-                : Number(snap.rows[0].change_pct),
-            volume:
-              snap.rows[0].volume == null ? null : Number(snap.rows[0].volume),
+            // Finite-only egress (parity with movers/browse) — NaN/±Inf → null.
+            price: toFiniteNumber(snap.rows[0].price),
+            change: toFiniteNumber(snap.rows[0].change),
+            change_pct: toFiniteNumber(snap.rows[0].change_pct),
+            volume: toFiniteNumber(snap.rows[0].volume),
             ts: toIso(snap.rows[0].ts),
           };
 
     return jsonOk({
-      symbol: row.symbol,
-      name: row.name,
-      sector: row.sector,
+      // Prefer DB symbol only when it still passes SYMBOL_RE; else path symbol.
+      symbol: normalizeSymbol(row.symbol) ?? symbol,
+      name: sanitizeDisclosureText(row.name, MAX_STOCK_NAME_LENGTH),
+      sector: sanitizeDisclosureText(row.sector, MAX_STOCK_SECTOR_LENGTH),
       last,
     });
   } catch (err) {

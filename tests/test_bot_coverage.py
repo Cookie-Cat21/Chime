@@ -11,6 +11,7 @@ from chime.bot import (
     RATE_LIMIT_REPLY,
     allow_command,
     cmd_alert,
+    cmd_brief,
     cmd_cancel,
     cmd_help,
     cmd_myalerts,
@@ -85,6 +86,7 @@ def _snap(symbol: str = "JKH.N0000") -> PriceSnapshot:
         (cmd_cancel, ["1"]),
         (cmd_myalerts, []),
         (cmd_mywatchlist, []),
+        (cmd_brief, ["JKH.N0000"]),
     ],
 )
 async def test_all_handlers_rate_limited(
@@ -224,9 +226,7 @@ async def test_cmd_alert_validation_errors() -> None:
     assert "couldn't parse" in reply.lower()
     assert "/alert SYMBOL above" in reply
 
-    update2, context2 = _make_update_context(
-        args=["JKH.N0000", "above"], storage=storage, cse=cse
-    )
+    update2, context2 = _make_update_context(args=["JKH.N0000", "above"], storage=storage, cse=cse)
     await cmd_alert(update2, context2)
     assert "need a number" in update2.effective_message.reply_text.await_args.args[0].lower()
 
@@ -234,7 +234,8 @@ async def test_cmd_alert_validation_errors() -> None:
         args=["JKH.N0000", "above", "nope"], storage=storage, cse=cse
     )
     await cmd_alert(update3, context3)
-    assert "must be a number" in update3.effective_message.reply_text.await_args.args[0]
+    reply3 = update3.effective_message.reply_text.await_args.args[0].lower()
+    assert "positive finite number" in reply3
 
     update4, context4 = _make_update_context(
         args=["JKH.N0000", "above", "-1"], storage=storage, cse=cse
@@ -286,6 +287,7 @@ async def test_cmd_myalerts_empty_and_formatted() -> None:
     assert "/alert JKH.N0000 below 90" in empty_reply
     assert "/alert JKH.N0000 move 5" in empty_reply
     assert "/alert JKH.N0000 disclosure" in empty_reply
+    assert "/alert JKH.N0000 disclosure Financial" in empty_reply
     assert disclaimer() in empty_reply
 
     rules = [
@@ -351,3 +353,160 @@ async def test_cmd_mywatchlist_empty_and_list() -> None:
     reply = update2.effective_message.reply_text.await_args.args[0]
     assert "Watchlist:" in reply
     assert "JKH.N0000" in reply
+
+
+@pytest.mark.asyncio
+async def test_cmd_brief_usage_bad_symbol_and_none_yet(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    storage = AsyncMock()
+    storage.get_latest_ready_brief = AsyncMock(return_value=None)
+    monkeypatch.setenv("AI_BRIEFS_ENABLED", "0")
+    monkeypatch.delenv("AI_API_KEY", raising=False)
+
+    update, context = _make_update_context(args=[], storage=storage)
+    await cmd_brief(update, context)
+    reply = update.effective_message.reply_text.await_args.args[0]
+    assert "Usage: /brief SYMBOL" in reply
+    assert disclaimer() in reply
+    storage.get_latest_ready_brief.assert_not_awaited()
+
+    update2, context2 = _make_update_context(args=["!!!"], storage=storage)
+    await cmd_brief(update2, context2)
+    bad = update2.effective_message.reply_text.await_args.args[0]
+    assert "doesn't look like a CSE symbol" in bad
+
+    update3, context3 = _make_update_context(args=["JKH.N0000"], storage=storage)
+    await cmd_brief(update3, context3)
+    storage.get_latest_ready_brief.assert_awaited_once_with("JKH.N0000")
+    none_reply = update3.effective_message.reply_text.await_args.args[0]
+    assert "JKH.N0000: AI briefs are off" in none_reply
+    assert disclaimer() in none_reply
+    storage.ensure_user.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_cmd_brief_none_yet_when_ai_enabled(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    storage = AsyncMock()
+    storage.get_latest_ready_brief = AsyncMock(return_value=None)
+    monkeypatch.setenv("AI_BRIEFS_ENABLED", "1")
+    monkeypatch.setenv("AI_API_KEY", "test-key")
+
+    update, context = _make_update_context(args=["JKH.N0000"], storage=storage)
+    await cmd_brief(update, context)
+    none_reply = update.effective_message.reply_text.await_args.args[0]
+    assert "JKH.N0000: none yet" in none_reply
+    assert "AI briefs are off" not in none_reply
+    assert disclaimer() in none_reply
+
+
+@pytest.mark.asyncio
+async def test_cmd_brief_returns_latest_ready() -> None:
+    storage = AsyncMock()
+    storage.get_latest_ready_brief = AsyncMock(
+        return_value={
+            "brief": "Board approved an interim dividend of 1.50 LKR.",
+            "symbol": "JKH.N0000",
+            "title": "Interim Dividend",
+            "url": "https://cdn.cse.lk/cmt/upload_report_file/x.pdf",
+            "external_id": "25040",
+            "disclosure_id": 55,
+        }
+    )
+    update, context = _make_update_context(args=["jkh.n0000"], storage=storage)
+    await cmd_brief(update, context)
+    storage.get_latest_ready_brief.assert_awaited_once_with("JKH.N0000")
+    reply = update.effective_message.reply_text.await_args.args[0]
+    assert "JKH.N0000 filing brief" in reply
+    assert "Interim Dividend" in reply
+    assert "Board approved an interim dividend" in reply
+    assert "cdn.cse.lk" in reply
+    assert disclaimer() in reply
+    storage.ensure_user.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_cmd_brief_strips_hostile_url() -> None:
+    from chime.bot import format_brief_lookup_reply
+
+    text = format_brief_lookup_reply(
+        symbol="JKH.N0000",
+        brief="Dividend declared.",
+        title="Notice",
+        url="javascript:alert(1)",
+    )
+    assert "javascript:" not in text
+    assert "Dividend declared." in text
+    assert disclaimer() in text
+
+    ok = format_brief_lookup_reply(
+        symbol="JKH.N0000",
+        brief="Dividend declared.",
+        url="https://www.cse.lk/announcements#99",
+    )
+    assert "https://www.cse.lk/announcements#99" in ok
+
+    long_body = "X" * 5000
+    capped = format_brief_lookup_reply(symbol="JKH.N0000", brief=long_body)
+    assert len(capped) < 4096
+    assert capped.endswith(disclaimer()) or disclaimer() in capped
+    assert "…" in capped
+
+@pytest.mark.asyncio
+async def test_cmd_alert_disclosure_category() -> None:
+    storage = AsyncMock()
+    storage.ensure_user = AsyncMock(return_value=42)
+    storage.upsert_stock = AsyncMock()
+
+    async def _create(
+        user_id: int,
+        symbol: str,
+        alert_type: AlertType,
+        threshold: float | None,
+        category: str | None = None,
+    ) -> AlertRule:
+        return AlertRule(
+            id=9,
+            user_id=user_id,
+            telegram_id=1001,
+            symbol=symbol,
+            type=alert_type,
+            threshold=threshold,
+            category=category,
+        )
+
+    storage.create_alert_rule = AsyncMock(side_effect=_create)
+    cse = AsyncMock()
+    cse.fetch_company_info = AsyncMock(return_value=_snap())
+    update, context = _make_update_context(
+        args=["JKH.N0000", "disclosure", "Financial"], storage=storage, cse=cse
+    )
+    await cmd_alert(update, context)
+    reply = update.effective_message.reply_text.await_args.args[0]
+    assert "matching category 'Financial'" in reply
+    assert storage.create_alert_rule.await_args.kwargs.get("category") == "Financial"
+
+
+@pytest.mark.asyncio
+async def test_cmd_myalerts_shows_disclosure_category() -> None:
+    storage = AsyncMock()
+    storage.ensure_user = AsyncMock(return_value=42)
+    storage.list_alerts = AsyncMock(
+        return_value=[
+            AlertRule(
+                id=5,
+                user_id=42,
+                telegram_id=1001,
+                symbol="JKH.N0000",
+                type=AlertType.DISCLOSURE,
+                threshold=None,
+                category="Financial",
+            )
+        ]
+    )
+    update, context = _make_update_context(storage=storage)
+    await cmd_myalerts(update, context)
+    reply = update.effective_message.reply_text.await_args.args[0]
+    assert "#5 JKH.N0000 disclosure Financial" in reply

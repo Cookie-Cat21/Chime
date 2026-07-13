@@ -10,7 +10,10 @@ from chime.migrate import apply_migrations
 from chime.storage import Storage
 
 DATABASE_URL = os.getenv("DATABASE_URL", "").strip()
-pytestmark = pytest.mark.skipif(not DATABASE_URL, reason="DATABASE_URL not set")
+pytestmark = [
+    pytest.mark.integration,
+    pytest.mark.skipif(not DATABASE_URL, reason="DATABASE_URL not set"),
+]
 
 
 @pytest.mark.asyncio

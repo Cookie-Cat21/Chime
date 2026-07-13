@@ -71,8 +71,10 @@ async def test_poller_survives_junk_then_ok() -> None:
     storage.advisory_unlock = AsyncMock()
     storage.watched_symbols = AsyncMock(return_value=["JKH.N0000"])
     storage.active_rules_for_symbols = AsyncMock(return_value=[disc_rule])
-    storage.insert_snapshot = AsyncMock(
-        side_effect=lambda s: s.model_copy(update={"id": 1})
+    storage.persist_market_snapshots = AsyncMock(
+        side_effect=lambda snaps: [
+            s.model_copy(update={"id": i}) for i, s in enumerate(snaps, start=1)
+        ]
     )
     storage.get_previous_state = AsyncMock()
     from chime.domain import PreviousPriceState
@@ -90,9 +92,7 @@ async def test_poller_survives_junk_then_ok() -> None:
             )
         ]
     )
-    cse.fetch_announcements_for_symbol = AsyncMock(
-        side_effect=RuntimeError("html error page")
-    )
+    cse.fetch_announcements_for_symbol = AsyncMock(side_effect=RuntimeError("html error page"))
 
     settings = Settings(
         telegram_bot_token="x",
@@ -116,14 +116,14 @@ async def test_disclosure_poll_skips_price_only_symbols() -> None:
     storage.advisory_unlock = AsyncMock()
     storage.watched_symbols = AsyncMock(return_value=["JKH.N0000", "COMB.N0000"])
     storage.active_rules_for_symbols = AsyncMock(return_value=[price_rule])
-    storage.insert_snapshot = AsyncMock(
-        side_effect=lambda s: s.model_copy(update={"id": 1})
+    storage.persist_market_snapshots = AsyncMock(
+        side_effect=lambda snaps: [
+            s.model_copy(update={"id": i}) for i, s in enumerate(snaps, start=1)
+        ]
     )
     from chime.domain import PreviousPriceState
 
-    storage.get_previous_state = AsyncMock(
-        return_value=PreviousPriceState(price=None)
-    )
+    storage.get_previous_state = AsyncMock(return_value=PreviousPriceState(price=None))
     storage.claim_unsent_batch = AsyncMock(return_value=[])
 
     cse = AsyncMock()
@@ -151,25 +151,21 @@ async def test_disclosure_poll_skips_price_only_symbols() -> None:
 @pytest.mark.asyncio
 async def test_disclosure_poll_fetches_only_disclosure_symbols() -> None:
     """WS-020: announcement fetch limited to symbols with disclosure rules."""
-    price_rule = make_rule(
-        id=1, symbol="JKH.N0000", type=AlertType.PRICE_ABOVE, threshold=100.0
-    )
-    disc_rule = make_rule(
-        id=2, symbol="COMB.N0000", type=AlertType.DISCLOSURE, threshold=None
-    )
+    price_rule = make_rule(id=1, symbol="JKH.N0000", type=AlertType.PRICE_ABOVE, threshold=100.0)
+    disc_rule = make_rule(id=2, symbol="COMB.N0000", type=AlertType.DISCLOSURE, threshold=None)
     storage = AsyncMock()
     storage.try_advisory_lock = AsyncMock(return_value=True)
     storage.advisory_unlock = AsyncMock()
     storage.watched_symbols = AsyncMock(return_value=["JKH.N0000", "COMB.N0000"])
     storage.active_rules_for_symbols = AsyncMock(return_value=[price_rule, disc_rule])
-    storage.insert_snapshot = AsyncMock(
-        side_effect=lambda s: s.model_copy(update={"id": 1})
+    storage.persist_market_snapshots = AsyncMock(
+        side_effect=lambda snaps: [
+            s.model_copy(update={"id": i}) for i, s in enumerate(snaps, start=1)
+        ]
     )
     from chime.domain import PreviousPriceState
 
-    storage.get_previous_state = AsyncMock(
-        return_value=PreviousPriceState(price=None)
-    )
+    storage.get_previous_state = AsyncMock(return_value=PreviousPriceState(price=None))
     storage.upsert_disclosure = AsyncMock()
     storage.claim_unsent_batch = AsyncMock(return_value=[])
 

@@ -217,6 +217,7 @@ def _fake_settings() -> MagicMock:
     s.http_timeout_seconds = 15.0
     s.circuit_fail_max = 5
     s.circuit_reset_seconds = 60.0
+    s.cse_min_interval_seconds = 0.0
     s.health_host = "127.0.0.1"
     s.health_port = 0
     s.bot_cmd_rate_per_minute = 20
@@ -240,9 +241,7 @@ def test_main_migrate_command(
     monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
 ) -> None:
     _patch_settings(monkeypatch)
-    monkeypatch.setattr(
-        main_mod, "apply_migrations", lambda url: ["001_initial.sql", "002_x.sql"]
-    )
+    monkeypatch.setattr(main_mod, "apply_migrations", lambda url: ["001_initial.sql", "002_x.sql"])
 
     main_mod.main(["migrate"])
     out = capsys.readouterr().out

@@ -9,7 +9,15 @@ import {
   UnwatchButton,
   WatchlistAddForm,
 } from "@/components/watchlist-controls";
+import {
+  MAX_STOCK_NAME_LENGTH,
+  MAX_STOCK_SECTOR_LENGTH,
+  sanitizeDisclosureText,
+} from "@/lib/api/disclosure-safe";
+import { toFiniteNumber } from "@/lib/api/finite-number";
 import { serverApiGet } from "@/lib/api/server-fetch";
+import { normalizeSymbol } from "@/lib/api/symbol";
+import { toIso } from "@/lib/api/time";
 import { requirePageSession } from "@/lib/auth/page-session";
 import { formatNumber, formatPct, formatTs } from "@/lib/format";
 
@@ -36,9 +44,53 @@ export default async function WatchlistPage() {
   await requirePageSession();
 
   const res = await serverApiGet("/api/v1/watchlist");
-  const payload: WatchlistPayload | null = res.ok
-    ? ((await res.json()) as WatchlistPayload)
-    : null;
+  let payload: WatchlistPayload | null = null;
+  if (res.ok) {
+    try {
+      const body: unknown = await res.json();
+      const itemsRaw =
+        body && typeof body === "object" && !Array.isArray(body)
+          ? (body as { items?: unknown }).items
+          : null;
+      if (Array.isArray(itemsRaw)) {
+        const items: WatchlistPayload["items"] = [];
+        for (const row of itemsRaw) {
+          if (row == null || typeof row !== "object" || Array.isArray(row)) {
+            continue;
+          }
+          const r = row as Record<string, unknown>;
+          // Fail closed — only CSE SYMBOL_RE rows (not sanitize-only junk).
+          const symbol = normalizeSymbol(
+            typeof r.symbol === "string" ? r.symbol : null,
+          );
+          if (!symbol) continue;
+          const price = toFiniteNumber(r.price);
+          const change = toFiniteNumber(r.change);
+          const change_pct = toFiniteNumber(r.change_pct);
+          items.push({
+            symbol,
+            name: sanitizeDisclosureText(
+              typeof r.name === "string" ? r.name : null,
+              MAX_STOCK_NAME_LENGTH,
+            ),
+            sector: sanitizeDisclosureText(
+              typeof r.sector === "string" ? r.sector : null,
+              MAX_STOCK_SECTOR_LENGTH,
+            ),
+            price,
+            change,
+            change_pct,
+            ts: toIso(r.ts),
+          });
+          // Cap parser — hostile / uncapped API JSON must not balloon SSR.
+          if (items.length >= 500) break;
+        }
+        payload = { items };
+      }
+    } catch {
+      payload = null;
+    }
+  }
 
   return (
     <div className="flex min-h-full flex-1 flex-col bg-background">
@@ -78,15 +130,27 @@ export default async function WatchlistPage() {
             description={
               <>
                 Add a CSE symbol with the form above to start watching prices
-                and disclosures. Or use{" "}
+                and disclosures.{" "}
+                <Link
+                  href="/market"
+                  className="rounded-sm underline underline-offset-4 focus-visible:ring-2 focus-visible:ring-ring/50 focus-visible:outline-none"
+                >
+                  Browse
+                </Link>{" "}
+                to discover tickers, or use{" "}
                 <code className="font-mono text-xs">/watch SYMBOL</code> in
                 Telegram — Chime keeps the list in sync either way.
               </>
             }
             action={
-              <Button asChild variant="outline">
-                <a href="#watch_symbol">Add a symbol</a>
-              </Button>
+              <div className="flex flex-wrap gap-2">
+                <Button asChild>
+                  <Link href="/market">Browse</Link>
+                </Button>
+                <Button asChild variant="outline">
+                  <a href="#watch_symbol">Add a symbol</a>
+                </Button>
+              </div>
             }
           />
         ) : (

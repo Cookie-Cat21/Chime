@@ -12,7 +12,10 @@ from chime.migrate import apply_migrations
 from chime.storage import Storage
 
 DATABASE_URL = os.getenv("DATABASE_URL", "").strip()
-pytestmark = pytest.mark.skipif(not DATABASE_URL, reason="DATABASE_URL not set")
+pytestmark = [
+    pytest.mark.integration,
+    pytest.mark.skipif(not DATABASE_URL, reason="DATABASE_URL not set"),
+]
 
 
 @pytest.fixture
@@ -29,9 +32,7 @@ async def storage() -> Storage:
 async def test_unsent_alerts_filters_inactive_rules(storage: Storage) -> None:
     user_id = await storage.ensure_user(telegram_id=9_004_001)
     await storage.upsert_stock("UNSA.N0000", "UNSA CO")
-    rule = await storage.create_alert_rule(
-        user_id, "UNSA.N0000", AlertType.PRICE_ABOVE, 100.0
-    )
+    rule = await storage.create_alert_rule(user_id, "UNSA.N0000", AlertType.PRICE_ABOVE, 100.0)
     snap = await storage.insert_snapshot(
         PriceSnapshot(
             symbol="UNSA.N0000",

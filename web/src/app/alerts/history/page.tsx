@@ -5,9 +5,21 @@ import { EmptyState } from "@/components/empty-state";
 import { NfaFooter } from "@/components/nfa-footer";
 import { NfaInline } from "@/components/nfa-inline";
 import { Button } from "@/components/ui/button";
+import {
+  MAX_HISTORY_EVENT_KEY_LENGTH,
+  sanitizeDisclosureText,
+} from "@/lib/api/disclosure-safe";
+import { toNonNegativeSafeInt, toSafePositiveInt } from "@/lib/api/safe-int";
 import { serverApiGet } from "@/lib/api/server-fetch";
+import { isAlertType, normalizeSymbol } from "@/lib/api/symbol";
+import { toIso } from "@/lib/api/time";
 import { requirePageSession } from "@/lib/auth/page-session";
 import { alertTypeLabel, formatTs } from "@/lib/format";
+
+/** Soft-cap OFFSET — keep in sync with history API ``MAX_HISTORY_OFFSET``. */
+const MAX_HISTORY_OFFSET = 10_000;
+/** Parity with history API max page size. */
+const MAX_PAGE_HISTORY_EVENTS = 200;
 
 export const dynamic = "force-dynamic";
 
@@ -16,7 +28,11 @@ export const metadata = {
   description: "Alert fire history from your Chime rules.",
 };
 
-type DeliveryStatus = "sent" | "retrying" | "dead_lettered";
+type DeliveryStatus =
+  | "sent"
+  | "retrying"
+  | "dead_lettered"
+  | "delivered_unmarked";
 
 type HistoryPayload = {
   events: {
@@ -36,14 +52,30 @@ type HistoryPayload = {
   offset: number;
 };
 
+/**
+ * Cap attempt labels in fire-history copy (parity Python dead-letter notify).
+ * ``toNonNegativeSafeInt`` still admits 15-digit SafeIntegers that balloon
+ * ``Retries stopped after N attempts`` UI text.
+ */
+const MAX_ATTEMPT_COUNT_DISPLAY = 1_000_000;
+
+function cappedAttemptCount(raw: unknown): number {
+  const n =
+    typeof raw === "number" && Number.isSafeInteger(raw) && raw >= 0 ? raw : 0;
+  return n > MAX_ATTEMPT_COUNT_DISPLAY ? MAX_ATTEMPT_COUNT_DISPLAY : n;
+}
+
 function pluralizeAttempts(count: number): string {
-  return `${count} ${count === 1 ? "attempt" : "attempts"}`;
+  const n = cappedAttemptCount(count);
+  return `${n} ${n === 1 ? "attempt" : "attempts"}`;
 }
 
 function deliveryBadgeClassName(status: DeliveryStatus): string {
   switch (status) {
     case "sent":
       return "border-emerald-500/30 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300";
+    case "delivered_unmarked":
+      return "border-sky-500/30 bg-sky-500/10 text-sky-700 dark:text-sky-300";
     case "retrying":
       return "border-amber-500/30 bg-amber-500/10 text-amber-700 dark:text-amber-300";
     case "dead_lettered":
@@ -60,6 +92,12 @@ function deliveryCopy(event: HistoryPayload["events"][number]): {
       return {
         label: "Sent",
         description: "Telegram delivery recorded.",
+      };
+    case "delivered_unmarked":
+      return {
+        label: "Delivered (unmarked)",
+        description:
+          "Telegram accepted the message, but the durable sent flag was not recorded.",
       };
     case "retrying":
       return {
@@ -83,25 +121,130 @@ function deliveryCopy(event: HistoryPayload["events"][number]): {
 export default async function AlertHistoryPage({
   searchParams,
 }: {
-  searchParams: Promise<{ symbol?: string; limit?: string }>;
+  searchParams: Promise<{ symbol?: string; limit?: string; offset?: string }>;
 }) {
   await requirePageSession();
   const sp = await searchParams;
-  const symbolFilter = sp.symbol?.trim().toUpperCase() || "";
-  const limitRaw = Number(sp.limit);
+  // Drop invalid / hostile filter params — same SYMBOL_RE as the API.
+  const symbolFilter = normalizeSymbol(sp.symbol ?? "") ?? "";
+  // Digits-only SafeInteger — Number("1e2") / precision-loss must not pass.
+  const limitParsed = toSafePositiveInt(sp.limit ?? "");
   const limit =
-    Number.isSafeInteger(limitRaw) && limitRaw >= 1
-      ? Math.min(limitRaw, 200)
-      : 50;
+    limitParsed != null ? Math.min(limitParsed, 200) : 50;
+  // Soft-cap OFFSET like the API — reject sci-notation / float trunc.
+  const offsetParsed = toNonNegativeSafeInt(sp.offset ?? "", -1);
+  const offset =
+    offsetParsed < 0 ? 0 : Math.min(offsetParsed, MAX_HISTORY_OFFSET);
 
   const qs = new URLSearchParams();
   qs.set("limit", String(limit));
+  qs.set("offset", String(offset));
   if (symbolFilter) qs.set("symbol", symbolFilter);
 
   const res = await serverApiGet(`/api/v1/alerts/history?${qs.toString()}`);
-  const payload: HistoryPayload | null = res.ok
-    ? ((await res.json()) as HistoryPayload)
-    : null;
+  let payload: HistoryPayload | null = null;
+  if (res.ok) {
+    try {
+      const body: unknown = await res.json();
+      const eventsRaw =
+        body && typeof body === "object" && !Array.isArray(body)
+          ? (body as { events?: unknown }).events
+          : null;
+      if (Array.isArray(eventsRaw)) {
+        const events: HistoryPayload["events"] = [];
+        for (const row of eventsRaw) {
+          if (events.length >= MAX_PAGE_HISTORY_EVENTS) break;
+          if (row == null || typeof row !== "object" || Array.isArray(row)) {
+            continue;
+          }
+          const r = row as Record<string, unknown>;
+          const id = toSafePositiveInt(r.id);
+          const rule_id = toSafePositiveInt(r.rule_id);
+          if (id == null || rule_id == null) continue;
+          if (!isAlertType(r.type)) continue;
+          // Fail closed — only CSE SYMBOL_RE rows (not sanitize-only junk).
+          const symbol = normalizeSymbol(
+            typeof r.symbol === "string" ? r.symbol : null,
+          );
+          if (!symbol) continue;
+          const statusRaw =
+            typeof r.delivery_status === "string" ? r.delivery_status : "";
+          const delivery_status: DeliveryStatus | null =
+            statusRaw === "sent" ||
+            statusRaw === "retrying" ||
+            statusRaw === "dead_lettered" ||
+            statusRaw === "delivered_unmarked"
+              ? statusRaw
+              : null;
+          if (!delivery_status) continue;
+          const attempt_count = cappedAttemptCount(
+            toNonNegativeSafeInt(r.attempt_count, 0),
+          );
+          const event_key =
+            sanitizeDisclosureText(
+              typeof r.event_key === "string" ? r.event_key : null,
+              MAX_HISTORY_EVENT_KEY_LENGTH,
+            ) ?? "";
+          const message_text =
+            typeof r.message_text === "string"
+              ? sanitizeDisclosureText(r.message_text, 4_000)
+              : null;
+          events.push({
+            id,
+            rule_id,
+            symbol,
+            type: r.type,
+            fired_at: toIso(r.fired_at),
+            // Strict === true — Boolean("false") must not invent sent/DL flags.
+            message_sent: r.message_sent === true,
+            dead_lettered: r.dead_lettered === true,
+            attempt_count,
+            delivery_status,
+            message_text,
+            event_key,
+          });
+        }
+        const limitOut = toNonNegativeSafeInt(
+          body && typeof body === "object" && !Array.isArray(body)
+            ? (body as { limit?: unknown }).limit
+            : limit,
+          limit,
+        );
+        const offsetOut = toNonNegativeSafeInt(
+          body && typeof body === "object" && !Array.isArray(body)
+            ? (body as { offset?: unknown }).offset
+            : offset,
+          offset,
+        );
+        payload = {
+          events,
+          limit: Math.min(Math.max(limitOut, 1), 200),
+          offset: Math.min(offsetOut, MAX_HISTORY_OFFSET),
+        };
+      }
+    } catch {
+      payload = null;
+    }
+  }
+
+  function historyHref(nextOffset: number): string {
+    const next = new URLSearchParams();
+    next.set("limit", String(limit));
+    if (nextOffset > 0) next.set("offset", String(nextOffset));
+    if (symbolFilter) next.set("symbol", symbolFilter);
+    const q = next.toString();
+    return q ? `/alerts/history?${q}` : "/alerts/history";
+  }
+
+  const pageLimit = payload?.limit ?? limit;
+  const pageOffset = payload?.offset ?? offset;
+  const hasPrev = pageOffset > 0;
+  const prevOffset = Math.max(0, pageOffset - pageLimit);
+  const nextOffset = Math.min(pageOffset + pageLimit, MAX_HISTORY_OFFSET);
+  const hasNext =
+    payload != null &&
+    payload.events.length >= pageLimit &&
+    nextOffset > pageOffset;
 
   return (
     <div className="flex min-h-full flex-1 flex-col bg-background">
@@ -119,6 +262,8 @@ export default async function AlertHistoryPage({
           method="get"
           className="mt-6 flex flex-col gap-3 sm:flex-row sm:items-end"
         >
+          {/* New filter resets OFFSET; preserve limit across Apply. */}
+          <input type="hidden" name="limit" value={limit} />
           <label className="flex min-w-0 flex-1 flex-col gap-1.5 text-sm">
             <span className="text-muted-foreground">Symbol filter</span>
             <input
@@ -238,6 +383,48 @@ export default async function AlertHistoryPage({
             })}
           </ul>
         )}
+
+        {payload && payload.events.length > 0 && (hasPrev || hasNext) ? (
+          <nav
+            className="mt-6 flex items-center justify-between gap-3 text-sm"
+            aria-label="Fire history pages"
+          >
+            {hasPrev ? (
+              <Link
+                href={historyHref(prevOffset)}
+                rel="prev"
+                aria-label="Previous page of fire history"
+                className="rounded-sm underline underline-offset-4 focus-visible:ring-2 focus-visible:ring-ring/50 focus-visible:outline-none"
+              >
+                Previous
+              </Link>
+            ) : (
+              <span
+                aria-disabled="true"
+                className="text-muted-foreground"
+              >
+                Previous
+              </span>
+            )}
+            {hasNext ? (
+              <Link
+                href={historyHref(nextOffset)}
+                rel="next"
+                aria-label="Next page of fire history"
+                className="rounded-sm underline underline-offset-4 focus-visible:ring-2 focus-visible:ring-ring/50 focus-visible:outline-none"
+              >
+                Next
+              </Link>
+            ) : (
+              <span
+                aria-disabled="true"
+                className="text-muted-foreground"
+              >
+                Next
+              </span>
+            )}
+          </nav>
+        ) : null}
 
         <NfaInline className="mt-8" />
       </main>

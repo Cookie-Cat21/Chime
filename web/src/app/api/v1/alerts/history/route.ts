@@ -1,11 +1,55 @@
 import type { NextRequest } from "next/server";
 
+import {
+  MAX_HISTORY_EVENT_KEY_LENGTH,
+  sanitizeDisclosureText,
+} from "@/lib/api/disclosure-safe";
+import {
+  toNonNegativeSafeInt,
+  toSafePositiveInt,
+} from "@/lib/api/safe-int";
+import { isAlertType, normalizeSymbol } from "@/lib/api/symbol";
 import { toIso } from "@/lib/api/time";
 import { jsonError, jsonOk } from "@/lib/auth/errors";
 import { requireSession } from "@/lib/auth/guard";
 import { getPool } from "@/lib/db";
 
 export const runtime = "nodejs";
+
+/** Cap fire-history message bodies so hostile DB text cannot balloon JSON. */
+export const HISTORY_MESSAGE_TEXT_MAX = 4_000;
+/** Bound OFFSET — same soft ceiling as market browse (no unbounded scans). */
+export const MAX_HISTORY_OFFSET = 10_000;
+
+const CTRL_RE = /[\u0000-\u001F\u007F-\u009F]/g;
+
+function sanitizeHistoryMessage(
+  raw: unknown,
+): string | null {
+  // Fail closed — non-strings used to throw on .replace (parity disclosure /
+  // inline-error sanitizers).
+  if (typeof raw !== "string") return null;
+  const cleaned = raw.replace(CTRL_RE, "").trim();
+  if (!cleaned) return null;
+  return cleaned.length > HISTORY_MESSAGE_TEXT_MAX
+    ? cleaned.slice(0, HISTORY_MESSAGE_TEXT_MAX - 1).trimEnd() + "…"
+    : cleaned;
+}
+
+/**
+ * Derive delivery_status per API_CONTRACT_V1 (alert_log delivery-state).
+ * Do not collapse delivered-unmarked into "sent" — that lies about message_sent.
+ */
+export function deriveDeliveryStatus(row: {
+  message_sent: boolean;
+  dead_lettered: boolean;
+  delivery_attempted_ok: boolean;
+}): "sent" | "dead_lettered" | "delivered_unmarked" | "retrying" {
+  if (row.message_sent) return "sent";
+  if (row.dead_lettered) return "dead_lettered";
+  if (row.delivery_attempted_ok) return "delivered_unmarked";
+  return "retrying";
+}
 
 /**
  * GET /api/v1/alerts/history — fire history (alert_log) for session user.
@@ -17,14 +61,21 @@ export async function GET(request: NextRequest) {
 
   const url = request.nextUrl;
   const symbolRaw = url.searchParams.get("symbol");
-  const symbol =
-    symbolRaw && symbolRaw.trim() ? symbolRaw.trim().toUpperCase() : null;
+  let symbol: string | null = null;
+  // Fail closed — non-string searchParams mocks used to throw on .trim.
+  if (typeof symbolRaw === "string" && symbolRaw.trim()) {
+    symbol = normalizeSymbol(symbolRaw);
+    if (!symbol) {
+      return jsonError(400, "invalid_symbol", "Invalid CSE symbol.");
+    }
+  }
 
   let limit = 50;
   const limitRaw = url.searchParams.get("limit");
   if (limitRaw != null) {
-    const n = Number(limitRaw);
-    if (!Number.isSafeInteger(n) || n < 1) {
+    // Digits-only SafeInteger — Number("1e2") / precision-loss must not pass.
+    const n = toSafePositiveInt(limitRaw);
+    if (n == null) {
       return jsonError(400, "validation_error", "limit must be a positive integer.");
     }
     limit = Math.min(n, 200);
@@ -33,11 +84,13 @@ export async function GET(request: NextRequest) {
   let offset = 0;
   const offsetRaw = url.searchParams.get("offset");
   if (offsetRaw != null) {
-    const n = Number(offsetRaw);
-    if (!Number.isSafeInteger(n) || n < 0) {
+    // Digits-only — reject scientific notation / float trunc aliases.
+    const n = toNonNegativeSafeInt(offsetRaw, -1);
+    if (n < 0) {
       return jsonError(400, "validation_error", "offset must be a non-negative integer.");
     }
-    offset = n;
+    // Soft-cap like GET /symbols — reject pathological OFFSET scans.
+    offset = Math.min(n, MAX_HISTORY_OFFSET);
   }
 
   try {
@@ -86,26 +139,47 @@ export async function GET(request: NextRequest) {
       params,
     );
 
-    const events = result.rows.map((row) => ({
-      id: Number(row.id),
-      rule_id: Number(row.rule_id),
-      symbol: row.symbol,
-      type: row.type,
-      fired_at: toIso(row.fired_at),
-      message_sent: Boolean(row.message_sent),
-      dead_lettered: Boolean(row.dead_lettered),
-      attempt_count: Number(row.attempt_count),
-      delivery_status:
-        row.message_sent
-          ? "sent"
-          : row.dead_lettered
-            ? "dead_lettered"
-            : row.delivery_attempted_ok
-              ? "sent"
-              : "retrying",
-      message_text: row.message_text,
-      event_key: row.event_key,
-    }));
+    const events = result.rows.flatMap((row) => {
+      // Digits-only SafeInteger — no Math.trunc float alias / precision loss.
+      const id = toSafePositiveInt(row.id);
+      const rule_id = toSafePositiveInt(row.rule_id);
+      if (id == null || rule_id == null) return [];
+      if (!isAlertType(row.type)) return [];
+      const attempts = toNonNegativeSafeInt(row.attempt_count, 0);
+      // Cap egress — 15-digit SafeIntegers used to balloon history JSON /
+      // fire-history copy (parity Python dead-letter notify 1_000_000).
+      const attempt_count =
+        attempts > 1_000_000 ? 1_000_000 : attempts;
+      // Fail closed — only CSE SYMBOL_RE (no sanitize "?" placeholder).
+      const symbol = normalizeSymbol(row.symbol);
+      if (!symbol) return [];
+      const event_key =
+        sanitizeDisclosureText(row.event_key, MAX_HISTORY_EVENT_KEY_LENGTH) ??
+        "";
+      // Strict === true — Boolean("false")/1 used to flip delivery_status.
+      const message_sent = row.message_sent === true;
+      const dead_lettered = row.dead_lettered === true;
+      const delivery_attempted_ok = row.delivery_attempted_ok === true;
+      return [
+        {
+          id,
+          rule_id,
+          symbol,
+          type: row.type,
+          fired_at: toIso(row.fired_at),
+          message_sent,
+          dead_lettered,
+          attempt_count,
+          delivery_status: deriveDeliveryStatus({
+            message_sent,
+            dead_lettered,
+            delivery_attempted_ok,
+          }),
+          message_text: sanitizeHistoryMessage(row.message_text),
+          event_key,
+        },
+      ];
+    });
 
     return jsonOk({ events, limit, offset });
   } catch (err) {

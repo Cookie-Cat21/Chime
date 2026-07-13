@@ -26,7 +26,16 @@ from zoneinfo import ZoneInfo
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from apscheduler.triggers.interval import IntervalTrigger
 
-from chime.adapters.cse import CSEClient
+from chime.adapters.cse import (
+    CSEClient,
+    announcement_to_disclosure,
+    build_unique_company_name_map,
+    legacy_pdf_urls_by_id,
+    normalize_company_name,
+    resolve_announcement_symbol,
+)
+from chime.briefs import briefs_enabled
+from chime.briefs.worker import claim_pending_briefs
 from chime.circuit import CircuitOpenError
 from chime.config import Settings
 from chime.domain import (
@@ -36,6 +45,7 @@ from chime.domain import (
     format_alert_message,
     format_dead_letter_notify,
 )
+from chime.health import brief_queue_health_hint
 from chime.logging_setup import get_logger
 from chime.notify import SendResult
 from chime.rules import evaluate_disclosure_rules, evaluate_price_rules, filter_fireable
@@ -45,6 +55,8 @@ log = get_logger(__name__)
 
 # bool kept for test AsyncMocks; production send returns SendResult.
 SendFunc = Callable[[int, str], Awaitable[SendResult | bool]]
+# Session try-lock for the CSE poll tick. Distinct from storage.BRIEF_CAP_LOCK_ID
+# (4_201_339) — do not unify; see docs/factory/passes/ADVISORY_LOCK_DEADLOCK.md.
 POLL_LOCK_ID = 4_201_337
 # After this many failed Telegram sends, stop retrying (message_sent stays false).
 MAX_SEND_ATTEMPTS = 5
@@ -74,6 +86,15 @@ class PendingSend:
     symbol: str | None = None
 
 
+@dataclass(frozen=True)
+class PendingPdfEnrich:
+    """Disclosure awaiting optional legacy PDF URL enrichment (after unlock)."""
+
+    disclosure_id: int
+    symbol: str
+    external_id: str
+
+
 def _normalize_send_result(result: SendResult | bool) -> SendResult:
     """Map legacy bool send callbacks onto SendResult (False → failed)."""
     if isinstance(result, bool):
@@ -81,9 +102,12 @@ def _normalize_send_result(result: SendResult | bool) -> SendResult:
     return result
 
 
-def _symbol_from_alert_message(message: str) -> str | None:
+def _symbol_from_alert_message(message: object) -> str | None:
     """Best-effort parse of ``format_alert_message`` first line (``🔔 SYMBOL``)."""
-    first = (message or "").split("\n", 1)[0].strip()
+    # Fail closed — non-strings used to throw on .split mid dead-letter notify.
+    if not isinstance(message, str):
+        return None
+    first = message.split("\n", 1)[0].strip()
     if first.startswith("🔔"):
         symbol = first.removeprefix("🔔").strip()
         return symbol or None
@@ -95,14 +119,19 @@ def _delivery_ok_token(
     log_id: int,
     rule_id: int | None,
     telegram_id: int,
-    message: str,
+    message: object,
 ) -> str:
-    digest = hashlib.sha256(message.encode("utf-8")).hexdigest()
+    # Fail closed — non-string message used to throw on .encode mid ledger token.
+    msg = message if isinstance(message, str) else ""
+    digest = hashlib.sha256(msg.encode("utf-8")).hexdigest()
     rule_part = "" if rule_id is None else str(rule_id)
     return f"{log_id}:{rule_part}:{telegram_id}:{digest}"
 
 
-def parse_hhmm(value: str) -> time:
+def parse_hhmm(value: object) -> time:
+    # Fail closed — non-strings used to throw on .split mid market-hours gate.
+    if not isinstance(value, str):
+        raise ValueError("market open/close must be HH:MM string")
     hour, minute = value.split(":")
     return time(int(hour), int(minute))
 
@@ -115,6 +144,13 @@ def is_market_open(now: datetime, settings: Settings) -> bool:
     open_t = parse_hhmm(settings.market_open)
     close_t = parse_hhmm(settings.market_close)
     return open_t <= local.time() <= close_t
+
+
+def _positive_int_setting(value: object) -> int:
+    """Return positive int settings, rejecting bool and other soft-accepted types."""
+    if isinstance(value, bool) or not isinstance(value, int):
+        return 0
+    return value if value > 0 else 0
 
 
 class Poller:
@@ -159,6 +195,59 @@ class Poller:
         self._load_delivery_ok_ledger()
         # Dead-letter user notification is best-effort and one-shot per process.
         self._dead_letter_notify_attempted_ids: set[int] = set()
+        # Legacy PDF enrichment queued under lock; HTTP runs after unlock.
+        self._pending_pdf_enrich: list[PendingPdfEnrich] = []
+        self._pdf_enrich_tasks: set[asyncio.Task[Any]] = set()
+        self._pdf_enrich_lock = asyncio.Lock()
+        # Cheap ops counters for loopback health (wave3 brief_queue hint).
+        self._pdf_enrich_last_batch_size: int = 0
+        self._pdf_enrich_batches_started: int = 0
+        self._brief_drain_tasks: set[asyncio.Task[Any]] = set()
+        self._brief_drain_lock = asyncio.Lock()
+        # After shutdown finishes draining background work, reject new schedules
+        # so a shielded late tick cannot race storage.close() (wave4).
+        self._background_closed = False
+
+    def pdf_enrich_health_snapshot(self) -> dict[str, int]:
+        """In-memory PDF enrich queue counters for health details."""
+        return {
+            "in_flight_tasks": len(self._pdf_enrich_tasks),
+            "last_batch_size": self._pdf_enrich_last_batch_size,
+            "batches_started": self._pdf_enrich_batches_started,
+        }
+
+    async def await_pdf_enrichment(self) -> None:
+        """Drain in-flight PDF enrich tasks (tests / shutdown)."""
+        await self._await_background_tasks(
+            self._pdf_enrich_tasks,
+            label="pdf_enrich",
+        )
+
+    async def await_brief_drain(self) -> None:
+        """Drain in-flight brief worker tasks (tests / shutdown)."""
+        await self._await_background_tasks(
+            self._brief_drain_tasks,
+            label="brief_drain",
+        )
+
+    async def _await_background_tasks(
+        self,
+        tasks: set[asyncio.Task[Any]],
+        *,
+        label: str,
+    ) -> None:
+        """Await a snapshot of background tasks; log (do not raise) failures."""
+        pending = list(tasks)
+        if not pending:
+            return
+        results = await asyncio.gather(*pending, return_exceptions=True)
+        for result in results:
+            if isinstance(result, Exception):
+                log.warning(
+                    "poller_background_task_error",
+                    kind=label,
+                    error=str(result),
+                )
 
     async def run_once(self, *, force: bool = False) -> list[AlertEvent]:
         """Single poll cycle. Returns events claimed (delivered after unlock)."""
@@ -169,6 +258,7 @@ class Poller:
             # so Telegram failures overnight/weekend still drain.
             await self._retry_unsent_with_lock()
             self.last_tick_at = datetime.now(UTC)
+            self._schedule_brief_drain()
             return []
 
         locked = await self.storage.try_advisory_lock(POLL_LOCK_ID)
@@ -183,26 +273,39 @@ class Poller:
         self.lock_held_skip = False
         fired: list[AlertEvent] = []
         pending: list[PendingSend] = []
+        pdf_enrich: list[PendingPdfEnrich] = []
         self._queue_sends = True
         self._pending_sends = pending
+        self._pending_pdf_enrich = pdf_enrich
+        # Fail-closed defaults: if the cycle aborts mid-tick, health must not
+        # keep stale True from a prior success (or cold-start defaults).
+        price_ok = False
+        disc_ok = False
         try:
+            self.last_error = None
             price_events, price_ok = await self._poll_prices()
             disc_events, disc_ok = await self._poll_disclosures()
+            await self._poll_sectors()
             fired.extend(price_events)
             fired.extend(disc_events)
-            self.price_poll_ok = price_ok
-            self.disclosure_poll_ok = disc_ok
             symbols = await self.storage.watched_symbols()
             rules = await self.storage.active_rules_for_symbols(symbols) if symbols else []
-            needs_disclosure = any(r.type.value == "disclosure" for r in rules)
+            # Fail closed — non-enum rule.type used to throw on .value mid tick
+            # health aggregation (poisoned row / hostile model_construct).
+            needs_disclosure = any(
+                getattr(r.type, "value", r.type) == "disclosure" for r in rules
+            )
             ok = True
-            if symbols and not price_ok:
+            # Market-wide persist is the browse foundation: degrade on price_ok
+            # False even with an empty watchlist (fetch/persist/empty board).
+            if not price_ok:
                 ok = False
             if needs_disclosure and not disc_ok:
                 ok = False
             self.last_tick_ok = ok
             if not ok:
-                self.last_error = "poll_degraded"
+                if self.last_error is None:
+                    self.last_error = "poll_degraded"
             else:
                 self.last_error = None
         except Exception as exc:
@@ -210,6 +313,8 @@ class Poller:
             self.last_error = str(exc)
             log.exception("poll_cycle_failed", error=str(exc))
         finally:
+            self.price_poll_ok = price_ok
+            self.disclosure_poll_ok = disc_ok
             self._queue_sends = False
             self.last_tick_at = datetime.now(UTC)
             await self.storage.advisory_unlock(POLL_LOCK_ID)
@@ -217,11 +322,14 @@ class Poller:
         # CORE-004: Telegram I/O for this tick's new claims after unlock.
         # E2-C05: unsent drain uses row leases (SKIP LOCKED) — no advisory
         # re-hold, so RetryAfter may sleep without pinning the poll lock.
+        # PDF enrichment is fail-soft and rate-limited — never blocks alerts.
         try:
             await self._deliver_pending(pending)
             await self._retry_unsent_with_lock()
         except Exception as exc:
             log.exception("poll_deliver_failed", error=str(exc))
+        self._schedule_pdf_enrichment(pdf_enrich)
+        self._schedule_brief_drain()
         return fired
 
     async def _retry_unsent_with_lock(self) -> None:
@@ -246,10 +354,17 @@ class Poller:
 
     def _delivery_ok_ledger_path_from_env(self) -> Path | None:
         raw = os.getenv(DELIVERY_OK_LEDGER_ENV)
-        if raw is not None:
+        # Fail closed — non-string getenv mocks used to throw on .strip mid ledger path.
+        if isinstance(raw, str):
             raw = raw.strip()
             return Path(raw) if raw else None
-        digest = hashlib.sha256(self.settings.database_url.encode("utf-8")).hexdigest()[:16]
+        if raw is not None:
+            return None
+        # Fail closed — non-string database_url used to throw on .encode mid ledger.
+        db_url = self.settings.database_url
+        if not isinstance(db_url, str) or not db_url:
+            return None
+        digest = hashlib.sha256(db_url.encode("utf-8")).hexdigest()[:16]
         return Path("/tmp/chime") / f"delivery-ok-{digest}.jsonl"
 
     def _load_delivery_ok_ledger(self) -> None:
@@ -300,12 +415,14 @@ class Poller:
         self._delivered_ok_tokens.add(token)
         if token in self._delivery_ok_records:
             return token
+        # Fail closed — non-string pending.message used to throw on .encode.
+        msg = pending.message if isinstance(pending.message, str) else ""
         record: dict[str, Any] = {
             "token": token,
             "id": pending.log_id,
             "rule_id": pending.rule_id,
             "telegram_id": pending.telegram_id,
-            "message_sha256": hashlib.sha256(pending.message.encode("utf-8")).hexdigest(),
+            "message_sha256": hashlib.sha256(msg.encode("utf-8")).hexdigest(),
             "event_key": event_key,
             "recorded_at": datetime.now(UTC).isoformat(),
         }
@@ -375,24 +492,28 @@ class Poller:
             self._forget_durable_delivery_ok(token)
 
     async def _poll_prices(self) -> tuple[list[AlertEvent], bool]:
+        """Fetch full tradeSummary, persist market-wide, evaluate watchlist only.
+
+        Empty watchlist still persists the board so the thin /market browse has
+        data. Rule evaluation and watched_missing checks remain watchlist-scoped.
+        """
         symbols = await self.storage.watched_symbols()
-        if not symbols:
-            self.watched_missing = []
-            self.trade_summary_count = None
-            self.trade_summary_empty_ok = False
-            log.info("poll_no_watchlist")
-            return [], True
+        wanted = set(symbols)
 
         try:
             all_snaps = await self.cse.fetch_trade_summary()
         except CircuitOpenError:
             self.trade_summary_count = None
             self.trade_summary_empty_ok = False
+            # No board this tick — clear stale missing so health does not imply
+            # a CSE symbol gap when the real failure is circuit/transport.
+            self.watched_missing = []
             log.error("price_poll_circuit_open")
             return [], False
         except Exception as exc:
             self.trade_summary_count = None
             self.trade_summary_empty_ok = False
+            self.watched_missing = []
             log.exception("price_poll_failed", error=str(exc))
             return [], False
 
@@ -405,9 +526,56 @@ class Poller:
                 symbols=sorted(symbols),
             )
 
-        wanted = set(symbols)
-        snaps = [s for s in all_snaps if s.symbol in wanted]
-        present = {s.symbol for s in snaps}
+        # Market-wide persist (Tijori/browse foundation). Fail closed on DB errors.
+        try:
+            stored_all = await self.storage.persist_market_snapshots(all_snaps)
+        except Exception as exc:
+            log.exception("market_persist_failed", error=str(exc), count=len(all_snaps))
+            # Fetch succeeded — report watchlist gaps from the board we saw.
+            if wanted:
+                # Fail closed — non-string symbols used to throw on .strip mid
+                # board gap reporting after persist failure.
+                present = {
+                    s.symbol.strip().upper()
+                    for s in all_snaps
+                    if isinstance(s.symbol, str) and s.symbol.strip()
+                }
+                self.watched_missing = sorted(wanted - present)
+            else:
+                self.watched_missing = []
+            return [], False
+
+        # Optional non-watchlist snapshot retention (fail-soft — never degrade tick).
+        retention_days = _positive_int_setting(self.settings.snapshot_retention_days)
+        if retention_days > 0:
+            try:
+                deleted = await self.storage.delete_old_non_watchlist_snapshots(retention_days)
+                if deleted:
+                    log.info(
+                        "snapshot_retention_deleted",
+                        deleted=deleted,
+                        days=retention_days,
+                    )
+            except Exception as exc:
+                log.exception(
+                    "snapshot_retention_failed",
+                    error=str(exc),
+                    days=retention_days,
+                )
+
+        if not wanted:
+            self.watched_missing = []
+            # Empty HTTP-OK board is not a successful browse persist.
+            price_ok = not self.trade_summary_empty_ok
+            log.info(
+                "poll_market_persist_no_watchlist",
+                persisted=len(stored_all),
+                trade_summary_count=self.trade_summary_count,
+                price_ok=price_ok,
+            )
+            return [], price_ok
+
+        present = {s.symbol for s in stored_all}
         missing = sorted(wanted - present)
         self.watched_missing = missing
         price_ok = not missing
@@ -418,6 +586,7 @@ class Poller:
                 symbols=missing,
             )
 
+        snaps = [s for s in stored_all if s.symbol in wanted]
         rules = await self.storage.active_rules_for_symbols(list(wanted))
         rules_by_symbol: dict[str, list[Any]] = {}
         for rule in rules:
@@ -425,14 +594,29 @@ class Poller:
 
         return await self._evaluate_price_snaps(snaps, rules_by_symbol), price_ok
 
+    async def _poll_sectors(self) -> None:
+        """Optional ``SECTORS_INGEST`` board persist — fail-soft, never degrades tick."""
+        if not self.settings.sectors_ingest:
+            return
+        try:
+            sectors = await self.cse.fetch_all_sectors()
+        except Exception as exc:
+            log.warning("sectors_poll_failed", error=str(exc))
+            return
+        try:
+            stored = await self.storage.persist_sectors(sectors)
+            log.info("sectors_persist_ok", fetched=len(sectors), persisted=len(stored))
+        except Exception as exc:
+            log.exception("sectors_persist_failed", error=str(exc), count=len(sectors))
+
     async def _evaluate_price_snaps(
         self,
         snaps: list[PriceSnapshot],
         rules_by_symbol: dict[str, list[Any]],
     ) -> list[AlertEvent]:
+        """Evaluate already-persisted watchlist snapshots (ids required)."""
         fired: list[AlertEvent] = []
-        for snap in snaps:
-            stored = await self.storage.insert_snapshot(snap)
+        for stored in snaps:
             assert stored.id is not None
             previous = await self.storage.get_previous_state(stored.symbol, before_id=stored.id)
             symbol_rules = rules_by_symbol.get(stored.symbol, [])
@@ -469,7 +653,11 @@ class Poller:
         if not symbols:
             return [], True
         rules = await self.storage.active_rules_for_symbols(symbols)
-        disclosure_rules = [r for r in rules if r.type.value == "disclosure"]
+        # Fail closed — non-enum rule.type used to throw on .value mid disclosure
+        # poll (parity tick needs_disclosure getattr).
+        disclosure_rules = [
+            r for r in rules if getattr(r.type, "value", r.type) == "disclosure"
+        ]
         # Only hit CSE announcements for symbols with active disclosure rules
         # (price-only watchlist symbols skip this leg — rate-limit priority).
         disclosure_symbols = sorted({r.symbol for r in disclosure_rules})
@@ -485,8 +673,33 @@ class Poller:
         # Fetch all first (no inter-symbol sleep under lock — CORE-004).
         # Sequential HTTP provides natural spacing; rate-limit sleeps belong
         # outside the advisory lock if reintroduced.
+        # Optional bulk path (DISCLOSURE_BULK_FEED=1): one market-wide call +
+        # stocks name→symbol map; fail-soft to per-symbol for uncovered
+        # tickers or when the bulk feed errors.
         fetched: dict[str, list[Disclosure]] = {}
-        for symbol in disclosure_symbols:
+        remaining = list(disclosure_symbols)
+        if self.settings.disclosure_bulk_feed:
+            bulk_fetched, bulk_covered, bulk_ok = await self._fetch_disclosures_bulk(
+                disclosure_symbols
+            )
+            if bulk_ok:
+                fetched.update(bulk_fetched)
+                remaining = [s for s in disclosure_symbols if s not in bulk_covered]
+                if remaining:
+                    log.info(
+                        "disclosure_bulk_partial_fallback",
+                        bulk_covered=sorted(bulk_covered),
+                        per_symbol_fallback=remaining,
+                    )
+            else:
+                # Fail-soft: bulk error does not poison the tick if per-symbol works.
+                log.warning(
+                    "disclosure_bulk_failed_fallback",
+                    symbols=disclosure_symbols,
+                )
+                remaining = list(disclosure_symbols)
+
+        for symbol in remaining:
             try:
                 fetched[symbol] = await self.cse.fetch_announcements_for_symbol(
                     symbol, from_date=from_date, to_date=to_date
@@ -502,13 +715,204 @@ class Poller:
                 # Always upsert + evaluate. Crash between insert and claim used to
                 # permanently skip (insert_if_new → None). Claim uniqueness
                 # prevents duplicate Telegram sends; created_at gates history.
-                stored = await self.storage.upsert_disclosure(disc)
+                try:
+                    stored = await self.storage.upsert_disclosure(disc)
+                except Exception as exc:
+                    any_failure = True
+                    self.last_error = str(exc)
+                    log.exception(
+                        "disclosure_persist_failed",
+                        symbol=symbol,
+                        external_id=getattr(disc, "external_id", None),
+                        error=str(exc),
+                    )
+                    continue
                 events = evaluate_disclosure_rules(disclosure=stored, rules=symbol_rules)
                 for event in filter_fireable(events):
                     claimed = await self._claim_and_send(event)
                     if claimed:
                         fired.append(event)
+                # Queue PDF enrichment after alerts are claimed — never blocks
+                # rule eval / Telegram. Skip rows that already have pdf_url.
+                if (
+                    stored.id is not None
+                    and stored.just_inserted
+                    and not stored.pdf_url
+                    and self._pending_pdf_enrich is not None
+                ):
+                    self._pending_pdf_enrich.append(
+                        PendingPdfEnrich(
+                            disclosure_id=stored.id,
+                            symbol=stored.symbol,
+                            external_id=stored.external_id,
+                        )
+                    )
         return fired, not any_failure
+
+    async def _fetch_disclosures_bulk(
+        self, disclosure_symbols: list[str]
+    ) -> tuple[dict[str, list[Disclosure]], set[str], bool]:
+        """Market-wide approvedAnnouncement + name map.
+
+        Returns ``(fetched_by_symbol, covered_symbols, ok)``. ``covered`` are
+        symbols that have a unique stocks-table name mapping (safe to skip
+        per-symbol HTTP even when the feed has no rows for them). On any
+        bulk/map failure, ``ok`` is False and the caller falls back fully.
+        """
+        # Fail closed — non-string watchlist symbols used to throw on .strip mid bulk fetch.
+        allowed = {
+            s.strip().upper()
+            for s in disclosure_symbols
+            if isinstance(s, str) and s.strip()
+        }
+        try:
+            rows = await self.cse.fetch_approved_announcements()
+            stock_pairs = await self.storage.list_stock_names()
+        except Exception as exc:
+            log.warning("disclosure_bulk_fetch_failed", error=str(exc))
+            return {}, set(), False
+
+        name_map = build_unique_company_name_map(stock_pairs)
+        covered: set[str] = set()
+        for symbol, name in stock_pairs:
+            # Fail closed — non-string stock pair members used to throw on .strip.
+            if not isinstance(symbol, str) or not isinstance(name, str):
+                continue
+            sym = symbol.strip().upper()
+            if sym not in allowed or not name:
+                continue
+            mapped = name_map.get(normalize_company_name(name))
+            if mapped == sym:
+                covered.add(sym)
+
+        seen_at = datetime.now(UTC)
+        fetched: dict[str, list[Disclosure]] = {s: [] for s in covered}
+        unmatched = 0
+        for row in rows:
+            resolved = resolve_announcement_symbol(row, name_map=name_map, allowed_symbols=allowed)
+            if resolved is None:
+                unmatched += 1
+                continue
+            covered.add(resolved)
+            fetched.setdefault(resolved, [])
+            disc = announcement_to_disclosure(row, symbol=resolved, seen_at=seen_at)
+            if disc is not None:
+                fetched[resolved].append(disc)
+
+        log.info(
+            "disclosure_bulk_ok",
+            rows=len(rows),
+            matched_symbols=sorted(s for s, ds in fetched.items() if ds),
+            covered=sorted(covered),
+            unmatched_or_out_of_watchlist=unmatched,
+        )
+        return fetched, covered, True
+
+    def _schedule_pdf_enrichment(self, items: list[PendingPdfEnrich]) -> None:
+        """Fire-and-forget enrich so run_once returns after alert delivery."""
+        if not items:
+            return
+        if self._background_closed:
+            log.warning(
+                "pdf_enrich_skipped_shutdown",
+                count=len(items),
+            )
+            return
+        self._pdf_enrich_last_batch_size = len(items)
+        self._pdf_enrich_batches_started += 1
+        task = asyncio.create_task(
+            self._enrich_disclosure_pdfs_safe(items),
+            name="chime_pdf_enrich",
+        )
+        self._pdf_enrich_tasks.add(task)
+        task.add_done_callback(self._pdf_enrich_tasks.discard)
+
+    def _schedule_brief_drain(self) -> None:
+        """Fire-and-forget pending brief drain when AI briefs are enabled."""
+        if not briefs_enabled():
+            return
+        if self._background_closed:
+            log.warning("brief_drain_skipped_shutdown")
+            return
+        # Coalesce: one in-flight drain (or waiter on the lock) is enough —
+        # avoid N tasks stacking on `_brief_drain_lock` for shutdown gathers.
+        if self._brief_drain_tasks or self._brief_drain_lock.locked():
+            return
+        task = asyncio.create_task(
+            self._drain_briefs_safe(),
+            name="chime_brief_drain",
+        )
+        self._brief_drain_tasks.add(task)
+        task.add_done_callback(self._brief_drain_tasks.discard)
+
+    async def _drain_briefs_safe(self) -> None:
+        try:
+            async with self._brief_drain_lock:
+                n = await claim_pending_briefs(self.storage, notify=self.send)
+                if n:
+                    log.info("brief_drain_done", processed=n)
+        except asyncio.CancelledError:
+            raise
+        except Exception as exc:
+            log.warning("brief_drain_failed", error=str(exc))
+
+    async def _enrich_disclosure_pdfs_safe(self, items: list[PendingPdfEnrich]) -> None:
+        try:
+            async with self._pdf_enrich_lock:
+                await self._enrich_disclosure_pdfs(items)
+        except asyncio.CancelledError:
+            raise
+        except Exception as exc:
+            log.warning("pdf_enrich_batch_failed", error=str(exc))
+
+    async def _enrich_disclosure_pdfs(self, items: list[PendingPdfEnrich]) -> None:
+        """Resolve legacy filePath → CDN PDF URL. Fail-soft; polite per-symbol sleep.
+
+        Runs outside the advisory lock and outside run_once's await path so CSE
+        latency / sleeps never pin the poller or delay Telegram / next tick.
+        """
+        if not items:
+            return
+        by_symbol: dict[str, list[PendingPdfEnrich]] = {}
+        for item in items:
+            by_symbol.setdefault(item.symbol, []).append(item)
+
+        sleep_s = max(0.0, float(self.settings.pdf_enrich_sleep_seconds))
+        for symbol, rows in sorted(by_symbol.items()):
+            if sleep_s > 0:
+                await asyncio.sleep(sleep_s)
+            try:
+                legacy = await self.cse.fetch_legacy_announcements(symbol)
+            except Exception as exc:
+                log.warning(
+                    "legacy_announcement_enrich_failed",
+                    symbol=symbol,
+                    error=str(exc),
+                )
+                continue
+            pdf_map = legacy_pdf_urls_by_id(legacy)
+            if not pdf_map:
+                continue
+            for item in rows:
+                pdf_url = pdf_map.get(item.external_id)
+                if not pdf_url:
+                    continue
+                try:
+                    updated = await self.storage.set_disclosure_pdf_url(item.disclosure_id, pdf_url)
+                    if updated:
+                        log.info(
+                            "disclosure_pdf_url_set",
+                            disclosure_id=item.disclosure_id,
+                            symbol=item.symbol,
+                            external_id=item.external_id,
+                        )
+                except Exception as exc:
+                    log.warning(
+                        "pdf_url_set_failed",
+                        disclosure_id=item.disclosure_id,
+                        symbol=item.symbol,
+                        error=str(exc),
+                    )
 
     async def _notify_dead_letter(
         self,
@@ -638,6 +1042,38 @@ class Poller:
                 attempts=attempts,
             )
 
+    async def _ready_filing_brief_for(self, event: AlertEvent) -> str | None:
+        """Best-effort ready brief for a disclosure alert; never raises."""
+        # Fail closed — non-enum type used to throw on .value before lookup try.
+        type_val = getattr(event.type, "value", event.type)
+        if type_val != "disclosure":
+            return None
+        external_id: str | None = None
+        # event_key = disclosure:{rule_id}:{external_id}
+        # Fail closed — non-string event_key used to throw on .startswith mid claim.
+        key = event.event_key
+        if isinstance(key, str) and key.startswith("disclosure:"):
+            parts = key.split(":", 2)
+            if len(parts) == 3 and parts[2].strip():
+                external_id = parts[2].strip()
+        try:
+            brief = await self.storage.get_ready_filing_brief(
+                disclosure_id=event.disclosure_id,
+                external_id=external_id,
+                symbol=event.symbol,
+            )
+        except Exception as exc:
+            log.warning(
+                "ready_filing_brief_lookup_failed",
+                event_key=event.event_key,
+                disclosure_id=event.disclosure_id,
+                error=str(exc),
+            )
+            return None
+        if isinstance(brief, str) and brief.strip():
+            return brief
+        return None
+
     async def _claim_only(
         self,
         event: AlertEvent,
@@ -648,8 +1084,12 @@ class Poller:
 
         When ``disarm`` is True (price crosses), uses ``claim_and_disarm`` so
         claim + armed=False commit together. Conflict → no disarm.
+
+        Disclosure claims attach a ready ``disclosure_briefs`` filing brief when
+        present (fail-soft — missing/pending briefs do not block the push).
         """
-        message = format_alert_message(event)
+        filing_brief = await self._ready_filing_brief_for(event)
+        message = format_alert_message(event, filing_brief=filing_brief)
         if disarm:
             log_id = await self.storage.claim_and_disarm(event, message)
         else:
@@ -828,14 +1268,35 @@ class Poller:
             if not pending:
                 break
             row = pending[0]
-            log_id = int(row["id"])
-            text = row["message_text"] or ""
+            # Fail closed — poisoned unsent rows used to throw on int() or
+            # soft-accept bool→1 / non-string message_text mid retry drain.
+            raw_id = row.get("id")
+            raw_tg = row.get("telegram_id")
+            raw_rule = row.get("rule_id")
+            if (
+                isinstance(raw_id, bool)
+                or not isinstance(raw_id, int)
+                or isinstance(raw_tg, bool)
+                or not isinstance(raw_tg, int)
+                or isinstance(raw_rule, bool)
+                or not isinstance(raw_rule, int)
+            ):
+                log.warning(
+                    "unsent_row_poisoned",
+                    alert_log_id=raw_id,
+                    telegram_id=raw_tg,
+                    rule_id=raw_rule,
+                )
+                continue
+            log_id = raw_id
+            raw_text = row.get("message_text")
+            text = raw_text if isinstance(raw_text, str) else ""
             item = PendingSend(
                 log_id=log_id,
-                telegram_id=int(row["telegram_id"]),
+                telegram_id=raw_tg,
                 message=text,
                 already_claimed_new=False,
-                rule_id=int(row["rule_id"]),
+                rule_id=raw_rule,
                 event=None,
                 symbol=_symbol_from_alert_message(text),
             )
@@ -880,12 +1341,63 @@ class Poller:
         )
         return scheduler
 
+    async def _drain_background_on_shutdown(self) -> None:
+        """Await PDF enrich + brief drain without cancelling them on timeout.
+
+        Re-scans task sets until empty so a late ``run_once`` (shielded tick
+        still finishing) can push work and still be waited on within the
+        budget. ``asyncio.shield`` mirrors CORE-005: timeout must not cancel
+        mid-flight work that holds the enrich/brief locks or a pool borrow.
+        """
+        loop = asyncio.get_running_loop()
+        deadline = loop.time() + SHUTDOWN_TICK_TIMEOUT_SECONDS
+        while True:
+            pending = [
+                t for t in (*self._pdf_enrich_tasks, *self._brief_drain_tasks) if not t.done()
+            ]
+            if not pending:
+                return
+            remaining = deadline - loop.time()
+            if remaining <= 0:
+                log.warning(
+                    "poller_shutdown_background_timeout",
+                    timeout_seconds=SHUTDOWN_TICK_TIMEOUT_SECONDS,
+                    pdf_enrich=len(self._pdf_enrich_tasks),
+                    brief_drain=len(self._brief_drain_tasks),
+                )
+                return
+            try:
+                results = await asyncio.wait_for(
+                    asyncio.gather(
+                        *[asyncio.shield(t) for t in pending],
+                        return_exceptions=True,
+                    ),
+                    timeout=remaining,
+                )
+            except TimeoutError:
+                log.warning(
+                    "poller_shutdown_background_timeout",
+                    timeout_seconds=SHUTDOWN_TICK_TIMEOUT_SECONDS,
+                    pdf_enrich=len(self._pdf_enrich_tasks),
+                    brief_drain=len(self._brief_drain_tasks),
+                )
+                return
+            for result in results:
+                if isinstance(result, Exception):
+                    log.warning(
+                        "poller_shutdown_background_error",
+                        error=str(result),
+                    )
+
     async def shutdown(self) -> None:
         """Stop the scheduler, then await any in-flight tick (bounded).
 
         ``scheduler.shutdown(wait=False)`` returns immediately; CORE-005 /
         E2-C02 require waiting for the current ``_scheduled_tick`` /
         ``run_once`` so ``storage.close()`` does not race the advisory lock.
+
+        After the tick wait, drain fire-and-forget PDF enrich / brief push
+        tasks the same way (shielded, bounded) before callers ``storage.close()``.
         """
         self._stopping.set()
         if self._scheduler is not None:
@@ -906,6 +1418,12 @@ class Poller:
                 )
             except Exception:
                 log.exception("poller_shutdown_tick_error")
+        try:
+            await self._drain_background_on_shutdown()
+        except Exception:
+            log.exception("poller_shutdown_background_error")
+        # Reject further fire-and-forget schedules (late shielded tick).
+        self._background_closed = True
         log.info("poller_stopped")
 
 
@@ -965,6 +1483,9 @@ async def run_poller_forever(
                 circuits=circuits,
                 last_error=poller.last_error,
             )
+            brief_queue = await brief_queue_health_hint(storage=storage, poller=poller)
+            if brief_queue:
+                health.update(brief_queue=brief_queue)
             with contextlib.suppress(TimeoutError):
                 await asyncio.wait_for(stop.wait(), timeout=10)
 

@@ -40,7 +40,7 @@ def load_nodes(path: Path) -> list[dict]:
     return nodes
 
 
-def resolve_score_file(node: dict, nodes_path: Path) -> Path:
+def resolve_score_file(node: dict) -> Path:
     """Chime node: score_file is relative to this repo root."""
     rel = node.get("score_file") or "docs/factory/SCOREBOARD.json"
     # Local-only stub: always resolve under the Chime checkout that owns
@@ -72,7 +72,7 @@ def main(argv: list[str] | None = None) -> int:
     total = 0
     for node in nodes:
         nid = str(node.get("id") or node.get("repo") or "?")
-        score_path = resolve_score_file(node, args.nodes)
+        score_path = resolve_score_file(node)
         if not score_path.is_file():
             rows.append(
                 {

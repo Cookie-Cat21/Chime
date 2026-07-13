@@ -1,19 +1,54 @@
 "use client";
 
 import Link from "next/link";
+import { usePathname } from "next/navigation";
 import { useState } from "react";
 
 import { NavSession } from "@/components/nav-session";
 
 const links = [
+  { href: "/market", label: "Browse" },
   { href: "/watchlist", label: "Watchlist" },
   { href: "/alerts", label: "Alerts" },
   { href: "/alerts/history", label: "History" },
+  { href: "/scenarios", label: "Scenarios" },
   { href: "/health", label: "Health" },
 ] as const;
 
+/**
+ * Resolve which nav href is active. Prefers the explicit `active` prop, else
+ * the current pathname. Longest prefix wins so `/alerts/history` highlights
+ * History (not Alerts), and `/scenarios` exact-matches Scenarios.
+ */
+/**
+ * Cap nav path strings — multi-MB forged ``active`` / pathname used to burn
+ * CPU in prefix matching before any href could win.
+ */
+export const MAX_NAV_PATH_LENGTH = 512;
+
+export function resolveActiveNavHref(
+  current: string | null | undefined,
+): (typeof links)[number]["href"] | undefined {
+  // Fail closed — non-strings used to throw on .startsWith / .endsWith.
+  if (typeof current !== "string" || !current) return undefined;
+  if (current.length > MAX_NAV_PATH_LENGTH) return undefined;
+  const path =
+    current.length > 1 && current.endsWith("/") ? current.slice(0, -1) : current;
+  let best: (typeof links)[number]["href"] | undefined;
+  for (const { href } of links) {
+    if (path === href || path.startsWith(`${href}/`)) {
+      if (best === undefined || href.length > best.length) {
+        best = href;
+      }
+    }
+  }
+  return best;
+}
+
 export function AppNav({ active }: { active?: string }) {
+  const pathname = usePathname();
   const [open, setOpen] = useState(false);
+  const activeHref = resolveActiveNavHref(active ?? pathname);
 
   return (
     <header className="sticky top-0 z-40 border-b border-border/70 bg-background/80 backdrop-blur-sm">
@@ -29,7 +64,7 @@ export function AppNav({ active }: { active?: string }) {
         {/* Desktop / tablet */}
         <nav className="hidden items-center gap-x-5 text-sm sm:flex">
           {links.map((link) => {
-            const isActive = active === link.href;
+            const isActive = activeHref === link.href;
             return (
               <Link
                 key={link.href}
@@ -75,37 +110,38 @@ export function AppNav({ active }: { active?: string }) {
         </div>
       </div>
 
-      {open ? (
-        <nav
-          id="chime-mobile-nav"
-          className="border-t border-border/60 px-4 py-2 sm:hidden"
-        >
-          <ul className="flex flex-col">
-            {links.map((link) => {
-              const isActive = active === link.href;
-              return (
-                <li key={link.href}>
-                  <Link
-                    href={link.href}
-                    aria-current={isActive ? "page" : undefined}
-                    onClick={() => setOpen(false)}
-                    className={`block rounded-sm py-3 text-base focus-visible:ring-2 focus-visible:ring-ring/50 focus-visible:outline-none ${
-                      isActive
-                        ? "font-medium text-foreground"
-                        : "text-muted-foreground"
-                    }`}
-                  >
-                    {link.label}
-                  </Link>
-                </li>
-              );
-            })}
-          </ul>
-          <div className="border-t border-border/60 py-3">
-            <NavSession compact />
-          </div>
-        </nav>
-      ) : null}
+      {/* Keep in DOM so aria-controls stays valid when the menu is closed. */}
+      <nav
+        id="chime-mobile-nav"
+        className="border-t border-border/60 px-4 py-2 sm:hidden"
+        hidden={!open}
+      >
+        <ul className="flex flex-col">
+          {links.map((link) => {
+            const isActive = activeHref === link.href;
+            return (
+              <li key={link.href}>
+                <Link
+                  href={link.href}
+                  aria-current={isActive ? "page" : undefined}
+                  tabIndex={open ? undefined : -1}
+                  onClick={() => setOpen(false)}
+                  className={`block rounded-sm py-3 text-base focus-visible:ring-2 focus-visible:ring-ring/50 focus-visible:outline-none ${
+                    isActive
+                      ? "font-medium text-foreground"
+                      : "text-muted-foreground"
+                  }`}
+                >
+                  {link.label}
+                </Link>
+              </li>
+            );
+          })}
+        </ul>
+        <div className="border-t border-border/60 py-3">
+          <NavSession compact />
+        </div>
+      </nav>
     </header>
   );
 }

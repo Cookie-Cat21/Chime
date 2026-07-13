@@ -49,6 +49,21 @@ def test_format_dead_letter_notify_includes_symbol_attempts_nfa() -> None:
     assert "Not financial advice" in msg
 
 
+def test_format_dead_letter_notify_strips_controls_from_symbol() -> None:
+    """Wave15: hostile/parsed symbols must not inject C0 controls into Telegram."""
+    msg = format_dead_letter_notify("JKH\x00.N0000\n", 3)
+    assert "\x00" not in msg
+    assert "\n" not in msg
+    assert "JKH.N0000" in msg
+    assert "after 3 tries" in msg
+    assert "Not financial advice" in msg
+
+
+def test_format_dead_letter_notify_control_only_symbol_falls_back() -> None:
+    msg = format_dead_letter_notify("\x00\x01", 2)
+    assert "alert for ? after 2 tries" in msg
+
+
 @pytest.mark.asyncio
 async def test_record_send_failure_notifies_once_at_ceiling() -> None:
     storage = AsyncMock()
@@ -92,9 +107,7 @@ async def test_record_send_deferred_notifies_once_at_ceiling() -> None:
 @pytest.mark.asyncio
 async def test_dead_letter_notify_path_attempted_once_per_alert_log_id() -> None:
     storage = AsyncMock()
-    storage.mark_alert_attempt = AsyncMock(
-        side_effect=[MAX_SEND_ATTEMPTS, MAX_SEND_ATTEMPTS + 1]
-    )
+    storage.mark_alert_attempt = AsyncMock(side_effect=[MAX_SEND_ATTEMPTS, MAX_SEND_ATTEMPTS + 1])
     storage.dead_letter = AsyncMock()
     send = AsyncMock(return_value=SendResult.OK)
 
@@ -108,9 +121,7 @@ async def test_dead_letter_notify_path_attempted_once_per_alert_log_id() -> None
         )
 
     assert storage.dead_letter.await_count == 2
-    send.assert_awaited_once_with(
-        1001, format_dead_letter_notify("JKH.N0000", MAX_SEND_ATTEMPTS)
-    )
+    send.assert_awaited_once_with(1001, format_dead_letter_notify("JKH.N0000", MAX_SEND_ATTEMPTS))
 
 
 @pytest.mark.asyncio

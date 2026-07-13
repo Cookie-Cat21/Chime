@@ -1,11 +1,14 @@
 # Chime
 
-Telegram-first alerting layer for the Colombo Stock Exchange (CSE).
+Tijori-for-CSE: thin **Browse**, AI **filing briefs**, and real **Telegram push**
+for the Colombo Stock Exchange — not a portfolio tracker or trading terminal.
 
-Chime is a background watcher, not a dashboard. You set an alert condition —
-a price threshold, a daily % move, or "any new disclosure for this company" —
-and get a Telegram message the moment it fires, with no browser tab or app
-open. Full product plan: [CLAUDE.md](CLAUDE.md). Endpoint notes:
+Chime is a background watcher. You set an alert condition — a price threshold,
+a daily % move, or "any new disclosure for this company" — and get a Telegram
+message the moment it fires, with no browser tab or app open. The thin dash
+adds `/market` Browse and optional plain-language filing briefs on disclosures;
+push stays primary. Full product plan: [CLAUDE.md](CLAUDE.md). Tijori plan:
+[docs/factory/TIJORI_CSE_PLAN.md](docs/factory/TIJORI_CSE_PLAN.md). Endpoint notes:
 [docs/endpoint_probe_report.md](docs/endpoint_probe_report.md).
 
 ## Setup
@@ -13,6 +16,10 @@ open. Full product plan: [CLAUDE.md](CLAUDE.md). Endpoint notes:
 ```bash
 python -m venv .venv && source .venv/bin/activate
 pip install -e ".[dev]"
+# Optional: PDF text extract for AI filing briefs (pypdf) — needed when
+# AI_BRIEFS_ENABLED=1 and the poller drains disclosure_briefs:
+#   pip install -e ".[briefs]"
+#   # or combined: pip install -e ".[dev,briefs]"
 cp .env.example .env   # fill TELEGRAM_BOT_TOKEN + DATABASE_URL
 python -m chime migrate
 python -m chime both   # or: bot | poller | tick --force
@@ -40,14 +47,30 @@ Point `DATABASE_URL` at it (see `.env.example`).
 | `python -m chime bot` | Telegram bot only |
 | `python -m chime poller` | Market-hours poller + rule engine only |
 | `python -m chime both` | Bot + poller in one process |
-| `python -m chime tick --force` | One poll cycle (ignores market hours) |
+| `python -m chime tick --force` | One poll cycle (ignores market hours); seeds `/market` browse |
+| `make tick` | Same as `python -m chime tick --force` |
 
 Bot and `both` start Telegram long-polling with `drop_pending_updates=True`, so
 queued messages from downtime are discarded on restart (avoids replaying stale
 `/watch` / `/alert` commands after a deploy).
 
-Telegram: `/watch`, `/unwatch`, `/alert …`, `/cancel ALERT_ID`, `/myalerts`
-(active alerts only — cancelled rules are omitted), `/mywatchlist`, `/help`.
+### Bot commands (Telegram)
+
+| Command | What it does |
+|---|---|
+| `/start` | Register user, short explainer + NFA |
+| `/help` | List commands + disclosure/alert notes + NFA |
+| `/watch SYMBOL` | Add symbol to watchlist |
+| `/unwatch SYMBOL` | Remove symbol; deactivates that user’s rules for it |
+| `/alert SYMBOL above PRICE` | Fire when last price crosses above threshold |
+| `/alert SYMBOL below PRICE` | Fire when last price crosses below threshold |
+| `/alert SYMBOL move PERCENT` | Fire when daily % move exceeds threshold |
+| `/alert SYMBOL disclosure [CATEGORY]` | Fire on new filing (optional title substring) |
+| `/cancel ALERT_ID` | Soft-cancel an active rule |
+| `/myalerts` | List active alerts only (cancelled omitted) |
+| `/mywatchlist` | List watched symbols |
+| `/brief SYMBOL` | Read-only latest ready AI filing brief (DB only; no LLM call). Empty → “AI briefs are off” or “none yet” |
+
 
 ## Latency SLO
 
@@ -92,10 +115,12 @@ Third-party licenses: [THIRD_PARTY.md](THIRD_PARTY.md).
 
 Quality-gated workstreams live under [docs/factory/](docs/factory/)
 ([COMMIT_FACTORY.md](docs/factory/COMMIT_FACTORY.md),
-[DASH_IA.md](docs/factory/DASH_IA.md)). Telegram remains the primary
-user surface; a thin management dashboard (Next.js + Tailwind + shadcn)
-is secondary — watchlist / alerts / fire history only, not a trading
-terminal.
+[DASH_IA.md](docs/factory/DASH_IA.md),
+[TIJORI_CSE_PLAN.md](docs/factory/TIJORI_CSE_PLAN.md),
+wave rollup [TIJORI_WAVE_REPORT.md](docs/factory/passes/TIJORI_WAVE_REPORT.md)).
+Telegram remains the primary user surface; a thin management + browse dashboard
+(Next.js + Tailwind + shadcn) is secondary — watchlist / alerts / fire history /
+symbol browse only, not a trading terminal.
 
 ### Dashboard runbook (`web/`)
 
@@ -106,7 +131,10 @@ Local demo auth (ADR 001) — Postgres only; never calls cse.lk from `web/`.
 make up && make migrate
 cp .env.example .env   # DATABASE_URL=postgresql://chime:chime@localhost:5432/chime
 
-# 2) Dashboard
+# 2) Seed /market browse (one forced CSE poll → stocks + price_snapshots)
+make tick   # or: python -m chime tick --force
+
+# 3) Dashboard
 cd web
 cp .env.example .env.local
 # Required:
@@ -120,10 +148,12 @@ npm install
 npm run dev
 ```
 
-Open [http://localhost:3000/login](http://localhost:3000/login). Demo sign-in
-posts `{ "telegram_id": <allowlisted id> }` → HttpOnly `chime_session` + CSRF.
-Mutations need matching `X-CSRF-Token`. Details: [web/README.md](web/README.md),
-[docs/adr/001-dash-auth.md](docs/adr/001-dash-auth.md).
+Empty `/market` ⇒ no snapshots yet — run `make tick` (or leave `poller`/`both`
+running). Open [http://localhost:3000/login](http://localhost:3000/login). Demo
+sign-in posts `{ "telegram_id": <allowlisted id> }` → HttpOnly `chime_session` +
+CSRF. Mutations need matching `X-CSRF-Token`. Details:
+[web/README.md](web/README.md), [docs/adr/001-dash-auth.md](docs/adr/001-dash-auth.md),
+[docs/runbooks/TIJORI.md](docs/runbooks/TIJORI.md).
 
 ## Disclaimer
 

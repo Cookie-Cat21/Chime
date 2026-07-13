@@ -1,14 +1,21 @@
 import { Pool, type PoolClient } from "pg";
 
+import { sanitizeDisclosureCategory } from "@/lib/api/disclosure-safe";
+import { toFiniteNumber } from "@/lib/api/market-browse";
+import { cappedAlertThreshold } from "@/lib/api/finite-number";
+import { toSafePositiveInt } from "@/lib/api/safe-int";
 import { toIso } from "@/lib/api/time";
-import type { AlertType } from "@/lib/api/symbol";
+import { isAlertType, normalizeSymbol, type AlertType } from "@/lib/api/symbol";
 
 const globalForPg = globalThis as typeof globalThis & {
   __chimePgPool?: Pool;
 };
 
 export function getPool(): Pool {
-  const url = (process.env.DATABASE_URL ?? "").trim();
+  // Fail closed — non-string env mocks used to throw on .trim mid pool init
+  // (parity getDashAuthConfig / resolveInternalOrigin typeof guards).
+  const urlEnv = process.env.DATABASE_URL;
+  const url = typeof urlEnv === "string" ? urlEnv.trim() : "";
   if (!url) {
     throw new Error("DATABASE_URL is not set");
   }
@@ -33,7 +40,13 @@ export async function ensureUser(telegramId: number): Promise<number> {
   );
   const row = result.rows[0];
   if (!row) throw new Error("ensure_user returned no row");
-  return Number(row.id);
+  // Digits-only SafeInteger — Number(oversized) used to precision-lose and
+  // mint a session for the wrong user_id after JSON/Number round-trip.
+  const id = toSafePositiveInt(row.id);
+  if (id == null || !Number.isSafeInteger(id)) {
+    throw new Error("ensure_user returned non-safe id");
+  }
+  return id;
 }
 
 export type StockRow = {
@@ -114,6 +127,7 @@ export type AlertRuleRow = {
   symbol: string;
   type: string;
   threshold: number | null;
+  category: string | null;
   active: boolean;
   armed: boolean;
   created_at: string | null;
@@ -124,17 +138,29 @@ function mapRule(row: {
   symbol: string;
   type: string;
   threshold: number | null;
+  category: string | null;
   active: boolean;
   armed: boolean;
   created_at: Date | string;
-}): AlertRuleRow {
+}): AlertRuleRow | null {
+  // Digits-only SafeInteger — Number(oversized) used to precision-lose and
+  // alias the wrong rule on create/idempotent return.
+  const id = toSafePositiveInt(row.id);
+  if (id == null || !Number.isSafeInteger(id)) return null;
+  if (!isAlertType(row.type)) return null;
+  // Fail closed — only CSE SYMBOL_RE (no sanitize "?" placeholder).
+  const symbol = normalizeSymbol(row.symbol);
+  if (!symbol) return null;
   return {
-    id: Number(row.id),
-    symbol: row.symbol,
+    id,
+    symbol,
     type: row.type,
-    threshold: row.threshold == null ? null : Number(row.threshold),
-    active: Boolean(row.active),
-    armed: Boolean(row.armed),
+    // Finite-only + abs magnitude cap — NaN/±Inf / ±absurd → null.
+    threshold: cappedAlertThreshold(toFiniteNumber(row.threshold)),
+    category: sanitizeDisclosureCategory(row.category),
+    // Strict === true — Boolean("false")/1 must not mislabel rule state.
+    active: row.active === true,
+    armed: row.armed === true,
     created_at: toIso(row.created_at),
   };
 }
@@ -145,24 +171,27 @@ async function fetchActiveRule(
   symbol: string,
   alertType: AlertType,
   threshold: number | null,
+  category: string | null,
 ): Promise<AlertRuleRow | null> {
   const result = await client.query<{
     id: string | number;
     symbol: string;
     type: string;
     threshold: number | null;
+    category: string | null;
     active: boolean;
     armed: boolean;
     created_at: Date | string;
   }>(
-    `SELECT id, symbol, type, threshold, active, armed, created_at
+    `SELECT id, symbol, type, threshold, category, active, armed, created_at
      FROM alert_rules
      WHERE user_id = $1 AND symbol = $2 AND type = $3
        AND COALESCE(threshold, -1) = COALESCE($4::double precision, -1)
+       AND COALESCE(category, '') = COALESCE($5, '')
        AND active
      ORDER BY id DESC
      LIMIT 1`,
-    [userId, symbol, alertType, threshold],
+    [userId, symbol, alertType, threshold, category],
   );
   const row = result.rows[0];
   return row ? mapRule(row) : null;
@@ -181,15 +210,20 @@ function isUniqueViolation(err: unknown): boolean {
  * Create alert rule mirroring Storage.create_alert_rule:
  * auto-watch, idempotent return-existing, armed=true on insert.
  * Stock must already exist (caller checks).
+ * ``category`` is for disclosure rules only (substring filter); ignored otherwise.
  */
 export async function createAlertRule(
   userId: number,
   symbol: string,
   alertType: AlertType,
   threshold: number | null,
+  category: string | null = null,
 ): Promise<{ rule: AlertRuleRow; created: boolean }> {
   const pool = getPool();
   const client = await pool.connect();
+  // Defense in depth: sanitize even if caller forgot (POST already sanitizes).
+  const cat =
+    alertType === "disclosure" ? sanitizeDisclosureCategory(category) : null;
   try {
     await client.query("BEGIN");
 
@@ -206,6 +240,7 @@ export async function createAlertRule(
       symbol,
       alertType,
       threshold,
+      cat,
     );
     if (existing) {
       await client.query("COMMIT");
@@ -218,19 +253,22 @@ export async function createAlertRule(
         symbol: string;
         type: string;
         threshold: number | null;
+        category: string | null;
         active: boolean;
         armed: boolean;
         created_at: Date | string;
       }>(
-        `INSERT INTO alert_rules (user_id, symbol, type, threshold, active, armed)
-         VALUES ($1, $2, $3, $4, TRUE, TRUE)
-         RETURNING id, symbol, type, threshold, active, armed, created_at`,
-        [userId, symbol, alertType, threshold],
+        `INSERT INTO alert_rules (user_id, symbol, type, threshold, category, active, armed)
+         VALUES ($1, $2, $3, $4, $5, TRUE, TRUE)
+         RETURNING id, symbol, type, threshold, category, active, armed, created_at`,
+        [userId, symbol, alertType, threshold, cat],
       );
       const row = inserted.rows[0];
       if (!row) throw new Error("create_alert_rule returned no row");
+      const mapped = mapRule(row);
+      if (!mapped) throw new Error("create_alert_rule returned non-safe rule");
       await client.query("COMMIT");
-      return { rule: mapRule(row), created: true };
+      return { rule: mapped, created: true };
     } catch (err) {
       if (!isUniqueViolation(err)) throw err;
       // Concurrent insert won — return survivor
@@ -242,6 +280,7 @@ export async function createAlertRule(
         symbol,
         alertType,
         threshold,
+        cat,
       );
       await client.query("COMMIT");
       if (raced) return { rule: raced, created: false };

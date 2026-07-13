@@ -1,6 +1,10 @@
 import { AppNav } from "@/components/app-nav";
 import { NfaFooter } from "@/components/nfa-footer";
+import { sanitizeDisclosureText } from "@/lib/api/disclosure-safe";
+import { toNonNegativeSafeInt } from "@/lib/api/safe-int";
 import { serverApiGet } from "@/lib/api/server-fetch";
+import { normalizeSymbol } from "@/lib/api/symbol";
+import { MAX_DATE_MS, toIso } from "@/lib/api/time";
 import { requirePageSession } from "@/lib/auth/page-session";
 import { formatTs } from "@/lib/format";
 
@@ -13,6 +17,21 @@ export const metadata = {
 
 /** Health timestamps older than this need explicit ops attention. */
 const STALE_HEALTH_AGE_MS = 24 * 60 * 60 * 1000;
+/** Cap age label digits — extreme past timestamps used to balloon ``Nd``. */
+const MAX_HEALTH_AGE_DAYS = 9_999;
+const HEALTH_UI_STRING_MAX = 512;
+const HEALTH_UI_WATCHED_MAX = 64;
+const HEALTH_UI_CIRCUITS_MAX = 32;
+const CIRCUIT_STATES = new Set(["closed", "open", "half_open"]);
+
+type BriefQueueHint = {
+  pending_briefs?: number;
+  pdf_enrich?: {
+    in_flight_tasks?: number;
+    last_batch_size?: number;
+    batches_started?: number;
+  };
+};
 
 type HealthPayload = {
   status: "ok" | "degraded";
@@ -28,8 +47,148 @@ type HealthPayload = {
     last_error?: string | null;
     watched_missing?: string[];
     circuits?: Record<string, { state?: string; failures?: number }>;
+    /** Ops hint only — omit section when absent. */
+    brief_queue?: BriefQueueHint;
   } | null;
 };
+
+function healthUiString(raw: unknown): string | null {
+  return sanitizeDisclosureText(
+    typeof raw === "string" ? raw : null,
+    HEALTH_UI_STRING_MAX,
+  );
+}
+
+/** Fail-closed timestamp — sanitize then require parseable ISO (no raw echo). */
+function healthTs(raw: unknown): string | null {
+  if (raw === null) return null;
+  if (typeof raw !== "string") return null;
+  const cleaned = healthUiString(raw);
+  return cleaned ? toIso(cleaned) : null;
+}
+
+/**
+ * Fail-closed health UI parse — hostile / wrong-shape JSON must not 500 the
+ * ops page or render unbounded strings / unsafe React keys.
+ */
+function parseHealthPayload(body: unknown): HealthPayload | null {
+  if (body == null || typeof body !== "object" || Array.isArray(body)) {
+    return null;
+  }
+  const r = body as Record<string, unknown>;
+  const status = r.status === "ok" || r.status === "degraded" ? r.status : null;
+  if (!status) return null;
+  if (typeof r.db_ok !== "boolean") return null;
+
+  let poller: HealthPayload["poller"] = null;
+  if (r.poller != null && typeof r.poller === "object" && !Array.isArray(r.poller)) {
+    const p = r.poller as Record<string, unknown>;
+    const watched: string[] = [];
+    if (Array.isArray(p.watched_missing)) {
+      for (const item of p.watched_missing) {
+        // Fail closed — only CSE SYMBOL_RE (no sanitize length-cap fallback).
+        const sym = normalizeSymbol(item);
+        if (!sym) continue;
+        watched.push(sym);
+        if (watched.length >= HEALTH_UI_WATCHED_MAX) break;
+      }
+    }
+
+    let circuits: NonNullable<
+      NonNullable<HealthPayload["poller"]>["circuits"]
+    > | undefined;
+    if (p.circuits != null && typeof p.circuits === "object" && !Array.isArray(p.circuits)) {
+      circuits = {};
+      for (const [key, value] of Object.entries(
+        p.circuits as Record<string, unknown>,
+      )) {
+        if (Object.keys(circuits).length >= HEALTH_UI_CIRCUITS_MAX) break;
+        const name = healthUiString(key);
+        if (!name || name.length > 64) continue;
+        if (value == null || typeof value !== "object" || Array.isArray(value)) {
+          continue;
+        }
+        const snap = value as Record<string, unknown>;
+        // Allowlist only — sanitize-alone used to echo hostile circuit states.
+        const stateRaw =
+          typeof snap.state === "string" ? healthUiString(snap.state) : null;
+        const state =
+          stateRaw && CIRCUIT_STATES.has(stateRaw) ? stateRaw : null;
+        const failuresRaw = toNonNegativeSafeInt(snap.failures, -1);
+        const failures = failuresRaw >= 0 ? failuresRaw : undefined;
+        circuits[name] = {
+          ...(state ? { state } : {}),
+          ...(failures !== undefined ? { failures } : {}),
+        };
+      }
+      if (Object.keys(circuits).length === 0) circuits = undefined;
+    }
+
+    let brief_queue: BriefQueueHint | undefined;
+    if (
+      p.brief_queue != null &&
+      typeof p.brief_queue === "object" &&
+      !Array.isArray(p.brief_queue)
+    ) {
+      const bq = p.brief_queue as Record<string, unknown>;
+      const hint: BriefQueueHint = {};
+      const pending = toNonNegativeSafeInt(bq.pending_briefs, -1);
+      if (pending >= 0) hint.pending_briefs = pending;
+      if (
+        bq.pdf_enrich != null &&
+        typeof bq.pdf_enrich === "object" &&
+        !Array.isArray(bq.pdf_enrich)
+      ) {
+        const pe = bq.pdf_enrich as Record<string, unknown>;
+        const pdf: NonNullable<BriefQueueHint["pdf_enrich"]> = {};
+        for (const key of [
+          "in_flight_tasks",
+          "last_batch_size",
+          "batches_started",
+        ] as const) {
+          const n = toNonNegativeSafeInt(pe[key], -1);
+          if (n >= 0) pdf[key] = n;
+        }
+        if (Object.keys(pdf).length > 0) hint.pdf_enrich = pdf;
+      }
+      if (Object.keys(hint).length > 0) brief_queue = hint;
+    }
+
+    poller = {
+      last_tick_at:
+        p.last_tick_at === null ? null : healthTs(p.last_tick_at) ?? undefined,
+      last_tick_ok:
+        typeof p.last_tick_ok === "boolean" ? p.last_tick_ok : undefined,
+      price_poll_ok:
+        typeof p.price_poll_ok === "boolean" ? p.price_poll_ok : undefined,
+      disclosure_poll_ok:
+        typeof p.disclosure_poll_ok === "boolean"
+          ? p.disclosure_poll_ok
+          : undefined,
+      lock_held_skip:
+        typeof p.lock_held_skip === "boolean" ? p.lock_held_skip : undefined,
+      last_error:
+        p.last_error === null
+          ? null
+          : typeof p.last_error === "string"
+            ? healthUiString(p.last_error)
+            : undefined,
+      watched_missing: watched,
+      circuits,
+      brief_queue,
+    };
+  } else if (r.poller === null) {
+    poller = null;
+  }
+
+  return {
+    status,
+    db_ok: r.db_ok,
+    started_at: healthTs(r.started_at),
+    last_snapshot_at: healthTs(r.last_snapshot_at),
+    poller,
+  };
+}
 
 export default async function HealthPage() {
   await requirePageSession();
@@ -37,7 +196,7 @@ export default async function HealthPage() {
   const res = await serverApiGet("/api/v1/health");
   let payload: HealthPayload | null = null;
   try {
-    payload = (await res.json()) as HealthPayload;
+    payload = parseHealthPayload(await res.json());
   } catch {
     payload = null;
   }
@@ -46,6 +205,7 @@ export default async function HealthPage() {
   const ok = status === "ok";
   const missing = payload?.poller?.watched_missing ?? [];
   const circuits = payload?.poller?.circuits ?? null;
+  const briefQueue = payload?.poller?.brief_queue ?? null;
   const snapshotAge = timestampAge(payload?.last_snapshot_at);
   const tickAge = timestampAge(payload?.poller?.last_tick_at);
   const pollerUnreachable =
@@ -219,6 +379,51 @@ export default async function HealthPage() {
                 </dl>
               </section>
             )}
+
+            {briefQueue != null && (
+              <section className="mt-10 border-t border-border/60 pt-6">
+                <h2 className="text-sm font-medium tracking-wide text-muted-foreground uppercase">
+                  Brief queue
+                </h2>
+                <p className="mt-2 text-sm text-muted-foreground">
+                  Ops hint only — does not change health status.
+                </p>
+                <dl className="mt-4 grid grid-cols-1 gap-5 sm:grid-cols-2">
+                  <Row
+                    label="Pending briefs"
+                    value={
+                      typeof briefQueue.pending_briefs === "number"
+                        ? String(briefQueue.pending_briefs)
+                        : "—"
+                    }
+                  />
+                  <Row
+                    label="PDF enrich in-flight"
+                    value={
+                      typeof briefQueue.pdf_enrich?.in_flight_tasks === "number"
+                        ? String(briefQueue.pdf_enrich.in_flight_tasks)
+                        : "—"
+                    }
+                  />
+                  <Row
+                    label="PDF enrich last batch"
+                    value={
+                      typeof briefQueue.pdf_enrich?.last_batch_size === "number"
+                        ? String(briefQueue.pdf_enrich.last_batch_size)
+                        : "—"
+                    }
+                  />
+                  <Row
+                    label="PDF enrich batches started"
+                    value={
+                      typeof briefQueue.pdf_enrich?.batches_started === "number"
+                        ? String(briefQueue.pdf_enrich.batches_started)
+                        : "—"
+                    }
+                  />
+                </dl>
+              </section>
+            )}
           </>
         )}
       </main>
@@ -239,9 +444,11 @@ type TimestampAge = {
 };
 
 function timestampAge(iso: string | null | undefined): TimestampAge | null {
-  if (!iso) return null;
+  // Fail closed — non-strings / out-of-range must not skew stale ops banners
+  // (parity formatTs / isStaleTs; formatAge day-cap alone still computed huge ageMs).
+  if (typeof iso !== "string" || !iso) return null;
   const ts = Date.parse(iso);
-  if (Number.isNaN(ts)) return null;
+  if (Number.isNaN(ts) || Math.abs(ts) > MAX_DATE_MS) return null;
   const ageMs = Math.max(0, Date.now() - ts);
   return {
     ageMs,
@@ -256,6 +463,8 @@ function formatAge(age: TimestampAge | null): string {
   const hours = Math.floor((totalMinutes % (24 * 60)) / 60);
   const minutes = totalMinutes % 60;
 
+  // Fail closed — extreme past ISO used to render multi-million-day labels.
+  if (days > MAX_HEALTH_AGE_DAYS) return `>${MAX_HEALTH_AGE_DAYS}d`;
   if (days > 0) return `${days}d ${hours}h`;
   if (hours > 0) return `${hours}h ${minutes}m`;
   return `${minutes}m`;
@@ -269,6 +478,23 @@ function statusToneClass(ok: boolean, pollerUnreachable: boolean): string {
     return "bg-[oklch(0.94_0.04_25)] text-[oklch(0.38_0.12_25)]";
   }
   return "bg-[oklch(0.93_0.04_40)] text-[oklch(0.4_0.1_40)]";
+}
+
+/** Cap ops-notice copy — misbuilt callers used to balloon the health panel. */
+const MAX_OPS_NOTICE_TITLE = 120;
+const MAX_OPS_NOTICE_COPY = 600;
+
+function sanitizeOpsNoticeText(
+  raw: unknown,
+  maxLen: number,
+  fallback: string,
+): string {
+  // Fail closed — non-strings / controls / overlong must not balloon UI.
+  const cleaned = sanitizeDisclosureText(
+    typeof raw === "string" ? raw : null,
+    maxLen,
+  );
+  return cleaned ?? fallback;
 }
 
 function OpsNotice({
@@ -292,11 +518,19 @@ function OpsNotice({
     tone === "danger"
       ? "text-[oklch(0.32_0.09_25)]"
       : "text-[oklch(0.32_0.07_55)]";
+  const safeTitle = sanitizeOpsNoticeText(
+    title,
+    MAX_OPS_NOTICE_TITLE,
+    "Notice",
+  );
+  const safeCopy = sanitizeOpsNoticeText(copy, MAX_OPS_NOTICE_COPY, "");
 
   return (
     <div className={`mt-5 rounded-lg border p-4 ${className}`}>
-      <p className={`text-sm font-medium ${titleClassName}`}>{title}</p>
-      <p className={`mt-1 text-sm ${copyClassName}`}>{copy}</p>
+      <p className={`text-sm font-medium ${titleClassName}`}>{safeTitle}</p>
+      {safeCopy ? (
+        <p className={`mt-1 text-sm ${copyClassName}`}>{safeCopy}</p>
+      ) : null}
     </div>
   );
 }
@@ -313,12 +547,20 @@ function Row({ label, value }: { label: string; value: string }) {
 }
 
 function StaleOpsNotice({ title, copy }: { title: string; copy: string }) {
+  const safeTitle = sanitizeOpsNoticeText(
+    title,
+    MAX_OPS_NOTICE_TITLE,
+    "Stale",
+  );
+  const safeCopy = sanitizeOpsNoticeText(copy, MAX_OPS_NOTICE_COPY, "");
   return (
     <div className="mt-5 rounded-lg border border-[oklch(0.78_0.08_65)] bg-[oklch(0.97_0.03_80)] p-4">
       <p className="text-sm font-medium text-[oklch(0.36_0.1_55)]">
-        {title}
+        {safeTitle}
       </p>
-      <p className="mt-1 text-sm text-[oklch(0.32_0.07_55)]">{copy}</p>
+      {safeCopy ? (
+        <p className="mt-1 text-sm text-[oklch(0.32_0.07_55)]">{safeCopy}</p>
+      ) : null}
     </div>
   );
 }
