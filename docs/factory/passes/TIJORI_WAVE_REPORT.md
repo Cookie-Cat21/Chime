@@ -1666,7 +1666,23 @@ Phase 1 foundations and Phase 2 Tijori-core plumbing are **landed** across waves
 **Shipped**
 
 - Pin: `tests/test_wave85_medium_bugs.py` — claim/disarm/attempt/lock/health/count fail-closed (impl via w84).
-- `TIJORI_WAVE_REPORT.md` — close late w77 health/DL/ensure_user inventory; append waves 81–85 toward soft ~100; header Waves 1–85.
+- `TIJORI_WAVE_REPORT.md` — close late w77 health/DL/ensure_user inventory; append waves 81–85 toward soft ~100; header Waves 1–87.
+
+---
+
+## Wave 86 — Adversarial CLEAN (post-CDN soft-accept)
+
+**Theme:** Adversarial re-probe after late `fix(w83)` CDN status/length/redirect close. **CLEAN — 0 findings above minor.** Docs-only; soft-accept / post-CDN lane CLEAN×2 with w83 (w87 separately CLEANs clock-skew).
+
+| SHA | Commit |
+|---|---|
+| `afafc3f9` | docs(w86): loop status push |
+| _(this)_ | docs(w86): CLEAN after CDN soft-accept close |
+
+**Shipped**
+
+- [W86_ADVERSARIAL.md](W86_ADVERSARIAL.md) — CLEAN verdict; post-CDN re-probe; no new medium+.
+- [LOOP_STATUS.md](LOOP_STATUS.md) — record w86 adversarial CLEAN alongside w83/w87.
 
 ---
 
@@ -1759,6 +1775,7 @@ Phase 1 foundations and Phase 2 Tijori-core plumbing are **landed** across waves
 | 83 (`w83`) | 1 (adversarial CLEAN + diminishing returns) |
 | 84 (`w84`) | 1 (claim/lock/health/count soft-accept + pins) |
 | 85 (`w85`) | 2 (soft-accept pin + report rollup) |
+| 86 (`w86`) | 2 (loop status + adversarial CLEAN) |
 | **Total** | **100+** |
 
 ---

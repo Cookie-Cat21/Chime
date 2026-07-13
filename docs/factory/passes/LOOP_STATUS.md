@@ -18,6 +18,7 @@
 | `chime` unit coverage | ✅ **100%** (wave 16 milestone — keep `--cov-fail-under=100`) |
 | Horizon | **Continuing to 100 waves** (quality-gated; early STOP on CLEAN×2) |
 | Adversarial (w83) | **CLEAN** — PG claim/lock/health/count soft-accept hunting exhausted |
+| Adversarial (w86) | **CLEAN** — post-CDN re-probe; 0 findings above minor |
 | Adversarial (w87) | **CLEAN** — WS-087 clock-skew claim invariant holds |
 | Adversarial (w89) | **FIXED** — CSE `_request` status/CT + pace soft-accepts |
 
