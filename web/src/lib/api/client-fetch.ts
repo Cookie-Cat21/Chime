@@ -92,6 +92,7 @@ export function isSafeClientApiPath(path: unknown): boolean {
  * Missing CSRF or HTTP 401 → hard-redirect to `/login?expired=1` so soft
  * nav / RSC cache cannot leave a zombie authenticated shell. Pass
  * `authRedirect: false` for logout (caller owns the destination).
+ * Reject redirects so the CSRF header/body cannot be replayed to another URL.
  */
 export async function apiMutate(
   path: string,
@@ -146,6 +147,7 @@ export async function apiMutate(
       headers,
       credentials: "same-origin",
       body: init.body !== undefined ? JSON.stringify(init.body) : undefined,
+      redirect: "error",
       signal: ctrl.signal,
     });
   } catch {
