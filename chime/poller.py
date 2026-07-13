@@ -146,6 +146,13 @@ def is_market_open(now: datetime, settings: Settings) -> bool:
     return open_t <= local.time() <= close_t
 
 
+def _positive_int_setting(value: object) -> int:
+    """Return positive int settings, rejecting bool and other soft-accepted types."""
+    if isinstance(value, bool) or not isinstance(value, int):
+        return 0
+    return value if value > 0 else 0
+
+
 class Poller:
     def __init__(
         self,
@@ -537,7 +544,7 @@ class Poller:
             return [], False
 
         # Optional non-watchlist snapshot retention (fail-soft — never degrade tick).
-        retention_days = self.settings.snapshot_retention_days
+        retention_days = _positive_int_setting(self.settings.snapshot_retention_days)
         if retention_days > 0:
             try:
                 deleted = await self.storage.delete_old_non_watchlist_snapshots(retention_days)
