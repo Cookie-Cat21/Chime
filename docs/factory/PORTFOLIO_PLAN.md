@@ -8,7 +8,10 @@ portfolio_score   = Σ repo_score(r)   over all enrolled factories
 
 **Not the KPI:** raw `git rev-list --count`, whitespace farms, split fixes.
 
-**Horizon:** Multi-year climb across many products. Chime is **node 1** (~35 so far).
+**Horizon:** Multi-year climb across many products. Chime is **node 1** (~148 `repo_score` so far).
+
+**Near-term (active):** [CHIME_HORIZON.md](CHIME_HORIZON.md) — Chime `repo_score` **2K–3K** (midpoint 2500).  
+**Later:** 10K portfolio / 50M fantasy — only after this band.
 
 **Authority:** Each repo still obeys its own constitution (for Chime: `CLAUDE.md` + `COMMIT_FACTORY.md`). Farming banned everywhere.
 
@@ -74,7 +77,7 @@ Pre-seeded epoch ladder (fence-legal only):
 
 When Epoch N clears → open N+1 from this ladder (or `scripts/factory/refill_board.py`).
 
-**Estimated Chime-only proper ceiling:** hundreds–low thousands over months — not millions. Portfolio growth needs **more repos**.
+**Estimated Chime-only proper ceiling:** hundreds–low thousands. Operating band **2K–3K**: [CHIME_HORIZON.md](CHIME_HORIZON.md).
 
 ---
 
@@ -131,4 +134,4 @@ Resume next session from `docs/factory/HANDOFF.md`.
 | `refuted_fixed_same_wave` | Quality |
 | `raw_commit_count` | **Ignore** for goals |
 
-Climb toward large portfolio numbers **over products and years** — Chime is the template node, not the entire 50M fantasy.
+Climb toward **2K–3K Chime `repo_score` first** — product truth and fuel map in [CHIME_HORIZON.md](CHIME_HORIZON.md).

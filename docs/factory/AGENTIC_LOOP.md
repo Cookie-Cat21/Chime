@@ -66,11 +66,13 @@ When a lane CLEAN×2:
 | Path | Role |
 |---|---|
 | [PORTFOLIO_PLAN.md](PORTFOLIO_PLAN.md) | KPI A + multi-hour / multi-repo plan |
+| [CHIME_HORIZON.md](CHIME_HORIZON.md) | Product now/next + active 2K–3K band |
 | [LONG_RUN_OPS.md](LONG_RUN_OPS.md) | Session heartbeat |
 | [HANDOFF.md](HANDOFF.md) | Cross-session resume |
 | `EPOCH*_BOARD.md` | Pre-seeded fuel (5+) |
 | [SCOREBOARD.json](SCOREBOARD.json) | Machine-readable score |
 | `scripts/factory/loop_status.py` | Status |
+| `scripts/factory/portfolio_sum.py` | Σ repo_score across nodes |
 | `scripts/factory/refill_board.py` | Anti-idle refill |
 | `scripts/factory/next_wave.py` | Wave packing |
 | `scripts/factory/verify.sh` | Canonical verify |
