@@ -2,7 +2,7 @@
 
 **Branch:** `cursor/tijori-cse-phase1-e44e`  
 **Date:** 2026-07-13  
-**HEAD (pre-this-commit):** `716d0c54`
+**HEAD (pre-this-commit):** `c02c65ea`
 **Report:** [TIJORI_WAVE_REPORT.md](TIJORI_WAVE_REPORT.md)  
 **Plan:** [TIJORI_CSE_PLAN.md](../TIJORI_CSE_PLAN.md)
 
@@ -14,14 +14,15 @@
 |---|---|
 | Waves completed | **100** (`wave` / `waveN` / `wN` through w100) |
 | This status push | **w100** (soft ~100 quality-gated horizon close) |
-| Commits ahead of `main` | **323** (pre-this-commit) |
+| Commits ahead of `main` | **326+** |
 | `chime` unit coverage | ✅ **100%** (wave 16 milestone — keep `--cov-fail-under=100`) |
 | Horizon | ✅ **COMPLETE** — soft ~100 quality-gated horizon closed at w100 |
-| Recent verify | ✅ **VERIFY_OK** through `716d0c54` (current pre-doc HEAD) |
+| Recent verify | ✅ **VERIFY_OK** + **100% cov** through `c02c65ea` |
 | Adversarial (w83) | **CLEAN** — PG claim/lock/health/count soft-accept hunting exhausted |
 | Adversarial (w86) | **CLEAN** — post-CDN re-probe; 0 findings above minor |
 | Adversarial (w87) | **CLEAN** — WS-087 clock-skew claim invariant holds |
 | Adversarial (w89) | **FIXED** — CSE `_request` status/CT + pace soft-accepts |
+| Post-horizon cov | ✅ **100%** restored (`fix(w96)` + `fix(w100)` cov pins) |
 | Waves 92–100 landed | **FIXED / CLEAN / COMPLETE** — watched_missing poison fallback retention; snapshot retention bool reject; history pagination cap; brief PDF fetch type checks; filing URL path validation; cancel trailing-token / circuit knobs; watchlist symbol listing; daily-move fallback crossings; market env settings; brief drain malformed rows; dashboard mutation redirects; adversarial CLEAN; disclosure poller batch resilience |
 
 ---
