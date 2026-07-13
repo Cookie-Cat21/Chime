@@ -384,7 +384,13 @@ async def _promote_skipped_if_needed(
         return
     try:
         raw = await _maybe_await(promote(max_age_hours=hours))
-        n = int(raw) if isinstance(raw, int) else 0
+        # Fail closed — bool soft-accepts via isinstance(True, int) / int(True)==1
+        # and inflated promote counts mid brief drain.
+        n = (
+            raw
+            if isinstance(raw, int) and not isinstance(raw, bool)
+            else 0
+        )
         if n:
             log.info("brief_skipped_promoted", count=n, max_age_hours=hours)
     except Exception as exc:

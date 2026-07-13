@@ -23,6 +23,9 @@ from chime.domain import (
     SectorSnapshot,
     sanitize_disclosure_category,
 )
+from chime.logging_setup import get_logger
+
+log = get_logger(__name__)
 
 
 def _as_row(row: Any) -> dict[str, Any]:
@@ -250,7 +253,17 @@ class Storage:
         assert len(rows) == len(normalized)
         out: list[PriceSnapshot] = []
         for (symbol, snap), row in zip(normalized, _as_rows(rows), strict=True):
-            out.append(snap.model_copy(update={"id": int(row["id"]), "symbol": symbol}))
+            # Fail closed — bool ids soft-accept via int(True)==1; lists abort
+            # mid market persist (parity ``_row_to_snapshot`` id guard).
+            raw_id = row.get("id")
+            if isinstance(raw_id, bool) or not isinstance(raw_id, int):
+                log.warning(
+                    "market_persist_row_poisoned_id",
+                    symbol=symbol,
+                    row_id=raw_id,
+                )
+                continue
+            out.append(snap.model_copy(update={"id": raw_id, "symbol": symbol}))
         return out
 
     async def delete_old_non_watchlist_snapshots(
@@ -988,9 +1001,18 @@ class Storage:
             ).fetchone()
             assert row is not None
             data = _as_row(row)
-            disclosure_id = int(data["id"])
+            # Fail closed — bool ids soft-accept via int(True)==1; lists abort
+            # mid disclosure upsert (parity market persist / row mappers).
+            raw_id = data.get("id")
+            if isinstance(raw_id, bool) or not isinstance(raw_id, int):
+                raise ValueError("disclosure row id failed validation")
+            disclosure_id = raw_id
             existing_pdf = data.get("pdf_url")
-            if data.get("inserted"):
+            # Fail closed — bool("false")/1 used to soft-accept via bool() and
+            # falsely mark re-upserts as just_inserted (duplicate alert fires).
+            raw_ins = data.get("inserted")
+            just_inserted = raw_ins is True
+            if just_inserted:
                 brief_status = BriefStatus.PENDING if briefs_enabled() else BriefStatus.SKIPPED
                 await conn.execute(
                     """
@@ -1004,7 +1026,7 @@ class Storage:
             update={
                 "id": disclosure_id,
                 "pdf_url": existing_pdf if existing_pdf else disc.pdf_url,
-                "just_inserted": bool(data.get("inserted")),
+                "just_inserted": just_inserted,
             }
         )
 
