@@ -1490,12 +1490,13 @@ Phase 1 foundations and Phase 2 Tijori-core plumbing are **landed** across waves
 | SHA | Commit |
 |---|---|
 | `b5da998a` | fix(w75): ruff wave72 pin SIM117 |
-| _(this)_ | docs(w75): report push |
+| `dafe0afc` | docs(w75): report push *(truncated mid-write; superseded)* |
+| `e5c6b934` | docs(w75): restore full wave report body |
 
 **Shipped**
 
 - `tests/test_wave72_medium_bugs.py` — combine nested `with` patches (ruff SIM117).
-- `TIJORI_WAVE_REPORT.md` — append waves 71–75 toward soft ~100; header Waves 1–75.
+- `TIJORI_WAVE_REPORT.md` — append waves 71–75 toward soft ~100; header Waves 1–75 (full body restored after mid-write truncate).
 
 ---
 
@@ -1577,7 +1578,7 @@ Phase 1 foundations and Phase 2 Tijori-core plumbing are **landed** across waves
 | 72 (`w72`) | 1 (cancel/brief/CSE/persist isinstance pin) |
 | 73 (`w73`) | 2 (layout viewport + state/CSE/web fail-closed) |
 | 74 (`w74`) | 1 (rule.type getattr + stock-name/board pin) |
-| 75 (`w75`) | 2 (ruff wave72 pin + report rollup) |
+| 75 (`w75`) | 3 (ruff wave72 pin + report + restore) |
 | **Total** | **100+** |
 
 ---
