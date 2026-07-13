@@ -2,6 +2,8 @@
 
 Short flags for market browse + filing-brief plumbing. Full deploy: [PRODUCTION.md](PRODUCTION.md). Plan: [TIJORI_CSE_PLAN.md](../factory/TIJORI_CSE_PLAN.md).
 
+Import/`migrate --help` smoke (no live CSE): `make tijori-smoke`.
+
 ## Market browse (`/market`)
 
 No extra env. Poller already persists full `tradeSummary` into `stocks` + `price_snapshots` (watchlist empty still OK).
@@ -10,6 +12,7 @@ No extra env. Poller already persists full `tradeSummary` into `stocks` + `price
 python -m chime migrate
 # Seed browse once (ignores market hours), or leave poller/both running:
 make tick                 # → python -m chime tick --force
+# SECTORS_INGEST=1 make tick   # optional sector board for GET /api/v1/sectors
 # python -m chime poller  # or: both
 # dash → /market (session); data = Postgres only
 ```
@@ -66,10 +69,12 @@ Optional extras per tick (fail-soft): `SECTORS_INGEST=1` → one `POST /allSecto
 |---|---|---|
 | `AI_MAX_BRIEFS_PER_DAY` | `50` | Hard daily claim budget (`BRIEF_CAP_LOCK_ID`); `ready`/`failed` count toward it |
 | `AI_BRIEF_SLEEP_SECONDS` | `0.5` | Pause between consecutive LLM calls in a drain |
+| `AI_HTTP_TIMEOUT_SECONDS` | `30` | Provider HTTP timeout per LLM call |
 | `AI_MAX_INPUT_CHARS` | `12000` | Truncate filing text before provider call |
 | `PDF_MAX_BYTES` | `5242880` | Max PDF download for extract |
 | `BRIEF_PDF_GRACE_SECONDS` | `120` | Wait for `pdf_url` before title-only summarize |
 | `BRIEF_CDN_BACKOFF_SECONDS` | `300` | After transient CDN miss requeue, skip reclaim |
+| `BRIEF_SKIPPED_PROMOTE_HOURS` | `24` | When AI is on, re-queue recent skipped ledger rows as pending (`0` = off) |
 | `BOT_CMD_RATE_PER_MINUTE` | `20` | Per-user Telegram cmd window (includes `/brief`) |
 
 Leave `AI_BRIEFS_ENABLED=0` until keyed; raising `AI_MAX_BRIEFS_PER_DAY` past free-tier RPD without a paid plan will 429 under a disclosure burst. CDN miss requeues **pending** (no daily-cap burn).
@@ -110,6 +115,28 @@ CSE_MIN_INTERVAL_SECONDS=0     # default; e.g. 0.2 if CSE starts 429/blocking
 
 Wired in `chime/config.py` → `Settings.cse_min_interval_seconds` → `CSEClient(min_interval_seconds=…)`. Also covered by tick spacing (`POLL_INTERVAL_SECONDS` + jitter) and sequential disclosure HTTP (natural spacing under the poll lock — avoid long sleeps under the advisory lock).
 
+## Snapshot retention (`SNAPSHOT_RETENTION_DAYS`)
+
+Optional. Default **0** (off). After each successful market persist, delete `price_snapshots` older than N days for symbols **not** on any watchlist. Watched symbols keep full history. Fail-soft on cleanup errors — never degrades the tick.
+
+```bash
+SNAPSHOT_RETENTION_DAYS=0    # default — keep all board history
+# SNAPSHOT_RETENTION_DAYS=14 # trim unwatched browse history
+```
+
+Wired in `chime/config.py` → `Settings.snapshot_retention_days`.
+
+## Sector ingest (`SECTORS_INGEST`)
+
+Optional. Default **off** (`0`). When `1`, each poll tick POSTs `/allSectors` and upserts the `sectors` table (fail-soft). Thin `GET /api/v1/sectors` reads Postgres only — empty `items` until ingest has run once.
+
+```bash
+SECTORS_INGEST=0             # default — skip
+# SECTORS_INGEST=1 make tick # seed sector board once
+```
+
+Wired in `chime/config.py` → `Settings.sectors_ingest`. See `tests/test_sectors_ingest.py`.
+
 ## Bulk disclosure feed (`DISCLOSURE_BULK_FEED`)
 
 Optional. Default **off** (`0`). When `1`, disclosure discovery uses one market-wide `POST /approvedAnnouncement` plus a unique `stocks` name→symbol map, then fail-soft to per-symbol `getAnnouncementByCompany` for uncovered tickers or on bulk/map errors. Still only runs for symbols with active disclosure rules.
@@ -120,3 +147,11 @@ DISCLOSURE_BULK_FEED=0   # default — per-symbol getAnnouncementByCompany only
 ```
 
 Flag name is `DISCLOSURE_BULK_FEED` (not `DISCLOSURE_BULK`). See `.env.example` and `tests/test_disclosure_bulk_feed.py`.
+
+## Briefs-on soak (checklist)
+
+1. Confirm provider free/paid quotas in console (table above).
+2. Set `AI_API_KEY` + `AI_PROVIDER` / `AI_MODEL`; leave `AI_MAX_BRIEFS_PER_DAY=50` until proven.
+3. Flip `AI_BRIEFS_ENABLED=1` on **one** replica; watch health + brief ledger (`pending` / `ready` / `failed`).
+4. Keep `AI_BRIEF_SLEEP_SECONDS` ≥ `0.5`; do not raise the daily cap to “catch up” after 429s.
+5. `/brief SYMBOL` stays read-only of ready rows — not a live LLM call.
