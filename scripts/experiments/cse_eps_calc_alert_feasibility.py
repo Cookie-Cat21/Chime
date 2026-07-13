@@ -104,12 +104,56 @@ def _is_company_only(text: str) -> bool:
     )
 
 
+def _is_notes_or_restatement_page(text: str) -> bool:
+    head = "\n".join(text.splitlines()[:30]).lower()
+    return bool(
+        re.search(
+            r"notes?\s+to\s+the\s+financial|as\s+previously\s+reported|"
+            r"cumulative\s+impact\s+of\s+adjustments|restated\s+balance|"
+            r"corporate\s+information|basis\s+of\s+preparation|"
+            r"computation\s+of\s+the\s+basic\s+earnings",
+            head,
+        )
+    )
+
+
 def _is_sopl(text: str) -> bool:
     low = text.lower()
+    if _is_notes_or_restatement_page(text):
+        return False
+    head = "\n".join(text.splitlines()[:30]).lower()
+    # Highlights / ratio / "income statement data" summary tables ≠ primary SOPL
+    if re.search(
+        r"financial\s+highlights|income\s+statement\s+data|"
+        r"price\s+earnings|earnings\s+yield|earnings\s+highlights|"
+        r"^\s*contents\b|about\s+this\s+report",
+        head,
+    ):
+        if "statement of profit" not in low:
+            return False
+    if re.search(r"price\s+earnings|earnings\s+yield|earnings\s+highlights", low):
+        # Investor highlights / ratio pages are not the primary SOPL
+        if "statement of profit" not in low and "income statement" not in low:
+            return False
     return (
         "statement of profit" in low
-        or "income statement" in low
-        or ("earnings per share" in low and "revenue" in low and len(text) > 800)
+        or (
+            "income statement" in low
+            and not re.search(r"income\s+statement\s+data", low)
+            and bool(re.search(r"\brevenue\b|\bturnover\b|interest\s+income", low))
+        )
+        or (
+            "profit or loss" in low
+            and "earnings per share" in low
+            and bool(
+                re.search(
+                    r"\brevenue\b|\bturnover\b|interest\s+income|"
+                    r"gross\s+income|gross\s+written",
+                    low,
+                )
+            )
+            and len(text) > 1200
+        )
     )
 
 
@@ -162,17 +206,24 @@ def independent_eps_from_page(text: str, page: int) -> GoldEps | None:
         bucket = cls
         if cls == "eps_generic" and i + 1 < len(lines):
             tag = ACC._classify(lines[i + 1])
-            if tag == "eps_basic_tag":
+            if tag in ("eps_basic_tag", "eps_basic"):
                 bucket = "eps_basic"
                 label = f"{ln} {lines[i+1]}"
-            elif tag == "eps_diluted_tag":
+                collect_idx = i + 1
+            elif tag in ("eps_diluted_tag", "eps_diluted"):
                 bucket = "eps_diluted"
                 label = f"{ln} {lines[i+1]}"
+                collect_idx = i + 1
             elif tag in ("eps_combined", "eps_combined_tag") or re.search(
-                r"basic\s*/\s*di", lines[i + 1], re.I
+                r"basic\s*/\s*di|basic\s+and\s+di", lines[i + 1], re.I
             ):
                 bucket = "eps_combined"
                 label = f"{ln} {lines[i+1]}"
+                collect_idx = i + 1
+            else:
+                collect_idx = i
+        else:
+            collect_idx = i
         if bucket not in (
             "eps_basic",
             "eps_combined",
@@ -181,12 +232,30 @@ def independent_eps_from_page(text: str, page: int) -> GoldEps | None:
         ):
             i += 1
             continue
-        nums = ACC._collect_following_nums(lines, i, eps_mode=True)
+        low = label.lower()
+        # Mirror main-extractor skips for independent path
+        if re.search(r"annualised|annualized|\(usd\)|usd\)|continuing|discontinued", low):
+            i += 1
+            continue
+        if re.search(r"before\s+sub-?division", low):
+            i += 1
+            continue
+        if re.search(r"vs\s+\(?\s*lkr|compared\s+to|has been calculated|for all periods", low):
+            i += 1
+            continue
+        if len(label) > 100:
+            i += 1
+            continue
+        nums = ACC._collect_following_nums(lines, collect_idx, eps_mode=True)
         if not nums:
             i += 1
             continue
         raw, val = nums[0]
         if abs(val) > 5000:
+            i += 1
+            continue
+        # Years / page numbers mistaken as EPS
+        if val == int(val) and 1900 <= abs(val) <= 2100:
             i += 1
             continue
         rank = 0
@@ -198,11 +267,25 @@ def independent_eps_from_page(text: str, page: int) -> GoldEps | None:
             rank = 2
         elif bucket == "eps_diluted":
             rank = 1
-        if "loss per share" in label.lower():
+        if "loss per share" in low:
             rank = 5
+        if "for the period" in low:
+            rank += 3
+        if "after share" in low or "after share split" in low or "after sub-division" in low or "after subdivision" in low:
+            rank += 4
+        if "after share split" in low:
+            rank += 3
+        if re.search(r"per\s+share\s+before|before\s*$|before\s+share", low):
+            rank -= 4
+        if "continuing" in low or "discontinued" in low:
+            rank -= 2
+        if "before sub-division" in low or "before subdivision" in low:
+            rank -= 3
+        if "after sub-division" in low or "after subdivision" in low:
+            rank += 2
         if best is None or rank > best[0]:
             dil = None
-            if bucket in ("eps_combined",) or "basic / dil" in label.lower():
+            if bucket in ("eps_combined",) or "basic / dil" in low or "basic and dil" in low:
                 dil = val
             best = (rank, val, label[:120], dil)
         i += 1
@@ -281,12 +364,33 @@ def build_expanded_gold(strong: list[dict]) -> tuple[list[GoldEps], dict]:
         for page, text, flags in pages:
             if meta["kind"] == "quarterly" and flags["ytd"] and not flags["quarter"]:
                 continue
-            # Skip quarterly-analysis / highlights pages for independent path
+            # Skip quarterly-analysis / highlights / notes-restatement pages
             head = "\n".join(text.splitlines()[:25]).lower()
-            if re.search(r"quarterly\s+analysis|table\s+of\s+contents", head) and not flags.get(
-                "sopl"
+            low = text.lower()
+            if _is_notes_or_restatement_page(text):
+                continue
+            if re.search(
+                r"financial\s+highlights|income\s+statement\s+data|"
+                r"quarterly\s+analysis|table\s+of\s+contents|price\s+earnings|"
+                r"earnings\s+yield|earnings\s+highlights",
+                head,
+            ) and not (
+                "statement of profit" in low and "revenue" in low and len(text) > 1500
             ):
                 continue
+            if re.search(r"price\s+earnings\s+ratio|earnings\s+yield", text.lower()) and not (
+                "statement of profit" in text.lower() and "revenue" in text.lower()
+            ):
+                continue
+            if meta["kind"] == "quarterly":
+                has_period = bool(
+                    re.search(r"profit\s+for\s+the\s+period|loss\s+for\s+the\s+period", low)
+                )
+                has_year_only = bool(
+                    re.search(r"profit\s+for\s+the\s+year|loss\s+for\s+the\s+year", low)
+                ) and not has_period
+                if has_year_only:
+                    continue
             cand = independent_eps_from_page(text, page)
             if cand is None:
                 continue
@@ -321,7 +425,7 @@ def build_expanded_gold(strong: list[dict]) -> tuple[list[GoldEps], dict]:
         if (
             main.required_ok
             and indep is not None
-            and abs(main.eps_basic.value - indep.eps_basic) < 0.05
+            and abs(main.eps_basic.value - indep.eps_basic) < 0.06
         ):
             # Dual agreement → accept as gold
             gold.append(

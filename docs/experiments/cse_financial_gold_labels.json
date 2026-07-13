@@ -128,5 +128,23 @@
     "eps_basic": -1.27,
     "eps_diluted": -1.06,
     "note": "FOR THE QUARTER ENDED statement (not year-ended page)"
+  },
+  {
+    "symbol": "MELS.N0000",
+    "kind": "annual",
+    "eps_basic": 14.67,
+    "note": "Group SOPL basic EPS"
+  },
+  {
+    "symbol": "MELS.N0000",
+    "kind": "quarterly",
+    "eps_basic": 5.3,
+    "note": "Profit for the quarter statement EPS (not YTD page)"
+  },
+  {
+    "symbol": "RIL.N0000",
+    "kind": "annual",
+    "eps_basic": 1.76,
+    "note": "SOPL basic attributable (not highlights 6.10)"
   }
 ]

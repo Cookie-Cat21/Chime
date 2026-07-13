@@ -35,19 +35,22 @@ REVENUE_LABEL = re.compile(
     r"revenue(?:\s+from\s+contracts\s+with\s+customers)?|"
     r"net\s+revenue|gross\s+revenue|gross\s+income|turnover|net\s+sales|"
     r"total\s+(?:net\s+)?revenue|total\s+income|total\s+operating\s+income|"
-    r"interest\s+income|financing\s+income|net\s+financing\s+income|"
+    r"net\s+interest\s+income|interest\s+income|financing\s+income|net\s+financing\s+income|"
+    r"net\s+rental\s+income|direct\s+income|net\s+trading\s+income|"
     r"gross\s+written\s+premiums?|"
     r"net\s+(?:written|earned)\s+premiums?|"
     r"gross\s+written\s+contribution(?:\s*\(premium\))?|"
     r"net\s+earned\s+contribution(?:\s*\(premium\))?|"
-    r"net\s+operating\s+income"
+    r"net\s+operating\s+income|net\s+income(?!\s+from)"
     r")\b",
     re.I,
 )
 # Skip these as primary revenue
 REVENUE_SKIP = re.compile(
     r"\b(other\s+(?:operating\s+)?(?:income|revenue)|revenue\s+taxes?|"
-    r"premiums?\s+ceded|retakaful|reinsurance)\b",
+    r"revenue\s+reserve|revaluation|"
+    r"premiums?\s+ceded|retakaful|reinsurance|deferred\s+revenue|"
+    r"inter\s+segment\s+revenue|external\s+revenue)\b",
     re.I,
 )
 
@@ -57,29 +60,42 @@ PROFIT_LABEL = re.compile(
     r"loss\s+for\s+the\s+(?:period|year|quarter)|"
     r"net\s+profit\s*(?:\(\s*/?\s*loss\s*\)|/\s*\(?\s*loss\s*\)?)?\s+for\s+the\s+(?:period|year)|"
     r"net\s+profit\s+for\s+the\s+(?:period|year)|"
+    r"net\s+profit\s*/\s*\(?\s*loss\s*\)?|"
+    r"profit\s*/\s*\(?\s*loss\s*\)?\s+for\s+the\s+(?:period|year)|"
+    r"profit\s*/\s*\(?\s*loss\s*\)?\s+after\s+(?:income\s+)?tax(?:ation)?|"
+    r"profit\s*\(\s*/?\s*loss\s*\)\s+after\s+(?:income\s+)?tax(?:ation)?|"
+    r"profit\s*/\s*\(?\s*loss\s*\)?\s+after\s+tax|"
     r"group\s+profit\s+after\s+tax|"
-    r"profit\s+after\s+tax|"
+    r"profit\s+after\s+tax(?:ation)?|"
+    r"profit\s+before\s+tax(?:ation)?|"  # last-resort; ranked lower via before-tax skip unless needed
     r"profit\s*(?:\(\s*/?\s*loss\s*\)|/\s*\(?\s*loss\s*\)?)?\s+attributable|"
     r"profit\s+attributable\s+to"
     r")\b",
     re.I,
 )
 PROFIT_SKIP = re.compile(
-    r"\b(before\s+tax|from\s+operations|operating\s+profit|gross\s+profit|"
-    r"comprehensive|share\s+of\s+profit)\b",
+    r"\b(from\s+operations|operating\s+profit|gross\s+profit|"
+    r"comprehensive|share\s+of\s+profit|discontinu)\b",
     re.I,
 )
+# Soft demote (still allowed) — used in ranking, not hard skip
+PROFIT_BEFORE_TAX = re.compile(r"\bbefore\s+tax", re.I)
 
 # NOTE: optional "(loss)" must be a full optional group — do NOT require the word "loss".
 EPS_BASIC = re.compile(
     r"^\s*("
-    r"basic\s+earnings?(?:\s*/\s*\(?\s*loss\s*\)?)?\s+per\s+share|"
+    r"basic\s+(?:and\s+diluted\s+)?earnings?(?:\s*/\s*\(?\s*loss\s*\)?)?\s+per\s+(?:ordinary\s+)?share|"
+    r"basic\s+(?:and\s+diluted\s+)?(?:loss|earning)\s+per\s+(?:ordinary\s+)?share|"
+    r"basic\s+loss\s+per\s+share|"
     r"basic\s*,?\s*profit\s*/?\s*\(?\s*loss\s*\)?\s+for\s+the\s+year|"  # ASCO note style
     r"basic\s+eps|"
+    r"basic\s+\(loss\)/\s*earning\s+per\s+share|"
     r"earnings?(?:\s*/\s*\(?\s*loss\s*\)?)?\s+per\s+(?:ordinary\s+)?share\s*(?:\(rs\.?\))?\s*[\-\u2013:]?\s*basic|"
     r"weighted\s+average\s+earnings?\s+per\s+share|"
     r"earnings?\s+per\s+share\s*\(rs\.?\)\s*basic|"
+    r"earnings?\s+per\s+(?:ordinary\s+)?share\s*[\-\u2013:]?\s*basic|"
     r"earnings?\s+per\s+ordinary\s+share|"
+    r"basic\s+earnings?/\s*\(?\s*loss\s*\)?\s+per\s+share|"
     r"loss\s+per\s+share|"
     r"earning\s+per\s+share"  # ACME typo singular
     r")",
@@ -87,7 +103,7 @@ EPS_BASIC = re.compile(
 )
 EPS_DILUTED = re.compile(
     r"^\s*("
-    r"diluted\s+earnings?(?:\s*/\s*\(?\s*loss\s*\)?)?\s+per\s+share|"
+    r"diluted\s+earnings?(?:\s*/\s*\(?\s*loss\s*\)?)?\s+per\s+(?:ordinary\s+)?share|"
     r"diluted\s+eps|"
     r"earnings?(?:\s*/\s*\(?\s*loss\s*\)?)?\s+per\s+share\s*(?:\(rs\.?\))?\s*[\-\u2013:]?\s*diluted|"
     r"earnings?\s+per\s+share\s*\(rs\.?\)\s*diluted|"
@@ -98,8 +114,10 @@ EPS_DILUTED = re.compile(
 EPS_COMBINED = re.compile(
     r"("
     r"basic\s*/\s*di[a-z]*lut[a-z]*ed|"  # diluted + Dialuted typo
+    r"basic\s+and\s+di[a-z]*lut[a-z]*ed|"
     r"diluted\s+and\s+basic|"
-    r"earnings?\s+per\s+share\s*[\-\u2013:]?\s*.{0,20}basic\s*/\s*di"
+    r"earnings?\s+per\s+share\s*[\-\u2013:]?\s*.{0,20}basic\s*/\s*di|"
+    r"\(loss\)/earnings\s+per\s+share\s*basic\s*/\s*diluted"
     r")",
     re.I,
 )
@@ -109,8 +127,15 @@ EPS_GENERIC = re.compile(
     r"earning\s+per\s+share|"
     r"earnings?\s+per\s+share|"
     r"loss\s+per\s+share|"
+    r"\(loss\)/earnings\s+per\s+share|"
     r"(?<![a-z])eps(?![a-z])"
     r")",
+    re.I,
+)
+
+EPS_SKIP = re.compile(
+    r"\b(annualised|annualized|graph\s*[–\-]|\(usd\)|usd\)|"
+    r"before\s+sub-?division)\b",
     re.I,
 )
 
@@ -191,12 +216,32 @@ class FilingResult:
     error: str | None = None
 
 
+def _normalize_pdf_text(text: str) -> str:
+    """Normalize common PDF ligatures / odd spaces so label regexes match."""
+    if not text:
+        return text
+    return (
+        text.replace("\ufb01", "fi")
+        .replace("\ufb02", "fl")
+        .replace("ﬁ", "fi")
+        .replace("ﬂ", "fl")
+        .replace("\xa0", " ")
+    )
+
+
 def _parse_num(raw: str) -> float | None:
     s = (raw or "").strip()
     if not s:
         return None
+    # Broken table cells like "-3-" / "3-" are not EPS values
+    if re.fullmatch(r"-?\d+-", s):
+        return None
     neg = s.startswith("(") and s.endswith(")")
     s = s.strip("()").replace(",", "").replace("%", "")
+    # Trailing dash remnants
+    s = s.strip("-")
+    if not s or s in {".", "-", "–", "—"}:
+        return None
     try:
         v = float(s)
     except ValueError:
@@ -208,12 +253,18 @@ def _nums_in(text: str) -> list[tuple[str, float]]:
     out: list[tuple[str, float]] = []
     for m in INLINE_NUM.finditer(text):
         raw = m.group(1)
-        # skip years
-        if re.fullmatch(r"20\d{2}", raw.replace(",", "")):
+        bare = raw.strip().strip("()")
+        # skip years (incl. "(Restated – 2025)" capturing "2025)")
+        if re.fullmatch(r"20\d{2}", bare.replace(",", "")):
             continue
-        # skip if followed by %
+        # skip if followed by % 
         end = m.end()
         if end < len(text) and text[end : end + 1] == "%":
+            continue
+        # Broken cells like "-3-" where INLINE_NUM only captured "-3"
+        if end < len(text) and text[end : end + 1] == "-" and re.fullmatch(
+            r"-?\d+", raw.replace(",", "")
+        ):
             continue
         v = _parse_num(raw)
         if v is None:
@@ -229,18 +280,37 @@ def _classify(line: str) -> str | None:
     if NARRATIVE.search(lab) and len(lab) > 50:
         return None
     low = lab.lower()
+    # Note-section / formula blurbs — not the SOPL value row
+    if re.match(r"^\d{1,2}\s+basic\b", low):
+        return None
+    if "is calculated by dividing" in low or "weighted average number" in low:
+        return None
+    if "is calculated by" in low and "earning" in low:
+        return None
+    if re.search(r"presents?\s+basic\s+and\s+diluted", low):
+        return None
+    if len(lab) > 120 and re.search(r"per\s+share|eps", low):
+        return None
     # Bare continuation tag
     if re.fullmatch(r"\(?\s*basic\s*/\s*diluted\s*\)?", low):
         return "eps_combined_tag"
-    if re.fullmatch(r"[\-\u2013—]?\s*basic\b.*", low) and "earning" not in low and "share" not in low:
+    if re.fullmatch(r"[\-\u2013—]?\s*basic\b.*", low) and "earning" not in low and "share" not in low and "loss" not in low:
         return "eps_basic_tag"
+    # Continuation row: "- Basic Earnings Per Share"
+    if re.match(r"^[\-\u2013—]\s*basic\b.*(earning|share)", low):
+        if "dilut" in low:
+            return "eps_combined"
+        return "eps_basic"
     if re.fullmatch(r"[\-\u2013—]?\s*diluted\b.*", low) and "earning" not in low and "share" not in low:
         return "eps_diluted_tag"
+    # Skip annualized / continuing-ops / USD EPS lines as primary picks
+    if EPS_SKIP.search(lab) and re.search(r"per\s+share|eps", lab, re.I):
+        return None
     if EPS_BASIC.search(lab):
         return "eps_basic"
     if EPS_DILUTED.search(lab):
         return "eps_diluted"
-    if EPS_COMBINED.search(lab) and ("earning" in low or "eps" in low or "per share" in low):
+    if EPS_COMBINED.search(lab) and ("earning" in low or "eps" in low or "per share" in low or "loss" in low):
         return "eps_combined"
     if EPS_GENERIC.search(lab):
         return "eps_generic"
@@ -262,7 +332,10 @@ def _is_leading_note_or_toc_token(raw: str, v: float) -> bool:
     t = raw.strip().strip("()")
     if not t:
         return False
-    # Parenthetical / negative values are never note refs.
+    # Parenthetical small ints are note refs: |(10)|0.78|0.73
+    if re.fullmatch(r"\(\d{1,2}\)", raw.strip()) and v == int(v) and 1 <= abs(v) <= 40:
+        return True
+    # Parenthetical / negative values otherwise are never note refs.
     if raw.strip().startswith("(") or v < 0:
         return False
     # Bare note numbers (Notes column): 5, 10, 38
@@ -278,6 +351,59 @@ def _is_leading_note_or_toc_token(raw: str, v: float) -> bool:
     return False
 
 
+def _is_prose_or_address_line(nxt: str) -> bool:
+    """True for narrative/address lines that must not supply EPS numbers."""
+    if re.search(
+        r"located at|mawatha|registered office|incorporated and domiciled|"
+        r"colombo\s+\d+|authorised for issue|board of directors|"
+        r"accounting standards|interim financial",
+        nxt,
+        re.I,
+    ):
+        return True
+    # Long sentence-like lines (not a pure number row)
+    if len(nxt) > 70 and not re.fullmatch(r"[\d\s.,()/\-%RsLKR'’]+", nxt):
+        wordish = len(re.findall(r"[A-Za-z]{3,}", nxt))
+        if wordish >= 6:
+            return True
+    return False
+
+
+def _collect_preceding_eps_nums(
+    lines: list[str], i: int
+) -> list[tuple[str, float]]:
+    """CSE notes often print EPS values *above* the label row.
+
+    Only accept EPS-shaped values (decimal and/or signed paren loss). Bare
+    integers are almost always note refs when they sit above the label.
+    """
+    for back in range(1, 4):
+        if i - back < 0:
+            break
+        prev = lines[i - back].strip()
+        if not prev or _is_prose_or_address_line(prev):
+            continue
+        if _classify(prev):
+            break
+        found = _nums_in(prev)
+        if not found:
+            continue
+        usable: list[tuple[str, float]] = []
+        for raw, v in found:
+            if _is_leading_note_or_toc_token(raw, v):
+                continue
+            if abs(v) > 500:
+                continue
+            # Preceding-only: require a decimal (3.47) or paren loss ((0.14)).
+            # Bare ints above a label are note columns (CHMX 27, CDB 22, PACK 20).
+            if "." not in raw and not raw.strip().startswith("("):
+                continue
+            usable.append((raw, v))
+        if usable:
+            return usable
+    return []
+
+
 def _collect_following_nums(
     lines: list[str], i: int, *, eps_mode: bool = False
 ) -> list[tuple[str, float]]:
@@ -289,7 +415,8 @@ def _collect_following_nums(
 
     j = i + 1
     empty_streak = 0
-    while j < len(lines) and j <= i + 8:
+    hit_prose = False
+    while j < len(lines) and j <= i + (14 if not eps_mode else 8):
         nxt = lines[j].strip()
         if not nxt:
             empty_streak += 1
@@ -298,6 +425,9 @@ def _collect_following_nums(
             j += 1
             continue
         empty_streak = 0
+        if eps_mode and _is_prose_or_address_line(nxt):
+            hit_prose = True
+            break
         cls = _classify(nxt)
         if cls and cls not in (
             "eps_combined_tag",
@@ -324,6 +454,22 @@ def _collect_following_nums(
         if re.fullmatch(r"annualised|annualized|unaudited|audited|restated", nxt, re.I):
             j += 1
             continue
+        if re.fullmatch(r"rs\.?|lkr|usd|rs\.?\s*['’]?\s*000", nxt, re.I):
+            j += 1
+            continue
+        if re.match(
+            r"figures in brackets|the above figures|provisional and subject",
+            nxt,
+            re.I,
+        ):
+            j += 1
+            continue
+        if re.fullmatch(r"group|company|note|notes|total|rs\.?['’]?000", nxt, re.I):
+            j += 1
+            continue
+        if nxt in {"-", "–", "—"}:
+            j += 1
+            continue
         found = _nums_in(nxt)
         if found:
             for raw, v in found:
@@ -334,6 +480,14 @@ def _collect_following_nums(
                     and v == int(v)
                     and 1 <= abs(v) <= 40
                     and len(found) == 1
+                ):
+                    continue
+                # EPS: drop street-number-like bare integers (BIL: "481, T B Jayah…")
+                if (
+                    eps_mode
+                    and v == int(v)
+                    and abs(v) >= 100
+                    and "." not in raw
                 ):
                     continue
                 nums.append((raw, v))
@@ -358,6 +512,8 @@ def _collect_following_nums(
     for raw, v in nums:
         if eps_mode and abs(v) > 5000:
             continue
+        if eps_mode and abs(v) > 500 and v == int(v) and "." not in raw:
+            continue
         if (
             not eps_mode
             and raw.replace(",", "").isdigit()
@@ -371,14 +527,14 @@ def _collect_following_nums(
             cleaned[0][0], cleaned[0][1]
         ):
             cleaned = cleaned[1:]
-        # Drop sole TOC page-number false positive
-        if (
-            len(cleaned) == 1
-            and _is_leading_note_or_toc_token(cleaned[0][0], cleaned[0][1])
-            and cleaned[0][1] == int(cleaned[0][1])
-            and abs(cleaned[0][1]) >= 50
+        # Drop sole note/TOC token — never treat note refs as EPS by themselves
+        # (HUNT: "Basic/Diluted | 10.1" note with no numeric EPS on the page).
+        if len(cleaned) == 1 and _is_leading_note_or_toc_token(
+            cleaned[0][0], cleaned[0][1]
         ):
             cleaned = []
+        if not cleaned:
+            cleaned = _collect_preceding_eps_nums(lines, i)
         return cleaned
     return cleaned or nums
 
@@ -394,6 +550,10 @@ def _verify_adjacency(page_text: str, label: str, raw: str) -> bool:
     # label then number within ~250 chars (allows note lines / newlines)
     pat = re.compile(lab + r".{0,250}?" + num, re.I | re.S)
     if pat.search(text):
+        return True
+    # number then label (CSE notes often print values above the EPS row)
+    pat_rev = re.compile(num + r".{0,250}?" + lab, re.I | re.S)
+    if pat_rev.search(text):
         return True
     # sometimes number then repeated label — also try compact lines
     lines = [ln.strip() for ln in page_text.splitlines()]
@@ -498,25 +658,51 @@ def extract_from_pages(
     page_is_group: dict[int, bool] = {}
     page_is_company_only: dict[int, bool] = {}
     page_is_analysis: dict[int, bool] = {}
+    page_has_period_profit: dict[int, bool] = {}
+    page_has_year_profit_only: dict[int, bool] = {}
+    page_is_highlights: dict[int, bool] = {}
 
     for page, text in pages:
+        text = _normalize_pdf_text(text)
         low_page = text.lower()
         head = "\n".join(text.splitlines()[:25]).lower()
-        page_is_sopl[page] = (
+        # Notes / restatement schedules often mention SOPL phrases — require a
+        # real statement shape (revenue + EPS), not just the words.
+        head25 = "\n".join(text.splitlines()[:25]).lower()
+        notes_band = bool(
+            re.search(
+                r"notes?\s+to\s+the\s+financial|as\s+previously\s+reported|"
+                r"cumulative\s+impact\s+of\s+adjustments|restated\s+balance|"
+                r"corporate\s+information|basis\s+of\s+preparation",
+                head25,
+            )
+        )
+        page_is_sopl[page] = (not notes_band) and (
             "statement of profit" in low_page
             or "income statement" in low_page
             or (
                 "profit or loss" in low_page
                 and "earnings per share" in low_page
+                and bool(
+                    re.search(
+                        r"\brevenue\b|\bturnover\b|interest\s+income|"
+                        r"gross\s+income|gross\s+written",
+                        low_page,
+                    )
+                )
                 and len(text) > 1200
             )
         )
         # Prefer explicit quarter headers in the *title band*, not footnotes
+        # Also treat "for the quarter" as a quarter page signal
         page_is_quarter[page] = bool(
             re.search(
-                r"for\s+the\s+(?:three\s+months|quarter)\s+ended|three\s+months\s+ended",
+                r"for\s+the\s+(?:three\s+months|quarter)\s+ended|three\s+months\s+ended|"
+                r"profit\s+for\s+the\s+quarter|loss\s+for\s+the\s+quarter",
                 head,
             )
+        ) or bool(
+            re.search(r"profit\s+for\s+the\s+quarter|loss\s+for\s+the\s+quarter", low_page)
         )
         page_is_ytd[page] = bool(
             re.search(
@@ -539,6 +725,16 @@ def extract_from_pages(
                 re.M,
             )
         ) and not page_is_sopl[page]
+        page_has_period_profit[page] = bool(
+            re.search(r"profit\s+for\s+the\s+period|loss\s+for\s+the\s+period", low_page, re.I)
+        )
+        page_is_highlights[page] = bool(
+            re.search(r"price\s+earnings|earnings\s+yield|earnings\s+highlights", low_page, re.I)
+        ) and not (
+            "statement of profit" in low_page
+            and re.search(r"revenue|turnover|interest income", low_page)
+            and len(text) > 2000
+        )
         scale_votes.append(
             "millions"
             if SCALE_MILLIONS.search(text)
@@ -570,40 +766,68 @@ def extract_from_pages(
                 i += 1
                 continue
             label = lines[i]
-            # Merge "Earnings Per Share -" + next "Basic / Diluted"
+            collect_idx = i
+            # Merge "Earnings Per Share" + next "Basic / Diluted" / full basic line.
+            # Values sit under the typed row — never preceding-fill the bare header
+            # (CIC/HNB/COMB: header above Basic picked prior-year / note junk).
             if bucket == "eps_generic" and i + 1 < len(lines):
                 nxt = lines[i + 1]
                 tag = _classify(nxt)
-                if tag == "eps_basic_tag":
+                if tag in ("eps_basic_tag", "eps_basic"):
                     bucket = "eps_basic"
                     label = f"{lines[i]} {nxt}".strip()
-                elif tag == "eps_diluted_tag":
+                    collect_idx = i + 1
+                elif tag in ("eps_diluted_tag", "eps_diluted"):
                     bucket = "eps_diluted"
                     label = f"{lines[i]} {nxt}".strip()
+                    collect_idx = i + 1
                 elif tag in ("eps_combined", "eps_combined_tag") or re.search(
-                    r"basic\s*/\s*di", nxt, re.I
+                    r"basic\s*/\s*di|basic\s+and\s+di", nxt, re.I
                 ):
                     bucket = "eps_combined"
                     label = f"{label} {nxt}".strip()
+                    collect_idx = i + 1
             if bucket in ("eps_generic", "eps_combined", "eps_basic", "eps_diluted") and i + 2 < len(lines):
                 for k in (i + 1, i + 2):
-                    if re.search(r"basic\s*/\s*di", lines[k], re.I):
+                    if re.search(r"basic\s*/\s*di|basic\s+and\s+di", lines[k], re.I):
                         bucket = "eps_combined"
                         label = f"{label} {lines[k]}".strip()
+                        collect_idx = max(collect_idx, k)
                         break
                     tag = _classify(lines[k])
-                    if tag == "eps_basic_tag" and bucket in ("eps_generic", "eps_combined"):
+                    if tag in ("eps_basic_tag", "eps_basic") and bucket in (
+                        "eps_generic",
+                        "eps_combined",
+                    ):
                         bucket = "eps_basic"
                         label = f"{lines[i]} {lines[k]}".strip()
+                        collect_idx = max(collect_idx, k)
                         break
-                    if tag == "eps_diluted_tag" and bucket in ("eps_generic", "eps_combined"):
+                    if tag in ("eps_diluted_tag", "eps_diluted") and bucket in (
+                        "eps_generic",
+                        "eps_combined",
+                    ):
                         bucket = "eps_diluted"
                         label = f"{lines[i]} {lines[k]}".strip()
+                        collect_idx = max(collect_idx, k)
                         break
 
             nums = _collect_following_nums(
-                lines, i, eps_mode=bucket.startswith("eps")
+                lines, collect_idx, eps_mode=bucket.startswith("eps")
             )
+            # When header+typed row merged but typed row had no nums, try header
+            # only if collect_idx moved (avoid double preceding junk on header).
+            if not nums and collect_idx != i and bucket.startswith("eps"):
+                nums = _collect_following_nums(lines, i, eps_mode=True)
+                # Header preceding-fill is untrusted when a typed row exists
+                if nums and collect_idx != i:
+                    # Keep only same-line nums from the header itself
+                    same = _nums_in(lines[i])
+                    nums = same if same else []
+            if not nums and bucket.startswith("eps") and collect_idx + 1 < len(lines):
+                nums = _collect_following_nums(
+                    lines, collect_idx + 1, eps_mode=True
+                )
             if not nums:
                 i += 1
                 continue
@@ -623,6 +847,12 @@ def extract_from_pages(
                 notes.append("on_company_only_page")
             if page_is_analysis.get(page):
                 notes.append("on_analysis_page")
+            if page_has_period_profit.get(page):
+                notes.append("page_has_period_profit")
+            if page_has_year_profit_only.get(page):
+                notes.append("page_has_year_profit_only")
+            if page_is_highlights.get(page):
+                notes.append("on_highlights_page")
             raw, val = nums[0]
             if bucket.startswith("eps") and abs(val) > 5000:
                 i += 1
@@ -705,8 +935,10 @@ def extract_from_pages(
             score += 5
         elif "for the year" in low:
             score += 2
-        if "after tax" in low:
-            score += 2
+        if "after tax" in low or "after taxation" in low:
+            score += 6
+        if "before tax" in low or "before taxation" in low:
+            score -= 10
         if low.startswith("net profit"):
             score += 1
         if "ended" in low:
@@ -719,24 +951,65 @@ def extract_from_pages(
 
     def rank_eps(p: Pick) -> tuple:
         score = 0
+        low = (p.label or "").lower()
         if "on_sopl_page" in p.notes:
             score += 15
         if "on_analysis_page" in p.notes:
             score -= 25
+        if "on_highlights_page" in p.notes:
+            score -= 20
         if kind == "quarterly":
             if "on_quarter_page" in p.notes:
                 score += 12
             if "on_ytd_page" in p.notes:
-                score -= 8
+                score -= 18
+            if "page_has_period_profit" in p.notes:
+                score += 14
+            if "page_has_year_profit_only" in p.notes:
+                score -= 20
+            # Strongly prefer the current-quarter statement when present
+            if re.search(r"for the quarter|three months", (p.label or ""), re.I):
+                score += 8
+            low_notes = " ".join(p.notes)
+            if "on_quarter_page" in p.notes and "on_ytd_page" not in p.notes:
+                score += 8
         if "on_group_page" in p.notes:
             score += 4
         if "on_company_only_page" in p.notes:
             score -= 3
         if "resolved_current_quarter_leftmost" in p.notes:
             score += 3
+        # Prefer period EPS over annualized; prefer total over continuing-only
+        if "for the period" in low:
+            score += 6
+        if kind == "quarterly" and ("for the year" in low or "year ended" in low):
+            score -= 12
+        if "annualised" in low or "annualized" in low:
+            score -= 20
+        if "continuing" in low or "discontinued" in low:
+            score -= 10
+        if "(usd)" in low or low.endswith("usd"):
+            score -= 15
+        if "restated" in low:
+            score -= 2
+        if "basic / diluted" in low or "basic and diluted" in low or "basic/diluted" in low:
+            score += 3
+        if "after sub-division" in low or "after subdivision" in low:
+            score += 5
+        if "after share" in low:  # CALH: after share subdivision
+            score += 8
+        if "before sub-division" in low or "before subdivision" in low:
+            score -= 15
+        if re.search(r"before\s*$", low) or "per share before" in low:
+            score -= 12
+        if "restated" in low:
+            score -= 2
+        if "price earnings" in low or "earnings yield" in low:
+            score -= 6
         if p.verified:
             score += 1
-        return (-score, p.page, abs(p.value))
+        # Prefer earlier rows on the same page (Group usually listed before Company)
+        return (-score, p.page)
 
     def best(bucket: str, key) -> Pick | None:
         items = cands.get(bucket) or []
@@ -780,6 +1053,50 @@ def extract_from_pages(
             eps_basic = _promote(alt, tag)
             break
 
+    # Prefer current-quarter EPS page over year-to-date statement (MELS etc.)
+    if (
+        kind == "quarterly"
+        and eps_basic is not None
+        and "on_ytd_page" in eps_basic.notes
+    ):
+        for alt, tag in (
+            (eps_combined, "replaced_ytd_from_combined_quarter"),
+            (eps_basic, "noop"),
+            (eps_generic, "replaced_ytd_from_generic_quarter"),
+            (eps_diluted, "replaced_ytd_from_diluted_quarter"),
+        ):
+            if tag == "noop" or alt is None:
+                continue
+            if "on_ytd_page" in alt.notes:
+                continue
+            if "on_quarter_page" not in alt.notes and "page_has_period_profit" not in alt.notes:
+                continue
+            eps_basic = _promote(alt, tag)
+            break
+    # Also consider other eps_basic candidates on quarter pages via re-best
+    if kind == "quarterly" and eps_basic is not None and "on_ytd_page" in eps_basic.notes:
+        quarter_basics = [
+            p
+            for p in (cands.get("eps_basic") or [])
+            if "on_ytd_page" not in p.notes
+            and ("on_quarter_page" in p.notes or "page_has_period_profit" in p.notes)
+        ]
+        if quarter_basics:
+            eps_basic = sorted(quarter_basics, key=rank_eps)[0]
+        for alt, tag in (
+            (eps_combined, "replaced_highlights_from_combined"),
+            (eps_diluted, "replaced_highlights_from_diluted"),
+            (eps_generic, "replaced_highlights_from_generic"),
+        ):
+            if alt is None:
+                continue
+            if "on_highlights_page" in alt.notes:
+                continue
+            if not _on_sopl(alt):
+                continue
+            eps_basic = _promote(alt, tag)
+            break
+
     # Promote combined / generic → basic when typed basic missing
     if eps_basic is None and eps_combined is not None:
         eps_basic = _promote(eps_combined, "promoted_from_combined")
@@ -817,6 +1134,10 @@ def extract_from_pages(
 
 
 def local_pdf_for(row: dict) -> Path | None:
+    if row.get("pdf_path"):
+        p = Path(row["pdf_path"])
+        if p.exists():
+            return p
     symbol, kind = row["symbol"], row["kind"]
     matches = sorted(PDF_DIR.glob(f"{symbol}_{kind}_*.pdf"))
     if matches:
@@ -867,13 +1188,29 @@ def eval_one(meta: dict) -> FilingResult:
         # Annuals: scan full PDF (CSE annuals bury SOPL past page 200)
         max_pages = None if meta["kind"] == "annual" else 50
         scored = score_pages(path, max_pages=max_pages)
-        top_idx = [p for p, h, _ in scored if h >= 3][:15]
+        # Prefer high-scoring SOPL pages, but always keep any page that
+        # actually contains an EPS / revenue / profit label row.
+        budget = 40 if meta["kind"] == "annual" else 20
+        top_idx = [p for p, h, _ in scored if h >= 2][:budget]
         if len(top_idx) < 4:
             top_idx = [p for p, _, _ in scored[:10]]
         text_by_page = {p: t for p, _, t in scored}
+        # Force-include EPS label pages (highlights + notes often score low)
+        eps_page_re = re.compile(
+            r"earnings?\s+per\s+share|earning\s+per\s+share|loss\s+per\s+share|"
+            r"basic\s+and\s+diluted|basic\s+eps",
+            re.I,
+        )
+        for p, h, t in scored:
+            if p in top_idx:
+                continue
+            if eps_page_re.search(t or ""):
+                top_idx.append(p)
+            if len(top_idx) >= budget + 25:
+                break
         pages = [(i, text_by_page[i]) for i in top_idx if i in text_by_page]
-        for p, h, t in scored[:8]:
-            if p not in top_idx:
+        for p, h, t in scored[:12]:
+            if p not in {i for i, _ in pages}:
                 pages.append((p, t))
 
         extracted = extract_from_pages(pages, kind=meta["kind"])
