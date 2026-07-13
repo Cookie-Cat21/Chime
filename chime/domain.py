@@ -8,7 +8,18 @@ from datetime import datetime
 from enum import StrEnum
 from typing import Any
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, field_validator
+
+
+def _none_if_bool_numeric(value: Any) -> Any:
+    """Reject bool-as-number soft accepts while preserving normal numeric coercion."""
+    return None if isinstance(value, bool) else value
+
+
+def _reject_bool_numeric(value: Any) -> Any:
+    if isinstance(value, bool):
+        raise ValueError("boolean is not a valid numeric value")
+    return value
 
 
 class AlertType(StrEnum):
@@ -39,6 +50,28 @@ class PriceSnapshot(BaseModel):
     ts: datetime
     # Optional DB id after persistence
     id: int | None = None
+
+    @field_validator("price", mode="before")
+    @classmethod
+    def _price_must_not_be_bool(cls, value: Any) -> Any:
+        return _reject_bool_numeric(value)
+
+    @field_validator(
+        "previous_close",
+        "change",
+        "change_pct",
+        "volume",
+        "trade_count",
+        "turnover",
+        "high",
+        "low",
+        "open",
+        "market_cap",
+        mode="before",
+    )
+    @classmethod
+    def _optional_numeric_must_not_be_bool(cls, value: Any) -> Any:
+        return _none_if_bool_numeric(value)
 
 
 class Disclosure(BaseModel):
@@ -108,6 +141,11 @@ class AlertRule(BaseModel):
     armed: bool = True
     created_at: datetime | None = None
 
+    @field_validator("threshold", mode="before")
+    @classmethod
+    def _threshold_must_not_be_bool(cls, value: Any) -> Any:
+        return _none_if_bool_numeric(value)
+
 
 class AlertEvent(BaseModel):
     """Pure evaluation result — no I/O. Caller claims + sends."""
@@ -139,6 +177,11 @@ class PreviousPriceState(BaseModel):
     change_pct: float | None = None
     # Whether a daily_move rule already fired for this symbol/session key
     move_fired_keys: set[str] = Field(default_factory=set)
+
+    @field_validator("price", "change_pct", mode="before")
+    @classmethod
+    def _state_numeric_must_not_be_bool(cls, value: Any) -> Any:
+        return _none_if_bool_numeric(value)
 
 
 DISCLOSURE_TITLE_MAX = 120
