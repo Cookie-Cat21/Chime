@@ -169,8 +169,11 @@ async def enqueue_or_skip_brief(
 
 def _title_only_input_text(row: dict[str, Any]) -> str:
     """Title-only fallback when no PDF text is available."""
-    symbol = str(row.get("symbol") or "").strip()
-    title = str(row.get("title") or "").strip()
+    # Fail closed — non-string PG fields used to soft-accept via str().
+    raw_sym = row.get("symbol")
+    raw_title = row.get("title")
+    symbol = raw_sym.strip() if isinstance(raw_sym, str) else ""
+    title = raw_title.strip() if isinstance(raw_title, str) else ""
     if symbol and title:
         return f"{symbol}: {title}"
     return title or symbol
@@ -191,8 +194,11 @@ async def _input_text_for_row(
     (permanent fail). Empty extract after a successful fetch still falls back
     to title (image-only PDFs).
     """
-    symbol = str(row.get("symbol") or "").strip()
-    title = str(row.get("title") or "").strip()
+    # Fail closed — non-string PG fields used to soft-accept via str().
+    raw_sym = row.get("symbol")
+    raw_title = row.get("title")
+    symbol = raw_sym.strip() if isinstance(raw_sym, str) else ""
+    title = raw_title.strip() if isinstance(raw_title, str) else ""
     max_chars = int(cfg.max_input_chars)
     pdf_url = row.get("pdf_url")
     if isinstance(pdf_url, str) and pdf_url.strip():
@@ -245,8 +251,11 @@ async def _notify_brief_followups(
     """
     disclosure_id = row.get("disclosure_id")
     try:
-        symbol = str(row.get("symbol") or "").strip()
-        external_id = str(row.get("external_id") or "").strip()
+        # Fail closed — non-string PG fields used to soft-accept via str().
+        raw_sym = row.get("symbol")
+        raw_ext = row.get("external_id")
+        symbol = raw_sym.strip() if isinstance(raw_sym, str) else ""
+        external_id = raw_ext.strip() if isinstance(raw_ext, str) else ""
         # Fail closed — non-string brief used to throw on .strip mid follow-up.
         brief_text = brief.strip() if isinstance(brief, str) else ""
         if not symbol or not brief_text or not external_id:
@@ -261,11 +270,13 @@ async def _notify_brief_followups(
         claim_fn = getattr(storage, "claim_brief_followups", None)
         if claim_fn is None:
             return
+        raw_title = row.get("title")
+        raw_url = row.get("url")
         message = format_brief_followup(
             symbol=symbol,
             brief=brief_text,
-            title=str(row.get("title") or "") or None,
-            url=str(row.get("url") or "") or None,
+            title=raw_title if isinstance(raw_title, str) else None,
+            url=raw_url if isinstance(raw_url, str) else None,
         )
         claimed = await claim_fn(
             external_id=external_id,

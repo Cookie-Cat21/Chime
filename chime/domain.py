@@ -402,7 +402,9 @@ def format_brief_followup(
         clean_title = truncate_disclosure_title(title)
         if clean_title:
             lines.append(f"Disclosure: {clean_title}")
-    if url and str(url).strip():
+    # Fail closed — non-string url used to soft-accept via str(url) before
+    # allowlist (objects became noise in the truthiness gate).
+    if isinstance(url, str) and url.strip():
         safe_url = allowed_filing_url(url)
         if safe_url:
             lines.append(safe_url)
