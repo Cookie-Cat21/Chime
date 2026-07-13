@@ -1358,21 +1358,14 @@ class Storage:
         assert row is not None and user is not None
         r = _as_row(row)
         u = _as_row(user)
-        created = r.get("created_at")
-        if created is not None and not isinstance(created, datetime):
-            created = datetime.fromisoformat(str(created))
-        return AlertRule(
-            id=int(r["id"]),
-            user_id=int(r["user_id"]),
-            telegram_id=int(u["telegram_id"]),
-            symbol=r["symbol"],
-            type=AlertType(r["type"]),
-            threshold=r["threshold"],
-            category=r.get("category"),
-            active=bool(r["active"]),
-            armed=bool(r["armed"]),
-            created_at=created,
-        )
+        # Reuse _row_to_rule — manual int()/fromisoformat(str()) used to
+        # soft-accept bools (int(True)==1) or abort on poisoned created_at
+        # after a successful INSERT.
+        r["telegram_id"] = u["telegram_id"]
+        rule = _row_to_rule(r)
+        if rule is None:
+            raise ValueError("inserted alert rule row failed validation")
+        return rule
 
     async def _fetch_active_rule(
         self,
@@ -1842,20 +1835,33 @@ def _row_to_snapshot(row: dict[str, Any]) -> PriceSnapshot | None:
     raw_sym = row.get("symbol")
     if not isinstance(raw_sym, str) or not raw_sym.strip():
         return None
+    raw_price = row.get("price")
+    # Fail closed — bool soft-accepts via float(True)==1.0.
+    if isinstance(raw_price, bool):
+        return None
     try:
-        price = float(row["price"])
+        price = float(raw_price)  # type: ignore[arg-type]
     except (TypeError, ValueError):
         return None
     if not math.isfinite(price):
         return None
     ts = row.get("ts")
     if not isinstance(ts, datetime):
+        # Fail closed — never str()-coerce non-string ts (objects used to
+        # soft-accept via a hostile __str__ that looked like ISO).
+        if not isinstance(ts, str):
+            return None
         try:
-            ts = datetime.fromisoformat(str(ts))
+            ts = datetime.fromisoformat(ts)
         except (TypeError, ValueError):
             return None
+    # Fail closed — bool ids soft-accept via int(True)==1; lists/None throw
+    # mid latest/previous snapshot reads (parity ``_row_to_rule``).
+    raw_id = row.get("id")
+    if isinstance(raw_id, bool) or not isinstance(raw_id, int):
+        return None
     return PriceSnapshot(
-        id=int(row["id"]),
+        id=raw_id,
         symbol=raw_sym.strip().upper(),
         price=price,
         previous_close=row.get("previous_close"),
@@ -1875,10 +1881,14 @@ def _row_to_snapshot(row: dict[str, Any]) -> PriceSnapshot | None:
 def _row_to_rule(row: dict[str, Any]) -> AlertRule | None:
     created = row.get("created_at")
     if created is not None and not isinstance(created, datetime):
-        try:
-            created = datetime.fromisoformat(str(created))
-        except (TypeError, ValueError):
+        # Fail closed — never str()-coerce non-string created_at.
+        if not isinstance(created, str):
             created = None
+        else:
+            try:
+                created = datetime.fromisoformat(created)
+            except (TypeError, ValueError):
+                created = None
     # Legacy / poisoned rows may still hold C0 controls or oversize categories —
     # sanitize on read so matching + Telegram egress share one egress bar.
     # Fail closed — never str()-coerce non-string PG values into category
@@ -1899,21 +1909,37 @@ def _row_to_rule(row: dict[str, Any]) -> AlertRule | None:
     raw_sym = row.get("symbol")
     if not isinstance(raw_sym, str) or not raw_sym.strip():
         return None
-    try:
-        rule_id = int(row["id"])
-        user_id = int(row["user_id"])
-        telegram_id = int(row["telegram_id"])
-    except (TypeError, ValueError, KeyError):
+    # Fail closed — bool ids soft-accept via int(True)==1; lists/None throw
+    # mid list_alerts / active_rules_for_symbols and abort the tick.
+    raw_id = row.get("id")
+    raw_uid = row.get("user_id")
+    raw_tg = row.get("telegram_id")
+    if (
+        isinstance(raw_id, bool)
+        or not isinstance(raw_id, int)
+        or isinstance(raw_uid, bool)
+        or not isinstance(raw_uid, int)
+        or isinstance(raw_tg, bool)
+        or not isinstance(raw_tg, int)
+    ):
+        return None
+    # Fail closed — bool() soft-accept of "false"/1 used to mislabel armed/active
+    # (parity dash ``=== true``).
+    raw_active = row.get("active")
+    if not isinstance(raw_active, bool):
+        return None
+    raw_armed = row.get("armed", True)
+    if not isinstance(raw_armed, bool):
         return None
     return AlertRule(
-        id=rule_id,
-        user_id=user_id,
-        telegram_id=telegram_id,
+        id=raw_id,
+        user_id=raw_uid,
+        telegram_id=raw_tg,
         symbol=raw_sym.strip().upper(),
         type=alert_type,
         threshold=row.get("threshold"),
         category=cat,
-        active=bool(row["active"]),
-        armed=bool(row.get("armed", True)),
+        active=raw_active,
+        armed=raw_armed,
         created_at=created,
     )

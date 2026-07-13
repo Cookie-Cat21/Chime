@@ -648,10 +648,20 @@ async def cmd_brief(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
             format_brief_lookup_reply(symbol=symbol, brief=None, ai_enabled=ai_on)
         )
         return
+    # Fail closed — non-string PG fields used to soft-accept via str()
+    # (ints/None became "123"/"None" in /brief Telegram egress).
+    raw_sym = row.get("symbol")
+    sym_out = (
+        raw_sym.strip().upper()
+        if isinstance(raw_sym, str) and raw_sym.strip()
+        else symbol
+    )
+    raw_brief = row.get("brief")
+    brief_out = raw_brief if isinstance(raw_brief, str) else ""
     await update.effective_message.reply_text(
         format_brief_lookup_reply(
-            symbol=str(row.get("symbol") or symbol),
-            brief=str(row.get("brief") or ""),
+            symbol=sym_out,
+            brief=brief_out,
             title=row.get("title") if isinstance(row.get("title"), str) else None,
             url=row.get("url") if isinstance(row.get("url"), str) else None,
             ai_enabled=ai_on,

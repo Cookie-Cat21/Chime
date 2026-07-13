@@ -293,9 +293,28 @@ async def _notify_brief_followups(
             )
             return
         for entry in claimed:
-            telegram_id = int(entry["telegram_id"])
-            log_id = int(entry["id"])
-            text = str(entry.get("message_text") or message)
+            # Fail closed — poisoned claim rows used to throw on int()/str()
+            # soft-accept mid brief follow-up drain (bool→1, lists abort).
+            raw_tg = entry.get("telegram_id")
+            raw_log = entry.get("id")
+            if (
+                isinstance(raw_tg, bool)
+                or not isinstance(raw_tg, int)
+                or isinstance(raw_log, bool)
+                or not isinstance(raw_log, int)
+            ):
+                log.warning(
+                    "brief_followup_claim_row_poisoned",
+                    disclosure_id=disclosure_id,
+                    symbol=symbol,
+                    telegram_id=raw_tg,
+                    alert_log_id=raw_log,
+                )
+                continue
+            telegram_id = raw_tg
+            log_id = raw_log
+            raw_text = entry.get("message_text")
+            text = raw_text if isinstance(raw_text, str) and raw_text else message
             try:
                 result = await notify(telegram_id, text)
             except Exception as exc:
@@ -460,7 +479,16 @@ async def claim_pending_briefs(
                 for i, row in enumerate(rows):
                     if i > 0 and sleep_s > 0:
                         await asyncio.sleep(sleep_s)
-                    disclosure_id = int(row["disclosure_id"])
+                    # Fail closed — poisoned disclosure_id used to throw on
+                    # int() (lists) or soft-accept bool→1 mid brief drain.
+                    raw_did = row.get("disclosure_id")
+                    if isinstance(raw_did, bool) or not isinstance(raw_did, int):
+                        log.warning(
+                            "brief_drain_row_poisoned",
+                            disclosure_id=raw_did,
+                        )
+                        continue
+                    disclosure_id = raw_did
                     try:
                         text = await _input_text_for_row(row, cfg=cfg, client=http)
                         brief = await prov.summarize(text)

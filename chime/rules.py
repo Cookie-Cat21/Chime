@@ -230,9 +230,11 @@ def _disclosure_category_matches(rule: AlertRule, disclosure: Disclosure) -> boo
     if not needle:
         return True
     haystack = disclosure.category
-    if haystack is None:
+    # Fail closed — non-string category used to soft-accept via str()
+    # (ints/objects became "123"/"<...>" and could false-match filters).
+    if not isinstance(haystack, str):
         return False
-    hay = str(haystack)
+    hay = haystack
     if not hay.strip():
         return False
     return needle.casefold() in hay.casefold()

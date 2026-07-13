@@ -1248,14 +1248,35 @@ class Poller:
             if not pending:
                 break
             row = pending[0]
-            log_id = int(row["id"])
-            text = row["message_text"] or ""
+            # Fail closed — poisoned unsent rows used to throw on int() or
+            # soft-accept bool→1 / non-string message_text mid retry drain.
+            raw_id = row.get("id")
+            raw_tg = row.get("telegram_id")
+            raw_rule = row.get("rule_id")
+            if (
+                isinstance(raw_id, bool)
+                or not isinstance(raw_id, int)
+                or isinstance(raw_tg, bool)
+                or not isinstance(raw_tg, int)
+                or isinstance(raw_rule, bool)
+                or not isinstance(raw_rule, int)
+            ):
+                log.warning(
+                    "unsent_row_poisoned",
+                    alert_log_id=raw_id,
+                    telegram_id=raw_tg,
+                    rule_id=raw_rule,
+                )
+                continue
+            log_id = raw_id
+            raw_text = row.get("message_text")
+            text = raw_text if isinstance(raw_text, str) else ""
             item = PendingSend(
                 log_id=log_id,
-                telegram_id=int(row["telegram_id"]),
+                telegram_id=raw_tg,
                 message=text,
                 already_claimed_new=False,
-                rule_id=int(row["rule_id"]),
+                rule_id=raw_rule,
                 event=None,
                 symbol=_symbol_from_alert_message(text),
             )
