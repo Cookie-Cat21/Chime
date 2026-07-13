@@ -1,0 +1,550 @@
+[
+  {
+    "symbol": "AAF.N0000",
+    "kind": "quarterly",
+    "eps_basic": 2.26,
+    "eps_diluted": 1.58,
+    "revenue": 2358166994.0,
+    "profit": 280257691.0,
+    "page": -1,
+    "label": "seed",
+    "source": "human_seed",
+    "notes": []
+  },
+  {
+    "symbol": "AAF.N0000",
+    "kind": "annual",
+    "eps_basic": 3.55,
+    "eps_diluted": 2.48,
+    "revenue": 5972861421.0,
+    "profit": 115756549.0,
+    "page": -1,
+    "label": "seed",
+    "source": "human_seed",
+    "notes": []
+  },
+  {
+    "symbol": "AAIC.N0000",
+    "kind": "quarterly",
+    "eps_basic": 7.55,
+    "eps_diluted": 7.55,
+    "revenue": 10968969.0,
+    "profit": 2389200.0,
+    "page": -1,
+    "label": "seed",
+    "source": "human_seed",
+    "notes": []
+  },
+  {
+    "symbol": "AAIC.N0000",
+    "kind": "annual",
+    "eps_basic": 12.61,
+    "eps_diluted": 12.61,
+    "revenue": null,
+    "profit": null,
+    "page": -1,
+    "label": "seed",
+    "source": "human_seed",
+    "notes": []
+  },
+  {
+    "symbol": "ABAN.N0000",
+    "kind": "quarterly",
+    "eps_basic": 25.92,
+    "eps_diluted": null,
+    "revenue": 1928502029.0,
+    "profit": 132442736.0,
+    "page": 1,
+    "label": "Earnings per share - Basic/Diluted",
+    "source": "dual_agree",
+    "notes": [
+      "main_indep_eps_agree"
+    ]
+  },
+  {
+    "symbol": "ABAN.N0000",
+    "kind": "annual",
+    "eps_basic": 85.85,
+    "eps_diluted": null,
+    "revenue": 6123805633.0,
+    "profit": 438720434.0,
+    "page": 51,
+    "label": "Earnings per share - basic/ diluted",
+    "source": "dual_agree",
+    "notes": [
+      "main_indep_eps_agree"
+    ]
+  },
+  {
+    "symbol": "ABL.N0000",
+    "kind": "quarterly",
+    "eps_basic": 4.5,
+    "eps_diluted": 4.5,
+    "revenue": 16918379.0,
+    "profit": 2480983.0,
+    "page": -1,
+    "label": "seed",
+    "source": "human_seed",
+    "notes": []
+  },
+  {
+    "symbol": "ABL.N0000",
+    "kind": "annual",
+    "eps_basic": 3.22,
+    "eps_diluted": 3.22,
+    "revenue": 15399562261.0,
+    "profit": 1774665732.0,
+    "page": 239,
+    "label": "Earnings Per Share - Basic",
+    "source": "dual_agree",
+    "notes": [
+      "main_indep_eps_agree"
+    ]
+  },
+  {
+    "symbol": "ACL.N0000",
+    "kind": "quarterly",
+    "eps_basic": 2.57,
+    "eps_diluted": 2.57,
+    "revenue": 12179908.0,
+    "profit": 2109509.0,
+    "page": 1,
+    "label": "Basic / Diluted Earnings per share (Rs.)",
+    "source": "extractor_only",
+    "notes": [
+      "no_indep",
+      "excluded_from_accuracy_gate"
+    ]
+  },
+  {
+    "symbol": "ACL.N0000",
+    "kind": "annual",
+    "eps_basic": 11.93,
+    "eps_diluted": null,
+    "revenue": 29196329.0,
+    "profit": 3445820.0,
+    "page": 113,
+    "label": "Earnings per share - basic/ diluted",
+    "source": "dual_agree",
+    "notes": [
+      "main_indep_eps_agree"
+    ]
+  },
+  {
+    "symbol": "ACME.N0000",
+    "kind": "quarterly",
+    "eps_basic": -1.57,
+    "eps_diluted": null,
+    "revenue": 175582.0,
+    "profit": 16120.0,
+    "page": 6,
+    "label": "Loss Per Share",
+    "source": "extractor_only",
+    "notes": [
+      "no_indep",
+      "excluded_from_accuracy_gate"
+    ]
+  },
+  {
+    "symbol": "AEL.N0000",
+    "kind": "quarterly",
+    "eps_basic": 1.24,
+    "eps_diluted": null,
+    "revenue": 13400679319.0,
+    "profit": 1388489168.0,
+    "page": 1,
+    "label": "Basic earnings per share",
+    "source": "dual_agree",
+    "notes": [
+      "main_indep_eps_agree"
+    ]
+  },
+  {
+    "symbol": "AEL.N0000",
+    "kind": "annual",
+    "eps_basic": 6.31,
+    "eps_diluted": null,
+    "revenue": 5.1,
+    "profit": 6291097836.0,
+    "page": 263,
+    "label": "Basic earnings per share",
+    "source": "dual_agree",
+    "notes": [
+      "main_indep_eps_agree"
+    ]
+  },
+  {
+    "symbol": "AGAL.N0000",
+    "kind": "annual",
+    "eps_basic": 5.0,
+    "eps_diluted": null,
+    "revenue": 4839661.0,
+    "profit": 781489.0,
+    "page": -1,
+    "label": "seed",
+    "source": "human_seed",
+    "notes": []
+  },
+  {
+    "symbol": "AGPL.N0000",
+    "kind": "quarterly",
+    "eps_basic": 0.19,
+    "eps_diluted": null,
+    "revenue": 1606483.0,
+    "profit": 94826.0,
+    "page": 2,
+    "label": "Basic Earnings Per Share",
+    "source": "dual_agree",
+    "notes": [
+      "main_indep_eps_agree"
+    ]
+  },
+  {
+    "symbol": "AGPL.N0000",
+    "kind": "annual",
+    "eps_basic": 1.0,
+    "eps_diluted": null,
+    "revenue": 7214937403.0,
+    "profit": 465023519.0,
+    "page": 82,
+    "label": "Earnings per Share",
+    "source": "dual_agree",
+    "notes": [
+      "main_indep_eps_agree"
+    ]
+  },
+  {
+    "symbol": "AGST.N0000",
+    "kind": "annual",
+    "eps_basic": 0.33,
+    "eps_diluted": null,
+    "revenue": 7666126877.0,
+    "profit": 159686284.0,
+    "page": 61,
+    "label": "Basic earnings per share (Rs.)",
+    "source": "dual_agree",
+    "notes": [
+      "main_indep_eps_agree"
+    ]
+  },
+  {
+    "symbol": "AHUN.N0000",
+    "kind": "quarterly",
+    "eps_basic": 3.99,
+    "eps_diluted": 3.99,
+    "revenue": 14210028.0,
+    "profit": 2160621.0,
+    "page": -1,
+    "label": "seed",
+    "source": "human_seed",
+    "notes": []
+  },
+  {
+    "symbol": "AHUN.N0000",
+    "kind": "annual",
+    "eps_basic": 9.16,
+    "eps_diluted": 9.16,
+    "revenue": 52349252.0,
+    "profit": -544187.0,
+    "page": -1,
+    "label": "seed",
+    "source": "human_seed",
+    "notes": []
+  },
+  {
+    "symbol": "ALLI.N0000",
+    "kind": "quarterly",
+    "eps_basic": 89.22,
+    "eps_diluted": null,
+    "revenue": 4669290719.0,
+    "profit": 769247716.0,
+    "page": -1,
+    "label": "seed",
+    "source": "human_seed",
+    "notes": []
+  },
+  {
+    "symbol": "ALUM.N0000",
+    "kind": "annual",
+    "eps_basic": 1.45,
+    "eps_diluted": 1.45,
+    "revenue": 14338260.0,
+    "profit": 867154.0,
+    "page": -1,
+    "label": "seed",
+    "source": "human_seed",
+    "notes": []
+  },
+  {
+    "symbol": "AMF.N0000",
+    "kind": "quarterly",
+    "eps_basic": 1.48,
+    "eps_diluted": null,
+    "revenue": 1345927534.0,
+    "profit": 167950965.0,
+    "page": 1,
+    "label": "Earnings per share (Rs.)",
+    "source": "dual_agree",
+    "notes": [
+      "main_indep_eps_agree"
+    ]
+  },
+  {
+    "symbol": "AMF.N0000",
+    "kind": "annual",
+    "eps_basic": 6.62,
+    "eps_diluted": null,
+    "revenue": 5619992235.0,
+    "profit": 750098461.0,
+    "page": 118,
+    "label": "Basic earnings per share (Rs.)",
+    "source": "extractor_only",
+    "notes": [
+      "no_indep",
+      "excluded_from_accuracy_gate"
+    ]
+  },
+  {
+    "symbol": "AMSL.N0000",
+    "kind": "quarterly",
+    "eps_basic": 0.48,
+    "eps_diluted": null,
+    "revenue": 1964151264.0,
+    "profit": 283104091.0,
+    "page": 3,
+    "label": "Earnings Per Share - Basic",
+    "source": "dual_agree",
+    "notes": [
+      "main_indep_eps_agree"
+    ]
+  },
+  {
+    "symbol": "AMSL.N0000",
+    "kind": "annual",
+    "eps_basic": 1.24,
+    "eps_diluted": null,
+    "revenue": 3.1,
+    "profit": 746307.0,
+    "page": 60,
+    "label": "Earnings Per Share - Basic",
+    "source": "dual_agree",
+    "notes": [
+      "main_indep_eps_agree"
+    ]
+  },
+  {
+    "symbol": "APLA.N0000",
+    "kind": "quarterly",
+    "eps_basic": 4.92,
+    "eps_diluted": null,
+    "revenue": 731203.0,
+    "profit": 207284.0,
+    "page": -1,
+    "label": "seed",
+    "source": "human_seed",
+    "notes": []
+  },
+  {
+    "symbol": "APLA.N0000",
+    "kind": "annual",
+    "eps_basic": 108.17,
+    "eps_diluted": 108.17,
+    "revenue": 2373421587.0,
+    "profit": 455680103.0,
+    "page": 66,
+    "label": "Basic/diluted earnings per share (Rs)",
+    "source": "dual_agree",
+    "notes": [
+      "main_indep_eps_agree"
+    ]
+  },
+  {
+    "symbol": "ASCO.N0000",
+    "kind": "quarterly",
+    "eps_basic": -0.06,
+    "eps_diluted": null,
+    "revenue": -296118.0,
+    "profit": -24789.0,
+    "page": 9,
+    "label": "Earnings / (loss) per share  - LKR",
+    "source": "dual_agree",
+    "notes": [
+      "main_indep_eps_agree"
+    ]
+  },
+  {
+    "symbol": "ASCO.N0000",
+    "kind": "annual",
+    "eps_basic": -0.45,
+    "eps_diluted": null,
+    "revenue": 1205078755.0,
+    "profit": 147282135.0,
+    "page": -1,
+    "label": "seed",
+    "source": "human_seed",
+    "notes": []
+  },
+  {
+    "symbol": "ASHO.N0000",
+    "kind": "quarterly",
+    "eps_basic": 520.54,
+    "eps_diluted": null,
+    "revenue": 7194099472.0,
+    "profit": 1884796089.0,
+    "page": 5,
+    "label": "Earnings per Share (Rs.)",
+    "source": "extractor_only",
+    "notes": [
+      "no_indep",
+      "excluded_from_accuracy_gate"
+    ]
+  },
+  {
+    "symbol": "ASHO.N0000",
+    "kind": "annual",
+    "eps_basic": 422.84,
+    "eps_diluted": null,
+    "revenue": 3.16,
+    "profit": 1531027028.0,
+    "page": 8,
+    "label": "EARNINGS PER SHARE (Rs.)",
+    "source": "dual_agree",
+    "notes": [
+      "main_indep_eps_agree"
+    ]
+  },
+  {
+    "symbol": "ASIR.N0000",
+    "kind": "quarterly",
+    "eps_basic": 1.11,
+    "eps_diluted": null,
+    "revenue": 8864199973.0,
+    "profit": 1348951466.0,
+    "page": -1,
+    "label": "seed",
+    "source": "human_seed",
+    "notes": []
+  },
+  {
+    "symbol": "ASIR.N0000",
+    "kind": "annual",
+    "eps_basic": 2.54,
+    "eps_diluted": null,
+    "revenue": 3.1,
+    "profit": 3118877023.0,
+    "page": 65,
+    "label": "Earnings Per Share - Basic",
+    "source": "dual_agree",
+    "notes": [
+      "main_indep_eps_agree"
+    ]
+  },
+  {
+    "symbol": "ASIY.N0000",
+    "kind": "quarterly",
+    "eps_basic": 31.0,
+    "eps_diluted": null,
+    "revenue": 722810895.0,
+    "profit": 132643543.0,
+    "page": 5,
+    "label": "Basic Earnings per share is calculated by dividing the net profit for the year attributable to ordinary shareholders by the weighted average",
+    "source": "dual_agree",
+    "notes": [
+      "main_indep_eps_agree"
+    ]
+  },
+  {
+    "symbol": "ASIY.N0000",
+    "kind": "annual",
+    "eps_basic": 0.8,
+    "eps_diluted": 0.8,
+    "revenue": 1275474800.0,
+    "profit": 209211207.0,
+    "page": 85,
+    "label": "Basic/Diluted Earnings/ (Loss) Per Share",
+    "source": "dual_agree",
+    "notes": [
+      "main_indep_eps_agree"
+    ]
+  },
+  {
+    "symbol": "ASPH.N0000",
+    "kind": "quarterly",
+    "eps_basic": 0.003,
+    "eps_diluted": null,
+    "revenue": 40635.0,
+    "profit": 10985.0,
+    "page": -1,
+    "label": "seed",
+    "source": "human_seed",
+    "notes": []
+  },
+  {
+    "symbol": "ASPH.N0000",
+    "kind": "annual",
+    "eps_basic": 0.01,
+    "eps_diluted": null,
+    "revenue": 29255062.0,
+    "profit": 18862011.0,
+    "page": 82,
+    "label": "Basic Earnings per share (EPS) - Rs.",
+    "source": "dual_agree",
+    "notes": [
+      "main_indep_eps_agree"
+    ]
+  },
+  {
+    "symbol": "ATL.N0000",
+    "kind": "quarterly",
+    "eps_basic": -1.27,
+    "eps_diluted": -1.06,
+    "revenue": 3237758580.0,
+    "profit": -289226338.0,
+    "page": -1,
+    "label": "seed",
+    "source": "human_seed",
+    "notes": []
+  },
+  {
+    "symbol": "ATLL.N0000",
+    "kind": "quarterly",
+    "eps_basic": -0.07,
+    "eps_diluted": -0.07,
+    "revenue": 502448835.0,
+    "profit": -3253721.0,
+    "page": 3,
+    "label": "Basic / diluted earnings per share to equity holders",
+    "source": "dual_agree",
+    "notes": [
+      "main_indep_eps_agree"
+    ]
+  },
+  {
+    "symbol": "ATLL.N0000",
+    "kind": "annual",
+    "eps_basic": 0.09,
+    "eps_diluted": 0.09,
+    "revenue": 1295045915.0,
+    "profit": 4578270.0,
+    "page": 67,
+    "label": "Basic/Diluted Earnings Per Share",
+    "source": "dual_agree",
+    "notes": [
+      "main_indep_eps_agree"
+    ]
+  },
+  {
+    "symbol": "BERU.N0000",
+    "kind": "annual",
+    "eps_basic": -8.0,
+    "eps_diluted": null,
+    "revenue": 722.5,
+    "profit": 177225928.0,
+    "page": 28,
+    "label": "Earnings per Share (Rs.)",
+    "source": "dual_agree",
+    "notes": [
+      "main_indep_eps_agree"
+    ]
+  }
+]

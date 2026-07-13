@@ -1,6 +1,15 @@
 [
   {
     "symbol": "AAF.N0000",
+    "kind": "annual",
+    "revenue": 5972861421.0,
+    "profit": 115756549.0,
+    "eps_basic": 3.55,
+    "eps_diluted": 2.48,
+    "note": "SOPL: note 38.1 then Basic 3.55 / Diluted 2.48 (not note as EPS)"
+  },
+  {
+    "symbol": "AAF.N0000",
     "kind": "quarterly",
     "revenue": 2358166994.0,
     "profit": 280257691.0,
@@ -9,13 +18,22 @@
     "note": "Interest Income / Profit for the Period / Basic+Diluted; current quarter columns"
   },
   {
-    "symbol": "AHUN.N0000",
+    "symbol": "AAIC.N0000",
+    "kind": "annual",
+    "revenue": null,
+    "profit": null,
+    "eps_basic": 12.61,
+    "eps_diluted": 12.61,
+    "note": "SOPL/note 23.2 Basic 12.61 (not 300 page/note artifact)"
+  },
+  {
+    "symbol": "AAIC.N0000",
     "kind": "quarterly",
-    "revenue": 14210028.0,
-    "profit": 2160621.0,
-    "eps_basic": 3.99,
-    "eps_diluted": 3.99,
-    "note": "Consolidated Income Statement current period"
+    "revenue": 10968969.0,
+    "profit": 2389200.0,
+    "eps_basic": 7.55,
+    "eps_diluted": 7.55,
+    "note": "For the three months ended \u2014 Gross written premiums"
   },
   {
     "symbol": "ABL.N0000",
@@ -27,38 +45,31 @@
     "note": "Financing Income / Profit for the Period / Basic/Diluted"
   },
   {
-    "symbol": "ATL.N0000",
-    "kind": "quarterly",
-    "revenue": 3237758580.0,
-    "profit": -289226338.0,
-    "eps_basic": -1.27,
-    "eps_diluted": -1.06,
-    "note": "FOR THE QUARTER ENDED statement (not year-ended page)"
+    "symbol": "AGAL.N0000",
+    "kind": "annual",
+    "revenue": 4839661.0,
+    "profit": 781489.0,
+    "eps_basic": 5.0,
+    "eps_diluted": null,
+    "note": "SOPL: note 12.1 then Basic 5.00 / 3.40 (not note as EPS)"
   },
   {
-    "symbol": "AAIC.N0000",
-    "kind": "quarterly",
-    "revenue": 10968969.0,
-    "profit": 2389200.0,
-    "eps_basic": 7.55,
-    "eps_diluted": 7.55,
-    "note": "For the three months ended — Gross written premiums"
+    "symbol": "AHUN.N0000",
+    "kind": "annual",
+    "revenue": 52349252.0,
+    "profit": -544187.0,
+    "eps_basic": 9.16,
+    "eps_diluted": 9.16,
+    "note": "Group SOPL / highlights EPS 9.16 (not TOC page 253)"
   },
   {
-    "symbol": "APLA.N0000",
+    "symbol": "AHUN.N0000",
     "kind": "quarterly",
-    "revenue": 731203.0,
-    "profit": 207284.0,
-    "eps_basic": 4.92,
-    "note": "First SOPL block (Group); Dialuted typo in source PDF"
-  },
-  {
-    "symbol": "ASPH.N0000",
-    "kind": "quarterly",
-    "revenue": 40635.0,
-    "profit": 10985.0,
-    "eps_basic": 0.003,
-    "note": "Diluted and Basic combined line"
+    "revenue": 14210028.0,
+    "profit": 2160621.0,
+    "eps_basic": 3.99,
+    "eps_diluted": 3.99,
+    "note": "Consolidated Income Statement current period"
   },
   {
     "symbol": "ALLI.N0000",
@@ -69,12 +80,21 @@
     "note": "Group SOPL (listed-entity EPS convention)"
   },
   {
-    "symbol": "ASIR.N0000",
+    "symbol": "ALUM.N0000",
+    "kind": "annual",
+    "revenue": 14338260.0,
+    "profit": 867154.0,
+    "eps_basic": 1.45,
+    "eps_diluted": 1.45,
+    "note": "SOPL Diluted and Basic 1.45 (not quarterly-analysis (1.45))"
+  },
+  {
+    "symbol": "APLA.N0000",
     "kind": "quarterly",
-    "revenue": 8864199973.0,
-    "profit": 1348951466.0,
-    "eps_basic": 1.11,
-    "note": "Three Months Ended statement (not YTD period page)"
+    "revenue": 731203.0,
+    "profit": 207284.0,
+    "eps_basic": 4.92,
+    "note": "First SOPL block (Group); Dialuted typo in source PDF"
   },
   {
     "symbol": "ASCO.N0000",
@@ -83,5 +103,30 @@
     "profit": 147282135.0,
     "eps_basic": -0.45,
     "note": "Annual SOPL Group column"
+  },
+  {
+    "symbol": "ASIR.N0000",
+    "kind": "quarterly",
+    "revenue": 8864199973.0,
+    "profit": 1348951466.0,
+    "eps_basic": 1.11,
+    "note": "Three Months Ended statement (not YTD period page)"
+  },
+  {
+    "symbol": "ASPH.N0000",
+    "kind": "quarterly",
+    "revenue": 40635.0,
+    "profit": 10985.0,
+    "eps_basic": 0.003,
+    "note": "Diluted and Basic combined line"
+  },
+  {
+    "symbol": "ATL.N0000",
+    "kind": "quarterly",
+    "revenue": 3237758580.0,
+    "profit": -289226338.0,
+    "eps_basic": -1.27,
+    "eps_diluted": -1.06,
+    "note": "FOR THE QUARTER ENDED statement (not year-ended page)"
   }
 ]

@@ -257,6 +257,27 @@ def _classify(line: str) -> str | None:
     return None
 
 
+def _is_leading_note_or_toc_token(raw: str, v: float) -> bool:
+    """True for CSE note-column / TOC tokens that often precede the real EPS."""
+    t = raw.strip().strip("()")
+    if not t:
+        return False
+    # Parenthetical / negative values are never note refs.
+    if raw.strip().startswith("(") or v < 0:
+        return False
+    # Bare note numbers (Notes column): 5, 10, 38
+    if re.fullmatch(r"\d{1,2}", t) and v == int(v) and 1 <= abs(v) <= 40:
+        return True
+    # Subsection note refs with *one* decimal place: 8.1, 10.3, 38.1
+    # (Real EPS like 3.55 / 9.16 have two+ decimals and are kept.)
+    if re.fullmatch(r"\d{1,2}\.\d", t):
+        return True
+    # TOC / contents page numbers (e.g. "EPS .... 253")
+    if re.fullmatch(r"\d{2,3}", t) and v == int(v) and 50 <= abs(v) <= 450:
+        return True
+    return False
+
+
 def _collect_following_nums(
     lines: list[str], i: int, *, eps_mode: bool = False
 ) -> list[tuple[str, float]]:
@@ -306,9 +327,10 @@ def _collect_following_nums(
         found = _nums_in(nxt)
         if found:
             for raw, v in found:
-                # skip lone note refs
+                # Non-EPS: skip lone note ints
                 if (
-                    raw.replace(",", "").isdigit()
+                    not eps_mode
+                    and raw.replace(",", "").isdigit()
                     and v == int(v)
                     and 1 <= abs(v) <= 40
                     and len(found) == 1
@@ -316,9 +338,18 @@ def _collect_following_nums(
                     continue
                 nums.append((raw, v))
             j += 1
-            # For EPS, one numeric line is usually enough (avoid YTD second line
-            # when % row already consumed); still allow one more if first was notes
-            if eps_mode and any(abs(v) < 5000 for _, v in nums):
+            if eps_mode:
+                # Strip leading note/TOC tokens when a real EPS follows
+                # (AAF: 38.1 note → 3.55 / 2.77). Keep scanning while only notes seen.
+                while len(nums) >= 2 and _is_leading_note_or_toc_token(
+                    nums[0][0], nums[0][1]
+                ):
+                    nums = nums[1:]
+                if not nums:
+                    continue
+                # Note-like single (38.1 / 10 / 253): peek further lines before committing.
+                if _is_leading_note_or_toc_token(nums[0][0], nums[0][1]):
+                    continue
                 break
             continue
         break
@@ -334,10 +365,21 @@ def _collect_following_nums(
             and 1 <= abs(v) <= 40
         ):
             continue
-        if eps_mode and raw.replace(",", "").isdigit() and v == int(v) and 1 <= abs(v) <= 40:
-            # note ref mixed into eps row — skip
-            continue
         cleaned.append((raw, v))
+    if eps_mode:
+        while len(cleaned) >= 2 and _is_leading_note_or_toc_token(
+            cleaned[0][0], cleaned[0][1]
+        ):
+            cleaned = cleaned[1:]
+        # Drop sole TOC page-number false positive
+        if (
+            len(cleaned) == 1
+            and _is_leading_note_or_toc_token(cleaned[0][0], cleaned[0][1])
+            and cleaned[0][1] == int(cleaned[0][1])
+            and abs(cleaned[0][1]) >= 50
+        ):
+            cleaned = []
+        return cleaned
     return cleaned or nums
 
 
@@ -455,10 +497,11 @@ def extract_from_pages(
     page_is_ytd: dict[int, bool] = {}
     page_is_group: dict[int, bool] = {}
     page_is_company_only: dict[int, bool] = {}
+    page_is_analysis: dict[int, bool] = {}
 
     for page, text in pages:
         low_page = text.lower()
-        head = "\n".join(text.splitlines()[:20]).lower()
+        head = "\n".join(text.splitlines()[:25]).lower()
         page_is_sopl[page] = (
             "statement of profit" in low_page
             or "income statement" in low_page
@@ -486,6 +529,16 @@ def extract_from_pages(
         page_is_company_only[page] = bool(
             re.search(r"\bcompany\b", head)
         ) and not page_is_group[page]
+        # Quarterly analysis / highlights / TOC — not the primary SOPL EPS source
+        page_is_analysis[page] = bool(
+            re.search(
+                r"quarterly\s+analysis|segment\s+information|"
+                r"financial\s+highlights|table\s+of\s+contents|"
+                r"^\s*contents\b",
+                head,
+                re.M,
+            )
+        ) and not page_is_sopl[page]
         scale_votes.append(
             "millions"
             if SCALE_MILLIONS.search(text)
@@ -568,6 +621,8 @@ def extract_from_pages(
                 notes.append("on_group_page")
             if page_is_company_only.get(page):
                 notes.append("on_company_only_page")
+            if page_is_analysis.get(page):
+                notes.append("on_analysis_page")
             raw, val = nums[0]
             if bucket.startswith("eps") and abs(val) > 5000:
                 i += 1
@@ -665,7 +720,9 @@ def extract_from_pages(
     def rank_eps(p: Pick) -> tuple:
         score = 0
         if "on_sopl_page" in p.notes:
-            score += 5
+            score += 15
+        if "on_analysis_page" in p.notes:
+            score -= 25
         if kind == "quarterly":
             if "on_quarter_page" in p.notes:
                 score += 12
@@ -694,45 +751,46 @@ def extract_from_pages(
     eps_combined = best("eps_combined", rank_eps)
     eps_generic = best("eps_generic", rank_eps)
 
+    def _on_sopl(p: Pick | None) -> bool:
+        return bool(p and "on_sopl_page" in p.notes)
+
+    def _promote(src: Pick, tag: str) -> Pick:
+        return Pick(
+            value=src.value,
+            raw=src.raw,
+            label=src.label,
+            page=src.page,
+            verified=src.verified,
+            notes=list(src.notes) + [tag],
+        )
+
+    # Prefer SOPL combined / "diluted and basic" over non-SOPL "basic" hits
+    # (ALUM: quarterly-analysis (1.45) vs SOPL Diluted and Basic 1.45).
+    if eps_basic is not None and not _on_sopl(eps_basic):
+        for alt, tag in (
+            (eps_combined, "replaced_nonssopl_from_combined"),
+            (eps_diluted, "replaced_nonssopl_from_diluted_and_basic"),
+            (eps_generic, "replaced_nonssopl_from_generic"),
+        ):
+            if not _on_sopl(alt):
+                continue
+            low = (alt.label or "").lower()
+            if alt is eps_diluted and "basic" not in low and "combined" not in low:
+                continue
+            eps_basic = _promote(alt, tag)
+            break
+
     # Promote combined / generic → basic when typed basic missing
     if eps_basic is None and eps_combined is not None:
-        eps_basic = Pick(
-            value=eps_combined.value,
-            raw=eps_combined.raw,
-            label=eps_combined.label,
-            page=eps_combined.page,
-            verified=eps_combined.verified,
-            notes=eps_combined.notes + ["promoted_from_combined"],
-        )
+        eps_basic = _promote(eps_combined, "promoted_from_combined")
         if eps_diluted is None:
-            eps_diluted = Pick(
-                value=eps_combined.value,
-                raw=eps_combined.raw,
-                label=eps_combined.label,
-                page=eps_combined.page,
-                verified=eps_combined.verified,
-                notes=["same_as_basic_combined"],
-            )
+            eps_diluted = _promote(eps_combined, "same_as_basic_combined")
     if eps_basic is None and eps_diluted is not None:
         low = (eps_diluted.label or "").lower()
         if "and basic" in low or "basic" in low:
-            eps_basic = Pick(
-                value=eps_diluted.value,
-                raw=eps_diluted.raw,
-                label=eps_diluted.label,
-                page=eps_diluted.page,
-                verified=eps_diluted.verified,
-                notes=["promoted_from_diluted_and_basic"],
-            )
+            eps_basic = _promote(eps_diluted, "promoted_from_diluted_and_basic")
     if eps_basic is None and eps_generic is not None:
-        eps_basic = Pick(
-            value=eps_generic.value,
-            raw=eps_generic.raw,
-            label=eps_generic.label,
-            page=eps_generic.page,
-            verified=eps_generic.verified,
-            notes=eps_generic.notes + ["promoted_from_generic"],
-        )
+        eps_basic = _promote(eps_generic, "promoted_from_generic")
 
     scale = "unknown"
     votes = [s for s in scale_votes if s != "unknown"]
@@ -854,17 +912,24 @@ def score_gold(gold_path: Path) -> dict:
     rows_out = []
     for g in gold:
         r = eval_one(g)
-        ok = bool(
-            r.required_ok
-            and r.revenue
-            and r.profit
-            and r.eps_basic
-            and abs(r.revenue.value - float(g["revenue"])) / max(abs(float(g["revenue"])), 1.0)
-            < 0.001
-            and abs(r.profit.value - float(g["profit"])) / max(abs(float(g["profit"])), 1.0)
-            < 0.001
-            and abs(r.eps_basic.value - float(g["eps_basic"])) < 0.05
-        )
+        ok = bool(r.eps_basic and abs(r.eps_basic.value - float(g["eps_basic"])) < 0.05)
+        if g.get("revenue") is not None:
+            ok = ok and bool(
+                r.revenue
+                and abs(r.revenue.value - float(g["revenue"]))
+                / max(abs(float(g["revenue"])), 1.0)
+                < 0.001
+            )
+        if g.get("profit") is not None:
+            ok = ok and bool(
+                r.profit
+                and abs(r.profit.value - float(g["profit"]))
+                / max(abs(float(g["profit"])), 1.0)
+                < 0.001
+            )
+        # When rev+profit are both labeled, still require the full verified gate
+        if g.get("revenue") is not None and g.get("profit") is not None:
+            ok = ok and bool(r.required_ok)
         hits += int(ok)
         rows_out.append(
             {
@@ -872,8 +937,8 @@ def score_gold(gold_path: Path) -> dict:
                 "kind": g["kind"],
                 "ok": ok,
                 "expected": {
-                    "revenue": g["revenue"],
-                    "profit": g["profit"],
+                    "revenue": g.get("revenue"),
+                    "profit": g.get("profit"),
                     "eps_basic": g["eps_basic"],
                 },
                 "got": {
