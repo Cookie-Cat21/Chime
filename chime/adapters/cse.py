@@ -14,7 +14,7 @@ import time
 from collections.abc import Iterable
 from datetime import UTC, datetime
 from typing import Any, cast
-from urllib.parse import urlparse
+from urllib.parse import unquote, urlparse
 from zoneinfo import ZoneInfo
 
 import httpx
@@ -51,6 +51,7 @@ CDN_BASE = f"https://{CDN_HOST}"
 # Telegram egress budget: unbounded path/fragment must not blow past 4096.
 FILING_URL_MAX = 512
 _URL_CTRL_RE = re.compile(r"[\x00-\x1f\x7f-\x9f]")
+_BAD_PERCENT_ESCAPE_RE = re.compile(r"%(?![0-9A-Fa-f]{2})")
 TRADE_SUMMARY_ENDPOINT = "tradeSummary"
 TRADE_SUMMARY_PATH = "/tradeSummary"
 ALL_SECTORS_ENDPOINT = "allSectors"
@@ -69,6 +70,33 @@ def _reject_bool_numeric_value(value: Any) -> Any:
 def _announcement_url(external_id: str) -> str:
     """Public CSE announcement page anchor used in Telegram disclosure alerts."""
     return f"{ANNOUNCEMENTS_PAGE}#{external_id}"
+
+
+def _safe_url_path_segments(path: str) -> list[str] | None:
+    """Return non-empty path segments, rejecting encoded traversal separators."""
+    segments = [s for s in path.split("/") if s != ""]
+    for segment in segments:
+        current = segment
+        for _ in range(5):
+            if _BAD_PERCENT_ESCAPE_RE.search(current):
+                return None
+            if (
+                current in {".", ".."}
+                or "/" in current
+                or "\\" in current
+                or _URL_CTRL_RE.search(current)
+            ):
+                return None
+            try:
+                decoded = unquote(current, errors="strict")
+            except UnicodeDecodeError:
+                return None
+            if decoded == current:
+                break
+            current = decoded
+        else:
+            return None
+    return segments
 
 
 def allowed_cdn_pdf_url(url: str | None) -> str | None:
@@ -96,8 +124,8 @@ def allowed_cdn_pdf_url(url: str | None) -> str | None:
     if parsed.username is not None or parsed.password is not None:
         return None
     path = parsed.path or "/"
-    segments = [s for s in path.split("/") if s != ""]
-    if any(seg == ".." or seg == "." for seg in segments):
+    segments = _safe_url_path_segments(path)
+    if segments is None:
         return None
     normalized_path = "/" + "/".join(segments) if segments else "/"
     out = f"{CDN_BASE}{normalized_path}"
@@ -134,8 +162,8 @@ def allowed_filing_url(url: str | None) -> str | None:
     if parsed.username is not None or parsed.password is not None:
         return None
     path = parsed.path or "/"
-    segments = [s for s in path.split("/") if s != ""]
-    if any(seg == ".." or seg == "." for seg in segments):
+    segments = _safe_url_path_segments(path)
+    if segments is None:
         return None
     normalized_path = "/" + "/".join(segments) if segments else "/"
     out = f"https://{ANNOUNCEMENTS_HOST}{normalized_path}"
@@ -173,8 +201,8 @@ def resolve_pdf_url(file_path: str | None) -> str | None:
     if ":" in first:
         return None
     path = path.lstrip("/")
-    segments = [s for s in path.split("/") if s != ""]
-    if not segments or any(seg == ".." or seg == "." for seg in segments):
+    segments = _safe_url_path_segments(path)
+    if not segments:
         return None
     return allowed_cdn_pdf_url(f"{CDN_BASE}/{'/'.join(segments)}")
 
