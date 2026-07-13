@@ -28,7 +28,7 @@ from tenacity import (
 )
 
 from chime.circuit import CircuitBreaker, CircuitOpenError
-from chime.domain import Disclosure, PriceSnapshot, SectorSnapshot
+from chime.domain import BigPrint, Disclosure, MarketNotice, PriceSnapshot, SectorSnapshot
 
 log = structlog.get_logger(__name__)
 
@@ -56,6 +56,14 @@ TRADE_SUMMARY_ENDPOINT = "tradeSummary"
 TRADE_SUMMARY_PATH = "/tradeSummary"
 ALL_SECTORS_ENDPOINT = "allSectors"
 ALL_SECTORS_PATH = "/allSectors"
+DAYS_TRADE_ENDPOINT = "daysTrade"
+DAYS_TRADE_PATH = "/daysTrade"
+BUY_IN_ENDPOINT = "getBuyInBoardAnnouncements"
+BUY_IN_PATH = "/getBuyInBoardAnnouncements"
+NON_COMPLIANCE_ENDPOINT = "getNonComplianceAnnouncements"
+NON_COMPLIANCE_PATH = "/getNonComplianceAnnouncements"
+NOTIFICATIONS_ENDPOINT = "notifications"
+NOTIFICATIONS_PATH = "/notifications"
 LEGACY_ANNOUNCEMENTS_ENDPOINT = "announcements"
 LEGACY_ANNOUNCEMENTS_PATH = "/announcements"
 
@@ -223,6 +231,7 @@ class TradeSummaryRow(BaseModel):
     low: float | None = None
     open: float | None = None
     marketCap: float | None = None
+    crossingVolume: float | None = None
     lastTradedTime: int | None = None
 
     @field_validator(
@@ -237,6 +246,7 @@ class TradeSummaryRow(BaseModel):
         "low",
         "open",
         "marketCap",
+        "crossingVolume",
         "lastTradedTime",
         mode="before",
     )
@@ -510,6 +520,7 @@ def trade_row_to_snapshot(
         volume=_finite_or_none(row.sharevolume),
         trade_count=_finite_or_none(row.tradevolume),
         turnover=_finite_or_none(row.turnover),
+        crossing_volume=_finite_or_none(row.crossingVolume),
         high=_finite_or_none(row.high),
         low=_finite_or_none(row.low),
         open=_finite_or_none(row.open),
@@ -708,6 +719,152 @@ def resolve_announcement_symbol(
         return None
     return mapped if mapped in allowed else None
 
+
+
+
+class DayTradeRow(BaseModel):
+    """Row from ``POST /daysTrade`` (intraday tape)."""
+
+    model_config = ConfigDict(extra="ignore")
+
+    id: int | None = None
+    price: float | None = None
+    quantity: float | None = None
+    lastTradedTime: int | None = None
+    tradeDate: int | None = None
+    time: str | None = None
+    symbol: str | None = None
+    securityId: int | None = None
+
+    @field_validator(
+        "id",
+        "price",
+        "quantity",
+        "lastTradedTime",
+        "tradeDate",
+        "securityId",
+        mode="before",
+    )
+    @classmethod
+    def _reject_bool_numeric(cls, value: Any) -> Any:
+        return _reject_bool_numeric_value(value)
+
+
+class DayTradeResponse(BaseModel):
+    model_config = ConfigDict(extra="ignore")
+
+    trades: list[DayTradeRow] = Field(default_factory=list)
+
+
+class FlexibleNoticeRow(BaseModel):
+    """Loose row for buy-in / non-compliance / notifications feeds."""
+
+    model_config = ConfigDict(extra="ignore")
+
+    id: Any = None
+    announcementId: int | None = None
+    symbol: str | None = None
+    company: str | None = None
+    name: str | None = None
+    title: str | None = None
+    body: str | None = None
+    remarks: str | None = None
+    announcementCategory: str | None = None
+    createdDate: int | None = None
+    dateOfAnnouncement: str | None = None
+    status: str | None = None
+
+    @field_validator("announcementId", "createdDate", mode="before")
+    @classmethod
+    def _reject_bool_numeric(cls, value: Any) -> Any:
+        return _reject_bool_numeric_value(value)
+
+
+def day_trade_to_big_print(
+    row: DayTradeRow,
+    *,
+    symbol: str,
+    now: datetime | None = None,
+) -> BigPrint | None:
+    """Normalize a daysTrade row; skip missing id / non-positive quantity."""
+    if isinstance(row.id, bool) or not isinstance(row.id, int):
+        return None
+    qty = _finite_or_none(row.quantity)
+    if qty is None or qty <= 0:
+        return None
+    if not isinstance(symbol, str) or not symbol.strip():
+        return None
+    fallback = now or datetime.now(UTC)
+    traded = _try_ms_to_dt(row.lastTradedTime) or _try_ms_to_dt(row.tradeDate) or fallback
+    return BigPrint(
+        external_id=str(row.id),
+        symbol=symbol.strip().upper(),
+        price=_finite_or_none(row.price),
+        quantity=qty,
+        traded_at=traded,
+        seen_at=fallback,
+    )
+
+
+def _notice_external_id(row: FlexibleNoticeRow, *, fallback_idx: int) -> str | None:
+    raw = row.announcementId if row.announcementId is not None else row.id
+    if isinstance(raw, bool):
+        return None
+    if isinstance(raw, int):
+        return str(raw)
+    if isinstance(raw, str) and raw.strip():
+        return raw.strip()[:128]
+    return f"idx-{fallback_idx}"
+
+
+def flexible_row_to_notice(
+    row: FlexibleNoticeRow,
+    *,
+    notice_type: str,
+    symbol: str | None = None,
+    company_name: str | None = None,
+    now: datetime | None = None,
+    fallback_idx: int = 0,
+) -> MarketNotice | None:
+    """Normalize buy-in / non-compliance / halt rows into MarketNotice."""
+    if notice_type not in {"buy_in", "non_compliance", "halt"}:
+        return None
+    ext = _notice_external_id(row, fallback_idx=fallback_idx)
+    if not ext:
+        return None
+    title = (
+        (row.title if isinstance(row.title, str) else None)
+        or (row.announcementCategory if isinstance(row.announcementCategory, str) else None)
+        or (row.name if isinstance(row.name, str) else None)
+        or notice_type.replace("_", " ")
+    )
+    title = title.strip() or notice_type.replace("_", " ")
+    body_parts: list[str] = []
+    for part in (row.body, row.remarks, row.company, row.name):
+        if isinstance(part, str) and part.strip():
+            body_parts.append(part.strip())
+    body = " — ".join(body_parts) if body_parts else None
+    published = (
+        _try_ms_to_dt(row.createdDate)
+        or _parse_date_of_announcement(row.dateOfAnnouncement)
+        or (now or datetime.now(UTC))
+    )
+    sym = None
+    if isinstance(symbol, str) and symbol.strip():
+        sym = symbol.strip().upper()
+    elif isinstance(row.symbol, str) and row.symbol.strip():
+        sym = row.symbol.strip().upper()
+    url = _announcement_url(ext) if notice_type != "halt" else ANNOUNCEMENTS_PAGE
+    return MarketNotice(
+        external_id=f"{notice_type}:{ext}",
+        notice_type=notice_type,
+        symbol=sym,
+        title=title[:200],
+        body=body,
+        url=url,
+        published_at=published,
+        seen_at=now or datetime.now(UTC),
+    )
 
 class CSEClient:
     """HTTP adapter for cse.lk with retries + per-endpoint circuit breakers."""
@@ -1093,3 +1250,174 @@ class CSEClient:
             list[LegacyAnnouncementRow],
             await self._guarded(LEGACY_ANNOUNCEMENTS_ENDPOINT, _call),
         )
+
+    async def fetch_days_trade(self, symbol: str) -> list[BigPrint]:
+        """Fetch day tape for one symbol (``POST /daysTrade``)."""
+
+        if not isinstance(symbol, str) or not symbol.strip():
+            return []
+        sym = symbol.strip().upper()
+
+        async def _call() -> list[BigPrint]:
+            raw = await self._request(
+                "POST",
+                DAYS_TRADE_PATH,
+                data={"symbol": sym},
+            )
+            if not isinstance(raw, dict):
+                log.error(
+                    "cse_schema_error",
+                    endpoint=DAYS_TRADE_ENDPOINT,
+                    error="expected object",
+                )
+                raise ValueError(f"{DAYS_TRADE_ENDPOINT}: expected JSON object")
+            rows_raw = raw.get("trades") or []
+            if not isinstance(rows_raw, list):
+                log.error(
+                    "cse_schema_error",
+                    endpoint=DAYS_TRADE_ENDPOINT,
+                    error="trades not a list",
+                )
+                raise ValueError(f"{DAYS_TRADE_ENDPOINT}: trades not a list")
+            now = datetime.now(UTC)
+            out: list[BigPrint] = []
+            for item in rows_raw:
+                try:
+                    row = DayTradeRow.model_validate(item)
+                except ValidationError as exc:
+                    log.warning(
+                        "cse_days_trade_row_skipped",
+                        endpoint=DAYS_TRADE_ENDPOINT,
+                        error=str(exc),
+                        row=str(item)[:200],
+                    )
+                    continue
+                bp = day_trade_to_big_print(row, symbol=sym, now=now)
+                if bp is not None:
+                    out.append(bp)
+            return out
+
+        return cast(list[BigPrint], await self._guarded(DAYS_TRADE_ENDPOINT, _call))
+
+    async def fetch_buy_in_announcements(self) -> list[MarketNotice]:
+        return await self._fetch_notice_list(
+            endpoint=BUY_IN_ENDPOINT,
+            path=BUY_IN_PATH,
+            notice_type="buy_in",
+            keys=("buyInBoardAnnouncements", "buyInAnnouncements", "reqBuyIn"),
+        )
+
+    async def fetch_non_compliance_announcements(self) -> list[MarketNotice]:
+        return await self._fetch_notice_list(
+            endpoint=NON_COMPLIANCE_ENDPOINT,
+            path=NON_COMPLIANCE_PATH,
+            notice_type="non_compliance",
+            keys=(
+                "nonComplianceAnnouncements",
+                "nonCompliance",
+                "reqNonCompliance",
+            ),
+        )
+
+    async def fetch_market_notifications(self) -> list[MarketNotice]:
+        """``GET /notifications`` — market halt / system banners."""
+
+        async def _call() -> list[MarketNotice]:
+            raw = await self._request("GET", NOTIFICATIONS_PATH)
+            rows_raw: list[Any]
+            if isinstance(raw, dict):
+                content = raw.get("content")
+                rows_raw = content if isinstance(content, list) else []
+            elif isinstance(raw, list):
+                rows_raw = raw
+            else:
+                log.error(
+                    "cse_schema_error",
+                    endpoint=NOTIFICATIONS_ENDPOINT,
+                    error="expected object or array",
+                )
+                raise ValueError(f"{NOTIFICATIONS_ENDPOINT}: unexpected JSON")
+            now = datetime.now(UTC)
+            out: list[MarketNotice] = []
+            for idx, item in enumerate(rows_raw):
+                try:
+                    row = FlexibleNoticeRow.model_validate(item)
+                except ValidationError as exc:
+                    log.warning(
+                        "cse_notification_row_skipped",
+                        endpoint=NOTIFICATIONS_ENDPOINT,
+                        error=str(exc),
+                        row=str(item)[:200],
+                    )
+                    continue
+                notice = flexible_row_to_notice(
+                    row,
+                    notice_type="halt",
+                    symbol="MARKET",
+                    now=now,
+                    fallback_idx=idx,
+                )
+                if notice is not None:
+                    out.append(notice)
+            return out
+
+        return cast(
+            list[MarketNotice], await self._guarded(NOTIFICATIONS_ENDPOINT, _call)
+        )
+
+    async def _fetch_notice_list(
+        self,
+        *,
+        endpoint: str,
+        path: str,
+        notice_type: str,
+        keys: tuple[str, ...],
+    ) -> list[MarketNotice]:
+        async def _call() -> list[MarketNotice]:
+            raw = await self._request("POST", path, json_body={})
+            rows_raw: list[Any] = []
+            if isinstance(raw, list):
+                rows_raw = raw
+            elif isinstance(raw, dict):
+                for key in keys:
+                    cand = raw.get(key)
+                    if isinstance(cand, list):
+                        rows_raw = cand
+                        break
+                if not rows_raw:
+                    for val in raw.values():
+                        if isinstance(val, list):
+                            rows_raw = val
+                            break
+            else:
+                log.error(
+                    "cse_schema_error",
+                    endpoint=endpoint,
+                    error="expected object or array",
+                )
+                raise ValueError(f"{endpoint}: unexpected JSON")
+            now = datetime.now(UTC)
+            out: list[MarketNotice] = []
+            for idx, item in enumerate(rows_raw):
+                try:
+                    row = FlexibleNoticeRow.model_validate(item)
+                except ValidationError as exc:
+                    log.warning(
+                        "cse_notice_row_skipped",
+                        endpoint=endpoint,
+                        error=str(exc),
+                        row=str(item)[:200],
+                    )
+                    continue
+                notice = flexible_row_to_notice(
+                    row,
+                    notice_type=notice_type,
+                    now=now,
+                    fallback_idx=idx,
+                )
+                if notice is not None:
+                    out.append(notice)
+            return out
+
+        return cast(list[MarketNotice], await self._guarded(endpoint, _call))
+

@@ -27,6 +27,58 @@ class AlertType(StrEnum):
     PRICE_BELOW = "price_below"
     DAILY_MOVE = "daily_move"
     DISCLOSURE = "disclosure"
+    # Activity / flow proxies (not true buy/sell attribution).
+    VOLUME_SPIKE = "volume_spike"
+    VOLUME_UP = "volume_up"
+    VOLUME_DOWN = "volume_down"
+    CROSSING_VOLUME = "crossing_volume"
+    BIG_PRINT = "big_print"
+    GAP = "gap"
+    BUY_IN = "buy_in"
+    NON_COMPLIANCE = "non_compliance"
+    HALT = "halt"
+
+
+# Alert types that need a positive numeric threshold.
+THRESHOLD_ALERT_TYPES: frozenset[AlertType] = frozenset(
+    {
+        AlertType.PRICE_ABOVE,
+        AlertType.PRICE_BELOW,
+        AlertType.DAILY_MOVE,
+        AlertType.VOLUME_SPIKE,
+        AlertType.VOLUME_UP,
+        AlertType.VOLUME_DOWN,
+        AlertType.CROSSING_VOLUME,
+        AlertType.BIG_PRINT,
+        AlertType.GAP,
+    }
+)
+
+# Alert types evaluated from price_snapshots (no extra CSE endpoint).
+PRICE_BOARD_ALERT_TYPES: frozenset[AlertType] = frozenset(
+    {
+        AlertType.PRICE_ABOVE,
+        AlertType.PRICE_BELOW,
+        AlertType.DAILY_MOVE,
+        AlertType.VOLUME_SPIKE,
+        AlertType.VOLUME_UP,
+        AlertType.VOLUME_DOWN,
+        AlertType.CROSSING_VOLUME,
+        AlertType.GAP,
+    }
+)
+
+# Notice types with no threshold (disclosure-like).
+NOTICE_ALERT_TYPES: frozenset[AlertType] = frozenset(
+    {
+        AlertType.BUY_IN,
+        AlertType.NON_COMPLIANCE,
+        AlertType.HALT,
+    }
+)
+
+# Synthetic stock for market-wide halt / system notices.
+MARKET_SYMBOL = "MARKET"
 
 
 class PriceSnapshot(BaseModel):
@@ -42,6 +94,7 @@ class PriceSnapshot(BaseModel):
     volume: float | None = None
     trade_count: float | None = None
     turnover: float | None = None
+    crossing_volume: float | None = None
     high: float | None = None
     low: float | None = None
     open: float | None = None
@@ -63,6 +116,7 @@ class PriceSnapshot(BaseModel):
         "volume",
         "trade_count",
         "turnover",
+        "crossing_volume",
         "high",
         "low",
         "open",
@@ -177,11 +231,64 @@ class PreviousPriceState(BaseModel):
     change_pct: float | None = None
     # Whether a daily_move rule already fired for this symbol/session key
     move_fired_keys: set[str] = Field(default_factory=set)
+    # Avg daily volume / crossing volume over recent sessions (excludes today).
+    avg_volume: float | None = None
+    avg_crossing_volume: float | None = None
+    # Day-bucket keys already claimed for volume/gap activity rules.
+    activity_fired_keys: set[str] = Field(default_factory=set)
 
-    @field_validator("price", "change_pct", mode="before")
+    @field_validator(
+        "price",
+        "change_pct",
+        "avg_volume",
+        "avg_crossing_volume",
+        mode="before",
+    )
     @classmethod
     def _state_numeric_must_not_be_bool(cls, value: Any) -> Any:
         return _none_if_bool_numeric(value)
+
+
+class BigPrint(BaseModel):
+    """Single day-tape print used for big_print alerts."""
+
+    model_config = ConfigDict(extra="ignore")
+
+    external_id: str
+    symbol: str
+    price: float | None = None
+    quantity: float
+    traded_at: datetime | None = None
+    seen_at: datetime | None = None
+    id: int | None = None
+    just_inserted: bool = False
+
+    @field_validator("quantity", mode="before")
+    @classmethod
+    def _qty_must_not_be_bool(cls, value: Any) -> Any:
+        return _reject_bool_numeric(value)
+
+    @field_validator("price", mode="before")
+    @classmethod
+    def _price_opt_must_not_be_bool(cls, value: Any) -> Any:
+        return _none_if_bool_numeric(value)
+
+
+class MarketNotice(BaseModel):
+    """Buy-in / non-compliance / halt notice normalized from CSE feeds."""
+
+    model_config = ConfigDict(extra="ignore")
+
+    external_id: str
+    notice_type: str  # buy_in | non_compliance | halt
+    symbol: str | None = None
+    title: str
+    body: str | None = None
+    url: str | None = None
+    published_at: datetime
+    seen_at: datetime | None = None
+    id: int | None = None
+    just_inserted: bool = False
 
 
 DISCLOSURE_TITLE_MAX = 120

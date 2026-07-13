@@ -41,6 +41,7 @@ from chime.config import Settings
 from chime.domain import (
     AlertEvent,
     Disclosure,
+    MARKET_SYMBOL,
     PriceSnapshot,
     format_alert_message,
     format_dead_letter_notify,
@@ -48,7 +49,13 @@ from chime.domain import (
 from chime.health import brief_queue_health_hint
 from chime.logging_setup import get_logger
 from chime.notify import SendResult
-from chime.rules import evaluate_disclosure_rules, evaluate_price_rules, filter_fireable
+from chime.rules import (
+    evaluate_big_print_rules,
+    evaluate_disclosure_rules,
+    evaluate_notice_rules,
+    evaluate_price_rules,
+    filter_fireable,
+)
 from chime.storage import Storage
 
 log = get_logger(__name__)
@@ -281,13 +288,19 @@ class Poller:
         # keep stale True from a prior success (or cold-start defaults).
         price_ok = False
         disc_ok = False
+        print_ok = False
+        notice_ok = False
         try:
             self.last_error = None
             price_events, price_ok = await self._poll_prices()
             disc_events, disc_ok = await self._poll_disclosures()
+            print_events, print_ok = await self._poll_big_prints()
+            notice_events, notice_ok = await self._poll_market_notices()
             await self._poll_sectors()
             fired.extend(price_events)
             fired.extend(disc_events)
+            fired.extend(print_events)
+            fired.extend(notice_events)
             symbols = await self.storage.watched_symbols()
             rules = await self.storage.active_rules_for_symbols(symbols) if symbols else []
             # Fail closed — non-enum rule.type used to throw on .value mid tick
@@ -301,6 +314,19 @@ class Poller:
             if not price_ok:
                 ok = False
             if needs_disclosure and not disc_ok:
+                ok = False
+            # Activity legs are fail-soft for tick health unless rules exist.
+            needs_prints = any(
+                getattr(r.type, "value", r.type) == "big_print" for r in rules
+            )
+            needs_notices = any(
+                getattr(r.type, "value", r.type)
+                in {"buy_in", "non_compliance", "halt"}
+                for r in rules
+            )
+            if needs_prints and not print_ok:
+                ok = False
+            if needs_notices and not notice_ok:
                 ok = False
             self.last_tick_ok = ok
             if not ok:
@@ -747,6 +773,119 @@ class Poller:
                             external_id=stored.external_id,
                         )
                     )
+        return fired, not any_failure
+
+    async def _poll_big_prints(self) -> tuple[list[AlertEvent], bool]:
+        """Poll day tape for symbols with active big_print rules."""
+        symbols = await self.storage.watched_symbols()
+        if not symbols:
+            return [], True
+        rules = await self.storage.active_rules_for_symbols(symbols)
+        print_rules = [
+            r for r in rules if getattr(r.type, "value", r.type) == "big_print"
+        ]
+        print_symbols = sorted({r.symbol for r in print_rules})
+        if not print_symbols:
+            return [], True
+
+        any_failure = False
+        fired: list[AlertEvent] = []
+        for symbol in print_symbols:
+            try:
+                prints = await self.cse.fetch_days_trade(symbol)
+            except Exception as exc:
+                any_failure = True
+                log.warning("big_print_poll_failed", symbol=symbol, error=str(exc))
+                continue
+            symbol_rules = [r for r in print_rules if r.symbol == symbol]
+            for bp in prints:
+                try:
+                    stored = await self.storage.upsert_big_print(bp)
+                except Exception as exc:
+                    any_failure = True
+                    log.exception(
+                        "big_print_persist_failed",
+                        symbol=symbol,
+                        external_id=getattr(bp, "external_id", None),
+                        error=str(exc),
+                    )
+                    continue
+                events = evaluate_big_print_rules(print_=stored, rules=symbol_rules)
+                for event in filter_fireable(events):
+                    claimed = await self._claim_and_send(event)
+                    if claimed:
+                        fired.append(event)
+        return fired, not any_failure
+
+    async def _poll_market_notices(self) -> tuple[list[AlertEvent], bool]:
+        """Poll buy-in, non-compliance, and halt/notification feeds."""
+        symbols = await self.storage.watched_symbols()
+        # Halt rules may only watch MARKET; still load all active notice rules.
+        wanted = set(symbols) | {MARKET_SYMBOL}
+        rules = await self.storage.active_rules_for_symbols(sorted(wanted))
+        notice_rules = [
+            r
+            for r in rules
+            if getattr(r.type, "value", r.type)
+            in {"buy_in", "non_compliance", "halt"}
+        ]
+        if not notice_rules:
+            return [], True
+
+        any_failure = False
+        notices: list[Any] = []
+        fetchers = (
+            ("buy_in", self.cse.fetch_buy_in_announcements),
+            ("non_compliance", self.cse.fetch_non_compliance_announcements),
+            ("halt", self.cse.fetch_market_notifications),
+        )
+        needed = {getattr(r.type, "value", r.type) for r in notice_rules}
+        for kind, fetcher in fetchers:
+            if kind not in needed:
+                continue
+            try:
+                batch = await fetcher()
+                notices.extend(batch)
+            except Exception as exc:
+                any_failure = True
+                log.warning("market_notice_poll_failed", kind=kind, error=str(exc))
+
+        fired: list[AlertEvent] = []
+        for notice in notices:
+            # Resolve company → symbol for buy-in / non-compliance when missing.
+            if notice.symbol is None and notice.notice_type != "halt":
+                company = None
+                if isinstance(notice.body, str) and notice.body.strip():
+                    # Body often starts with company name from flexible parser.
+                    company = notice.body.split(" — ", 1)[0].strip()
+                if isinstance(notice.title, str) and (
+                    company is None or company == notice.title
+                ):
+                    # Try title only when body lacked a distinct company.
+                    pass
+                resolved = await self.storage.resolve_symbol_by_company_name(company)
+                if resolved is None and isinstance(notice.title, str):
+                    resolved = await self.storage.resolve_symbol_by_company_name(
+                        notice.title
+                    )
+                if resolved is not None:
+                    notice = notice.model_copy(update={"symbol": resolved})
+            try:
+                stored = await self.storage.upsert_market_notice(notice)
+            except Exception as exc:
+                any_failure = True
+                log.exception(
+                    "market_notice_persist_failed",
+                    notice_type=getattr(notice, "notice_type", None),
+                    external_id=getattr(notice, "external_id", None),
+                    error=str(exc),
+                )
+                continue
+            events = evaluate_notice_rules(notice=stored, rules=notice_rules)
+            for event in filter_fireable(events):
+                claimed = await self._claim_and_send(event)
+                if claimed:
+                    fired.append(event)
         return fired, not any_failure
 
     async def _fetch_disclosures_bulk(

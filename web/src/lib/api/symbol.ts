@@ -40,6 +40,36 @@ export const ALERT_TYPES = [
   "price_below",
   "daily_move",
   "disclosure",
+  "volume_spike",
+  "volume_up",
+  "volume_down",
+  "crossing_volume",
+  "big_print",
+  "gap",
+  "buy_in",
+  "non_compliance",
+  "halt",
+] as const;
+
+/** Alert types that require a positive numeric threshold. */
+export const THRESHOLD_ALERT_TYPES = [
+  "price_above",
+  "price_below",
+  "daily_move",
+  "volume_spike",
+  "volume_up",
+  "volume_down",
+  "crossing_volume",
+  "big_print",
+  "gap",
+] as const;
+
+/** Notice-style alerts with no threshold. */
+export const NOTICE_ALERT_TYPES = [
+  "disclosure",
+  "buy_in",
+  "non_compliance",
+  "halt",
 ] as const;
 
 export type AlertType = (typeof ALERT_TYPES)[number];

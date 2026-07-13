@@ -84,6 +84,24 @@ export function alertTypeLabel(type: unknown): string {
       return "Daily move";
     case "disclosure":
       return "Disclosure";
+    case "volume_spike":
+      return "Volume spike";
+    case "volume_up":
+      return "Volume up";
+    case "volume_down":
+      return "Volume down";
+    case "crossing_volume":
+      return "Crossing volume";
+    case "big_print":
+      return "Big print";
+    case "gap":
+      return "Gap";
+    case "buy_in":
+      return "Buy-in board";
+    case "non_compliance":
+      return "Non-compliance";
+    case "halt":
+      return "Market halt";
     default:
       // Fail closed — never echo unknown / hostile type strings into the UI.
       return "Unknown";

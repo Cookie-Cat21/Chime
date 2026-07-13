@@ -15,7 +15,9 @@ from chime.domain import (
     AlertEvent,
     AlertRule,
     AlertType,
+    BigPrint,
     Disclosure,
+    MarketNotice,
     PreviousPriceState,
     PriceSnapshot,
 )
@@ -92,13 +94,53 @@ def _event_key_disclosure(rule: AlertRule, disclosure: Disclosure) -> str:
     return f"disclosure:{rule.id}:{disclosure.external_id}"
 
 
+def _event_key_day(prefix: str, rule: AlertRule, snapshot: PriceSnapshot) -> str | None:
+    """One fire per Colombo calendar day for activity rules."""
+    try:
+        day = snapshot.ts.astimezone(_COLOMBO).date().isoformat()
+    except (OverflowError, ValueError, OSError):
+        return None
+    return f"{prefix}:{rule.id}:{day}"
+
+
+def _volume_multiple_met(
+    *,
+    current: float | None,
+    avg: float | None,
+    threshold: float,
+) -> bool:
+    """True when current volume is at least threshold × recent average."""
+    if not (_finite(current) and _finite(avg) and _finite(threshold)):
+        return False
+    if avg <= 0 or threshold <= 0 or current is None or avg is None:
+        return False
+    return current >= threshold * avg
+
+
+def _signed_change_pct(snapshot: PriceSnapshot, curr: float) -> float | None:
+    pct = snapshot.change_pct
+    if _finite(pct):
+        return pct
+    return _pct_from_previous_close(curr, snapshot.previous_close)
+
+
+def _gap_pct(snapshot: PriceSnapshot) -> float | None:
+    """|open − previous_close| / previous_close × 100."""
+    if not (_finite(snapshot.open) and _finite(snapshot.previous_close)):
+        return None
+    assert snapshot.open is not None and snapshot.previous_close is not None
+    if snapshot.previous_close == 0:
+        return None
+    return abs((snapshot.open - snapshot.previous_close) / snapshot.previous_close) * 100.0
+
+
 def evaluate_price_rules(
     *,
     snapshot: PriceSnapshot,
     previous: PreviousPriceState,
     rules: list[AlertRule],
 ) -> list[AlertEvent]:
-    """Evaluate price_above / price_below / daily_move rules for one snapshot.
+    """Evaluate price / move / volume / crossing / gap rules for one snapshot.
 
     Non-finite prices / thresholds / pcts and unconvertible timestamps fail
     closed (skip the rule, never raise).
@@ -226,6 +268,255 @@ def evaluate_price_rules(
                     )
                 )
 
+        elif rule.type in (
+            AlertType.VOLUME_SPIKE,
+            AlertType.VOLUME_UP,
+            AlertType.VOLUME_DOWN,
+        ):
+            if rule.threshold is None or not math.isfinite(rule.threshold):
+                continue
+            thr = abs(rule.threshold)
+            prefix = {
+                AlertType.VOLUME_SPIKE: "volspike",
+                AlertType.VOLUME_UP: "volup",
+                AlertType.VOLUME_DOWN: "voldown",
+            }[rule.type]
+            key = _event_key_day(prefix, rule, snapshot)
+            if key is None or key in previous.activity_fired_keys:
+                continue
+            if not _volume_multiple_met(
+                current=snapshot.volume,
+                avg=previous.avg_volume,
+                threshold=thr,
+            ):
+                continue
+            signed = _signed_change_pct(snapshot, curr)
+            if rule.type == AlertType.VOLUME_UP:
+                if not _finite(signed) or signed is None or signed <= 0:
+                    continue
+                direction = "up"
+            elif rule.type == AlertType.VOLUME_DOWN:
+                if not _finite(signed) or signed is None or signed >= 0:
+                    continue
+                direction = "down"
+            else:
+                direction = None
+            vol = snapshot.volume if _finite(snapshot.volume) else 0.0
+            avg = previous.avg_volume if _finite(previous.avg_volume) else 0.0
+            mult = (vol / avg) if avg > 0 else 0.0
+            if direction is None:
+                trigger = (
+                    f"unusual volume {mult:.1f}× recent avg "
+                    f"({vol:,.0f} vs {avg:,.0f}; threshold {thr:g}×)"
+                )
+            else:
+                trigger = (
+                    f"heavy volume {direction} {mult:.1f}× avg "
+                    f"({vol:,.0f}; price {signed:+.2f}%; threshold {thr:g}×)"
+                )
+            events.append(
+                AlertEvent(
+                    rule_id=rule.id,
+                    user_id=rule.user_id,
+                    telegram_id=rule.telegram_id,
+                    symbol=rule.symbol,
+                    type=rule.type,
+                    threshold=thr,
+                    trigger=trigger,
+                    current_price=curr,
+                    snapshot_id=snapshot.id,
+                    event_key=key,
+                )
+            )
+
+        elif rule.type == AlertType.CROSSING_VOLUME:
+            if rule.threshold is None or not math.isfinite(rule.threshold):
+                continue
+            thr = abs(rule.threshold)
+            key = _event_key_day("xvol", rule, snapshot)
+            if key is None or key in previous.activity_fired_keys:
+                continue
+            if not _volume_multiple_met(
+                current=snapshot.crossing_volume,
+                avg=previous.avg_crossing_volume,
+                threshold=thr,
+            ):
+                continue
+            xvol = snapshot.crossing_volume if _finite(snapshot.crossing_volume) else 0.0
+            xavg = (
+                previous.avg_crossing_volume
+                if _finite(previous.avg_crossing_volume)
+                else 0.0
+            )
+            mult = (xvol / xavg) if xavg > 0 else 0.0
+            events.append(
+                AlertEvent(
+                    rule_id=rule.id,
+                    user_id=rule.user_id,
+                    telegram_id=rule.telegram_id,
+                    symbol=rule.symbol,
+                    type=rule.type,
+                    threshold=thr,
+                    trigger=(
+                        f"crossing volume {mult:.1f}× recent avg "
+                        f"({xvol:,.0f} vs {xavg:,.0f}; threshold {thr:g}×)"
+                    ),
+                    current_price=curr,
+                    snapshot_id=snapshot.id,
+                    event_key=key,
+                )
+            )
+
+        elif rule.type == AlertType.GAP:
+            if rule.threshold is None or not math.isfinite(rule.threshold):
+                continue
+            thr = abs(rule.threshold)
+            key = _event_key_day("gap", rule, snapshot)
+            if key is None or key in previous.activity_fired_keys:
+                continue
+            gap = _gap_pct(snapshot)
+            if not _finite(gap) or gap is None:
+                continue
+            # First observation of the day can fire once gap already exceeds thr
+            # (open is set early); still day-bucketed via event_key.
+            if gap < thr:
+                continue
+            assert snapshot.open is not None and snapshot.previous_close is not None
+            direction = "up" if snapshot.open >= snapshot.previous_close else "down"
+            events.append(
+                AlertEvent(
+                    rule_id=rule.id,
+                    user_id=rule.user_id,
+                    telegram_id=rule.telegram_id,
+                    symbol=rule.symbol,
+                    type=rule.type,
+                    threshold=thr,
+                    trigger=(
+                        f"gap {direction} {gap:.2f}% "
+                        f"(open {snapshot.open:.2f} vs prev close "
+                        f"{snapshot.previous_close:.2f}; threshold {thr:.2f}%)"
+                    ),
+                    current_price=curr,
+                    snapshot_id=snapshot.id,
+                    event_key=key,
+                )
+            )
+
+    return events
+
+
+def evaluate_big_print_rules(
+    *,
+    print_: BigPrint,
+    rules: list[AlertRule],
+) -> list[AlertEvent]:
+    """Fire when a day-tape print quantity meets/exceeds the rule threshold."""
+    events: list[AlertEvent] = []
+    if not isinstance(print_.external_id, str) or not print_.external_id.strip():
+        return events
+    if not _finite(print_.quantity) or print_.quantity <= 0:
+        return events
+    for rule in rules:
+        if not rule.active or rule.type != AlertType.BIG_PRINT:
+            continue
+        if rule.symbol != print_.symbol:
+            continue
+        if rule.threshold is None or not math.isfinite(rule.threshold):
+            continue
+        thr = abs(rule.threshold)
+        if print_.quantity < thr:
+            continue
+        # Fail-closed backfill gate: only prints seen after rule creation.
+        if rule.created_at is None:
+            continue
+        created = _safe_utc_aware(rule.created_at)
+        seen = _safe_utc_aware(print_.seen_at) if print_.seen_at is not None else None
+        traded = _safe_utc_aware(print_.traded_at) if print_.traded_at is not None else None
+        if created is None:
+            continue
+        gate_ts = traded or seen
+        if gate_ts is not None and gate_ts <= created:
+            continue
+        px = print_.price if _finite(print_.price) else None
+        events.append(
+            AlertEvent(
+                rule_id=rule.id,
+                user_id=rule.user_id,
+                telegram_id=rule.telegram_id,
+                symbol=rule.symbol,
+                type=rule.type,
+                threshold=thr,
+                trigger=(
+                    f"big print {print_.quantity:,.0f} shares"
+                    + (f" @ {px:.2f}" if px is not None else "")
+                    + f" (threshold {thr:,.0f})"
+                ),
+                current_price=px,
+                snapshot_id=None,
+                event_key=f"bigprint:{rule.id}:{print_.external_id}",
+            )
+        )
+    return events
+
+
+_NOTICE_TYPE_TO_ALERT = {
+    "buy_in": AlertType.BUY_IN,
+    "non_compliance": AlertType.NON_COMPLIANCE,
+    "halt": AlertType.HALT,
+}
+
+
+def evaluate_notice_rules(
+    *,
+    notice: MarketNotice,
+    rules: list[AlertRule],
+) -> list[AlertEvent]:
+    """Fire buy-in / non-compliance / halt rules for a newly seen market notice."""
+    events: list[AlertEvent] = []
+    if not isinstance(notice.external_id, str) or not notice.external_id.strip():
+        return events
+    alert_type = _NOTICE_TYPE_TO_ALERT.get(notice.notice_type)
+    if alert_type is None:
+        return events
+    published = _safe_utc_aware(notice.published_at)
+    if published is None or published <= datetime(1970, 1, 1, tzinfo=UTC):
+        return events
+    for rule in rules:
+        if not rule.active or rule.type != alert_type:
+            continue
+        # Halt notices are market-wide; buy-in / non-compliance need symbol match.
+        if alert_type == AlertType.HALT:
+            pass
+        else:
+            if notice.symbol is None or rule.symbol != notice.symbol:
+                continue
+        if rule.created_at is None:
+            continue
+        created = _safe_utc_aware(rule.created_at)
+        if created is None or published <= created:
+            continue
+        title = notice.title if isinstance(notice.title, str) else "notice"
+        prefix = {
+            AlertType.BUY_IN: "buy-in board",
+            AlertType.NON_COMPLIANCE: "non-compliance",
+            AlertType.HALT: "market notice",
+        }[alert_type]
+        events.append(
+            AlertEvent(
+                rule_id=rule.id,
+                user_id=rule.user_id,
+                telegram_id=rule.telegram_id,
+                symbol=rule.symbol,
+                type=rule.type,
+                threshold=None,
+                trigger=f"{prefix}: {title}",
+                current_price=None,
+                disclosure_url=notice.url,
+                disclosure_title=title,
+                snapshot_id=None,
+                event_key=f"{notice.notice_type}:{rule.id}:{notice.external_id}",
+            )
+        )
     return events
 
 

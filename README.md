@@ -66,6 +66,13 @@ queued messages from downtime are discarded on restart (avoids replaying stale
 | `/alert SYMBOL below PRICE` | Fire when last price crosses below threshold |
 | `/alert SYMBOL move PERCENT` | Fire when daily % move exceeds threshold |
 | `/alert SYMBOL disclosure [CATEGORY]` | Fire on new filing (optional title substring) |
+| `/alert SYMBOL volume N` | Unusual volume (≥ N× recent daily average) |
+| `/alert SYMBOL volup N` / `voldown N` | Heavy volume while price up / down |
+| `/alert SYMBOL crossing N` | Crossing volume ≥ N× recent average |
+| `/alert SYMBOL print QTY` | Single day-tape print ≥ QTY shares |
+| `/alert SYMBOL gap PERCENT` | Open gap vs previous close |
+| `/alert SYMBOL buyin` / `noncompliance` | Buy-in board / non-compliance notice |
+| `/alert MARKET halt` | Market-wide halt / system notice |
 | `/cancel ALERT_ID` | Soft-cancel an active rule |
 | `/myalerts` | List active alerts only (cancelled omitted) |
 | `/mywatchlist` | List watched symbols |
