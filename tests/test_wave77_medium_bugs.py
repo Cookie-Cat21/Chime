@@ -96,5 +96,9 @@ async def test_ensure_user_rejects_poisoned_returning_id() -> None:
 
     src = (ROOT / "chime" / "storage.py").read_text(encoding="utf-8")
     chunk = src.split("async def ensure_user")[1].split("async def add_watch")[0]
-    assert "isinstance(raw_id, bool)" in chunk
+    assert "_require_pg_int" in chunk
     assert 'int(_as_row(row)["id"])' not in chunk
+    # Helper itself must reject bool soft-accept (int(True)==1).
+    helper = src.split("def _require_pg_int")[1].split("def _pg_count")[0]
+    assert "isinstance(value, bool)" in helper
+    assert "not isinstance(value, int)" in helper

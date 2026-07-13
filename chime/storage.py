@@ -36,6 +36,20 @@ def _as_rows(rows: Any) -> list[dict[str, Any]]:
     return [cast(dict[str, Any], r) for r in rows]
 
 
+def _require_pg_int(value: Any, *, what: str) -> int:
+    """Fail closed — bool soft-accepts via ``int(True)==1``; lists abort mid path."""
+    if isinstance(value, bool) or not isinstance(value, int):
+        raise ValueError(f"{what} failed validation")
+    return value
+
+
+def _pg_count(value: Any) -> int | None:
+    """Non-negative PG COUNT; None when poisoned (bool / non-int / negative)."""
+    if isinstance(value, bool) or not isinstance(value, int) or value < 0:
+        return None
+    return value
+
+
 # Transaction-scoped daily-cap serializer for claim_pending_briefs.
 # Distinct from poller.POLL_LOCK_ID (4_201_337): same bigint would let a
 # session poll hold block brief xact waiters on a second pool connection and
@@ -312,7 +326,9 @@ class Storage:
             ).fetchone()
         if row is None:
             return 0
-        return int(_as_row(row).get("n") or 0)
+        # Fail closed — bool soft-accepts via int(True)==1; None/"n" → 0.
+        counted = _pg_count(_as_row(row).get("n"))
+        return 0 if counted is None else counted
 
     async def persist_sectors(self, sectors: list[SectorSnapshot]) -> list[SectorSnapshot]:
         """Upsert CSE sector index rows (optional ``SECTORS_INGEST`` path).
@@ -682,7 +698,12 @@ class Storage:
                         (stale_processing_minutes,),
                     )
                 ).fetchone()
-                used = int(_as_row(used_row).get("n") or 0) if used_row else 0
+                # Fail closed — bool soft-accept via int(True)==1 understates
+                # daily use and over-claims past AI_MAX_BRIEFS_PER_DAY.
+                raw_n = _as_row(used_row).get("n") if used_row else 0
+                used = _pg_count(raw_n)
+                if used is None:
+                    return []
                 remaining = max(0, int(max_briefs_per_day) - used)
                 if remaining <= 0:
                     return []
@@ -957,7 +978,11 @@ class Storage:
             ).fetchone()
         if row is None:
             return 0
-        return int(_as_row(row).get("n") or 0)
+        # Fail closed — bool soft-accept via int(True)==1 understates daily use.
+        counted = _pg_count(_as_row(row).get("n"))
+        if counted is None:
+            raise ValueError("count_briefs_today n failed validation")
+        return counted
 
     async def upsert_disclosure(self, disc: Disclosure) -> Disclosure:
         """Insert or update disclosure; always return it with a DB id.
@@ -1221,10 +1246,7 @@ class Storage:
             ).fetchone()
         assert row is not None
         # Fail closed — bool ids soft-accept via int(True)==1 mid /start.
-        raw_id = _as_row(row).get("id")
-        if isinstance(raw_id, bool) or not isinstance(raw_id, int):
-            raise ValueError("ensure_user RETURNING id failed validation")
-        return raw_id
+        return _require_pg_int(_as_row(row).get("id"), what="ensure_user RETURNING id")
 
     async def add_watch(self, user_id: int, symbol: str) -> None:
         # Fail closed — non-string symbol used to throw on .strip mid watch.
@@ -1524,7 +1546,9 @@ class Storage:
             row = await (
                 await conn.execute("SELECT pg_try_advisory_lock(%s) AS locked", (lock_id,))
             ).fetchone()
-            locked = bool(row and _as_row(row)["locked"])
+            # Fail closed — bool(1)/"false" used to soft-accept a held lock
+            # (parity upsert_disclosure inserted is True / health ok).
+            locked = bool(row) and _as_row(row).get("locked") is True
         except Exception:
             await cm.__aexit__(None, None, None)
             self._lock_cm = None
@@ -1597,7 +1621,8 @@ class Storage:
             ).fetchone()
         if row is None:
             return None
-        return int(_as_row(row)["id"])
+        # Fail closed — bool ids soft-accept via int(True)==1 mid claim deliver.
+        return _require_pg_int(_as_row(row).get("id"), what="claim_alert RETURNING id")
 
     async def claim_and_disarm(
         self,
@@ -1642,11 +1667,17 @@ class Storage:
             ).fetchone()
             if row is None:
                 return None
+            # Fail closed — bool ids soft-accept via int(True)==1 mid claim+disarm
+            # (parity claim_alert / ensure_user RETURNING id). Validate before
+            # disarm so a poisoned RETURNING id rolls the transaction back.
+            raw_id = _require_pg_int(
+                _as_row(row).get("id"), what="claim_and_disarm RETURNING id"
+            )
             await conn.execute(
                 "UPDATE alert_rules SET armed = %s WHERE id = %s",
                 (False, event.rule_id),
             )
-            return int(_as_row(row)["id"])
+            return raw_id
 
     async def mark_delivery_attempted_ok(self, alert_log_id: int) -> None:
         """Record that Telegram accepted the send (before message_sent).
@@ -1695,7 +1726,12 @@ class Storage:
                 )
             ).fetchone()
         assert row is not None
-        return int(_as_row(row)["attempt_count"])
+        # Fail closed — bool soft-accepts via int(True)==1 undercount attempts
+        # and delay dead-letter (parity format_dead_letter_notify attempts).
+        return _require_pg_int(
+            _as_row(row).get("attempt_count"),
+            what="mark_alert_attempt RETURNING attempt_count",
+        )
 
     async def dead_letter(self, alert_log_id: int) -> None:
         """Mark an unsent alert as abandoned (skip further retries)."""
@@ -1809,7 +1845,9 @@ class Storage:
         exc_info: tuple[Any, BaseException, Any] | tuple[None, None, None] = (None, None, None)
         try:
             row = await (await conn.execute("SELECT 1 AS ok")).fetchone()
-            return bool(row and _as_row(row)["ok"] == 1)
+            # Fail closed — True == 1 soft-accepts a bool ok as healthy.
+            raw_ok = _as_row(row).get("ok") if row else None
+            return isinstance(raw_ok, int) and not isinstance(raw_ok, bool) and raw_ok == 1
         except BaseException as exc:
             exc_info = (type(exc), exc, exc.__traceback__)
             raise
@@ -1830,7 +1868,11 @@ class Storage:
             ).fetchone()
         if row is None:
             return 0
-        return int(_as_row(row)["n"])
+        # Fail closed — bool soft-accept via int(True)==1 mid health hint.
+        counted = _pg_count(_as_row(row).get("n"))
+        if counted is None:
+            raise ValueError("count_pending_disclosure_briefs n failed validation")
+        return counted
 
     def pool_health_snapshot(self) -> dict[str, Any]:
         """Return real pool metrics observed by health checks.
@@ -1850,8 +1892,10 @@ class Storage:
             return snapshot
         for key in ("pool_min", "pool_max", "pool_size", "pool_available", "requests_waiting"):
             value = stats.get(key)
-            if isinstance(value, int):
-                snapshot[key] = value
+            # Fail closed — bool soft-accepts via isinstance(True, int).
+            if isinstance(value, bool) or not isinstance(value, int):
+                continue
+            snapshot[key] = value
         return snapshot
 
 
