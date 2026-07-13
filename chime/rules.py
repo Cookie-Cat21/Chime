@@ -35,6 +35,13 @@ def _finite(value: float | None) -> TypeGuard[float]:
     return value is not None and math.isfinite(value)
 
 
+def _pct_from_previous_close(price: float | None, previous_close: float | None) -> float | None:
+    """Compute daily percent move from previous close when CSE omits it."""
+    if not (_finite(price) and _finite(previous_close)) or previous_close == 0:
+        return None
+    return ((price - previous_close) / previous_close) * 100.0
+
+
 def crossed_above(prev: float | None, curr: float, threshold: float) -> bool:
     """True iff price transitioned from below threshold to at/above threshold."""
     if prev is None or not (_finite(prev) and _finite(curr) and _finite(threshold)):
@@ -185,10 +192,9 @@ def evaluate_price_rules(
                 continue
             thr = abs(rule.threshold)
             pct = snapshot.change_pct
-            if pct is None and snapshot.previous_close not in (None, 0):
-                pc = snapshot.previous_close
-                if _finite(pc) and pc != 0:
-                    pct = ((curr - pc) / pc) * 100.0
+            pct_from_close = pct is None
+            if pct_from_close:
+                pct = _pct_from_previous_close(curr, snapshot.previous_close)
             if not _finite(pct):
                 continue
             key = _event_key_move(rule, snapshot)
@@ -198,6 +204,8 @@ def evaluate_price_rules(
                 continue
             # Crossing semantics on |pct|: require previous |pct| below threshold
             prev_pct = previous.change_pct
+            if not _finite(prev_pct) and pct_from_close:
+                prev_pct = _pct_from_previous_close(previous.price, snapshot.previous_close)
             if not _finite(prev_pct):
                 # Baseline only — do not fire on first observation / already-exceeded
                 continue
