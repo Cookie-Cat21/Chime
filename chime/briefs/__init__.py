@@ -23,6 +23,14 @@ __all__ = [
     "nfa_suffix",
 ]
 
+_FILING_START = "<<<FILING>>>"
+_FILING_END = "<<<END_FILING>>>"
+
+
+def _neutralize_filing_delimiters(text: str) -> str:
+    """Keep filing-provided delimiter literals from escaping the prompt block."""
+    return text.replace(_FILING_START, "[FILING]").replace(_FILING_END, "[END_FILING]")
+
 
 class BriefStatus(StrEnum):
     PENDING = "pending"
@@ -176,15 +184,15 @@ def build_brief_prompt(
     """
     # Fail closed — non-strings used to throw on .replace/.strip mid prompt build.
     body_raw = extracted_text if isinstance(extracted_text, str) else ""
-    body = body_raw.replace("\x00", "").strip()
+    body = _neutralize_filing_delimiters(body_raw.replace("\x00", "").strip())
     # Fail closed — int(NaN)/None/inf used to raise mid prompt build.
     cap = resolve_positive_int_cap(max_chars, default=1, absolute_max=200_000)
     if len(body) > cap:
         body = body[:cap]
     sym_raw = symbol if isinstance(symbol, str) else ""
     ttl_raw = title if isinstance(title, str) else ""
-    sym = sym_raw.replace("\x00", "").strip() or "UNKNOWN"
-    ttl = ttl_raw.replace("\x00", "").strip() or "(untitled)"
+    sym = _neutralize_filing_delimiters(sym_raw.replace("\x00", "").strip()) or "UNKNOWN"
+    ttl = _neutralize_filing_delimiters(ttl_raw.replace("\x00", "").strip()) or "(untitled)"
     return (
         f"Symbol: {sym}\nTitle: {ttl}\n\n<<<FILING>>>\n{body}\n<<<END_FILING>>>\n\n{nfa_suffix()}"
     )

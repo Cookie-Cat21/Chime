@@ -20,7 +20,12 @@ from typing import Any, Protocol
 import httpx
 import structlog
 
-from chime.briefs import BRIEF_SYSTEM_INSTRUCTION, BriefSettings, briefs_enabled
+from chime.briefs import (
+    BRIEF_SYSTEM_INSTRUCTION,
+    BriefSettings,
+    _neutralize_filing_delimiters,
+    briefs_enabled,
+)
 from chime.domain import resolve_positive_int_cap
 
 log = structlog.get_logger("chime.briefs.provider")
@@ -88,15 +93,19 @@ class _HttpBriefProviderBase:
         )
         start = "<<<FILING>>>"
         end = "<<<END_FILING>>>"
-        if start in body and end in body:
-            pre, _, rest = body.partition(start)
-            inner, _, post = rest.partition(end)
-            inner = inner.strip("\n")
+        start_idx = body.find(start)
+        end_idx = body.rfind(end)
+        if start_idx >= 0 and end_idx > start_idx:
+            pre = body[:start_idx]
+            inner = body[start_idx + len(start) : end_idx]
+            post = body[end_idx + len(end) :]
+            inner = _neutralize_filing_delimiters(inner.strip("\n"))
             if len(inner) > max_chars:
                 inner = inner[:max_chars]
             return f"{pre}{start}\n{inner}\n{end}{post}"
         if len(body) > max_chars:
             body = body[:max_chars]
+        body = _neutralize_filing_delimiters(body)
         return f"{start}\n{body}\n{end}"
 
 
