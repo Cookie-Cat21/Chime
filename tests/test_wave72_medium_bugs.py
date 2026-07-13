@@ -345,12 +345,11 @@ async def test_fetch_all_sectors_skips_when_normalize_returns_none() -> None:
     raw = [
         {"sectorId": 1, "symbol": "egy", "name": "Energy", "indexValue": 10.0}
     ]
-    with patch.object(client, "_request", AsyncMock(return_value=raw)):
-        with patch(
-            "chime.adapters.cse.sector_row_to_snapshot",
-            return_value=None,
-        ):
-            out = await client.fetch_all_sectors()
+    with patch.object(client, "_request", AsyncMock(return_value=raw)), patch(
+        "chime.adapters.cse.sector_row_to_snapshot",
+        return_value=None,
+    ):
+        out = await client.fetch_all_sectors()
     assert out == []
 
 
