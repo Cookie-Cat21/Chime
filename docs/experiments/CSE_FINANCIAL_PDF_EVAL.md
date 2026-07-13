@@ -53,7 +53,8 @@ Open-source text extract often **finds numbers**, but disambiguation is the hard
 3. If we continue: build a validator (period + scale + basic/diluted) and only surface figures with “verify in filing”.  
 4. Keep product default: disclosure alert + AI brief.
 
-**Follow-up (done):** `CSE_FINANCIAL_TABLE_VALIDATE_EVAL.md` — FinTable-style page-text parse + validators on the 72 strong PDFs → **~12.5% gated OK** (typed EPS, period resolved, no hard conflicts). Still research-only.
+**Follow-up (done):** `CSE_FINANCIAL_TABLE_VALIDATE_EVAL.md` — FinTable-style page-text parse + validators on the 72 strong PDFs.  
+**Accuracy follow-up (done):** `CSE_FINANCIAL_ACCURACY_EVAL.md` — iterated extractor to **100% coverage** on 41 unique strong filings and **100% human-gold value match** on a 10-filing panel (current-quarter / Group conventions). Still research-only.
 
 ## Errors (pre URL-encode fix)
 
