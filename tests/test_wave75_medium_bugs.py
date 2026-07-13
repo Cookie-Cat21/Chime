@@ -147,8 +147,16 @@ def test_row_to_rule_and_snapshot_fail_closed() -> None:
     assert poisoned_created is not None and poisoned_created.created_at is None
 
     assert _row_to_snapshot({"id": 1, "symbol": 123, "price": 1.0, "ts": datetime.now(UTC)}) is None
-    assert _row_to_snapshot({"id": 1, "symbol": "  ", "price": 1.0, "ts": datetime.now(UTC)}) is None
-    assert _row_to_snapshot({"id": 1, "symbol": "JKH.N0000", "price": "x", "ts": datetime.now(UTC)}) is None
+    assert (
+        _row_to_snapshot({"id": 1, "symbol": "  ", "price": 1.0, "ts": datetime.now(UTC)})
+        is None
+    )
+    assert (
+        _row_to_snapshot(
+            {"id": 1, "symbol": "JKH.N0000", "price": "x", "ts": datetime.now(UTC)}
+        )
+        is None
+    )
     assert _row_to_snapshot(
         {"id": 1, "symbol": "JKH.N0000", "price": float("nan"), "ts": datetime.now(UTC)}
     ) is None
