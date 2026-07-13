@@ -39,7 +39,9 @@ from chime.briefs.worker import claim_pending_briefs
 from chime.circuit import CircuitOpenError
 from chime.config import Settings
 from chime.domain import (
+    MARKET_SYMBOL,
     AlertEvent,
+    AlertRule,
     Disclosure,
     PriceSnapshot,
     format_alert_message,
@@ -48,7 +50,14 @@ from chime.domain import (
 from chime.health import brief_queue_health_hint
 from chime.logging_setup import get_logger
 from chime.notify import SendResult
-from chime.rules import evaluate_disclosure_rules, evaluate_price_rules, filter_fireable
+from chime.rules import (
+    evaluate_big_print_rules,
+    evaluate_disclosure_rules,
+    evaluate_notice_rules,
+    evaluate_order_book_rules,
+    evaluate_price_rules,
+    filter_fireable,
+)
 from chime.storage import Storage
 
 log = get_logger(__name__)
@@ -281,13 +290,22 @@ class Poller:
         # keep stale True from a prior success (or cold-start defaults).
         price_ok = False
         disc_ok = False
+        print_ok = False
+        notice_ok = False
+        book_ok = False
         try:
             self.last_error = None
             price_events, price_ok = await self._poll_prices()
             disc_events, disc_ok = await self._poll_disclosures()
+            print_events, print_ok = await self._poll_big_prints()
+            notice_events, notice_ok = await self._poll_market_notices()
+            book_events, book_ok = await self._poll_order_books()
             await self._poll_sectors()
             fired.extend(price_events)
             fired.extend(disc_events)
+            fired.extend(print_events)
+            fired.extend(notice_events)
+            fired.extend(book_events)
             symbols = await self.storage.watched_symbols()
             rules = await self.storage.active_rules_for_symbols(symbols) if symbols else []
             # Fail closed — non-enum rule.type used to throw on .value mid tick
@@ -301,6 +319,25 @@ class Poller:
             if not price_ok:
                 ok = False
             if needs_disclosure and not disc_ok:
+                ok = False
+            # Activity legs are fail-soft for tick health unless rules exist.
+            needs_prints = any(
+                getattr(r.type, "value", r.type) == "big_print" for r in rules
+            )
+            needs_notices = any(
+                getattr(r.type, "value", r.type)
+                in {"buy_in", "non_compliance", "halt"}
+                for r in rules
+            )
+            if needs_prints and not print_ok:
+                ok = False
+            if needs_notices and not notice_ok:
+                ok = False
+            needs_book = any(
+                getattr(r.type, "value", r.type) in {"bid_heavy", "ask_heavy"}
+                for r in rules
+            )
+            if needs_book and not book_ok:
                 ok = False
             self.last_tick_ok = ok
             if not ok:
@@ -755,6 +792,176 @@ class Poller:
                     )
         return fired, not any_failure
 
+    async def _poll_big_prints(self) -> tuple[list[AlertEvent], bool]:
+        """Poll day tape for symbols with active big_print rules."""
+        symbols = await self.storage.watched_symbols()
+        if not symbols:
+            return [], True
+        rules = await self.storage.active_rules_for_symbols(symbols)
+        print_rules = [
+            r for r in rules if getattr(r.type, "value", r.type) == "big_print"
+        ]
+        print_symbols = sorted({r.symbol for r in print_rules})
+        if not print_symbols:
+            return [], True
+
+        any_failure = False
+        fired: list[AlertEvent] = []
+        for symbol in print_symbols:
+            try:
+                prints = await self.cse.fetch_days_trade(symbol)
+            except Exception as exc:
+                any_failure = True
+                log.warning("big_print_poll_failed", symbol=symbol, error=str(exc))
+                continue
+            symbol_rules = [r for r in print_rules if r.symbol == symbol]
+            for bp in prints:
+                try:
+                    stored = await self.storage.upsert_big_print(bp)
+                except Exception as exc:
+                    any_failure = True
+                    log.exception(
+                        "big_print_persist_failed",
+                        symbol=symbol,
+                        external_id=getattr(bp, "external_id", None),
+                        error=str(exc),
+                    )
+                    continue
+                events = evaluate_big_print_rules(print_=stored, rules=symbol_rules)
+                for event in filter_fireable(events):
+                    claimed = await self._claim_and_send(event)
+                    if claimed:
+                        fired.append(event)
+        return fired, not any_failure
+
+    async def _poll_market_notices(self) -> tuple[list[AlertEvent], bool]:
+        """Poll buy-in, non-compliance, and halt/notification feeds."""
+        symbols = await self.storage.watched_symbols()
+        # Halt rules may only watch MARKET; still load all active notice rules.
+        wanted = set(symbols) | {MARKET_SYMBOL}
+        rules = await self.storage.active_rules_for_symbols(sorted(wanted))
+        notice_rules = [
+            r
+            for r in rules
+            if getattr(r.type, "value", r.type)
+            in {"buy_in", "non_compliance", "halt"}
+        ]
+        if not notice_rules:
+            return [], True
+
+        any_failure = False
+        notices: list[Any] = []
+        fetchers = (
+            ("buy_in", self.cse.fetch_buy_in_announcements),
+            ("non_compliance", self.cse.fetch_non_compliance_announcements),
+            ("halt", self.cse.fetch_market_notifications),
+        )
+        needed = {getattr(r.type, "value", r.type) for r in notice_rules}
+        for kind, fetcher in fetchers:
+            if kind not in needed:
+                continue
+            try:
+                batch = await fetcher()
+                notices.extend(batch)
+            except Exception as exc:
+                any_failure = True
+                log.warning("market_notice_poll_failed", kind=kind, error=str(exc))
+
+        fired: list[AlertEvent] = []
+        for notice in notices:
+            # Resolve company → symbol for buy-in / non-compliance when missing.
+            if notice.symbol is None and notice.notice_type != "halt":
+                company = None
+                if isinstance(notice.body, str) and notice.body.strip():
+                    # Body often starts with company name from flexible parser.
+                    company = notice.body.split(" — ", 1)[0].strip()
+                if isinstance(notice.title, str) and (
+                    company is None or company == notice.title
+                ):
+                    # Try title only when body lacked a distinct company.
+                    pass
+                resolved = await self.storage.resolve_symbol_by_company_name(company)
+                if resolved is None and isinstance(notice.title, str):
+                    resolved = await self.storage.resolve_symbol_by_company_name(
+                        notice.title
+                    )
+                if resolved is not None:
+                    notice = notice.model_copy(update={"symbol": resolved})
+            try:
+                stored = await self.storage.upsert_market_notice(notice)
+            except Exception as exc:
+                any_failure = True
+                log.exception(
+                    "market_notice_persist_failed",
+                    notice_type=getattr(notice, "notice_type", None),
+                    external_id=getattr(notice, "external_id", None),
+                    error=str(exc),
+                )
+                continue
+            events = evaluate_notice_rules(notice=stored, rules=notice_rules)
+            for event in filter_fireable(events):
+                claimed = await self._claim_and_send(event)
+                if claimed:
+                    fired.append(event)
+        return fired, not any_failure
+
+
+    async def _poll_order_books(self) -> tuple[list[AlertEvent], bool]:
+        """Poll public order-book totals for bid_heavy / ask_heavy rules."""
+        symbols = await self.storage.watched_symbols()
+        if not symbols:
+            return [], True
+        rules = await self.storage.active_rules_for_symbols(symbols)
+        book_rules = [
+            r
+            for r in rules
+            if getattr(r.type, "value", r.type) in {"bid_heavy", "ask_heavy"}
+        ]
+        book_symbols = sorted({r.symbol for r in book_rules})
+        if not book_symbols:
+            return [], True
+
+        any_failure = False
+        fired: list[AlertEvent] = []
+        for symbol in book_symbols:
+            try:
+                book = await self.cse.fetch_order_book(symbol)
+            except Exception as exc:
+                any_failure = True
+                log.warning("order_book_poll_failed", symbol=symbol, error=str(exc))
+                continue
+            if book is None:
+                continue
+            try:
+                stored = await self.storage.persist_order_book(book)
+            except Exception as exc:
+                any_failure = True
+                log.exception(
+                    "order_book_persist_failed",
+                    symbol=symbol,
+                    error=str(exc),
+                )
+                continue
+            try:
+                fired_keys = await self.storage.order_book_fired_keys(symbol)
+            except Exception as exc:
+                any_failure = True
+                log.exception(
+                    "order_book_fired_keys_failed",
+                    symbol=symbol,
+                    error=str(exc),
+                )
+                fired_keys = set()
+            symbol_rules = [r for r in book_rules if r.symbol == symbol]
+            events = evaluate_order_book_rules(
+                book=stored, rules=symbol_rules, fired_keys=fired_keys
+            )
+            for event in filter_fireable(events):
+                claimed = await self._claim_and_send(event)
+                if claimed:
+                    fired.append(event)
+        return fired, not any_failure
+
     async def _fetch_disclosures_bulk(
         self, disclosure_symbols: list[str]
     ) -> tuple[dict[str, list[Disclosure]], set[str], bool]:
@@ -912,6 +1119,7 @@ class Poller:
                             symbol=item.symbol,
                             external_id=item.external_id,
                         )
+                        self._schedule_metrics_job(item.disclosure_id, item.symbol)
                 except Exception as exc:
                     log.warning(
                         "pdf_url_set_failed",
@@ -919,6 +1127,147 @@ class Poller:
                         symbol=item.symbol,
                         error=str(exc),
                     )
+
+    def _schedule_metrics_job(self, disclosure_id: int, symbol: str) -> None:
+        """Fire-and-forget filing metrics extract after pdf_url lands."""
+        from chime.metrics import metrics_enabled
+
+        if not metrics_enabled():
+            return
+        try:
+            loop = asyncio.get_running_loop()
+        except RuntimeError:
+            return
+        loop.create_task(
+            self._run_metrics_job_safe(disclosure_id, symbol),
+            name=f"metrics-{disclosure_id}",
+        )
+
+    async def _run_metrics_job_safe(self, disclosure_id: int, symbol: str) -> None:
+        try:
+            await self._run_metrics_job(disclosure_id, symbol)
+        except Exception as exc:  # noqa: BLE001
+            log.warning(
+                "metrics_job_failed",
+                disclosure_id=disclosure_id,
+                symbol=symbol,
+                error=str(exc)[:240],
+            )
+
+    async def _run_metrics_job(self, disclosure_id: int, symbol: str) -> None:
+        from chime.domain import format_alert_message
+        from chime.metrics import MetricsSettings
+        from chime.metrics.worker import process_disclosure_metrics
+
+        disc = await self.storage.get_disclosure_by_id(disclosure_id)
+        if disc is None or not disc.pdf_url:
+            return
+        rules = await self.storage.active_rules_for_symbols([symbol])
+        cfg = MetricsSettings.from_env()
+        result = await process_disclosure_metrics(
+            storage=self.storage,
+            disclosure=disc,
+            rules=rules,
+            settings=cfg,
+        )
+        if result is None:
+            return
+        if (
+            cfg.yoy_append_to_disclosure
+            and result.metrics_id is not None
+            and result.compared
+        ):
+            await self._maybe_send_yoy_append(disc, result.metrics_id, rules)
+        if not result.events:
+            return
+        for event in result.events:
+            text = format_alert_message(event)
+            shadow_only = cfg.metrics_shadow_mode and (
+                (
+                    event.type.value in ("eps_above", "eps_below")
+                    and not cfg.eps_calc_alerts_enabled
+                )
+                or (
+                    "yoy" in event.type.value and not cfg.yoy_compare_alerts_enabled
+                )
+            )
+            if shadow_only:
+                text = f"[shadow] {text}"
+            alert_id = await self.storage.claim_alert(event, text)
+            if alert_id is None:
+                continue
+            if shadow_only:
+                await self.storage.mark_alert_sent(alert_id)
+                log.info(
+                    "metrics_shadow_fire",
+                    alert_log_id=alert_id,
+                    event_key=event.event_key,
+                    symbol=symbol,
+                )
+                continue
+            pending = PendingSend(
+                log_id=alert_id,
+                telegram_id=event.telegram_id,
+                message=text,
+                already_claimed_new=True,
+                rule_id=event.rule_id,
+                event=event,
+                symbol=event.symbol,
+            )
+            await self._deliver_one(pending)
+
+    async def _maybe_send_yoy_append(
+        self, disc: Disclosure, metrics_id: int, rules: list[AlertRule]
+    ) -> None:
+        """Follow-up Telegram with YoY block for users watching disclosures."""
+        from chime.domain import (
+            AlertEvent,
+            AlertType,
+            format_alert_message,
+            format_yoy_comparison_block,
+        )
+
+        comparison = await self.storage.get_filing_comparison_for_metrics(metrics_id)
+        metrics_rows = await self.storage.list_filing_metrics_for_symbol(disc.symbol)
+        metrics = next((m for m in metrics_rows if int(m["id"]) == metrics_id), None)
+        if not metrics or not comparison:
+            return
+        block = format_yoy_comparison_block(metrics=metrics, comparison=comparison)
+        if not block:
+            return
+        for rule in rules:
+            if not rule.active or rule.type != AlertType.DISCLOSURE:
+                continue
+            if rule.symbol != disc.symbol:
+                continue
+            event = AlertEvent(
+                rule_id=rule.id,
+                user_id=rule.user_id,
+                telegram_id=rule.telegram_id,
+                symbol=rule.symbol,
+                type=AlertType.DISCLOSURE,
+                threshold=None,
+                trigger=f"filing metrics YoY for {disc.title}",
+                disclosure_url=disc.url or disc.pdf_url,
+                disclosure_title=disc.title,
+                disclosure_id=disc.id,
+                filing_brief=block,
+                event_key=f"yoy_append:{rule.id}:{disc.id}",
+            )
+            text = format_alert_message(event)
+            alert_id = await self.storage.claim_alert(event, text)
+            if alert_id is None:
+                continue
+            pending = PendingSend(
+                log_id=alert_id,
+                telegram_id=event.telegram_id,
+                message=text,
+                already_claimed_new=True,
+                rule_id=event.rule_id,
+                event=event,
+                symbol=event.symbol,
+            )
+            await self._deliver_one(pending)
 
     async def _notify_dead_letter(
         self,

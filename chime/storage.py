@@ -17,7 +17,10 @@ from chime.domain import (
     AlertEvent,
     AlertRule,
     AlertType,
+    BigPrint,
     Disclosure,
+    MarketNotice,
+    OrderBookSnapshot,
     PreviousPriceState,
     PriceSnapshot,
     SectorSnapshot,
@@ -200,6 +203,7 @@ class Storage:
         snap_volumes = [snap.volume for _, snap in normalized]
         snap_trade_counts = [snap.trade_count for _, snap in normalized]
         snap_turnovers = [snap.turnover for _, snap in normalized]
+        snap_crossing = [snap.crossing_volume for _, snap in normalized]
         snap_highs = [snap.high for _, snap in normalized]
         snap_lows = [snap.low for _, snap in normalized]
         snap_opens = [snap.open for _, snap in normalized]
@@ -225,15 +229,16 @@ class Storage:
                     """
                     INSERT INTO price_snapshots (
                         symbol, price, change, change_pct, previous_close,
-                        volume, trade_count, turnover, high, low, open,
-                        market_cap, ts
+                        volume, trade_count, turnover, crossing_volume,
+                        high, low, open, market_cap, ts
                     )
                     SELECT
                         symbol, price, change, change_pct, previous_close,
-                        volume, trade_count, turnover, high, low, open,
-                        market_cap, ts
+                        volume, trade_count, turnover, crossing_volume,
+                        high, low, open, market_cap, ts
                     FROM UNNEST(
                         %s::text[],
+                        %s::double precision[],
                         %s::double precision[],
                         %s::double precision[],
                         %s::double precision[],
@@ -248,8 +253,8 @@ class Storage:
                         %s::timestamptz[]
                     ) AS t(
                         symbol, price, change, change_pct, previous_close,
-                        volume, trade_count, turnover, high, low, open,
-                        market_cap, ts
+                        volume, trade_count, turnover, crossing_volume,
+                        high, low, open, market_cap, ts
                     )
                     RETURNING id
                     """,
@@ -262,6 +267,7 @@ class Storage:
                         snap_volumes,
                         snap_trade_counts,
                         snap_turnovers,
+                        snap_crossing,
                         snap_highs,
                         snap_lows,
                         snap_opens,
@@ -479,11 +485,19 @@ class Storage:
     async def get_previous_state(self, symbol: str, *, before_id: int) -> PreviousPriceState:
         # Fail closed — non-string symbol used to throw on .strip after
         # previous_snapshot already returned None (parity previous_snapshot).
+        empty = PreviousPriceState(
+            price=None,
+            change_pct=None,
+            move_fired_keys=set(),
+            avg_volume=None,
+            avg_crossing_volume=None,
+            activity_fired_keys=set(),
+        )
         if not isinstance(symbol, str):
-            return PreviousPriceState(price=None, change_pct=None, move_fired_keys=set())
+            return empty
         symbol = symbol.strip().upper()
         if not symbol:
-            return PreviousPriceState(price=None, change_pct=None, move_fired_keys=set())
+            return empty
         prev = await self.previous_snapshot(symbol, before_id=before_id)
         async with self._pool.connection() as conn:
             rows = await (
@@ -492,19 +506,201 @@ class Storage:
                     SELECT al.event_key
                     FROM alert_log al
                     JOIN alert_rules ar ON ar.id = al.rule_id
-                    WHERE ar.symbol = %s AND al.event_key LIKE 'move:%%'
+                    WHERE ar.symbol = %s
+                      AND (
+                        al.event_key LIKE 'move:%%'
+                        OR al.event_key LIKE 'volspike:%%'
+                        OR al.event_key LIKE 'volup:%%'
+                        OR al.event_key LIKE 'voldown:%%'
+                        OR al.event_key LIKE 'xvol:%%'
+                        OR al.event_key LIKE 'gap:%%'
+                      )
                     """,
                     (symbol,),
                 )
             ).fetchall()
-            move_keys = {r["event_key"] for r in _as_rows(rows)}
+            keys = {r["event_key"] for r in _as_rows(rows)}
+            move_keys = {k for k in keys if k.startswith("move:")}
+            activity_keys = keys - move_keys
+            avg_row = await (
+                await conn.execute(
+                    """
+                    SELECT
+                        AVG(day_vol) AS avg_volume,
+                        AVG(day_xvol) AS avg_crossing_volume
+                    FROM (
+                        SELECT
+                            (ps.ts AT TIME ZONE 'Asia/Colombo')::date AS d,
+                            MAX(ps.volume) AS day_vol,
+                            MAX(ps.crossing_volume) AS day_xvol
+                        FROM price_snapshots ps
+                        WHERE ps.symbol = %s
+                          AND ps.id < %s
+                          AND (ps.ts AT TIME ZONE 'Asia/Colombo')::date
+                              < (now() AT TIME ZONE 'Asia/Colombo')::date
+                        GROUP BY 1
+                        ORDER BY 1 DESC
+                        LIMIT 20
+                    ) daily
+                    """,
+                    (symbol, before_id),
+                )
+            ).fetchone()
+        avg_volume = None
+        avg_crossing = None
+        if avg_row is not None:
+            ar = _as_row(avg_row)
+            for key, dest in (
+                ("avg_volume", "avg_volume"),
+                ("avg_crossing_volume", "avg_crossing"),
+            ):
+                raw = ar.get(key)
+                if isinstance(raw, bool):
+                    continue
+                try:
+                    val = float(raw) if raw is not None else None
+                except (TypeError, ValueError):
+                    val = None
+                if val is not None and math.isfinite(val):
+                    if dest == "avg_volume":
+                        avg_volume = val
+                    else:
+                        avg_crossing = val
         if prev is None:
-            return PreviousPriceState(price=None, change_pct=None, move_fired_keys=move_keys)
+            return PreviousPriceState(
+                price=None,
+                change_pct=None,
+                move_fired_keys=move_keys,
+                avg_volume=avg_volume,
+                avg_crossing_volume=avg_crossing,
+                activity_fired_keys=activity_keys,
+            )
         return PreviousPriceState(
             price=prev.price,
             change_pct=prev.change_pct,
             move_fired_keys=move_keys,
+            avg_volume=avg_volume,
+            avg_crossing_volume=avg_crossing,
+            activity_fired_keys=activity_keys,
         )
+
+    async def upsert_big_print(self, print_: BigPrint) -> BigPrint:
+        """Insert or return existing day-tape print; sets just_inserted."""
+        if not isinstance(print_.symbol, str) or not print_.symbol.strip():
+            raise ValueError("big print symbol required")
+        symbol = print_.symbol.strip().upper()
+        await self.upsert_stock(symbol)
+        async with self._pool.connection() as conn:
+            row = await (
+                await conn.execute(
+                    """
+                    INSERT INTO big_prints
+                        (external_id, symbol, price, quantity, traded_at, seen_at)
+                    VALUES (%s, %s, %s, %s, %s, COALESCE(%s, now()))
+                    ON CONFLICT (external_id, symbol) DO UPDATE SET
+                        price = COALESCE(EXCLUDED.price, big_prints.price),
+                        quantity = EXCLUDED.quantity,
+                        traded_at = COALESCE(EXCLUDED.traded_at, big_prints.traded_at)
+                    RETURNING id, external_id, symbol, price, quantity, traded_at, seen_at,
+                              (xmax = 0) AS just_inserted
+                    """,
+                    (
+                        print_.external_id,
+                        symbol,
+                        print_.price,
+                        print_.quantity,
+                        print_.traded_at,
+                        print_.seen_at,
+                    ),
+                )
+            ).fetchone()
+        assert row is not None
+        r = _as_row(row)
+        return BigPrint(
+            id=r["id"],
+            external_id=r["external_id"],
+            symbol=r["symbol"],
+            price=r.get("price"),
+            quantity=r["quantity"],
+            traded_at=r.get("traded_at"),
+            seen_at=r.get("seen_at"),
+            just_inserted=bool(r.get("just_inserted")),
+        )
+
+    async def upsert_market_notice(self, notice: MarketNotice) -> MarketNotice:
+        """Insert or update a market notice; sets just_inserted on first insert."""
+        if notice.notice_type not in {"buy_in", "non_compliance", "halt"}:
+            raise ValueError("invalid notice_type")
+        symbol = None
+        if isinstance(notice.symbol, str) and notice.symbol.strip():
+            symbol = notice.symbol.strip().upper()
+            await self.upsert_stock(symbol)
+        async with self._pool.connection() as conn:
+            row = await (
+                await conn.execute(
+                    """
+                    INSERT INTO market_notices
+                        (external_id, notice_type, symbol, title, body, url, published_at, seen_at)
+                    VALUES (%s, %s, %s, %s, %s, %s, %s, COALESCE(%s, now()))
+                    ON CONFLICT (external_id, notice_type) DO UPDATE SET
+                        symbol = COALESCE(EXCLUDED.symbol, market_notices.symbol),
+                        title = EXCLUDED.title,
+                        body = COALESCE(EXCLUDED.body, market_notices.body),
+                        url = COALESCE(EXCLUDED.url, market_notices.url),
+                        published_at = EXCLUDED.published_at
+                    RETURNING id, external_id, notice_type, symbol, title, body, url,
+                              published_at, seen_at,
+                              (xmax = 0) AS just_inserted
+                    """,
+                    (
+                        notice.external_id,
+                        notice.notice_type,
+                        symbol,
+                        notice.title,
+                        notice.body,
+                        notice.url,
+                        notice.published_at,
+                        notice.seen_at,
+                    ),
+                )
+            ).fetchone()
+        assert row is not None
+        r = _as_row(row)
+        return MarketNotice(
+            id=r["id"],
+            external_id=r["external_id"],
+            notice_type=r["notice_type"],
+            symbol=r.get("symbol"),
+            title=r["title"],
+            body=r.get("body"),
+            url=r.get("url"),
+            published_at=r["published_at"],
+            seen_at=r.get("seen_at"),
+            just_inserted=bool(r.get("just_inserted")),
+        )
+
+    async def resolve_symbol_by_company_name(self, company: str | None) -> str | None:
+        """Map a CSE company/name string to a unique stocks.symbol (case-insensitive)."""
+        if not isinstance(company, str) or not company.strip():
+            return None
+        name = company.strip()
+        async with self._pool.connection() as conn:
+            rows = await (
+                await conn.execute(
+                    """
+                    SELECT symbol
+                    FROM stocks
+                    WHERE name IS NOT NULL
+                      AND lower(name) = lower(%s)
+                    LIMIT 2
+                    """,
+                    (name,),
+                )
+            ).fetchall()
+        if len(rows) != 1:
+            return None
+        sym = _as_row(rows[0]).get("symbol")
+        return sym.strip().upper() if isinstance(sym, str) and sym.strip() else None
 
     async def enqueue_disclosure_brief(
         self,
@@ -1151,6 +1347,183 @@ class Storage:
                 )
             ).fetchone()
         return row is not None
+
+    async def get_disclosure_by_id(self, disclosure_id: int) -> Disclosure | None:
+        """Load a disclosure row by id (metrics worker)."""
+        async with self._pool.connection() as conn:
+            row = await (
+                await conn.execute(
+                    """
+                    SELECT id, external_id, symbol, title, category, url, company_name,
+                           published_at, seen_at, pdf_url
+                    FROM disclosures
+                    WHERE id = %s
+                    """,
+                    (disclosure_id,),
+                )
+            ).fetchone()
+        if row is None:
+            return None
+        r = _as_row(row)
+        try:
+            return Disclosure(
+                id=int(r["id"]),
+                external_id=str(r["external_id"]),
+                symbol=str(r["symbol"]),
+                title=str(r["title"]),
+                category=r.get("category"),
+                url=str(r["url"]),
+                company_name=r.get("company_name"),
+                published_at=r["published_at"],
+                seen_at=r["seen_at"],
+                pdf_url=r.get("pdf_url"),
+            )
+        except Exception:
+            return None
+
+    async def upsert_filing_metrics(self, row: dict[str, Any]) -> dict[str, Any]:
+        """Insert or update filing_metrics by disclosure_id."""
+        import json as _json
+
+        notes = row.get("extract_notes") or {}
+        if not isinstance(notes, str):
+            notes = _json.dumps(notes)
+        async with self._pool.connection() as conn:
+            saved = await (
+                await conn.execute(
+                    """
+                    INSERT INTO filing_metrics (
+                        disclosure_id, symbol, kind, fiscal_period_end, fiscal_quarter,
+                        entity, scale, currency, revenue, profit, eps_basic, eps_diluted,
+                        extract_ok, extract_notes, pdf_url
+                    ) VALUES (
+                        %s, %s, %s, %s, %s,
+                        %s, %s, %s, %s, %s, %s, %s,
+                        %s, %s::jsonb, %s
+                    )
+                    ON CONFLICT (disclosure_id) DO UPDATE SET
+                        kind = EXCLUDED.kind,
+                        fiscal_period_end = EXCLUDED.fiscal_period_end,
+                        fiscal_quarter = EXCLUDED.fiscal_quarter,
+                        entity = EXCLUDED.entity,
+                        scale = EXCLUDED.scale,
+                        currency = EXCLUDED.currency,
+                        revenue = EXCLUDED.revenue,
+                        profit = EXCLUDED.profit,
+                        eps_basic = EXCLUDED.eps_basic,
+                        eps_diluted = EXCLUDED.eps_diluted,
+                        extract_ok = EXCLUDED.extract_ok,
+                        extract_notes = EXCLUDED.extract_notes,
+                        pdf_url = EXCLUDED.pdf_url
+                    RETURNING *
+                    """,
+                    (
+                        row["disclosure_id"],
+                        row["symbol"],
+                        row.get("kind") or "unknown",
+                        row.get("fiscal_period_end"),
+                        row.get("fiscal_quarter"),
+                        row.get("entity") or "unknown",
+                        row.get("scale") or "unknown",
+                        row.get("currency") or "LKR",
+                        row.get("revenue"),
+                        row.get("profit"),
+                        row.get("eps_basic"),
+                        row.get("eps_diluted"),
+                        bool(row.get("extract_ok")),
+                        notes,
+                        row.get("pdf_url"),
+                    ),
+                )
+            ).fetchone()
+        assert saved is not None
+        return dict(_as_row(saved))
+
+    async def list_filing_metrics_for_symbol(
+        self, symbol: str, *, kind: str | None = None
+    ) -> list[dict[str, Any]]:
+        async with self._pool.connection() as conn:
+            if kind:
+                rows = await (
+                    await conn.execute(
+                        """
+                        SELECT * FROM filing_metrics
+                        WHERE symbol = %s AND kind = %s
+                        ORDER BY fiscal_period_end DESC NULLS LAST, id DESC
+                        """,
+                        (symbol, kind),
+                    )
+                ).fetchall()
+            else:
+                rows = await (
+                    await conn.execute(
+                        """
+                        SELECT * FROM filing_metrics
+                        WHERE symbol = %s
+                        ORDER BY fiscal_period_end DESC NULLS LAST, id DESC
+                        """,
+                        (symbol,),
+                    )
+                ).fetchall()
+        return [dict(_as_row(r)) for r in rows]
+
+    async def upsert_filing_comparison(self, row: dict[str, Any]) -> dict[str, Any]:
+        async with self._pool.connection() as conn:
+            saved = await (
+                await conn.execute(
+                    """
+                    INSERT INTO filing_comparisons (
+                        filing_metrics_id, prior_filing_metrics_id, match_quality,
+                        eps_delta, eps_delta_pct,
+                        revenue_delta, revenue_delta_pct,
+                        profit_delta, profit_delta_pct
+                    ) VALUES (
+                        %s, %s, %s,
+                        %s, %s,
+                        %s, %s,
+                        %s, %s
+                    )
+                    ON CONFLICT (filing_metrics_id) DO UPDATE SET
+                        prior_filing_metrics_id = EXCLUDED.prior_filing_metrics_id,
+                        match_quality = EXCLUDED.match_quality,
+                        eps_delta = EXCLUDED.eps_delta,
+                        eps_delta_pct = EXCLUDED.eps_delta_pct,
+                        revenue_delta = EXCLUDED.revenue_delta,
+                        revenue_delta_pct = EXCLUDED.revenue_delta_pct,
+                        profit_delta = EXCLUDED.profit_delta,
+                        profit_delta_pct = EXCLUDED.profit_delta_pct
+                    RETURNING *
+                    """,
+                    (
+                        row["filing_metrics_id"],
+                        row.get("prior_filing_metrics_id"),
+                        row["match_quality"],
+                        row.get("eps_delta"),
+                        row.get("eps_delta_pct"),
+                        row.get("revenue_delta"),
+                        row.get("revenue_delta_pct"),
+                        row.get("profit_delta"),
+                        row.get("profit_delta_pct"),
+                    ),
+                )
+            ).fetchone()
+        assert saved is not None
+        return dict(_as_row(saved))
+
+    async def get_filing_comparison_for_metrics(
+        self, filing_metrics_id: int
+    ) -> dict[str, Any] | None:
+        async with self._pool.connection() as conn:
+            row = await (
+                await conn.execute(
+                    """
+                    SELECT * FROM filing_comparisons
+                    WHERE filing_metrics_id = %s
+                    """,
+                    (filing_metrics_id,),
+                )
+            ).fetchone()
+        return dict(_as_row(row)) if row is not None else None
 
     async def get_ready_filing_brief(
         self,
@@ -2021,6 +2394,68 @@ class Storage:
         return snapshot
 
 
+
+    async def persist_order_book(self, book: OrderBookSnapshot) -> OrderBookSnapshot:
+        """Insert an order-book imbalance snapshot row."""
+        if not isinstance(book.symbol, str) or not book.symbol.strip():
+            raise ValueError("order book symbol required")
+        symbol = book.symbol.strip().upper()
+        await self.upsert_stock(symbol)
+        async with self._pool.connection() as conn:
+            row = await (
+                await conn.execute(
+                    """
+                    INSERT INTO order_book_snapshots
+                        (symbol, total_bids, total_asks, best_bid, best_bid_qty, ts)
+                    VALUES (%s, %s, %s, %s, %s, %s)
+                    RETURNING id, symbol, total_bids, total_asks, best_bid, best_bid_qty, ts
+                    """,
+                    (
+                        symbol,
+                        book.total_bids,
+                        book.total_asks,
+                        book.best_bid,
+                        book.best_bid_qty,
+                        book.ts,
+                    ),
+                )
+            ).fetchone()
+        assert row is not None
+        r = _as_row(row)
+        return OrderBookSnapshot(
+            id=r["id"],
+            symbol=r["symbol"],
+            total_bids=float(r["total_bids"]),
+            total_asks=float(r["total_asks"]),
+            best_bid=r.get("best_bid"),
+            best_bid_qty=r.get("best_bid_qty"),
+            ts=r["ts"],
+        )
+
+    async def order_book_fired_keys(self, symbol: str) -> set[str]:
+        """Day-bucket event keys already claimed for book imbalance rules."""
+        if not isinstance(symbol, str) or not symbol.strip():
+            return set()
+        symbol = symbol.strip().upper()
+        async with self._pool.connection() as conn:
+            rows = await (
+                await conn.execute(
+                    """
+                    SELECT al.event_key
+                    FROM alert_log al
+                    JOIN alert_rules ar ON ar.id = al.rule_id
+                    WHERE ar.symbol = %s
+                      AND (
+                        al.event_key LIKE 'bidheavy:%%'
+                        OR al.event_key LIKE 'askheavy:%%'
+                      )
+                    """,
+                    (symbol,),
+                )
+            ).fetchall()
+        return {r["event_key"] for r in _as_rows(rows)}
+
+
 def _row_to_snapshot(row: dict[str, Any]) -> PriceSnapshot | None:
     # Fail closed — non-string / blank symbol used to coerce via pydantic or
     # abort latest/previous snapshot reads mid poller.
@@ -2062,6 +2497,7 @@ def _row_to_snapshot(row: dict[str, Any]) -> PriceSnapshot | None:
         volume=row.get("volume"),
         trade_count=row.get("trade_count"),
         turnover=row.get("turnover"),
+        crossing_volume=row.get("crossing_volume"),
         high=row.get("high"),
         low=row.get("low"),
         open=row.get("open"),

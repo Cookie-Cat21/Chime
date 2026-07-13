@@ -224,6 +224,7 @@ export async function createAlertRule(
   // Defense in depth: sanitize even if caller forgot (POST already sanitizes).
   const cat =
     alertType === "disclosure" ? sanitizeDisclosureCategory(category) : null;
+  // MARKET halt is seeded by migration 009; other types require a known stock.
   try {
     await client.query("BEGIN");
 

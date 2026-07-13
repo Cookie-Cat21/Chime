@@ -27,6 +27,105 @@ class AlertType(StrEnum):
     PRICE_BELOW = "price_below"
     DAILY_MOVE = "daily_move"
     DISCLOSURE = "disclosure"
+    # Activity / flow proxies (not true buy/sell attribution).
+    VOLUME_SPIKE = "volume_spike"
+    VOLUME_UP = "volume_up"
+    VOLUME_DOWN = "volume_down"
+    CROSSING_VOLUME = "crossing_volume"
+    BIG_PRINT = "big_print"
+    GAP = "gap"
+    BUY_IN = "buy_in"
+    NON_COMPLIANCE = "non_compliance"
+    HALT = "halt"
+    # Public order book imbalance (POST /orderBook totalBids / totalAsks).
+    BID_HEAVY = "bid_heavy"
+    ASK_HEAVY = "ask_heavy"
+    # Financial PDF calc / YoY alerts (feature-flagged).
+    EPS_ABOVE = "eps_above"
+    EPS_BELOW = "eps_below"
+    EPS_YOY_ABOVE = "eps_yoy_above"
+    EPS_YOY_BELOW = "eps_yoy_below"
+    REV_YOY_ABOVE = "rev_yoy_above"
+    REV_YOY_BELOW = "rev_yoy_below"
+    PROFIT_YOY_ABOVE = "profit_yoy_above"
+    PROFIT_YOY_BELOW = "profit_yoy_below"
+
+
+# Alert types that need a positive numeric threshold.
+THRESHOLD_ALERT_TYPES: frozenset[AlertType] = frozenset(
+    {
+        AlertType.PRICE_ABOVE,
+        AlertType.PRICE_BELOW,
+        AlertType.DAILY_MOVE,
+        AlertType.VOLUME_SPIKE,
+        AlertType.VOLUME_UP,
+        AlertType.VOLUME_DOWN,
+        AlertType.CROSSING_VOLUME,
+        AlertType.BIG_PRINT,
+        AlertType.GAP,
+        AlertType.BID_HEAVY,
+        AlertType.ASK_HEAVY,
+        AlertType.EPS_ABOVE,
+        AlertType.EPS_BELOW,
+        AlertType.EPS_YOY_ABOVE,
+        AlertType.EPS_YOY_BELOW,
+        AlertType.REV_YOY_ABOVE,
+        AlertType.REV_YOY_BELOW,
+        AlertType.PROFIT_YOY_ABOVE,
+        AlertType.PROFIT_YOY_BELOW,
+    }
+)
+
+# Filing-metrics alerts (absolute EPS or YoY %).
+FILING_METRICS_ALERT_TYPES: frozenset[AlertType] = frozenset(
+    {
+        AlertType.EPS_ABOVE,
+        AlertType.EPS_BELOW,
+        AlertType.EPS_YOY_ABOVE,
+        AlertType.EPS_YOY_BELOW,
+        AlertType.REV_YOY_ABOVE,
+        AlertType.REV_YOY_BELOW,
+        AlertType.PROFIT_YOY_ABOVE,
+        AlertType.PROFIT_YOY_BELOW,
+    }
+)
+
+YOY_ALERT_TYPES: frozenset[AlertType] = frozenset(
+    {
+        AlertType.EPS_YOY_ABOVE,
+        AlertType.EPS_YOY_BELOW,
+        AlertType.REV_YOY_ABOVE,
+        AlertType.REV_YOY_BELOW,
+        AlertType.PROFIT_YOY_ABOVE,
+        AlertType.PROFIT_YOY_BELOW,
+    }
+)
+
+# Alert types evaluated from price_snapshots (no extra CSE endpoint).
+PRICE_BOARD_ALERT_TYPES: frozenset[AlertType] = frozenset(
+    {
+        AlertType.PRICE_ABOVE,
+        AlertType.PRICE_BELOW,
+        AlertType.DAILY_MOVE,
+        AlertType.VOLUME_SPIKE,
+        AlertType.VOLUME_UP,
+        AlertType.VOLUME_DOWN,
+        AlertType.CROSSING_VOLUME,
+        AlertType.GAP,
+    }
+)
+
+# Notice types with no threshold (disclosure-like).
+NOTICE_ALERT_TYPES: frozenset[AlertType] = frozenset(
+    {
+        AlertType.BUY_IN,
+        AlertType.NON_COMPLIANCE,
+        AlertType.HALT,
+    }
+)
+
+# Synthetic stock for market-wide halt / system notices.
+MARKET_SYMBOL = "MARKET"
 
 
 class PriceSnapshot(BaseModel):
@@ -42,6 +141,7 @@ class PriceSnapshot(BaseModel):
     volume: float | None = None
     trade_count: float | None = None
     turnover: float | None = None
+    crossing_volume: float | None = None
     high: float | None = None
     low: float | None = None
     open: float | None = None
@@ -63,6 +163,7 @@ class PriceSnapshot(BaseModel):
         "volume",
         "trade_count",
         "turnover",
+        "crossing_volume",
         "high",
         "low",
         "open",
@@ -177,11 +278,93 @@ class PreviousPriceState(BaseModel):
     change_pct: float | None = None
     # Whether a daily_move rule already fired for this symbol/session key
     move_fired_keys: set[str] = Field(default_factory=set)
+    # Avg daily volume / crossing volume over recent sessions (excludes today).
+    avg_volume: float | None = None
+    avg_crossing_volume: float | None = None
+    # Day-bucket keys already claimed for volume/gap activity rules.
+    activity_fired_keys: set[str] = Field(default_factory=set)
 
-    @field_validator("price", "change_pct", mode="before")
+    @field_validator(
+        "price",
+        "change_pct",
+        "avg_volume",
+        "avg_crossing_volume",
+        mode="before",
+    )
     @classmethod
     def _state_numeric_must_not_be_bool(cls, value: Any) -> Any:
         return _none_if_bool_numeric(value)
+
+
+class BigPrint(BaseModel):
+    """Single day-tape print used for big_print alerts."""
+
+    model_config = ConfigDict(extra="ignore")
+
+    external_id: str
+    symbol: str
+    price: float | None = None
+    quantity: float
+    traded_at: datetime | None = None
+    seen_at: datetime | None = None
+    id: int | None = None
+    just_inserted: bool = False
+
+    @field_validator("quantity", mode="before")
+    @classmethod
+    def _qty_must_not_be_bool(cls, value: Any) -> Any:
+        return _reject_bool_numeric(value)
+
+    @field_validator("price", mode="before")
+    @classmethod
+    def _price_opt_must_not_be_bool(cls, value: Any) -> Any:
+        return _none_if_bool_numeric(value)
+
+
+
+class OrderBookSnapshot(BaseModel):
+    """Normalized public order-book totals from ``POST /orderBook``.
+
+    Full depth is truncated on the public API (often one bid level), but
+    ``total_bids`` / ``total_asks`` are populated and usable for imbalance.
+    """
+
+    model_config = ConfigDict(extra="ignore")
+
+    symbol: str
+    total_bids: float
+    total_asks: float
+    best_bid: float | None = None
+    best_bid_qty: float | None = None
+    ts: datetime
+    id: int | None = None
+
+    @field_validator("total_bids", "total_asks", mode="before")
+    @classmethod
+    def _totals_must_not_be_bool(cls, value: Any) -> Any:
+        return _reject_bool_numeric(value)
+
+    @field_validator("best_bid", "best_bid_qty", mode="before")
+    @classmethod
+    def _opt_must_not_be_bool(cls, value: Any) -> Any:
+        return _none_if_bool_numeric(value)
+
+
+class MarketNotice(BaseModel):
+    """Buy-in / non-compliance / halt notice normalized from CSE feeds."""
+
+    model_config = ConfigDict(extra="ignore")
+
+    external_id: str
+    notice_type: str  # buy_in | non_compliance | halt
+    symbol: str | None = None
+    title: str
+    body: str | None = None
+    url: str | None = None
+    published_at: datetime
+    seen_at: datetime | None = None
+    id: int | None = None
+    just_inserted: bool = False
 
 
 DISCLOSURE_TITLE_MAX = 120
@@ -250,6 +433,46 @@ def sanitize_disclosure_category(category: str | None) -> str | None:
 def disclaimer() -> str:
     return "Not financial advice — informational only."
 
+
+def format_yoy_comparison_block(
+    *,
+    metrics: dict[str, Any],
+    comparison: dict[str, Any] | None,
+) -> str | None:
+    """Short YoY block for disclosure Telegram append. None if not comparable."""
+    if not metrics.get("extract_ok"):
+        return None
+    if not comparison or comparison.get("match_quality") not in (
+        "exact_yoy",
+        "approx_yoy",
+    ):
+        return None
+    lines: list[str] = []
+    kind = str(metrics.get("kind") or "filing")
+    entity = str(metrics.get("entity") or "unknown")
+    eps = metrics.get("eps_basic")
+    if eps is not None and comparison.get("eps_delta_pct") is not None:
+        lines.append(
+            f"Basic EPS {float(eps):.4g} "
+            f"(YoY {float(comparison['eps_delta_pct']):+.2f}%)"
+        )
+    elif eps is not None:
+        lines.append(f"Basic EPS {float(eps):.4g}")
+    rev_pct = comparison.get("revenue_delta_pct")
+    pat_pct = comparison.get("profit_delta_pct")
+    bits: list[str] = []
+    if rev_pct is not None:
+        bits.append(f"Revenue YoY {float(rev_pct):+.2f}%")
+    if pat_pct is not None:
+        bits.append(f"Profit YoY {float(pat_pct):+.2f}%")
+    if bits:
+        lines.append(" · ".join(bits))
+    lines.append(
+        f"{kind} · {entity} · {metrics.get('currency') or 'LKR'} · "
+        f"{comparison.get('match_quality')}"
+    )
+    lines.append("Extracted numbers — verify in the filing.")
+    return "\n".join(lines)
 
 def truncate_disclosure_title(title: str, max_len: int = DISCLOSURE_TITLE_MAX) -> str:
     """Truncate long filing titles so Telegram alert bodies stay readable.

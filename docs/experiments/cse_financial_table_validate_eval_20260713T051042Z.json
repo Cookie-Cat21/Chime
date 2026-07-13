@@ -1,0 +1,5410 @@
+{
+  "generated_at": "2026-07-13T05:10:42.052786+00:00",
+  "prior": "docs/experiments/cse_financial_pdf_eval_20260713T045432Z.json",
+  "note": "Research only \u2014 not alert truth. FinTable-style pdfplumber + validators.",
+  "llm_used": false,
+  "fintable_upstream_used": false,
+  "extractor_primary": "pdfplumber",
+  "summary": {
+    "n": 72,
+    "verdicts": {
+      "unambiguous": 9,
+      "fail": 35,
+      "ambiguous": 28
+    },
+    "verdict_pct": {
+      "unambiguous": 12.5,
+      "fail": 48.6,
+      "ambiguous": 38.9
+    },
+    "unambiguous": 9,
+    "unambiguous_pct": 12.5,
+    "ambiguous": 28,
+    "ambiguous_pct": 38.9,
+    "fail": 35,
+    "fail_pct": 48.6,
+    "scale_counts": {
+      "unknown": 32,
+      "millions": 17,
+      "thousands": 23
+    },
+    "eps_validator": {
+      "ok_basic_and_diluted": 9,
+      "missing": 14,
+      "ok_basic_only": 16,
+      "generic_only": 27,
+      "diluted_only": 6
+    },
+    "period_validator": {
+      "ok_resolved_current_quarter": 26,
+      "ok_or_assumed_annual": 37,
+      "untagged": 2,
+      "ok_tagged": 7
+    },
+    "top_fail_reasons": [
+      [
+        "profit:missing",
+        17
+      ],
+      [
+        "eps:missing",
+        14
+      ],
+      [
+        "revenue:missing",
+        7
+      ]
+    ],
+    "top_ambiguity_reasons": [
+      [
+        "eps:generic_unlabeled_basic_or_diluted",
+        27
+      ],
+      [
+        "revenue:conflicting_candidates",
+        20
+      ],
+      [
+        "profit:conflicting_candidates",
+        10
+      ],
+      [
+        "eps:diluted_without_basic",
+        6
+      ],
+      [
+        "scale:revenue_too_small_for_thousands",
+        4
+      ],
+      [
+        "eps:conflicting_candidates",
+        2
+      ],
+      [
+        "profit:multi_column_tie",
+        2
+      ],
+      [
+        "revenue:multi_column_tie",
+        2
+      ],
+      [
+        "period:untagged",
+        2
+      ],
+      [
+        "scale:revenue_huge_for_millions_label",
+        2
+      ],
+      [
+        "scale:unknown_and_tiny_revenue",
+        2
+      ]
+    ],
+    "has_revenue": 65,
+    "has_profit": 55,
+    "has_eps_any": 58,
+    "has_basic_and_diluted": 9,
+    "gated_ok": 9,
+    "gated_ok_pct": 12.5
+  },
+  "rows": [
+    {
+      "symbol": "AAF.N0000",
+      "kind": "quarterly",
+      "title": "Interim Financial Statements for the Quarter ended 31st March 2026",
+      "url": "https://cdn.cse.lk/cmt/upload_report_file/1108_1778154056385.pdf",
+      "pdf_path": "/tmp/cse-financial-pdfs/AAF.N0000_quarterly_50009.pdf",
+      "pages_scored": 17,
+      "sopl_pages": [
+        3,
+        2,
+        4,
+        7,
+        1,
+        5
+      ],
+      "tables_found": 3,
+      "sopl_tables": 3,
+      "extractor": "page_text+pdfplumber",
+      "scale": "unknown",
+      "period_tags": [
+        "annual",
+        "has_comparative",
+        "quarter",
+        "ytd"
+      ],
+      "entity_tags": [
+        "company"
+      ],
+      "revenue": {
+        "value": 2358166994.0,
+        "raw": "2,358,166,994",
+        "label": "Interest Income",
+        "page": 3,
+        "column": 0,
+        "notes": [
+          "resolved_current_quarter_leftmost"
+        ]
+      },
+      "profit": {
+        "value": 280257691.0,
+        "raw": "280,257,691",
+        "label": "Profit for the Period",
+        "page": 3,
+        "column": 0,
+        "notes": [
+          "resolved_current_quarter_leftmost"
+        ]
+      },
+      "eps_basic": {
+        "value": 2.26,
+        "raw": "2.26",
+        "label": "Basic Earnings Per Share (Rs.)",
+        "page": 3,
+        "column": 0,
+        "notes": [
+          "resolved_current_quarter_leftmost"
+        ]
+      },
+      "eps_diluted": {
+        "value": 1.58,
+        "raw": "1.58",
+        "label": "Diluted Earnings Per Share (Rs.)",
+        "page": 3,
+        "column": 0,
+        "notes": [
+          "resolved_current_quarter_leftmost"
+        ]
+      },
+      "eps_generic": null,
+      "validators": {
+        "period": "ok_resolved_current_quarter",
+        "period_resolve": "leftmost_current_quarter",
+        "scale": "unknown",
+        "eps": "ok_basic_and_diluted",
+        "entity": "company",
+        "eps_magnitude": "plausible",
+        "gated_ok": true
+      },
+      "verdict": "unambiguous",
+      "fail_reasons": [],
+      "ambiguity_reasons": [],
+      "error": null
+    },
+    {
+      "symbol": "AAF.N0000",
+      "kind": "quarterly",
+      "title": "Interim Financial Statements for the Quarter ended 31st December 2025",
+      "url": "https://cdn.cse.lk/cmt/upload_report_file/1108_1769769143644.pdf",
+      "pdf_path": "/tmp/cse-financial-pdfs/AAF.N0000_quarterly_50009.pdf",
+      "pages_scored": 17,
+      "sopl_pages": [
+        3,
+        2,
+        4,
+        7,
+        1,
+        5
+      ],
+      "tables_found": 3,
+      "sopl_tables": 3,
+      "extractor": "page_text+pdfplumber",
+      "scale": "unknown",
+      "period_tags": [
+        "annual",
+        "has_comparative",
+        "quarter",
+        "ytd"
+      ],
+      "entity_tags": [
+        "company"
+      ],
+      "revenue": {
+        "value": 2358166994.0,
+        "raw": "2,358,166,994",
+        "label": "Interest Income",
+        "page": 3,
+        "column": 0,
+        "notes": [
+          "resolved_current_quarter_leftmost"
+        ]
+      },
+      "profit": {
+        "value": 280257691.0,
+        "raw": "280,257,691",
+        "label": "Profit for the Period",
+        "page": 3,
+        "column": 0,
+        "notes": [
+          "resolved_current_quarter_leftmost"
+        ]
+      },
+      "eps_basic": {
+        "value": 2.26,
+        "raw": "2.26",
+        "label": "Basic Earnings Per Share (Rs.)",
+        "page": 3,
+        "column": 0,
+        "notes": [
+          "resolved_current_quarter_leftmost"
+        ]
+      },
+      "eps_diluted": {
+        "value": 1.58,
+        "raw": "1.58",
+        "label": "Diluted Earnings Per Share (Rs.)",
+        "page": 3,
+        "column": 0,
+        "notes": [
+          "resolved_current_quarter_leftmost"
+        ]
+      },
+      "eps_generic": null,
+      "validators": {
+        "period": "ok_resolved_current_quarter",
+        "period_resolve": "leftmost_current_quarter",
+        "scale": "unknown",
+        "eps": "ok_basic_and_diluted",
+        "entity": "company",
+        "eps_magnitude": "plausible",
+        "gated_ok": true
+      },
+      "verdict": "unambiguous",
+      "fail_reasons": [],
+      "ambiguity_reasons": [],
+      "error": null
+    },
+    {
+      "symbol": "AAF.N0000",
+      "kind": "annual",
+      "title": "Annual Report 2024/2025",
+      "url": "https://cdn.cse.lk/cmt/upload_report_file/1108_1756350479532.pdf",
+      "pdf_path": "/tmp/cse-financial-pdfs/AAF.N0000_annual_48844.pdf",
+      "pages_scored": 40,
+      "sopl_pages": [
+        3,
+        11,
+        25
+      ],
+      "tables_found": 1,
+      "sopl_tables": 1,
+      "extractor": "page_text+pdfplumber",
+      "scale": "millions",
+      "period_tags": [
+        "annual"
+      ],
+      "entity_tags": [
+        "company",
+        "group"
+      ],
+      "revenue": null,
+      "profit": {
+        "value": 441.0,
+        "raw": "441",
+        "label": "Profit After Tax",
+        "page": 11,
+        "column": 0,
+        "notes": [
+          "assumed_current_vs_comparative"
+        ]
+      },
+      "eps_basic": {
+        "value": 3.55,
+        "raw": "3.55",
+        "label": "Earnings per share (Rs.) basic",
+        "page": 11,
+        "column": 0,
+        "notes": [
+          "assumed_current_vs_comparative"
+        ]
+      },
+      "eps_diluted": {
+        "value": 2.48,
+        "raw": "2.48",
+        "label": "Earnings per share (Rs.) diluted",
+        "page": 11,
+        "column": 0,
+        "notes": [
+          "assumed_current_vs_comparative"
+        ]
+      },
+      "eps_generic": null,
+      "validators": {
+        "period": "ok_or_assumed_annual",
+        "scale": "ok_millions",
+        "eps": "ok_basic_and_diluted",
+        "entity": "both_mentioned",
+        "eps_magnitude": "plausible",
+        "gated_ok": false
+      },
+      "verdict": "fail",
+      "fail_reasons": [
+        "revenue:missing"
+      ],
+      "ambiguity_reasons": [],
+      "error": null
+    },
+    {
+      "symbol": "AAIC.N0000",
+      "kind": "quarterly",
+      "title": "Interim Financial Statements for the Quarter ended 31st March 2026",
+      "url": "https://cdn.cse.lk/cmt/upload_report_file/364_1778578221397.pdf",
+      "pdf_path": "/tmp/cse-financial-pdfs/AAIC.N0000_quarterly_50227.pdf",
+      "pages_scored": 19,
+      "sopl_pages": [
+        2,
+        4,
+        1,
+        3,
+        6,
+        7
+      ],
+      "tables_found": 4,
+      "sopl_tables": 4,
+      "extractor": "page_text+pdfplumber",
+      "scale": "thousands",
+      "period_tags": [
+        "annual",
+        "quarter",
+        "ytd"
+      ],
+      "entity_tags": [
+        "company",
+        "group"
+      ],
+      "revenue": null,
+      "profit": {
+        "value": 4680392.0,
+        "raw": "4,680,392",
+        "label": "Profit for the period",
+        "page": 1,
+        "column": 0,
+        "notes": [
+          "multi_value_no_header"
+        ]
+      },
+      "eps_basic": {
+        "value": 18.0,
+        "raw": "18",
+        "label": "Basic earnings per share (Rs.)",
+        "page": 1,
+        "column": 0,
+        "notes": [
+          "multi_value_no_header"
+        ]
+      },
+      "eps_diluted": {
+        "value": 18.0,
+        "raw": "18",
+        "label": "Diluted earnings per share (Rs.)",
+        "page": 1,
+        "column": 0,
+        "notes": [
+          "multi_value_no_header"
+        ]
+      },
+      "eps_generic": null,
+      "validators": {
+        "period": "ok_resolved_current_quarter",
+        "period_resolve": "leftmost_current_quarter",
+        "period_resolve_confidence": "assumed",
+        "multi_value_notes": [
+          "profit",
+          "eps_basic",
+          "eps_diluted"
+        ],
+        "scale": "ok_thousands",
+        "eps": "ok_basic_and_diluted",
+        "eps_note": "basic_equals_diluted",
+        "entity": "both_mentioned",
+        "eps_magnitude": "plausible",
+        "gated_ok": false
+      },
+      "verdict": "fail",
+      "fail_reasons": [
+        "revenue:missing"
+      ],
+      "ambiguity_reasons": [
+        "eps:conflicting_candidates"
+      ],
+      "error": null
+    },
+    {
+      "symbol": "AAIC.N0000",
+      "kind": "quarterly",
+      "title": "Interim Financial Statements for the Quarter ended 31st December 2025",
+      "url": "https://cdn.cse.lk/cmt/upload_report_file/364_1770808242676.pdf",
+      "pdf_path": "/tmp/cse-financial-pdfs/AAIC.N0000_quarterly_50227.pdf",
+      "pages_scored": 19,
+      "sopl_pages": [
+        2,
+        4,
+        1,
+        3,
+        6,
+        7
+      ],
+      "tables_found": 4,
+      "sopl_tables": 4,
+      "extractor": "page_text+pdfplumber",
+      "scale": "thousands",
+      "period_tags": [
+        "annual",
+        "quarter",
+        "ytd"
+      ],
+      "entity_tags": [
+        "company",
+        "group"
+      ],
+      "revenue": null,
+      "profit": {
+        "value": 4680392.0,
+        "raw": "4,680,392",
+        "label": "Profit for the period",
+        "page": 1,
+        "column": 0,
+        "notes": [
+          "multi_value_no_header"
+        ]
+      },
+      "eps_basic": {
+        "value": 18.0,
+        "raw": "18",
+        "label": "Basic earnings per share (Rs.)",
+        "page": 1,
+        "column": 0,
+        "notes": [
+          "multi_value_no_header"
+        ]
+      },
+      "eps_diluted": {
+        "value": 18.0,
+        "raw": "18",
+        "label": "Diluted earnings per share (Rs.)",
+        "page": 1,
+        "column": 0,
+        "notes": [
+          "multi_value_no_header"
+        ]
+      },
+      "eps_generic": null,
+      "validators": {
+        "period": "ok_resolved_current_quarter",
+        "period_resolve": "leftmost_current_quarter",
+        "period_resolve_confidence": "assumed",
+        "multi_value_notes": [
+          "profit",
+          "eps_basic",
+          "eps_diluted"
+        ],
+        "scale": "ok_thousands",
+        "eps": "ok_basic_and_diluted",
+        "eps_note": "basic_equals_diluted",
+        "entity": "both_mentioned",
+        "eps_magnitude": "plausible",
+        "gated_ok": false
+      },
+      "verdict": "fail",
+      "fail_reasons": [
+        "revenue:missing"
+      ],
+      "ambiguity_reasons": [
+        "eps:conflicting_candidates"
+      ],
+      "error": null
+    },
+    {
+      "symbol": "AAIC.N0000",
+      "kind": "annual",
+      "title": "Annual Report as at 31st December 2025",
+      "url": "https://cdn.cse.lk/cmt/upload_report_file/364_1773074258222.pdf",
+      "pdf_path": "/tmp/cse-financial-pdfs/AAIC.N0000_annual_47614.pdf",
+      "pages_scored": 40,
+      "sopl_pages": [
+        6,
+        18,
+        23,
+        24
+      ],
+      "tables_found": 4,
+      "sopl_tables": 3,
+      "extractor": "page_text+pdfplumber",
+      "scale": "millions",
+      "period_tags": [
+        "annual"
+      ],
+      "entity_tags": [
+        "company"
+      ],
+      "revenue": {
+        "value": 20.0,
+        "raw": "20",
+        "label": "Gross Written Premium Growth",
+        "page": 24,
+        "column": 2,
+        "notes": [
+          "multi_column_tie"
+        ]
+      },
+      "profit": {
+        "value": 59.0,
+        "raw": "59",
+        "label": "Profit After Tax Growth",
+        "page": 24,
+        "column": 2,
+        "notes": [
+          "multi_column_tie"
+        ]
+      },
+      "eps_basic": null,
+      "eps_diluted": null,
+      "eps_generic": null,
+      "validators": {
+        "period": "ok_or_assumed_annual",
+        "scale": "ok_millions",
+        "eps": "missing",
+        "entity": "company",
+        "gated_ok": false
+      },
+      "verdict": "fail",
+      "fail_reasons": [
+        "eps:missing"
+      ],
+      "ambiguity_reasons": [
+        "profit:multi_column_tie",
+        "revenue:multi_column_tie"
+      ],
+      "error": null
+    },
+    {
+      "symbol": "AAIC.N0000",
+      "kind": "annual",
+      "title": "Annual Report 2024",
+      "url": "https://cdn.cse.lk/cmt/upload_report_file/364_1741255680829.pdf",
+      "pdf_path": "/tmp/cse-financial-pdfs/AAIC.N0000_annual_47614.pdf",
+      "pages_scored": 40,
+      "sopl_pages": [
+        6,
+        18,
+        23,
+        24
+      ],
+      "tables_found": 4,
+      "sopl_tables": 3,
+      "extractor": "page_text+pdfplumber",
+      "scale": "millions",
+      "period_tags": [
+        "annual"
+      ],
+      "entity_tags": [
+        "company"
+      ],
+      "revenue": {
+        "value": 20.0,
+        "raw": "20",
+        "label": "Gross Written Premium Growth",
+        "page": 24,
+        "column": 2,
+        "notes": [
+          "multi_column_tie"
+        ]
+      },
+      "profit": {
+        "value": 59.0,
+        "raw": "59",
+        "label": "Profit After Tax Growth",
+        "page": 24,
+        "column": 2,
+        "notes": [
+          "multi_column_tie"
+        ]
+      },
+      "eps_basic": null,
+      "eps_diluted": null,
+      "eps_generic": null,
+      "validators": {
+        "period": "ok_or_assumed_annual",
+        "scale": "ok_millions",
+        "eps": "missing",
+        "entity": "company",
+        "gated_ok": false
+      },
+      "verdict": "fail",
+      "fail_reasons": [
+        "eps:missing"
+      ],
+      "ambiguity_reasons": [
+        "profit:multi_column_tie",
+        "revenue:multi_column_tie"
+      ],
+      "error": null
+    },
+    {
+      "symbol": "ABAN.N0000",
+      "kind": "quarterly",
+      "title": "Interim Financial Statements for the Quarter ended 31st March 2026",
+      "url": "https://cdn.cse.lk/cmt/upload_report_file/642_1779961072679.03.2026.pdf",
+      "pdf_path": "/tmp/cse-financial-pdfs/ABAN.N0000_quarterly_50214.pdf",
+      "pages_scored": 9,
+      "sopl_pages": [
+        1,
+        4,
+        5
+      ],
+      "tables_found": 0,
+      "sopl_tables": 0,
+      "extractor": "page_text+pdfplumber",
+      "scale": "millions",
+      "period_tags": [
+        "annual"
+      ],
+      "entity_tags": [
+        "company"
+      ],
+      "revenue": {
+        "value": 1928502029.0,
+        "raw": "1,928,502,029",
+        "label": "Turnover",
+        "page": 1,
+        "column": 0,
+        "notes": [
+          "multi_value_no_header"
+        ]
+      },
+      "profit": {
+        "value": 132442736.0,
+        "raw": "132,442,736",
+        "label": "Net Profit/(Loss) for the Period",
+        "page": 1,
+        "column": 0,
+        "notes": [
+          "multi_value_no_header"
+        ]
+      },
+      "eps_basic": {
+        "value": 25.92,
+        "raw": "25.92",
+        "label": "Earnings per share - Basic/Diluted",
+        "page": 1,
+        "column": 0,
+        "notes": [
+          "multi_value_no_header"
+        ]
+      },
+      "eps_diluted": null,
+      "eps_generic": null,
+      "validators": {
+        "period": "untagged",
+        "multi_value_notes": [
+          "revenue",
+          "profit",
+          "eps_basic"
+        ],
+        "scale": "ok_millions",
+        "eps": "ok_basic_only",
+        "entity": "company",
+        "eps_magnitude": "plausible",
+        "scale_warnings": [
+          "scale:revenue_huge_for_millions_label"
+        ],
+        "gated_ok": false
+      },
+      "verdict": "ambiguous",
+      "fail_reasons": [],
+      "ambiguity_reasons": [
+        "period:untagged",
+        "profit:conflicting_candidates",
+        "scale:revenue_huge_for_millions_label"
+      ],
+      "error": null
+    },
+    {
+      "symbol": "ABAN.N0000",
+      "kind": "quarterly",
+      "title": "Interim Financial Statements for the Quarter ended 31st December 2025",
+      "url": "https://cdn.cse.lk/cmt/upload_report_file/642_1770805922769.12.2025_Final.pdf",
+      "pdf_path": "/tmp/cse-financial-pdfs/ABAN.N0000_quarterly_50214.pdf",
+      "pages_scored": 9,
+      "sopl_pages": [
+        1,
+        4,
+        5
+      ],
+      "tables_found": 0,
+      "sopl_tables": 0,
+      "extractor": "page_text+pdfplumber",
+      "scale": "millions",
+      "period_tags": [
+        "annual"
+      ],
+      "entity_tags": [
+        "company"
+      ],
+      "revenue": {
+        "value": 1928502029.0,
+        "raw": "1,928,502,029",
+        "label": "Turnover",
+        "page": 1,
+        "column": 0,
+        "notes": [
+          "multi_value_no_header"
+        ]
+      },
+      "profit": {
+        "value": 132442736.0,
+        "raw": "132,442,736",
+        "label": "Net Profit/(Loss) for the Period",
+        "page": 1,
+        "column": 0,
+        "notes": [
+          "multi_value_no_header"
+        ]
+      },
+      "eps_basic": {
+        "value": 25.92,
+        "raw": "25.92",
+        "label": "Earnings per share - Basic/Diluted",
+        "page": 1,
+        "column": 0,
+        "notes": [
+          "multi_value_no_header"
+        ]
+      },
+      "eps_diluted": null,
+      "eps_generic": null,
+      "validators": {
+        "period": "untagged",
+        "multi_value_notes": [
+          "revenue",
+          "profit",
+          "eps_basic"
+        ],
+        "scale": "ok_millions",
+        "eps": "ok_basic_only",
+        "entity": "company",
+        "eps_magnitude": "plausible",
+        "scale_warnings": [
+          "scale:revenue_huge_for_millions_label"
+        ],
+        "gated_ok": false
+      },
+      "verdict": "ambiguous",
+      "fail_reasons": [],
+      "ambiguity_reasons": [
+        "period:untagged",
+        "profit:conflicting_candidates",
+        "scale:revenue_huge_for_millions_label"
+      ],
+      "error": null
+    },
+    {
+      "symbol": "ABAN.N0000",
+      "kind": "annual",
+      "title": "ANNUAL REPORT AS OF 31-03-2025",
+      "url": "https://cdn.cse.lk/cmt/upload_report_file/642_1756460085368.pdf",
+      "pdf_path": "/tmp/cse-financial-pdfs/ABAN.N0000_annual_46582.pdf",
+      "pages_scored": 40,
+      "sopl_pages": [
+        3,
+        4,
+        5,
+        6,
+        9,
+        11
+      ],
+      "tables_found": 0,
+      "sopl_tables": 0,
+      "extractor": "page_text+pdfplumber",
+      "scale": "unknown",
+      "period_tags": [
+        "annual",
+        "has_comparative"
+      ],
+      "entity_tags": [
+        "company"
+      ],
+      "revenue": {
+        "value": 5.13,
+        "raw": "5.13",
+        "label": "Revenue",
+        "page": 4,
+        "column": 0,
+        "notes": [
+          "multi_value_no_header"
+        ]
+      },
+      "profit": {
+        "value": 5246866.0,
+        "raw": "5,246,866",
+        "label": "Net Profit Margin",
+        "page": 4,
+        "column": 0,
+        "notes": [
+          "multi_value_no_header"
+        ]
+      },
+      "eps_basic": null,
+      "eps_diluted": null,
+      "eps_generic": {
+        "value": 23.0,
+        "raw": "23",
+        "label": "EPS",
+        "page": 4,
+        "column": 1,
+        "notes": []
+      },
+      "validators": {
+        "period": "ok_or_assumed_annual",
+        "multi_value_notes": [
+          "revenue",
+          "profit"
+        ],
+        "scale": "unknown",
+        "eps": "generic_only",
+        "entity": "company",
+        "eps_magnitude": "plausible",
+        "scale_warnings": [
+          "scale:unknown_and_tiny_revenue"
+        ],
+        "gated_ok": false
+      },
+      "verdict": "ambiguous",
+      "fail_reasons": [],
+      "ambiguity_reasons": [
+        "eps:generic_unlabeled_basic_or_diluted",
+        "revenue:conflicting_candidates",
+        "scale:unknown_and_tiny_revenue"
+      ],
+      "error": null
+    },
+    {
+      "symbol": "ABAN.N0000",
+      "kind": "annual",
+      "title": "Annual Report 2023/2024",
+      "url": "https://cdn.cse.lk/cmt/upload_report_file/642_1725016991782.pdf",
+      "pdf_path": "/tmp/cse-financial-pdfs/ABAN.N0000_annual_46582.pdf",
+      "pages_scored": 40,
+      "sopl_pages": [
+        3,
+        4,
+        5,
+        6,
+        9,
+        11
+      ],
+      "tables_found": 0,
+      "sopl_tables": 0,
+      "extractor": "page_text+pdfplumber",
+      "scale": "unknown",
+      "period_tags": [
+        "annual",
+        "has_comparative"
+      ],
+      "entity_tags": [
+        "company"
+      ],
+      "revenue": {
+        "value": 5.13,
+        "raw": "5.13",
+        "label": "Revenue",
+        "page": 4,
+        "column": 0,
+        "notes": [
+          "multi_value_no_header"
+        ]
+      },
+      "profit": {
+        "value": 5246866.0,
+        "raw": "5,246,866",
+        "label": "Net Profit Margin",
+        "page": 4,
+        "column": 0,
+        "notes": [
+          "multi_value_no_header"
+        ]
+      },
+      "eps_basic": null,
+      "eps_diluted": null,
+      "eps_generic": {
+        "value": 23.0,
+        "raw": "23",
+        "label": "EPS",
+        "page": 4,
+        "column": 1,
+        "notes": []
+      },
+      "validators": {
+        "period": "ok_or_assumed_annual",
+        "multi_value_notes": [
+          "revenue",
+          "profit"
+        ],
+        "scale": "unknown",
+        "eps": "generic_only",
+        "entity": "company",
+        "eps_magnitude": "plausible",
+        "scale_warnings": [
+          "scale:unknown_and_tiny_revenue"
+        ],
+        "gated_ok": false
+      },
+      "verdict": "ambiguous",
+      "fail_reasons": [],
+      "ambiguity_reasons": [
+        "eps:generic_unlabeled_basic_or_diluted",
+        "revenue:conflicting_candidates",
+        "scale:unknown_and_tiny_revenue"
+      ],
+      "error": null
+    },
+    {
+      "symbol": "ABL.N0000",
+      "kind": "quarterly",
+      "title": "Interim Financial Statements for the Quarter ended 31st March 2026",
+      "url": "https://cdn.cse.lk/cmt/upload_report_file/1303_1778762290403.pdf",
+      "pdf_path": "/tmp/cse-financial-pdfs/ABL.N0000_quarterly_50612.pdf",
+      "pages_scored": 16,
+      "sopl_pages": [
+        3,
+        4,
+        5,
+        6,
+        8,
+        11
+      ],
+      "tables_found": 9,
+      "sopl_tables": 8,
+      "extractor": "page_text+pdfplumber",
+      "scale": "thousands",
+      "period_tags": [
+        "annual",
+        "quarter"
+      ],
+      "entity_tags": [],
+      "revenue": {
+        "value": 10700996.0,
+        "raw": "10,700,996",
+        "label": "Net Operating Income",
+        "page": 3,
+        "column": 0,
+        "notes": [
+          "multi_value_no_header"
+        ]
+      },
+      "profit": {
+        "value": 2480983.0,
+        "raw": "2,480,983",
+        "label": "Profit for the Period",
+        "page": 3,
+        "column": 0,
+        "notes": [
+          "multi_value_no_header"
+        ]
+      },
+      "eps_basic": null,
+      "eps_diluted": null,
+      "eps_generic": null,
+      "validators": {
+        "period": "ok_tagged",
+        "multi_value_notes": [
+          "revenue",
+          "profit"
+        ],
+        "scale": "ok_thousands",
+        "eps": "missing",
+        "entity": "untagged",
+        "gated_ok": false
+      },
+      "verdict": "fail",
+      "fail_reasons": [
+        "eps:missing"
+      ],
+      "ambiguity_reasons": [],
+      "error": null
+    },
+    {
+      "symbol": "ABL.N0000",
+      "kind": "quarterly",
+      "title": "Interim Financial Statements for the Quarter ended 31st December 2025",
+      "url": "https://cdn.cse.lk/cmt/upload_report_file/1303_1772106542773.pdf",
+      "pdf_path": "/tmp/cse-financial-pdfs/ABL.N0000_quarterly_50612.pdf",
+      "pages_scored": 16,
+      "sopl_pages": [
+        3,
+        4,
+        5,
+        6,
+        8,
+        11
+      ],
+      "tables_found": 9,
+      "sopl_tables": 8,
+      "extractor": "page_text+pdfplumber",
+      "scale": "thousands",
+      "period_tags": [
+        "annual",
+        "quarter"
+      ],
+      "entity_tags": [],
+      "revenue": {
+        "value": 10700996.0,
+        "raw": "10,700,996",
+        "label": "Net Operating Income",
+        "page": 3,
+        "column": 0,
+        "notes": [
+          "multi_value_no_header"
+        ]
+      },
+      "profit": {
+        "value": 2480983.0,
+        "raw": "2,480,983",
+        "label": "Profit for the Period",
+        "page": 3,
+        "column": 0,
+        "notes": [
+          "multi_value_no_header"
+        ]
+      },
+      "eps_basic": null,
+      "eps_diluted": null,
+      "eps_generic": null,
+      "validators": {
+        "period": "ok_tagged",
+        "multi_value_notes": [
+          "revenue",
+          "profit"
+        ],
+        "scale": "ok_thousands",
+        "eps": "missing",
+        "entity": "untagged",
+        "gated_ok": false
+      },
+      "verdict": "fail",
+      "fail_reasons": [
+        "eps:missing"
+      ],
+      "ambiguity_reasons": [],
+      "error": null
+    },
+    {
+      "symbol": "ABL.N0000",
+      "kind": "annual",
+      "title": "Annual Report as at 31st December 2025",
+      "url": "https://cdn.cse.lk/cmt/upload_report_file/1303_1776330317080.pdf",
+      "pdf_path": "/tmp/cse-financial-pdfs/ABL.N0000_annual_47646.pdf",
+      "pages_scored": 40,
+      "sopl_pages": [
+        4,
+        31
+      ],
+      "tables_found": 1,
+      "sopl_tables": 1,
+      "extractor": "page_text+pdfplumber",
+      "scale": "thousands",
+      "period_tags": [
+        "annual"
+      ],
+      "entity_tags": [],
+      "revenue": null,
+      "profit": {
+        "value": 1774666.0,
+        "raw": "1,774,666",
+        "label": "Profit for the Year",
+        "page": 31,
+        "column": 0,
+        "notes": [
+          "multi_value_no_header"
+        ]
+      },
+      "eps_basic": {
+        "value": 3.22,
+        "raw": "3.22",
+        "label": "Earnings Per Share - Basic",
+        "page": 31,
+        "column": 0,
+        "notes": [
+          "assumed_current_vs_comparative"
+        ]
+      },
+      "eps_diluted": {
+        "value": 3.22,
+        "raw": "3.22",
+        "label": "Earnings Per Share - Diluted",
+        "page": 31,
+        "column": 0,
+        "notes": [
+          "assumed_current_vs_comparative"
+        ]
+      },
+      "eps_generic": null,
+      "validators": {
+        "period": "ok_or_assumed_annual",
+        "multi_value_notes": [
+          "profit"
+        ],
+        "scale": "ok_thousands",
+        "eps": "ok_basic_and_diluted",
+        "eps_note": "basic_equals_diluted",
+        "entity": "untagged",
+        "eps_magnitude": "plausible",
+        "gated_ok": false
+      },
+      "verdict": "fail",
+      "fail_reasons": [
+        "revenue:missing"
+      ],
+      "ambiguity_reasons": [],
+      "error": null
+    },
+    {
+      "symbol": "ABL.N0000",
+      "kind": "annual",
+      "title": "Annual Report - 2024",
+      "url": "https://cdn.cse.lk/cmt/upload_report_file/1303_1742470050705.pdf",
+      "pdf_path": "/tmp/cse-financial-pdfs/ABL.N0000_annual_47646.pdf",
+      "pages_scored": 40,
+      "sopl_pages": [
+        4,
+        31
+      ],
+      "tables_found": 1,
+      "sopl_tables": 1,
+      "extractor": "page_text+pdfplumber",
+      "scale": "thousands",
+      "period_tags": [
+        "annual"
+      ],
+      "entity_tags": [],
+      "revenue": null,
+      "profit": {
+        "value": 1774666.0,
+        "raw": "1,774,666",
+        "label": "Profit for the Year",
+        "page": 31,
+        "column": 0,
+        "notes": [
+          "multi_value_no_header"
+        ]
+      },
+      "eps_basic": {
+        "value": 3.22,
+        "raw": "3.22",
+        "label": "Earnings Per Share - Basic",
+        "page": 31,
+        "column": 0,
+        "notes": [
+          "assumed_current_vs_comparative"
+        ]
+      },
+      "eps_diluted": {
+        "value": 3.22,
+        "raw": "3.22",
+        "label": "Earnings Per Share - Diluted",
+        "page": 31,
+        "column": 0,
+        "notes": [
+          "assumed_current_vs_comparative"
+        ]
+      },
+      "eps_generic": null,
+      "validators": {
+        "period": "ok_or_assumed_annual",
+        "multi_value_notes": [
+          "profit"
+        ],
+        "scale": "ok_thousands",
+        "eps": "ok_basic_and_diluted",
+        "eps_note": "basic_equals_diluted",
+        "entity": "untagged",
+        "eps_magnitude": "plausible",
+        "gated_ok": false
+      },
+      "verdict": "fail",
+      "fail_reasons": [
+        "revenue:missing"
+      ],
+      "ambiguity_reasons": [],
+      "error": null
+    },
+    {
+      "symbol": "ACL.N0000",
+      "kind": "quarterly",
+      "title": "Interim Financial Statements for the Quarter ended 31st March 2026",
+      "url": "https://cdn.cse.lk/cmt/upload_report_file/644_1780045529078.03.2026.pdf",
+      "pdf_path": "/tmp/cse-financial-pdfs/ACL.N0000_quarterly_50368.pdf",
+      "pages_scored": 11,
+      "sopl_pages": [
+        1,
+        2,
+        3,
+        4,
+        5,
+        6
+      ],
+      "tables_found": 5,
+      "sopl_tables": 5,
+      "extractor": "page_text+pdfplumber",
+      "scale": "unknown",
+      "period_tags": [
+        "annual",
+        "quarter",
+        "ytd"
+      ],
+      "entity_tags": [
+        "company",
+        "group"
+      ],
+      "revenue": {
+        "value": 12179908.0,
+        "raw": "12,179,908",
+        "label": "Revenue",
+        "page": 1,
+        "column": 0,
+        "notes": [
+          "multi_value_no_header"
+        ]
+      },
+      "profit": {
+        "value": 2109509.0,
+        "raw": "2,109,509",
+        "label": "Profit for the period",
+        "page": 1,
+        "column": 0,
+        "notes": [
+          "multi_value_no_header"
+        ]
+      },
+      "eps_basic": null,
+      "eps_diluted": {
+        "value": 2.57,
+        "raw": "2.57",
+        "label": "Basic / Diluted Earnings per share (Rs.)",
+        "page": 1,
+        "column": 0,
+        "notes": [
+          "multi_value_no_header"
+        ]
+      },
+      "eps_generic": null,
+      "validators": {
+        "period": "ok_resolved_current_quarter",
+        "period_resolve": "leftmost_current_quarter",
+        "period_resolve_confidence": "assumed",
+        "multi_value_notes": [
+          "revenue",
+          "profit",
+          "eps_diluted"
+        ],
+        "scale": "unknown",
+        "eps": "diluted_only",
+        "entity": "both_mentioned",
+        "eps_magnitude": "plausible",
+        "gated_ok": false
+      },
+      "verdict": "ambiguous",
+      "fail_reasons": [],
+      "ambiguity_reasons": [
+        "eps:diluted_without_basic"
+      ],
+      "error": null
+    },
+    {
+      "symbol": "ACL.N0000",
+      "kind": "quarterly",
+      "title": "Interim Financial Statements for the Quarter ended 31st December 2025",
+      "url": "https://cdn.cse.lk/cmt/upload_report_file/644_1770974063006.12.2025.pdf",
+      "pdf_path": "/tmp/cse-financial-pdfs/ACL.N0000_quarterly_50368.pdf",
+      "pages_scored": 11,
+      "sopl_pages": [
+        1,
+        2,
+        3,
+        4,
+        5,
+        6
+      ],
+      "tables_found": 5,
+      "sopl_tables": 5,
+      "extractor": "page_text+pdfplumber",
+      "scale": "unknown",
+      "period_tags": [
+        "annual",
+        "quarter",
+        "ytd"
+      ],
+      "entity_tags": [
+        "company",
+        "group"
+      ],
+      "revenue": {
+        "value": 12179908.0,
+        "raw": "12,179,908",
+        "label": "Revenue",
+        "page": 1,
+        "column": 0,
+        "notes": [
+          "multi_value_no_header"
+        ]
+      },
+      "profit": {
+        "value": 2109509.0,
+        "raw": "2,109,509",
+        "label": "Profit for the period",
+        "page": 1,
+        "column": 0,
+        "notes": [
+          "multi_value_no_header"
+        ]
+      },
+      "eps_basic": null,
+      "eps_diluted": {
+        "value": 2.57,
+        "raw": "2.57",
+        "label": "Basic / Diluted Earnings per share (Rs.)",
+        "page": 1,
+        "column": 0,
+        "notes": [
+          "multi_value_no_header"
+        ]
+      },
+      "eps_generic": null,
+      "validators": {
+        "period": "ok_resolved_current_quarter",
+        "period_resolve": "leftmost_current_quarter",
+        "period_resolve_confidence": "assumed",
+        "multi_value_notes": [
+          "revenue",
+          "profit",
+          "eps_diluted"
+        ],
+        "scale": "unknown",
+        "eps": "diluted_only",
+        "entity": "both_mentioned",
+        "eps_magnitude": "plausible",
+        "gated_ok": false
+      },
+      "verdict": "ambiguous",
+      "fail_reasons": [],
+      "ambiguity_reasons": [
+        "eps:diluted_without_basic"
+      ],
+      "error": null
+    },
+    {
+      "symbol": "ACL.N0000",
+      "kind": "annual",
+      "title": "Annual Report 2024/25",
+      "url": "https://cdn.cse.lk/cmt/upload_report_file/644_1756468586206.pdf",
+      "pdf_path": "/tmp/cse-financial-pdfs/ACL.N0000_annual_46209.pdf",
+      "pages_scored": 40,
+      "sopl_pages": [
+        4,
+        9,
+        24,
+        10,
+        17,
+        23
+      ],
+      "tables_found": 5,
+      "sopl_tables": 5,
+      "extractor": "page_text+pdfplumber",
+      "scale": "millions",
+      "period_tags": [
+        "annual"
+      ],
+      "entity_tags": [
+        "company",
+        "group"
+      ],
+      "revenue": {
+        "value": 29196.0,
+        "raw": "29,196",
+        "label": "Turnover",
+        "page": 9,
+        "column": 0,
+        "notes": [
+          "assumed_current_vs_comparative"
+        ]
+      },
+      "profit": {
+        "value": 3446.0,
+        "raw": "3,446",
+        "label": "Profit After Tax",
+        "page": 9,
+        "column": 0,
+        "notes": [
+          "assumed_current_vs_comparative"
+        ]
+      },
+      "eps_basic": null,
+      "eps_diluted": null,
+      "eps_generic": null,
+      "validators": {
+        "period": "ok_or_assumed_annual",
+        "scale": "ok_millions",
+        "eps": "missing",
+        "entity": "both_mentioned",
+        "gated_ok": false
+      },
+      "verdict": "fail",
+      "fail_reasons": [
+        "eps:missing"
+      ],
+      "ambiguity_reasons": [
+        "profit:conflicting_candidates",
+        "revenue:conflicting_candidates"
+      ],
+      "error": null
+    },
+    {
+      "symbol": "ACL.N0000",
+      "kind": "annual",
+      "title": "Annual Report 2023/24",
+      "url": "https://cdn.cse.lk/cmt/upload_report_file/644_1722913499503.pdf",
+      "pdf_path": "/tmp/cse-financial-pdfs/ACL.N0000_annual_46209.pdf",
+      "pages_scored": 40,
+      "sopl_pages": [
+        4,
+        9,
+        24,
+        10,
+        17,
+        23
+      ],
+      "tables_found": 5,
+      "sopl_tables": 5,
+      "extractor": "page_text+pdfplumber",
+      "scale": "millions",
+      "period_tags": [
+        "annual"
+      ],
+      "entity_tags": [
+        "company",
+        "group"
+      ],
+      "revenue": {
+        "value": 29196.0,
+        "raw": "29,196",
+        "label": "Turnover",
+        "page": 9,
+        "column": 0,
+        "notes": [
+          "assumed_current_vs_comparative"
+        ]
+      },
+      "profit": {
+        "value": 3446.0,
+        "raw": "3,446",
+        "label": "Profit After Tax",
+        "page": 9,
+        "column": 0,
+        "notes": [
+          "assumed_current_vs_comparative"
+        ]
+      },
+      "eps_basic": null,
+      "eps_diluted": null,
+      "eps_generic": null,
+      "validators": {
+        "period": "ok_or_assumed_annual",
+        "scale": "ok_millions",
+        "eps": "missing",
+        "entity": "both_mentioned",
+        "gated_ok": false
+      },
+      "verdict": "fail",
+      "fail_reasons": [
+        "eps:missing"
+      ],
+      "ambiguity_reasons": [
+        "profit:conflicting_candidates",
+        "revenue:conflicting_candidates"
+      ],
+      "error": null
+    },
+    {
+      "symbol": "ACME.N0000",
+      "kind": "quarterly",
+      "title": "Interim Financial Statements for the Quarter ended 31st December 2025",
+      "url": "https://cdn.cse.lk/cmt/upload_report_file/661_1770976950085.pdf",
+      "pdf_path": "/tmp/cse-financial-pdfs/ACME.N0000_quarterly_50423.pdf",
+      "pages_scored": 10,
+      "sopl_pages": [
+        1,
+        2,
+        4,
+        6
+      ],
+      "tables_found": 3,
+      "sopl_tables": 3,
+      "extractor": "page_text+pdfplumber",
+      "scale": "thousands",
+      "period_tags": [
+        "annual",
+        "has_comparative",
+        "quarter",
+        "ytd"
+      ],
+      "entity_tags": [
+        "company",
+        "group"
+      ],
+      "revenue": {
+        "value": 175582.0,
+        "raw": "175,582",
+        "label": "Revenue",
+        "page": 1,
+        "column": 0,
+        "notes": [
+          "assumed_current_vs_comparative"
+        ]
+      },
+      "profit": {
+        "value": -52254.0,
+        "raw": "(52,254)",
+        "label": "Loss for the Period",
+        "page": 2,
+        "column": 0,
+        "notes": [
+          "multi_value_no_header"
+        ]
+      },
+      "eps_basic": null,
+      "eps_diluted": null,
+      "eps_generic": {
+        "value": 31.0,
+        "raw": "31",
+        "label": "4. EARNING PER SHARE (EPS)",
+        "page": 6,
+        "column": 0,
+        "notes": []
+      },
+      "validators": {
+        "period": "ok_resolved_current_quarter",
+        "period_resolve": "leftmost_current_quarter",
+        "period_resolve_confidence": "assumed",
+        "multi_value_notes": [
+          "profit"
+        ],
+        "scale": "ok_thousands",
+        "eps": "generic_only",
+        "entity": "both_mentioned",
+        "eps_magnitude": "plausible",
+        "gated_ok": false
+      },
+      "verdict": "ambiguous",
+      "fail_reasons": [],
+      "ambiguity_reasons": [
+        "eps:generic_unlabeled_basic_or_diluted",
+        "profit:conflicting_candidates"
+      ],
+      "error": null
+    },
+    {
+      "symbol": "AEL.N0000",
+      "kind": "quarterly",
+      "title": "Interim Financial Statements for the Quarter ended 31st March 2026",
+      "url": "https://cdn.cse.lk/cmt/upload_report_file/1141_1779883539555.pdf",
+      "pdf_path": "/tmp/cse-financial-pdfs/AEL.N0000_quarterly_50218.pdf",
+      "pages_scored": 12,
+      "sopl_pages": [
+        1,
+        2,
+        6,
+        4,
+        7,
+        3
+      ],
+      "tables_found": 7,
+      "sopl_tables": 4,
+      "extractor": "page_text+pdfplumber",
+      "scale": "unknown",
+      "period_tags": [
+        "annual",
+        "has_comparative",
+        "quarter",
+        "ytd"
+      ],
+      "entity_tags": [
+        "company",
+        "group"
+      ],
+      "revenue": {
+        "value": 13400679319.0,
+        "raw": "13,400,679,319",
+        "label": "Revenue",
+        "page": 1,
+        "column": 0,
+        "notes": [
+          "multi_value_no_header"
+        ]
+      },
+      "profit": {
+        "value": 1388489168.0,
+        "raw": "1,388,489,168",
+        "label": "Profit for the period",
+        "page": 1,
+        "column": 0,
+        "notes": [
+          "multi_value_no_header"
+        ]
+      },
+      "eps_basic": {
+        "value": 1.24,
+        "raw": "1.24",
+        "label": "Basic earnings per share",
+        "page": 1,
+        "column": 0,
+        "notes": [
+          "multi_value_no_header"
+        ]
+      },
+      "eps_diluted": null,
+      "eps_generic": null,
+      "validators": {
+        "period": "ok_resolved_current_quarter",
+        "period_resolve": "leftmost_current_quarter",
+        "period_resolve_confidence": "assumed",
+        "multi_value_notes": [
+          "revenue",
+          "profit",
+          "eps_basic"
+        ],
+        "scale": "unknown",
+        "eps": "ok_basic_only",
+        "entity": "both_mentioned",
+        "eps_magnitude": "plausible",
+        "gated_ok": true
+      },
+      "verdict": "unambiguous",
+      "fail_reasons": [],
+      "ambiguity_reasons": [],
+      "error": null
+    },
+    {
+      "symbol": "AEL.N0000",
+      "kind": "quarterly",
+      "title": "Interim Financial Statements for the Quarter ended 31st December 2025",
+      "url": "https://cdn.cse.lk/cmt/upload_report_file/1141_1770807536303.pdf",
+      "pdf_path": "/tmp/cse-financial-pdfs/AEL.N0000_quarterly_50218.pdf",
+      "pages_scored": 12,
+      "sopl_pages": [
+        1,
+        2,
+        6,
+        4,
+        7,
+        3
+      ],
+      "tables_found": 7,
+      "sopl_tables": 4,
+      "extractor": "page_text+pdfplumber",
+      "scale": "unknown",
+      "period_tags": [
+        "annual",
+        "has_comparative",
+        "quarter",
+        "ytd"
+      ],
+      "entity_tags": [
+        "company",
+        "group"
+      ],
+      "revenue": {
+        "value": 13400679319.0,
+        "raw": "13,400,679,319",
+        "label": "Revenue",
+        "page": 1,
+        "column": 0,
+        "notes": [
+          "multi_value_no_header"
+        ]
+      },
+      "profit": {
+        "value": 1388489168.0,
+        "raw": "1,388,489,168",
+        "label": "Profit for the period",
+        "page": 1,
+        "column": 0,
+        "notes": [
+          "multi_value_no_header"
+        ]
+      },
+      "eps_basic": {
+        "value": 1.24,
+        "raw": "1.24",
+        "label": "Basic earnings per share",
+        "page": 1,
+        "column": 0,
+        "notes": [
+          "multi_value_no_header"
+        ]
+      },
+      "eps_diluted": null,
+      "eps_generic": null,
+      "validators": {
+        "period": "ok_resolved_current_quarter",
+        "period_resolve": "leftmost_current_quarter",
+        "period_resolve_confidence": "assumed",
+        "multi_value_notes": [
+          "revenue",
+          "profit",
+          "eps_basic"
+        ],
+        "scale": "unknown",
+        "eps": "ok_basic_only",
+        "entity": "both_mentioned",
+        "eps_magnitude": "plausible",
+        "gated_ok": true
+      },
+      "verdict": "unambiguous",
+      "fail_reasons": [],
+      "ambiguity_reasons": [],
+      "error": null
+    },
+    {
+      "symbol": "AEL.N0000",
+      "kind": "annual",
+      "title": "Annual Report as at 31st March 2026",
+      "url": "https://cdn.cse.lk/cmt/upload_report_file/1141_1782872955657.pdf",
+      "pdf_path": "/tmp/cse-financial-pdfs/AEL.N0000_annual_48428.pdf",
+      "pages_scored": 40,
+      "sopl_pages": [
+        17,
+        25,
+        4,
+        30,
+        20,
+        22
+      ],
+      "tables_found": 6,
+      "sopl_tables": 6,
+      "extractor": "page_text+pdfplumber",
+      "scale": "unknown",
+      "period_tags": [
+        "annual",
+        "has_comparative"
+      ],
+      "entity_tags": [
+        "company",
+        "group"
+      ],
+      "revenue": {
+        "value": 34511.0,
+        "raw": "34,511",
+        "label": "Turnover for the year at Group level",
+        "page": 25,
+        "column": 0,
+        "notes": [
+          "assumed_current_vs_comparative"
+        ]
+      },
+      "profit": null,
+      "eps_basic": null,
+      "eps_diluted": null,
+      "eps_generic": {
+        "value": 6.31,
+        "raw": "6.31",
+        "label": "current year Earnings per Share (EPS)",
+        "page": 25,
+        "column": 0,
+        "notes": [
+          "multi_value_no_header"
+        ]
+      },
+      "validators": {
+        "period": "ok_or_assumed_annual",
+        "multi_value_notes": [
+          "eps_generic"
+        ],
+        "scale": "unknown",
+        "eps": "generic_only",
+        "entity": "both_mentioned",
+        "eps_magnitude": "plausible",
+        "gated_ok": false
+      },
+      "verdict": "fail",
+      "fail_reasons": [
+        "profit:missing"
+      ],
+      "ambiguity_reasons": [
+        "eps:generic_unlabeled_basic_or_diluted"
+      ],
+      "error": null
+    },
+    {
+      "symbol": "AEL.N0000",
+      "kind": "annual",
+      "title": "Annual Report 2024/25 (Updated)",
+      "url": "https://cdn.cse.lk/cmt/upload_report_file/1141_1753438557109.pdf",
+      "pdf_path": "/tmp/cse-financial-pdfs/AEL.N0000_annual_48428.pdf",
+      "pages_scored": 40,
+      "sopl_pages": [
+        17,
+        25,
+        4,
+        30,
+        20,
+        22
+      ],
+      "tables_found": 6,
+      "sopl_tables": 6,
+      "extractor": "page_text+pdfplumber",
+      "scale": "unknown",
+      "period_tags": [
+        "annual",
+        "has_comparative"
+      ],
+      "entity_tags": [
+        "company",
+        "group"
+      ],
+      "revenue": {
+        "value": 34511.0,
+        "raw": "34,511",
+        "label": "Turnover for the year at Group level",
+        "page": 25,
+        "column": 0,
+        "notes": [
+          "assumed_current_vs_comparative"
+        ]
+      },
+      "profit": null,
+      "eps_basic": null,
+      "eps_diluted": null,
+      "eps_generic": {
+        "value": 6.31,
+        "raw": "6.31",
+        "label": "current year Earnings per Share (EPS)",
+        "page": 25,
+        "column": 0,
+        "notes": [
+          "multi_value_no_header"
+        ]
+      },
+      "validators": {
+        "period": "ok_or_assumed_annual",
+        "multi_value_notes": [
+          "eps_generic"
+        ],
+        "scale": "unknown",
+        "eps": "generic_only",
+        "entity": "both_mentioned",
+        "eps_magnitude": "plausible",
+        "gated_ok": false
+      },
+      "verdict": "fail",
+      "fail_reasons": [
+        "profit:missing"
+      ],
+      "ambiguity_reasons": [
+        "eps:generic_unlabeled_basic_or_diluted"
+      ],
+      "error": null
+    },
+    {
+      "symbol": "AGAL.N0000",
+      "kind": "annual",
+      "title": "Annual Report as at 31st December 2025",
+      "url": "https://cdn.cse.lk/cmt/upload_report_file/704_1779878791433.pdf",
+      "pdf_path": "/tmp/cse-financial-pdfs/AGAL.N0000_annual_48037.pdf",
+      "pages_scored": 40,
+      "sopl_pages": [
+        38,
+        1,
+        4,
+        6,
+        11,
+        12
+      ],
+      "tables_found": 3,
+      "sopl_tables": 3,
+      "extractor": "page_text+pdfplumber",
+      "scale": "thousands",
+      "period_tags": [
+        "annual",
+        "has_comparative"
+      ],
+      "entity_tags": [
+        "company"
+      ],
+      "revenue": {
+        "value": 4839661.0,
+        "raw": "4,839,661",
+        "label": "Revenue",
+        "page": 4,
+        "column": 0,
+        "notes": [
+          "assumed_current_vs_comparative"
+        ]
+      },
+      "profit": {
+        "value": 781489.0,
+        "raw": "781,489",
+        "label": "Profit after tax",
+        "page": 4,
+        "column": 0,
+        "notes": [
+          "assumed_current_vs_comparative"
+        ]
+      },
+      "eps_basic": {
+        "value": 12.1,
+        "raw": "12.1",
+        "label": "Basic earnings per share  (Rs.)",
+        "page": 38,
+        "column": 0,
+        "notes": [
+          "multi_value_no_header"
+        ]
+      },
+      "eps_diluted": null,
+      "eps_generic": null,
+      "validators": {
+        "period": "ok_or_assumed_annual",
+        "multi_value_notes": [
+          "eps_basic"
+        ],
+        "scale": "ok_thousands",
+        "eps": "ok_basic_only",
+        "entity": "company",
+        "eps_magnitude": "plausible",
+        "gated_ok": false
+      },
+      "verdict": "ambiguous",
+      "fail_reasons": [],
+      "ambiguity_reasons": [
+        "revenue:conflicting_candidates"
+      ],
+      "error": null
+    },
+    {
+      "symbol": "AGAL.N0000",
+      "kind": "annual",
+      "title": "ANNUAL REPORT 2024",
+      "url": "https://cdn.cse.lk/cmt/upload_report_file/704_1748572002435.pdf",
+      "pdf_path": "/tmp/cse-financial-pdfs/AGAL.N0000_annual_48037.pdf",
+      "pages_scored": 40,
+      "sopl_pages": [
+        38,
+        1,
+        4,
+        6,
+        11,
+        12
+      ],
+      "tables_found": 3,
+      "sopl_tables": 3,
+      "extractor": "page_text+pdfplumber",
+      "scale": "thousands",
+      "period_tags": [
+        "annual",
+        "has_comparative"
+      ],
+      "entity_tags": [
+        "company"
+      ],
+      "revenue": {
+        "value": 4839661.0,
+        "raw": "4,839,661",
+        "label": "Revenue",
+        "page": 4,
+        "column": 0,
+        "notes": [
+          "assumed_current_vs_comparative"
+        ]
+      },
+      "profit": {
+        "value": 781489.0,
+        "raw": "781,489",
+        "label": "Profit after tax",
+        "page": 4,
+        "column": 0,
+        "notes": [
+          "assumed_current_vs_comparative"
+        ]
+      },
+      "eps_basic": {
+        "value": 12.1,
+        "raw": "12.1",
+        "label": "Basic earnings per share  (Rs.)",
+        "page": 38,
+        "column": 0,
+        "notes": [
+          "multi_value_no_header"
+        ]
+      },
+      "eps_diluted": null,
+      "eps_generic": null,
+      "validators": {
+        "period": "ok_or_assumed_annual",
+        "multi_value_notes": [
+          "eps_basic"
+        ],
+        "scale": "ok_thousands",
+        "eps": "ok_basic_only",
+        "entity": "company",
+        "eps_magnitude": "plausible",
+        "gated_ok": false
+      },
+      "verdict": "ambiguous",
+      "fail_reasons": [],
+      "ambiguity_reasons": [
+        "revenue:conflicting_candidates"
+      ],
+      "error": null
+    },
+    {
+      "symbol": "AGPL.N0000",
+      "kind": "quarterly",
+      "title": "Interim Financial Statements for the Quarter ended 31st December 2025",
+      "url": "https://cdn.cse.lk/cmt/upload_report_file/3027_1770639043555.pdf",
+      "pdf_path": "/tmp/cse-financial-pdfs/AGPL.N0000_quarterly_50144.pdf",
+      "pages_scored": 11,
+      "sopl_pages": [
+        2,
+        3,
+        5,
+        6,
+        8
+      ],
+      "tables_found": 0,
+      "sopl_tables": 0,
+      "extractor": "page_text+pdfplumber",
+      "scale": "thousands",
+      "period_tags": [
+        "quarter",
+        "ytd"
+      ],
+      "entity_tags": [],
+      "revenue": {
+        "value": 1606483.0,
+        "raw": "1,606,483",
+        "label": "Revenue",
+        "page": 2,
+        "column": 0,
+        "notes": [
+          "multi_value_no_header"
+        ]
+      },
+      "profit": {
+        "value": 94826.0,
+        "raw": "94,826",
+        "label": "Net Profit for the Period",
+        "page": 2,
+        "column": 0,
+        "notes": [
+          "multi_value_no_header"
+        ]
+      },
+      "eps_basic": {
+        "value": 0.19,
+        "raw": "0.19",
+        "label": "Basic Earnings Per Share",
+        "page": 2,
+        "column": 0,
+        "notes": [
+          "multi_value_no_header"
+        ]
+      },
+      "eps_diluted": null,
+      "eps_generic": null,
+      "validators": {
+        "period": "ok_resolved_current_quarter",
+        "period_resolve": "leftmost_current_quarter",
+        "period_resolve_confidence": "assumed",
+        "multi_value_notes": [
+          "revenue",
+          "profit",
+          "eps_basic"
+        ],
+        "scale": "ok_thousands",
+        "eps": "ok_basic_only",
+        "entity": "untagged",
+        "eps_magnitude": "plausible",
+        "gated_ok": true
+      },
+      "verdict": "unambiguous",
+      "fail_reasons": [],
+      "ambiguity_reasons": [],
+      "error": null
+    },
+    {
+      "symbol": "AGPL.N0000",
+      "kind": "annual",
+      "title": "ANNUAL  REPORT FOR THE FINANCIAL YEAR 2024/2025",
+      "url": "https://cdn.cse.lk/cmt/upload_report_file/3027_1754579595339.pdf",
+      "pdf_path": "/tmp/cse-financial-pdfs/AGPL.N0000_annual_46610.pdf",
+      "pages_scored": 40,
+      "sopl_pages": [
+        33,
+        3,
+        6,
+        32,
+        16,
+        19
+      ],
+      "tables_found": 12,
+      "sopl_tables": 8,
+      "extractor": "page_text+pdfplumber",
+      "scale": "millions",
+      "period_tags": [
+        "annual",
+        "has_comparative"
+      ],
+      "entity_tags": [
+        "company",
+        "group"
+      ],
+      "revenue": {
+        "value": 7215.0,
+        "raw": "7,215",
+        "label": "Revenue",
+        "page": 6,
+        "column": 0,
+        "notes": [
+          "assumed_current_vs_comparative"
+        ]
+      },
+      "profit": {
+        "value": 465.0,
+        "raw": "465",
+        "label": "Profit after Tax",
+        "page": 6,
+        "column": 0,
+        "notes": [
+          "assumed_current_vs_comparative"
+        ]
+      },
+      "eps_basic": null,
+      "eps_diluted": null,
+      "eps_generic": {
+        "value": 0.09,
+        "raw": "0.09",
+        "label": "Earnings per share (EPS)",
+        "page": 32,
+        "column": 0,
+        "notes": [
+          "multi_value_no_header"
+        ]
+      },
+      "validators": {
+        "period": "ok_or_assumed_annual",
+        "multi_value_notes": [
+          "eps_generic"
+        ],
+        "scale": "ok_millions",
+        "eps": "generic_only",
+        "entity": "both_mentioned",
+        "eps_magnitude": "plausible",
+        "gated_ok": false
+      },
+      "verdict": "ambiguous",
+      "fail_reasons": [],
+      "ambiguity_reasons": [
+        "eps:generic_unlabeled_basic_or_diluted",
+        "profit:conflicting_candidates",
+        "revenue:conflicting_candidates"
+      ],
+      "error": null
+    },
+    {
+      "symbol": "AGPL.N0000",
+      "kind": "annual",
+      "title": "Annual Report 2023/2024",
+      "url": "https://cdn.cse.lk/cmt/upload_report_file/3027_1725244158613.pdf",
+      "pdf_path": "/tmp/cse-financial-pdfs/AGPL.N0000_annual_46610.pdf",
+      "pages_scored": 40,
+      "sopl_pages": [
+        33,
+        3,
+        6,
+        32,
+        16,
+        19
+      ],
+      "tables_found": 12,
+      "sopl_tables": 8,
+      "extractor": "page_text+pdfplumber",
+      "scale": "millions",
+      "period_tags": [
+        "annual",
+        "has_comparative"
+      ],
+      "entity_tags": [
+        "company",
+        "group"
+      ],
+      "revenue": {
+        "value": 7215.0,
+        "raw": "7,215",
+        "label": "Revenue",
+        "page": 6,
+        "column": 0,
+        "notes": [
+          "assumed_current_vs_comparative"
+        ]
+      },
+      "profit": {
+        "value": 465.0,
+        "raw": "465",
+        "label": "Profit after Tax",
+        "page": 6,
+        "column": 0,
+        "notes": [
+          "assumed_current_vs_comparative"
+        ]
+      },
+      "eps_basic": null,
+      "eps_diluted": null,
+      "eps_generic": {
+        "value": 0.09,
+        "raw": "0.09",
+        "label": "Earnings per share (EPS)",
+        "page": 32,
+        "column": 0,
+        "notes": [
+          "multi_value_no_header"
+        ]
+      },
+      "validators": {
+        "period": "ok_or_assumed_annual",
+        "multi_value_notes": [
+          "eps_generic"
+        ],
+        "scale": "ok_millions",
+        "eps": "generic_only",
+        "entity": "both_mentioned",
+        "eps_magnitude": "plausible",
+        "gated_ok": false
+      },
+      "verdict": "ambiguous",
+      "fail_reasons": [],
+      "ambiguity_reasons": [
+        "eps:generic_unlabeled_basic_or_diluted",
+        "profit:conflicting_candidates",
+        "revenue:conflicting_candidates"
+      ],
+      "error": null
+    },
+    {
+      "symbol": "AGST.N0000",
+      "kind": "annual",
+      "title": "Annual Report 2024/2025",
+      "url": "https://cdn.cse.lk/cmt/upload_report_file/1121_1755513168267.pdf",
+      "pdf_path": "/tmp/cse-financial-pdfs/AGST.N0000_annual_46594.pdf",
+      "pages_scored": 40,
+      "sopl_pages": [
+        5,
+        6,
+        3,
+        11,
+        19
+      ],
+      "tables_found": 1,
+      "sopl_tables": 1,
+      "extractor": "page_text+pdfplumber",
+      "scale": "thousands",
+      "period_tags": [
+        "annual",
+        "has_comparative",
+        "quarter"
+      ],
+      "entity_tags": [
+        "company",
+        "group"
+      ],
+      "revenue": {
+        "value": 7.4,
+        "raw": "7.4",
+        "label": "Revenue grew by 3% in 2023/24,",
+        "page": 11,
+        "column": 0,
+        "notes": [
+          "assumed_current_vs_comparative"
+        ]
+      },
+      "profit": {
+        "value": 0.0,
+        "raw": "000)",
+        "label": "Profit attributable to owners of the company",
+        "page": 5,
+        "column": 0,
+        "notes": [
+          "multi_value_no_header"
+        ]
+      },
+      "eps_basic": null,
+      "eps_diluted": null,
+      "eps_generic": null,
+      "validators": {
+        "period": "ok_or_assumed_annual",
+        "multi_value_notes": [
+          "profit"
+        ],
+        "scale": "ok_thousands",
+        "eps": "missing",
+        "entity": "both_mentioned",
+        "scale_warnings": [
+          "scale:revenue_too_small_for_thousands"
+        ],
+        "gated_ok": false
+      },
+      "verdict": "fail",
+      "fail_reasons": [
+        "eps:missing"
+      ],
+      "ambiguity_reasons": [
+        "scale:revenue_too_small_for_thousands"
+      ],
+      "error": null
+    },
+    {
+      "symbol": "AGST.N0000",
+      "kind": "annual",
+      "title": "Annual Report 2023/2024",
+      "url": "https://cdn.cse.lk/cmt/upload_report_file/1121_1725245066138.pdf",
+      "pdf_path": "/tmp/cse-financial-pdfs/AGST.N0000_annual_46594.pdf",
+      "pages_scored": 40,
+      "sopl_pages": [
+        5,
+        6,
+        3,
+        11,
+        19
+      ],
+      "tables_found": 1,
+      "sopl_tables": 1,
+      "extractor": "page_text+pdfplumber",
+      "scale": "thousands",
+      "period_tags": [
+        "annual",
+        "has_comparative",
+        "quarter"
+      ],
+      "entity_tags": [
+        "company",
+        "group"
+      ],
+      "revenue": {
+        "value": 7.4,
+        "raw": "7.4",
+        "label": "Revenue grew by 3% in 2023/24,",
+        "page": 11,
+        "column": 0,
+        "notes": [
+          "assumed_current_vs_comparative"
+        ]
+      },
+      "profit": {
+        "value": 0.0,
+        "raw": "000)",
+        "label": "Profit attributable to owners of the company",
+        "page": 5,
+        "column": 0,
+        "notes": [
+          "multi_value_no_header"
+        ]
+      },
+      "eps_basic": null,
+      "eps_diluted": null,
+      "eps_generic": null,
+      "validators": {
+        "period": "ok_or_assumed_annual",
+        "multi_value_notes": [
+          "profit"
+        ],
+        "scale": "ok_thousands",
+        "eps": "missing",
+        "entity": "both_mentioned",
+        "scale_warnings": [
+          "scale:revenue_too_small_for_thousands"
+        ],
+        "gated_ok": false
+      },
+      "verdict": "fail",
+      "fail_reasons": [
+        "eps:missing"
+      ],
+      "ambiguity_reasons": [
+        "scale:revenue_too_small_for_thousands"
+      ],
+      "error": null
+    },
+    {
+      "symbol": "AHUN.N0000",
+      "kind": "quarterly",
+      "title": "Interim Financial Statements for the Quarter ended 31st March 2026",
+      "url": "https://cdn.cse.lk/cmt/upload_report_file/521_1780023846306.pdf",
+      "pdf_path": "/tmp/cse-financial-pdfs/AHUN.N0000_quarterly_50261.pdf",
+      "pages_scored": 16,
+      "sopl_pages": [
+        3,
+        4,
+        7,
+        8,
+        1,
+        2
+      ],
+      "tables_found": 0,
+      "sopl_tables": 0,
+      "extractor": "page_text+pdfplumber",
+      "scale": "thousands",
+      "period_tags": [
+        "quarter",
+        "ytd"
+      ],
+      "entity_tags": [
+        "company",
+        "group"
+      ],
+      "revenue": {
+        "value": 14210028.0,
+        "raw": "14,210,028",
+        "label": "Revenue",
+        "page": 1,
+        "column": 0,
+        "notes": [
+          "resolved_current_quarter_leftmost"
+        ]
+      },
+      "profit": null,
+      "eps_basic": null,
+      "eps_diluted": null,
+      "eps_generic": null,
+      "validators": {
+        "period": "ok_resolved_current_quarter",
+        "period_resolve": "leftmost_current_quarter",
+        "scale": "ok_thousands",
+        "eps": "missing",
+        "entity": "both_mentioned",
+        "gated_ok": false
+      },
+      "verdict": "fail",
+      "fail_reasons": [
+        "eps:missing",
+        "profit:missing"
+      ],
+      "ambiguity_reasons": [
+        "revenue:conflicting_candidates"
+      ],
+      "error": null
+    },
+    {
+      "symbol": "AHUN.N0000",
+      "kind": "annual",
+      "title": "Annual Report as at 31st March 2026 (Amended Version)",
+      "url": "https://cdn.cse.lk/cmt/upload_report_file/521_1780664740525.pdf",
+      "pdf_path": "/tmp/cse-financial-pdfs/AHUN.N0000_annual_51790.pdf",
+      "pages_scored": 40,
+      "sopl_pages": [
+        4,
+        17,
+        18,
+        19,
+        22,
+        25
+      ],
+      "tables_found": 6,
+      "sopl_tables": 5,
+      "extractor": "page_text+pdfplumber",
+      "scale": "thousands",
+      "period_tags": [
+        "annual",
+        "has_comparative"
+      ],
+      "entity_tags": [
+        "company",
+        "group"
+      ],
+      "revenue": {
+        "value": 52.34,
+        "raw": "52.34",
+        "label": "Revenue grew by 7% to Rs. 52.34 Billion, with",
+        "page": 25,
+        "column": 1,
+        "notes": []
+      },
+      "profit": null,
+      "eps_basic": null,
+      "eps_diluted": null,
+      "eps_generic": {
+        "value": 9.16,
+        "raw": "9.16",
+        "label": "Earnings per share showed strong growth,",
+        "page": 22,
+        "column": 0,
+        "notes": [
+          "multi_value_no_header"
+        ]
+      },
+      "validators": {
+        "period": "ok_or_assumed_annual",
+        "multi_value_notes": [
+          "eps_generic"
+        ],
+        "scale": "ok_thousands",
+        "eps": "generic_only",
+        "entity": "both_mentioned",
+        "eps_magnitude": "plausible",
+        "gated_ok": false
+      },
+      "verdict": "fail",
+      "fail_reasons": [
+        "profit:missing"
+      ],
+      "ambiguity_reasons": [
+        "eps:generic_unlabeled_basic_or_diluted"
+      ],
+      "error": null
+    },
+    {
+      "symbol": "AHUN.N0000",
+      "kind": "annual",
+      "title": "Annual Report as at 31st March 2026",
+      "url": "https://cdn.cse.lk/cmt/upload_report_file/521_1780650981279.pdf",
+      "pdf_path": "/tmp/cse-financial-pdfs/AHUN.N0000_annual_51790.pdf",
+      "pages_scored": 40,
+      "sopl_pages": [
+        4,
+        17,
+        18,
+        19,
+        22,
+        25
+      ],
+      "tables_found": 6,
+      "sopl_tables": 5,
+      "extractor": "page_text+pdfplumber",
+      "scale": "thousands",
+      "period_tags": [
+        "annual",
+        "has_comparative"
+      ],
+      "entity_tags": [
+        "company",
+        "group"
+      ],
+      "revenue": {
+        "value": 52.34,
+        "raw": "52.34",
+        "label": "Revenue grew by 7% to Rs. 52.34 Billion, with",
+        "page": 25,
+        "column": 1,
+        "notes": []
+      },
+      "profit": null,
+      "eps_basic": null,
+      "eps_diluted": null,
+      "eps_generic": {
+        "value": 9.16,
+        "raw": "9.16",
+        "label": "Earnings per share showed strong growth,",
+        "page": 22,
+        "column": 0,
+        "notes": [
+          "multi_value_no_header"
+        ]
+      },
+      "validators": {
+        "period": "ok_or_assumed_annual",
+        "multi_value_notes": [
+          "eps_generic"
+        ],
+        "scale": "ok_thousands",
+        "eps": "generic_only",
+        "entity": "both_mentioned",
+        "eps_magnitude": "plausible",
+        "gated_ok": false
+      },
+      "verdict": "fail",
+      "fail_reasons": [
+        "profit:missing"
+      ],
+      "ambiguity_reasons": [
+        "eps:generic_unlabeled_basic_or_diluted"
+      ],
+      "error": null
+    },
+    {
+      "symbol": "ALLI.N0000",
+      "kind": "quarterly",
+      "title": "Interim Financial Statements for the Quarter ended 31st March 2026",
+      "url": "https://cdn.cse.lk/cmt/upload_report_file/341_1780052600210.pdf",
+      "pdf_path": "/tmp/cse-financial-pdfs/ALLI.N0000_quarterly_51633.pdf",
+      "pages_scored": 16,
+      "sopl_pages": [
+        1,
+        2,
+        3,
+        4,
+        6,
+        8
+      ],
+      "tables_found": 6,
+      "sopl_tables": 6,
+      "extractor": "page_text+pdfplumber",
+      "scale": "unknown",
+      "period_tags": [
+        "annual",
+        "quarter"
+      ],
+      "entity_tags": [
+        "company",
+        "group"
+      ],
+      "revenue": {
+        "value": 4266284103.0,
+        "raw": "4,266,284,103",
+        "label": "Interest income",
+        "page": 1,
+        "column": 0,
+        "notes": [
+          "multi_value_no_header"
+        ]
+      },
+      "profit": {
+        "value": 720173576.0,
+        "raw": "720,173,576",
+        "label": "Profit for the Period",
+        "page": 1,
+        "column": 0,
+        "notes": [
+          "multi_value_no_header"
+        ]
+      },
+      "eps_basic": null,
+      "eps_diluted": null,
+      "eps_generic": null,
+      "validators": {
+        "period": "ok_tagged",
+        "multi_value_notes": [
+          "revenue",
+          "profit"
+        ],
+        "scale": "unknown",
+        "eps": "missing",
+        "entity": "both_mentioned",
+        "gated_ok": false
+      },
+      "verdict": "fail",
+      "fail_reasons": [
+        "eps:missing"
+      ],
+      "ambiguity_reasons": [],
+      "error": null
+    },
+    {
+      "symbol": "ALUM.N0000",
+      "kind": "annual",
+      "title": "Annual Report as at 31st March 2026",
+      "url": "https://cdn.cse.lk/cmt/upload_report_file/1323_1780572222177.pdf",
+      "pdf_path": "/tmp/cse-financial-pdfs/ALUM.N0000_annual_48106.pdf",
+      "pages_scored": 40,
+      "sopl_pages": [
+        4,
+        25,
+        27,
+        12,
+        16,
+        21
+      ],
+      "tables_found": 1,
+      "sopl_tables": 1,
+      "extractor": "page_text+pdfplumber",
+      "scale": "millions",
+      "period_tags": [
+        "annual"
+      ],
+      "entity_tags": [
+        "company"
+      ],
+      "revenue": {
+        "value": 14.3,
+        "raw": "14.3",
+        "label": "Revenue advanced 30.4 %",
+        "page": 12,
+        "column": 0,
+        "notes": []
+      },
+      "profit": {
+        "value": 867.0,
+        "raw": "867",
+        "label": "net profit after tax reached LKR",
+        "page": 16,
+        "column": 0,
+        "notes": []
+      },
+      "eps_basic": null,
+      "eps_diluted": null,
+      "eps_generic": {
+        "value": 1.45,
+        "raw": "1.45",
+        "label": "Earning per share rose to",
+        "page": 25,
+        "column": 0,
+        "notes": [
+          "assumed_current_vs_comparative"
+        ]
+      },
+      "validators": {
+        "period": "ok_or_assumed_annual",
+        "scale": "ok_millions",
+        "eps": "generic_only",
+        "entity": "company",
+        "eps_magnitude": "plausible",
+        "gated_ok": false
+      },
+      "verdict": "ambiguous",
+      "fail_reasons": [],
+      "ambiguity_reasons": [
+        "eps:generic_unlabeled_basic_or_diluted",
+        "revenue:conflicting_candidates"
+      ],
+      "error": null
+    },
+    {
+      "symbol": "ALUM.N0000",
+      "kind": "annual",
+      "title": "Annual Report 2024/25",
+      "url": "https://cdn.cse.lk/cmt/upload_report_file/1323_1748600615099.25.pdf",
+      "pdf_path": "/tmp/cse-financial-pdfs/ALUM.N0000_annual_48106.pdf",
+      "pages_scored": 40,
+      "sopl_pages": [
+        4,
+        25,
+        27,
+        12,
+        16,
+        21
+      ],
+      "tables_found": 1,
+      "sopl_tables": 1,
+      "extractor": "page_text+pdfplumber",
+      "scale": "millions",
+      "period_tags": [
+        "annual"
+      ],
+      "entity_tags": [
+        "company"
+      ],
+      "revenue": {
+        "value": 14.3,
+        "raw": "14.3",
+        "label": "Revenue advanced 30.4 %",
+        "page": 12,
+        "column": 0,
+        "notes": []
+      },
+      "profit": {
+        "value": 867.0,
+        "raw": "867",
+        "label": "net profit after tax reached LKR",
+        "page": 16,
+        "column": 0,
+        "notes": []
+      },
+      "eps_basic": null,
+      "eps_diluted": null,
+      "eps_generic": {
+        "value": 1.45,
+        "raw": "1.45",
+        "label": "Earning per share rose to",
+        "page": 25,
+        "column": 0,
+        "notes": [
+          "assumed_current_vs_comparative"
+        ]
+      },
+      "validators": {
+        "period": "ok_or_assumed_annual",
+        "scale": "ok_millions",
+        "eps": "generic_only",
+        "entity": "company",
+        "eps_magnitude": "plausible",
+        "gated_ok": false
+      },
+      "verdict": "ambiguous",
+      "fail_reasons": [],
+      "ambiguity_reasons": [
+        "eps:generic_unlabeled_basic_or_diluted",
+        "revenue:conflicting_candidates"
+      ],
+      "error": null
+    },
+    {
+      "symbol": "AMF.N0000",
+      "kind": "quarterly",
+      "title": "Interim Financial Statements for the Quarter ended 31st March 2026",
+      "url": "https://cdn.cse.lk/cmt/upload_report_file/1068_1779354160023.pdf",
+      "pdf_path": "/tmp/cse-financial-pdfs/AMF.N0000_quarterly_49927.pdf",
+      "pages_scored": 9,
+      "sopl_pages": [
+        1,
+        2,
+        6,
+        3,
+        5
+      ],
+      "tables_found": 3,
+      "sopl_tables": 3,
+      "extractor": "page_text+pdfplumber",
+      "scale": "unknown",
+      "period_tags": [
+        "annual",
+        "quarter",
+        "ytd"
+      ],
+      "entity_tags": [
+        "company"
+      ],
+      "revenue": {
+        "value": 3846240699.0,
+        "raw": "3,846,240,699",
+        "label": "Revenue Reserves",
+        "page": 2,
+        "column": 0,
+        "notes": [
+          "assumed_current_vs_comparative"
+        ]
+      },
+      "profit": null,
+      "eps_basic": null,
+      "eps_diluted": null,
+      "eps_generic": {
+        "value": 1.48,
+        "raw": "1.48",
+        "label": "Earnings per share (Rs.)",
+        "page": 1,
+        "column": 0,
+        "notes": [
+          "multi_value_no_header"
+        ]
+      },
+      "validators": {
+        "period": "ok_resolved_current_quarter",
+        "period_resolve": "leftmost_current_quarter",
+        "period_resolve_confidence": "assumed",
+        "multi_value_notes": [
+          "eps_generic"
+        ],
+        "scale": "unknown",
+        "eps": "generic_only",
+        "entity": "company",
+        "eps_magnitude": "plausible",
+        "gated_ok": false
+      },
+      "verdict": "fail",
+      "fail_reasons": [
+        "profit:missing"
+      ],
+      "ambiguity_reasons": [
+        "eps:generic_unlabeled_basic_or_diluted"
+      ],
+      "error": null
+    },
+    {
+      "symbol": "AMF.N0000",
+      "kind": "quarterly",
+      "title": "Interim Financial Statements for the Quarter ended 31st December 2025",
+      "url": "https://cdn.cse.lk/cmt/upload_report_file/1068_1769050239982.12.2025.pdf",
+      "pdf_path": "/tmp/cse-financial-pdfs/AMF.N0000_quarterly_49927.pdf",
+      "pages_scored": 9,
+      "sopl_pages": [
+        1,
+        2,
+        6,
+        3,
+        5
+      ],
+      "tables_found": 3,
+      "sopl_tables": 3,
+      "extractor": "page_text+pdfplumber",
+      "scale": "unknown",
+      "period_tags": [
+        "annual",
+        "quarter",
+        "ytd"
+      ],
+      "entity_tags": [
+        "company"
+      ],
+      "revenue": {
+        "value": 3846240699.0,
+        "raw": "3,846,240,699",
+        "label": "Revenue Reserves",
+        "page": 2,
+        "column": 0,
+        "notes": [
+          "assumed_current_vs_comparative"
+        ]
+      },
+      "profit": null,
+      "eps_basic": null,
+      "eps_diluted": null,
+      "eps_generic": {
+        "value": 1.48,
+        "raw": "1.48",
+        "label": "Earnings per share (Rs.)",
+        "page": 1,
+        "column": 0,
+        "notes": [
+          "multi_value_no_header"
+        ]
+      },
+      "validators": {
+        "period": "ok_resolved_current_quarter",
+        "period_resolve": "leftmost_current_quarter",
+        "period_resolve_confidence": "assumed",
+        "multi_value_notes": [
+          "eps_generic"
+        ],
+        "scale": "unknown",
+        "eps": "generic_only",
+        "entity": "company",
+        "eps_magnitude": "plausible",
+        "gated_ok": false
+      },
+      "verdict": "fail",
+      "fail_reasons": [
+        "profit:missing"
+      ],
+      "ambiguity_reasons": [
+        "eps:generic_unlabeled_basic_or_diluted"
+      ],
+      "error": null
+    },
+    {
+      "symbol": "AMF.N0000",
+      "kind": "annual",
+      "title": "Annual Report 2024/2025",
+      "url": "https://cdn.cse.lk/cmt/upload_report_file/1068_1754298794260.pdf",
+      "pdf_path": "/tmp/cse-financial-pdfs/AMF.N0000_annual_48519.pdf",
+      "pages_scored": 40,
+      "sopl_pages": [
+        29,
+        33,
+        35,
+        36
+      ],
+      "tables_found": 2,
+      "sopl_tables": 2,
+      "extractor": "page_text+pdfplumber",
+      "scale": "millions",
+      "period_tags": [
+        "annual",
+        "has_comparative"
+      ],
+      "entity_tags": [
+        "company"
+      ],
+      "revenue": {
+        "value": 5557.0,
+        "raw": "5,557",
+        "label": "Interest Income",
+        "page": 33,
+        "column": 0,
+        "notes": [
+          "assumed_current_vs_comparative"
+        ]
+      },
+      "profit": null,
+      "eps_basic": null,
+      "eps_diluted": null,
+      "eps_generic": null,
+      "validators": {
+        "period": "ok_or_assumed_annual",
+        "scale": "ok_millions",
+        "eps": "missing",
+        "entity": "company",
+        "gated_ok": false
+      },
+      "verdict": "fail",
+      "fail_reasons": [
+        "eps:missing",
+        "profit:missing"
+      ],
+      "ambiguity_reasons": [],
+      "error": null
+    },
+    {
+      "symbol": "AMSL.N0000",
+      "kind": "quarterly",
+      "title": "Interim Financial Statements for the Quarter ended 31st March 2026",
+      "url": "https://cdn.cse.lk/cmt/upload_report_file/513_1777547363551..pdf",
+      "pdf_path": "/tmp/cse-financial-pdfs/AMSL.N0000_quarterly_50079.pdf",
+      "pages_scored": 11,
+      "sopl_pages": [
+        1,
+        3,
+        2,
+        4,
+        6,
+        8
+      ],
+      "tables_found": 3,
+      "sopl_tables": 2,
+      "extractor": "page_text+pdfplumber",
+      "scale": "unknown",
+      "period_tags": [
+        "annual",
+        "has_comparative",
+        "quarter",
+        "ytd"
+      ],
+      "entity_tags": [
+        "company",
+        "group"
+      ],
+      "revenue": {
+        "value": 5850027128.0,
+        "raw": "5,850,027,128",
+        "label": "Revenue",
+        "page": 1,
+        "column": 0,
+        "notes": [
+          "multi_value_no_header"
+        ]
+      },
+      "profit": {
+        "value": 724797487.0,
+        "raw": "724,797,487",
+        "label": "Profit for the Period",
+        "page": 1,
+        "column": 0,
+        "notes": [
+          "multi_value_no_header"
+        ]
+      },
+      "eps_basic": {
+        "value": 1.18,
+        "raw": "1.18",
+        "label": "Earnings Per Share - Basic",
+        "page": 1,
+        "column": 0,
+        "notes": [
+          "multi_value_no_header"
+        ]
+      },
+      "eps_diluted": null,
+      "eps_generic": null,
+      "validators": {
+        "period": "ok_resolved_current_quarter",
+        "period_resolve": "leftmost_current_quarter",
+        "period_resolve_confidence": "assumed",
+        "multi_value_notes": [
+          "revenue",
+          "profit",
+          "eps_basic"
+        ],
+        "scale": "unknown",
+        "eps": "ok_basic_only",
+        "entity": "both_mentioned",
+        "eps_magnitude": "plausible",
+        "gated_ok": true
+      },
+      "verdict": "unambiguous",
+      "fail_reasons": [],
+      "ambiguity_reasons": [],
+      "error": null
+    },
+    {
+      "symbol": "AMSL.N0000",
+      "kind": "quarterly",
+      "title": "Interim Financial Statements for the Quarter ended 31st December 2025",
+      "url": "https://cdn.cse.lk/cmt/upload_report_file/513_1770352046299.pdf",
+      "pdf_path": "/tmp/cse-financial-pdfs/AMSL.N0000_quarterly_50079.pdf",
+      "pages_scored": 11,
+      "sopl_pages": [
+        1,
+        3,
+        2,
+        4,
+        6,
+        8
+      ],
+      "tables_found": 3,
+      "sopl_tables": 2,
+      "extractor": "page_text+pdfplumber",
+      "scale": "unknown",
+      "period_tags": [
+        "annual",
+        "has_comparative",
+        "quarter",
+        "ytd"
+      ],
+      "entity_tags": [
+        "company",
+        "group"
+      ],
+      "revenue": {
+        "value": 5850027128.0,
+        "raw": "5,850,027,128",
+        "label": "Revenue",
+        "page": 1,
+        "column": 0,
+        "notes": [
+          "multi_value_no_header"
+        ]
+      },
+      "profit": {
+        "value": 724797487.0,
+        "raw": "724,797,487",
+        "label": "Profit for the Period",
+        "page": 1,
+        "column": 0,
+        "notes": [
+          "multi_value_no_header"
+        ]
+      },
+      "eps_basic": {
+        "value": 1.18,
+        "raw": "1.18",
+        "label": "Earnings Per Share - Basic",
+        "page": 1,
+        "column": 0,
+        "notes": [
+          "multi_value_no_header"
+        ]
+      },
+      "eps_diluted": null,
+      "eps_generic": null,
+      "validators": {
+        "period": "ok_resolved_current_quarter",
+        "period_resolve": "leftmost_current_quarter",
+        "period_resolve_confidence": "assumed",
+        "multi_value_notes": [
+          "revenue",
+          "profit",
+          "eps_basic"
+        ],
+        "scale": "unknown",
+        "eps": "ok_basic_only",
+        "entity": "both_mentioned",
+        "eps_magnitude": "plausible",
+        "gated_ok": true
+      },
+      "verdict": "unambiguous",
+      "fail_reasons": [],
+      "ambiguity_reasons": [],
+      "error": null
+    },
+    {
+      "symbol": "AMSL.N0000",
+      "kind": "annual",
+      "title": "Annual Report as at 31st March 2025",
+      "url": "https://cdn.cse.lk/cmt/upload_report_file/513_1764148122811.pdf",
+      "pdf_path": "/tmp/cse-financial-pdfs/AMSL.N0000_annual_46644.pdf",
+      "pages_scored": 40,
+      "sopl_pages": [
+        1,
+        3,
+        6
+      ],
+      "tables_found": 1,
+      "sopl_tables": 1,
+      "extractor": "page_text+pdfplumber",
+      "scale": "thousands",
+      "period_tags": [
+        "annual",
+        "has_comparative"
+      ],
+      "entity_tags": [
+        "company",
+        "group"
+      ],
+      "revenue": {
+        "value": 0.0,
+        "raw": "000",
+        "label": "Revenue",
+        "page": 3,
+        "column": 0,
+        "notes": [
+          "multi_value_no_header"
+        ]
+      },
+      "profit": {
+        "value": 0.0,
+        "raw": "000",
+        "label": "Profit after Tax",
+        "page": 3,
+        "column": 0,
+        "notes": [
+          "multi_value_no_header"
+        ]
+      },
+      "eps_basic": null,
+      "eps_diluted": null,
+      "eps_generic": null,
+      "validators": {
+        "period": "ok_or_assumed_annual",
+        "multi_value_notes": [
+          "revenue",
+          "profit"
+        ],
+        "scale": "ok_thousands",
+        "eps": "missing",
+        "entity": "both_mentioned",
+        "scale_warnings": [
+          "scale:revenue_too_small_for_thousands"
+        ],
+        "gated_ok": false
+      },
+      "verdict": "fail",
+      "fail_reasons": [
+        "eps:missing"
+      ],
+      "ambiguity_reasons": [
+        "scale:revenue_too_small_for_thousands"
+      ],
+      "error": null
+    },
+    {
+      "symbol": "AMSL.N0000",
+      "kind": "annual",
+      "title": "Annual Report 2023/2024",
+      "url": "https://cdn.cse.lk/cmt/upload_report_file/513_1725593089259.pdf",
+      "pdf_path": "/tmp/cse-financial-pdfs/AMSL.N0000_annual_46644.pdf",
+      "pages_scored": 40,
+      "sopl_pages": [
+        1,
+        3,
+        6
+      ],
+      "tables_found": 1,
+      "sopl_tables": 1,
+      "extractor": "page_text+pdfplumber",
+      "scale": "thousands",
+      "period_tags": [
+        "annual",
+        "has_comparative"
+      ],
+      "entity_tags": [
+        "company",
+        "group"
+      ],
+      "revenue": {
+        "value": 0.0,
+        "raw": "000",
+        "label": "Revenue",
+        "page": 3,
+        "column": 0,
+        "notes": [
+          "multi_value_no_header"
+        ]
+      },
+      "profit": {
+        "value": 0.0,
+        "raw": "000",
+        "label": "Profit after Tax",
+        "page": 3,
+        "column": 0,
+        "notes": [
+          "multi_value_no_header"
+        ]
+      },
+      "eps_basic": null,
+      "eps_diluted": null,
+      "eps_generic": null,
+      "validators": {
+        "period": "ok_or_assumed_annual",
+        "multi_value_notes": [
+          "revenue",
+          "profit"
+        ],
+        "scale": "ok_thousands",
+        "eps": "missing",
+        "entity": "both_mentioned",
+        "scale_warnings": [
+          "scale:revenue_too_small_for_thousands"
+        ],
+        "gated_ok": false
+      },
+      "verdict": "fail",
+      "fail_reasons": [
+        "eps:missing"
+      ],
+      "ambiguity_reasons": [
+        "scale:revenue_too_small_for_thousands"
+      ],
+      "error": null
+    },
+    {
+      "symbol": "APLA.N0000",
+      "kind": "quarterly",
+      "title": "Interim Financial Statements for the Quarter ended 31st March 2026",
+      "url": "https://cdn.cse.lk/cmt/upload_report_file/643_1780051898453.pdf",
+      "pdf_path": "/tmp/cse-financial-pdfs/APLA.N0000_quarterly_50375.pdf",
+      "pages_scored": 7,
+      "sopl_pages": [
+        1,
+        2,
+        5,
+        3,
+        4,
+        6
+      ],
+      "tables_found": 7,
+      "sopl_tables": 7,
+      "extractor": "page_text+pdfplumber",
+      "scale": "thousands",
+      "period_tags": [
+        "annual",
+        "has_comparative",
+        "quarter",
+        "ytd"
+      ],
+      "entity_tags": [
+        "company",
+        "group"
+      ],
+      "revenue": {
+        "value": 731203.0,
+        "raw": "731,203",
+        "label": "Revenue from contracts with customers",
+        "page": 1,
+        "column": 0,
+        "notes": [
+          "multi_value_no_header"
+        ]
+      },
+      "profit": {
+        "value": 207284.0,
+        "raw": "207,284",
+        "label": "Net profit for the period",
+        "page": 1,
+        "column": 0,
+        "notes": [
+          "multi_value_no_header"
+        ]
+      },
+      "eps_basic": {
+        "value": 4.92,
+        "raw": "4.92",
+        "label": "Basic / Dialuted Earnings per share (Rs)",
+        "page": 1,
+        "column": 0,
+        "notes": [
+          "multi_value_no_header"
+        ]
+      },
+      "eps_diluted": null,
+      "eps_generic": null,
+      "validators": {
+        "period": "ok_resolved_current_quarter",
+        "period_resolve": "leftmost_current_quarter",
+        "period_resolve_confidence": "assumed",
+        "multi_value_notes": [
+          "revenue",
+          "profit",
+          "eps_generic"
+        ],
+        "scale": "ok_thousands",
+        "eps": "ok_basic_only",
+        "entity": "both_mentioned",
+        "eps_magnitude": "plausible",
+        "gated_ok": false
+      },
+      "verdict": "ambiguous",
+      "fail_reasons": [],
+      "ambiguity_reasons": [
+        "revenue:conflicting_candidates"
+      ],
+      "error": null
+    },
+    {
+      "symbol": "APLA.N0000",
+      "kind": "quarterly",
+      "title": "Interim Financial Statements for the Quarter ended 31st December 2025",
+      "url": "https://cdn.cse.lk/cmt/upload_report_file/643_1770974381263.pdf",
+      "pdf_path": "/tmp/cse-financial-pdfs/APLA.N0000_quarterly_50375.pdf",
+      "pages_scored": 7,
+      "sopl_pages": [
+        1,
+        2,
+        5,
+        3,
+        4,
+        6
+      ],
+      "tables_found": 7,
+      "sopl_tables": 7,
+      "extractor": "page_text+pdfplumber",
+      "scale": "thousands",
+      "period_tags": [
+        "annual",
+        "has_comparative",
+        "quarter",
+        "ytd"
+      ],
+      "entity_tags": [
+        "company",
+        "group"
+      ],
+      "revenue": {
+        "value": 731203.0,
+        "raw": "731,203",
+        "label": "Revenue from contracts with customers",
+        "page": 1,
+        "column": 0,
+        "notes": [
+          "multi_value_no_header"
+        ]
+      },
+      "profit": {
+        "value": 207284.0,
+        "raw": "207,284",
+        "label": "Net profit for the period",
+        "page": 1,
+        "column": 0,
+        "notes": [
+          "multi_value_no_header"
+        ]
+      },
+      "eps_basic": {
+        "value": 4.92,
+        "raw": "4.92",
+        "label": "Basic / Dialuted Earnings per share (Rs)",
+        "page": 1,
+        "column": 0,
+        "notes": [
+          "multi_value_no_header"
+        ]
+      },
+      "eps_diluted": null,
+      "eps_generic": null,
+      "validators": {
+        "period": "ok_resolved_current_quarter",
+        "period_resolve": "leftmost_current_quarter",
+        "period_resolve_confidence": "assumed",
+        "multi_value_notes": [
+          "revenue",
+          "profit",
+          "eps_generic"
+        ],
+        "scale": "ok_thousands",
+        "eps": "ok_basic_only",
+        "entity": "both_mentioned",
+        "eps_magnitude": "plausible",
+        "gated_ok": false
+      },
+      "verdict": "ambiguous",
+      "fail_reasons": [],
+      "ambiguity_reasons": [
+        "revenue:conflicting_candidates"
+      ],
+      "error": null
+    },
+    {
+      "symbol": "APLA.N0000",
+      "kind": "annual",
+      "title": "Annual Report for the year ended 31st March 2025",
+      "url": "https://cdn.cse.lk/cmt/upload_report_file/643_1756350200465.pdf",
+      "pdf_path": "/tmp/cse-financial-pdfs/APLA.N0000_annual_46204.pdf",
+      "pages_scored": 40,
+      "sopl_pages": [
+        5,
+        3,
+        6,
+        7,
+        8,
+        9
+      ],
+      "tables_found": 0,
+      "sopl_tables": 0,
+      "extractor": "page_text+pdfplumber",
+      "scale": "millions",
+      "period_tags": [
+        "annual",
+        "has_comparative"
+      ],
+      "entity_tags": [
+        "company",
+        "group"
+      ],
+      "revenue": {
+        "value": 2373.0,
+        "raw": "2,373",
+        "label": "Turnover",
+        "page": 5,
+        "column": 0,
+        "notes": [
+          "assumed_current_vs_comparative"
+        ]
+      },
+      "profit": {
+        "value": 456.0,
+        "raw": "456",
+        "label": "Profit After Tax",
+        "page": 5,
+        "column": 0,
+        "notes": [
+          "assumed_current_vs_comparative"
+        ]
+      },
+      "eps_basic": null,
+      "eps_diluted": null,
+      "eps_generic": {
+        "value": 108.17,
+        "raw": "108.17",
+        "label": "Rs.108.17 Earnings Per Share",
+        "page": 5,
+        "column": 0,
+        "notes": []
+      },
+      "validators": {
+        "period": "ok_or_assumed_annual",
+        "scale": "ok_millions",
+        "eps": "generic_only",
+        "entity": "both_mentioned",
+        "eps_magnitude": "plausible",
+        "gated_ok": false
+      },
+      "verdict": "ambiguous",
+      "fail_reasons": [],
+      "ambiguity_reasons": [
+        "eps:generic_unlabeled_basic_or_diluted"
+      ],
+      "error": null
+    },
+    {
+      "symbol": "APLA.N0000",
+      "kind": "annual",
+      "title": "Annual Report for the year ended 31st March 2024",
+      "url": "https://cdn.cse.lk/cmt/upload_report_file/643_1722851207975.pdf",
+      "pdf_path": "/tmp/cse-financial-pdfs/APLA.N0000_annual_46204.pdf",
+      "pages_scored": 40,
+      "sopl_pages": [
+        5,
+        3,
+        6,
+        7,
+        8,
+        9
+      ],
+      "tables_found": 0,
+      "sopl_tables": 0,
+      "extractor": "page_text+pdfplumber",
+      "scale": "millions",
+      "period_tags": [
+        "annual",
+        "has_comparative"
+      ],
+      "entity_tags": [
+        "company",
+        "group"
+      ],
+      "revenue": {
+        "value": 2373.0,
+        "raw": "2,373",
+        "label": "Turnover",
+        "page": 5,
+        "column": 0,
+        "notes": [
+          "assumed_current_vs_comparative"
+        ]
+      },
+      "profit": {
+        "value": 456.0,
+        "raw": "456",
+        "label": "Profit After Tax",
+        "page": 5,
+        "column": 0,
+        "notes": [
+          "assumed_current_vs_comparative"
+        ]
+      },
+      "eps_basic": null,
+      "eps_diluted": null,
+      "eps_generic": {
+        "value": 108.17,
+        "raw": "108.17",
+        "label": "Rs.108.17 Earnings Per Share",
+        "page": 5,
+        "column": 0,
+        "notes": []
+      },
+      "validators": {
+        "period": "ok_or_assumed_annual",
+        "scale": "ok_millions",
+        "eps": "generic_only",
+        "entity": "both_mentioned",
+        "eps_magnitude": "plausible",
+        "gated_ok": false
+      },
+      "verdict": "ambiguous",
+      "fail_reasons": [],
+      "ambiguity_reasons": [
+        "eps:generic_unlabeled_basic_or_diluted"
+      ],
+      "error": null
+    },
+    {
+      "symbol": "ASCO.N0000",
+      "kind": "quarterly",
+      "title": "Interim Financial Statements for the Quarter ended 31st March 2026",
+      "url": "https://cdn.cse.lk/cmt/upload_report_file/401_1778152719610.pdf",
+      "pdf_path": "/tmp/cse-financial-pdfs/ASCO.N0000_quarterly_50140.pdf",
+      "pages_scored": 18,
+      "sopl_pages": [
+        8,
+        9,
+        4,
+        10,
+        11,
+        13
+      ],
+      "tables_found": 5,
+      "sopl_tables": 5,
+      "extractor": "page_text+pdfplumber",
+      "scale": "unknown",
+      "period_tags": [
+        "annual",
+        "quarter",
+        "ytd"
+      ],
+      "entity_tags": [
+        "company",
+        "group"
+      ],
+      "revenue": {
+        "value": -188772.0,
+        "raw": "( 188,772)",
+        "label": "Revenue Direct expenses",
+        "page": 8,
+        "column": 4,
+        "notes": []
+      },
+      "profit": null,
+      "eps_basic": null,
+      "eps_diluted": null,
+      "eps_generic": null,
+      "validators": {
+        "period": "ok_resolved_current_quarter",
+        "period_resolve": "leftmost_current_quarter",
+        "period_resolve_confidence": "assumed",
+        "scale": "unknown",
+        "eps": "missing",
+        "entity": "both_mentioned",
+        "gated_ok": false
+      },
+      "verdict": "fail",
+      "fail_reasons": [
+        "eps:missing",
+        "profit:missing"
+      ],
+      "ambiguity_reasons": [
+        "revenue:conflicting_candidates"
+      ],
+      "error": null
+    },
+    {
+      "symbol": "ASCO.N0000",
+      "kind": "annual",
+      "title": "Amended Annual Report as at 31st March 2025",
+      "url": "https://cdn.cse.lk/cmt/upload_report_file/401_1764558654280.pdf",
+      "pdf_path": "/tmp/cse-financial-pdfs/ASCO.N0000_annual_49747.pdf",
+      "pages_scored": 40,
+      "sopl_pages": [
+        3,
+        4,
+        19,
+        31
+      ],
+      "tables_found": 1,
+      "sopl_tables": 1,
+      "extractor": "page_text+pdfplumber",
+      "scale": "unknown",
+      "period_tags": [
+        "annual",
+        "has_comparative"
+      ],
+      "entity_tags": [
+        "company",
+        "group"
+      ],
+      "revenue": {
+        "value": 1205078755.0,
+        "raw": "1,205,078,755",
+        "label": "Revenue",
+        "page": 4,
+        "column": 0,
+        "notes": [
+          "assumed_current_vs_comparative"
+        ]
+      },
+      "profit": null,
+      "eps_basic": null,
+      "eps_diluted": null,
+      "eps_generic": {
+        "value": -0.45,
+        "raw": "(0.45)",
+        "label": "Basic/Diluted Earnings/(Loss) Per Share (EPS)",
+        "page": 4,
+        "column": 0,
+        "notes": [
+          "multi_value_no_header"
+        ]
+      },
+      "validators": {
+        "period": "ok_or_assumed_annual",
+        "multi_value_notes": [
+          "eps_generic"
+        ],
+        "scale": "unknown",
+        "eps": "generic_only",
+        "entity": "both_mentioned",
+        "eps_magnitude": "plausible",
+        "gated_ok": false
+      },
+      "verdict": "fail",
+      "fail_reasons": [
+        "profit:missing"
+      ],
+      "ambiguity_reasons": [
+        "eps:generic_unlabeled_basic_or_diluted"
+      ],
+      "error": null
+    },
+    {
+      "symbol": "ASCO.N0000",
+      "kind": "annual",
+      "title": "Annual Report as at 31st March 2025",
+      "url": "https://cdn.cse.lk/cmt/upload_report_file/401_1764294313176.pdf",
+      "pdf_path": "/tmp/cse-financial-pdfs/ASCO.N0000_annual_49747.pdf",
+      "pages_scored": 40,
+      "sopl_pages": [
+        3,
+        4,
+        19,
+        31
+      ],
+      "tables_found": 1,
+      "sopl_tables": 1,
+      "extractor": "page_text+pdfplumber",
+      "scale": "unknown",
+      "period_tags": [
+        "annual",
+        "has_comparative"
+      ],
+      "entity_tags": [
+        "company",
+        "group"
+      ],
+      "revenue": {
+        "value": 1205078755.0,
+        "raw": "1,205,078,755",
+        "label": "Revenue",
+        "page": 4,
+        "column": 0,
+        "notes": [
+          "assumed_current_vs_comparative"
+        ]
+      },
+      "profit": null,
+      "eps_basic": null,
+      "eps_diluted": null,
+      "eps_generic": {
+        "value": -0.45,
+        "raw": "(0.45)",
+        "label": "Basic/Diluted Earnings/(Loss) Per Share (EPS)",
+        "page": 4,
+        "column": 0,
+        "notes": [
+          "multi_value_no_header"
+        ]
+      },
+      "validators": {
+        "period": "ok_or_assumed_annual",
+        "multi_value_notes": [
+          "eps_generic"
+        ],
+        "scale": "unknown",
+        "eps": "generic_only",
+        "entity": "both_mentioned",
+        "eps_magnitude": "plausible",
+        "gated_ok": false
+      },
+      "verdict": "fail",
+      "fail_reasons": [
+        "profit:missing"
+      ],
+      "ambiguity_reasons": [
+        "eps:generic_unlabeled_basic_or_diluted"
+      ],
+      "error": null
+    },
+    {
+      "symbol": "ASHO.N0000",
+      "kind": "quarterly",
+      "title": "Interim Financial Statements for the Quarter ended 31st March 2026",
+      "url": "https://cdn.cse.lk/cmt/upload_report_file/695_1779707757704.03.2026.pdf",
+      "pdf_path": "/tmp/cse-financial-pdfs/ASHO.N0000_quarterly_50475.pdf",
+      "pages_scored": 8,
+      "sopl_pages": [
+        2,
+        3,
+        5
+      ],
+      "tables_found": 1,
+      "sopl_tables": 0,
+      "extractor": "page_text+pdfplumber",
+      "scale": "unknown",
+      "period_tags": [
+        "annual",
+        "has_comparative",
+        "quarter",
+        "ytd"
+      ],
+      "entity_tags": [],
+      "revenue": {
+        "value": 7194099472.0,
+        "raw": "7,194,099,472",
+        "label": "Revenue",
+        "page": 2,
+        "column": 0,
+        "notes": []
+      },
+      "profit": {
+        "value": 1884796089.0,
+        "raw": "1,884,796,089",
+        "label": "Profit  for the Period",
+        "page": 2,
+        "column": 0,
+        "notes": [
+          "multi_value_no_header"
+        ]
+      },
+      "eps_basic": null,
+      "eps_diluted": {
+        "value": 520.54,
+        "raw": "520.54",
+        "label": "Basic and Diluted Earnings per Share",
+        "page": 2,
+        "column": 0,
+        "notes": [
+          "multi_value_no_header"
+        ]
+      },
+      "eps_generic": null,
+      "validators": {
+        "period": "ok_resolved_current_quarter",
+        "period_resolve": "leftmost_current_quarter",
+        "period_resolve_confidence": "assumed",
+        "multi_value_notes": [
+          "profit",
+          "eps_diluted",
+          "eps_generic"
+        ],
+        "scale": "unknown",
+        "eps": "diluted_only",
+        "entity": "untagged",
+        "eps_magnitude": "plausible",
+        "gated_ok": false
+      },
+      "verdict": "ambiguous",
+      "fail_reasons": [],
+      "ambiguity_reasons": [
+        "eps:diluted_without_basic"
+      ],
+      "error": null
+    },
+    {
+      "symbol": "ASHO.N0000",
+      "kind": "quarterly",
+      "title": "Interim Financial Statements for the Quarter ended 31st December 2025",
+      "url": "https://cdn.cse.lk/cmt/upload_report_file/695_1770983023315.12.2025.pdf",
+      "pdf_path": "/tmp/cse-financial-pdfs/ASHO.N0000_quarterly_50475.pdf",
+      "pages_scored": 8,
+      "sopl_pages": [
+        2,
+        3,
+        5
+      ],
+      "tables_found": 1,
+      "sopl_tables": 0,
+      "extractor": "page_text+pdfplumber",
+      "scale": "unknown",
+      "period_tags": [
+        "annual",
+        "has_comparative",
+        "quarter",
+        "ytd"
+      ],
+      "entity_tags": [],
+      "revenue": {
+        "value": 7194099472.0,
+        "raw": "7,194,099,472",
+        "label": "Revenue",
+        "page": 2,
+        "column": 0,
+        "notes": []
+      },
+      "profit": {
+        "value": 1884796089.0,
+        "raw": "1,884,796,089",
+        "label": "Profit  for the Period",
+        "page": 2,
+        "column": 0,
+        "notes": [
+          "multi_value_no_header"
+        ]
+      },
+      "eps_basic": null,
+      "eps_diluted": {
+        "value": 520.54,
+        "raw": "520.54",
+        "label": "Basic and Diluted Earnings per Share",
+        "page": 2,
+        "column": 0,
+        "notes": [
+          "multi_value_no_header"
+        ]
+      },
+      "eps_generic": null,
+      "validators": {
+        "period": "ok_resolved_current_quarter",
+        "period_resolve": "leftmost_current_quarter",
+        "period_resolve_confidence": "assumed",
+        "multi_value_notes": [
+          "profit",
+          "eps_diluted",
+          "eps_generic"
+        ],
+        "scale": "unknown",
+        "eps": "diluted_only",
+        "entity": "untagged",
+        "eps_magnitude": "plausible",
+        "gated_ok": false
+      },
+      "verdict": "ambiguous",
+      "fail_reasons": [],
+      "ambiguity_reasons": [
+        "eps:diluted_without_basic"
+      ],
+      "error": null
+    },
+    {
+      "symbol": "ASHO.N0000",
+      "kind": "annual",
+      "title": "Annual Report 2024/25",
+      "url": "https://cdn.cse.lk/cmt/upload_report_file/695_1752832207668.pdf",
+      "pdf_path": "/tmp/cse-financial-pdfs/ASHO.N0000_annual_48382.pdf",
+      "pages_scored": 40,
+      "sopl_pages": [
+        4,
+        8,
+        10,
+        34,
+        20,
+        22
+      ],
+      "tables_found": 4,
+      "sopl_tables": 4,
+      "extractor": "page_text+pdfplumber",
+      "scale": "unknown",
+      "period_tags": [
+        "annual",
+        "has_comparative"
+      ],
+      "entity_tags": [
+        "company"
+      ],
+      "revenue": {
+        "value": 9003641728.0,
+        "raw": "9,003,641,728",
+        "label": "TURNOVER (Rs.)",
+        "page": 8,
+        "column": 0,
+        "notes": [
+          "assumed_current_vs_comparative"
+        ]
+      },
+      "profit": {
+        "value": 1531027028.0,
+        "raw": "1,531,027,028",
+        "label": "PROFIT AFTER TAX (Rs.)",
+        "page": 8,
+        "column": 0,
+        "notes": [
+          "assumed_current_vs_comparative"
+        ]
+      },
+      "eps_basic": null,
+      "eps_diluted": null,
+      "eps_generic": {
+        "value": 422.84,
+        "raw": "422.84",
+        "label": "EARNINGS PER SHARE (Rs.)",
+        "page": 8,
+        "column": 0,
+        "notes": [
+          "assumed_current_vs_comparative"
+        ]
+      },
+      "validators": {
+        "period": "ok_or_assumed_annual",
+        "scale": "unknown",
+        "eps": "generic_only",
+        "entity": "company",
+        "eps_magnitude": "plausible",
+        "gated_ok": false
+      },
+      "verdict": "ambiguous",
+      "fail_reasons": [],
+      "ambiguity_reasons": [
+        "eps:generic_unlabeled_basic_or_diluted",
+        "profit:conflicting_candidates",
+        "revenue:conflicting_candidates"
+      ],
+      "error": null
+    },
+    {
+      "symbol": "ASIR.N0000",
+      "kind": "quarterly",
+      "title": "Interim Financial Statements for the Quarter ended 31st March 2026",
+      "url": "https://cdn.cse.lk/cmt/upload_report_file/512_1777545878665.pdf",
+      "pdf_path": "/tmp/cse-financial-pdfs/ASIR.N0000_quarterly_50078.pdf",
+      "pages_scored": 11,
+      "sopl_pages": [
+        3,
+        1,
+        2,
+        4,
+        6,
+        8
+      ],
+      "tables_found": 1,
+      "sopl_tables": 0,
+      "extractor": "page_text+pdfplumber",
+      "scale": "unknown",
+      "period_tags": [
+        "annual",
+        "has_comparative",
+        "quarter",
+        "ytd"
+      ],
+      "entity_tags": [
+        "company",
+        "group"
+      ],
+      "revenue": {
+        "value": 26104660908.0,
+        "raw": "26,104,660,908",
+        "label": "Revenue",
+        "page": 1,
+        "column": 0,
+        "notes": [
+          "multi_value_no_header"
+        ]
+      },
+      "profit": {
+        "value": 1348951466.0,
+        "raw": "1,348,951,466",
+        "label": "Profit for the Period",
+        "page": 3,
+        "column": 0,
+        "notes": [
+          "multi_value_no_header"
+        ]
+      },
+      "eps_basic": {
+        "value": 3.19,
+        "raw": "3.19",
+        "label": "Earnings Per Share- Basic",
+        "page": 1,
+        "column": 0,
+        "notes": [
+          "multi_value_no_header"
+        ]
+      },
+      "eps_diluted": null,
+      "eps_generic": null,
+      "validators": {
+        "period": "ok_resolved_current_quarter",
+        "period_resolve": "leftmost_current_quarter",
+        "period_resolve_confidence": "assumed",
+        "multi_value_notes": [
+          "revenue",
+          "profit",
+          "eps_basic"
+        ],
+        "scale": "unknown",
+        "eps": "ok_basic_only",
+        "entity": "both_mentioned",
+        "eps_magnitude": "plausible",
+        "gated_ok": true
+      },
+      "verdict": "unambiguous",
+      "fail_reasons": [],
+      "ambiguity_reasons": [],
+      "error": null
+    },
+    {
+      "symbol": "ASIR.N0000",
+      "kind": "quarterly",
+      "title": "Interim Financial Statements for the Quarter ended 31st December 2025",
+      "url": "https://cdn.cse.lk/cmt/upload_report_file/512_1770352082851.pdf",
+      "pdf_path": "/tmp/cse-financial-pdfs/ASIR.N0000_quarterly_50078.pdf",
+      "pages_scored": 11,
+      "sopl_pages": [
+        3,
+        1,
+        2,
+        4,
+        6,
+        8
+      ],
+      "tables_found": 1,
+      "sopl_tables": 0,
+      "extractor": "page_text+pdfplumber",
+      "scale": "unknown",
+      "period_tags": [
+        "annual",
+        "has_comparative",
+        "quarter",
+        "ytd"
+      ],
+      "entity_tags": [
+        "company",
+        "group"
+      ],
+      "revenue": {
+        "value": 26104660908.0,
+        "raw": "26,104,660,908",
+        "label": "Revenue",
+        "page": 1,
+        "column": 0,
+        "notes": [
+          "multi_value_no_header"
+        ]
+      },
+      "profit": {
+        "value": 1348951466.0,
+        "raw": "1,348,951,466",
+        "label": "Profit for the Period",
+        "page": 3,
+        "column": 0,
+        "notes": [
+          "multi_value_no_header"
+        ]
+      },
+      "eps_basic": {
+        "value": 3.19,
+        "raw": "3.19",
+        "label": "Earnings Per Share- Basic",
+        "page": 1,
+        "column": 0,
+        "notes": [
+          "multi_value_no_header"
+        ]
+      },
+      "eps_diluted": null,
+      "eps_generic": null,
+      "validators": {
+        "period": "ok_resolved_current_quarter",
+        "period_resolve": "leftmost_current_quarter",
+        "period_resolve_confidence": "assumed",
+        "multi_value_notes": [
+          "revenue",
+          "profit",
+          "eps_basic"
+        ],
+        "scale": "unknown",
+        "eps": "ok_basic_only",
+        "entity": "both_mentioned",
+        "eps_magnitude": "plausible",
+        "gated_ok": true
+      },
+      "verdict": "unambiguous",
+      "fail_reasons": [],
+      "ambiguity_reasons": [],
+      "error": null
+    },
+    {
+      "symbol": "ASIR.N0000",
+      "kind": "annual",
+      "title": "Annual Report as at 31st March 2025",
+      "url": "https://cdn.cse.lk/cmt/upload_report_file/512_1764147969254.pdf",
+      "pdf_path": "/tmp/cse-financial-pdfs/ASIR.N0000_annual_46643.pdf",
+      "pages_scored": 40,
+      "sopl_pages": [
+        4,
+        1,
+        37
+      ],
+      "tables_found": 0,
+      "sopl_tables": 0,
+      "extractor": "page_text+pdfplumber",
+      "scale": "unknown",
+      "period_tags": [
+        "annual"
+      ],
+      "entity_tags": [
+        "group"
+      ],
+      "revenue": {
+        "value": 28571.0,
+        "raw": "28,571",
+        "label": "Revenue",
+        "page": 4,
+        "column": 0,
+        "notes": [
+          "multi_value_no_header"
+        ]
+      },
+      "profit": {
+        "value": 3119.0,
+        "raw": "3,119",
+        "label": "Net Profit",
+        "page": 4,
+        "column": 0,
+        "notes": [
+          "multi_value_no_header"
+        ]
+      },
+      "eps_basic": null,
+      "eps_diluted": null,
+      "eps_generic": {
+        "value": 2.54,
+        "raw": "2.54",
+        "label": "Earnings Per Share (EPS)",
+        "page": 4,
+        "column": 0,
+        "notes": [
+          "multi_value_no_header"
+        ]
+      },
+      "validators": {
+        "period": "ok_or_assumed_annual",
+        "multi_value_notes": [
+          "revenue",
+          "profit",
+          "eps_generic"
+        ],
+        "scale": "unknown",
+        "eps": "generic_only",
+        "entity": "group",
+        "eps_magnitude": "plausible",
+        "gated_ok": false
+      },
+      "verdict": "ambiguous",
+      "fail_reasons": [],
+      "ambiguity_reasons": [
+        "eps:generic_unlabeled_basic_or_diluted"
+      ],
+      "error": null
+    },
+    {
+      "symbol": "ASIR.N0000",
+      "kind": "annual",
+      "title": "Annual Report 2023/2024",
+      "url": "https://cdn.cse.lk/cmt/upload_report_file/512_1725593130277.pdf",
+      "pdf_path": "/tmp/cse-financial-pdfs/ASIR.N0000_annual_46643.pdf",
+      "pages_scored": 40,
+      "sopl_pages": [
+        4,
+        1,
+        37
+      ],
+      "tables_found": 0,
+      "sopl_tables": 0,
+      "extractor": "page_text+pdfplumber",
+      "scale": "unknown",
+      "period_tags": [
+        "annual"
+      ],
+      "entity_tags": [
+        "group"
+      ],
+      "revenue": {
+        "value": 28571.0,
+        "raw": "28,571",
+        "label": "Revenue",
+        "page": 4,
+        "column": 0,
+        "notes": [
+          "multi_value_no_header"
+        ]
+      },
+      "profit": {
+        "value": 3119.0,
+        "raw": "3,119",
+        "label": "Net Profit",
+        "page": 4,
+        "column": 0,
+        "notes": [
+          "multi_value_no_header"
+        ]
+      },
+      "eps_basic": null,
+      "eps_diluted": null,
+      "eps_generic": {
+        "value": 2.54,
+        "raw": "2.54",
+        "label": "Earnings Per Share (EPS)",
+        "page": 4,
+        "column": 0,
+        "notes": [
+          "multi_value_no_header"
+        ]
+      },
+      "validators": {
+        "period": "ok_or_assumed_annual",
+        "multi_value_notes": [
+          "revenue",
+          "profit",
+          "eps_generic"
+        ],
+        "scale": "unknown",
+        "eps": "generic_only",
+        "entity": "group",
+        "eps_magnitude": "plausible",
+        "gated_ok": false
+      },
+      "verdict": "ambiguous",
+      "fail_reasons": [],
+      "ambiguity_reasons": [
+        "eps:generic_unlabeled_basic_or_diluted"
+      ],
+      "error": null
+    },
+    {
+      "symbol": "ASIY.N0000",
+      "kind": "quarterly",
+      "title": "Interim Financial Statements for the Quarter ended 31st March 2026",
+      "url": "https://cdn.cse.lk/cmt/upload_report_file/1205_1779873831543.pdf",
+      "pdf_path": "/tmp/cse-financial-pdfs/ASIY.N0000_quarterly_50195.pdf",
+      "pages_scored": 9,
+      "sopl_pages": [
+        2,
+        3,
+        5,
+        1,
+        6
+      ],
+      "tables_found": 2,
+      "sopl_tables": 2,
+      "extractor": "page_text+pdfplumber",
+      "scale": "unknown",
+      "period_tags": [
+        "annual",
+        "has_comparative",
+        "quarter",
+        "ytd"
+      ],
+      "entity_tags": [
+        "company",
+        "group"
+      ],
+      "revenue": {
+        "value": 722810895.0,
+        "raw": "722,810,895",
+        "label": "Revenue Reserves",
+        "page": 1,
+        "column": 0,
+        "notes": [
+          "multi_value_no_header"
+        ]
+      },
+      "profit": {
+        "value": 132643543.0,
+        "raw": "132,643,543",
+        "label": "Profit after tax",
+        "page": 6,
+        "column": 0,
+        "notes": [
+          "multi_value_no_header"
+        ]
+      },
+      "eps_basic": {
+        "value": 0.17,
+        "raw": "0.17",
+        "label": "Basic Earnings Per Share (Rs.)",
+        "page": 2,
+        "column": 0,
+        "notes": [
+          "multi_value_no_header"
+        ]
+      },
+      "eps_diluted": null,
+      "eps_generic": null,
+      "validators": {
+        "period": "ok_resolved_current_quarter",
+        "period_resolve": "leftmost_current_quarter",
+        "period_resolve_confidence": "assumed",
+        "multi_value_notes": [
+          "revenue",
+          "profit",
+          "eps_basic"
+        ],
+        "scale": "unknown",
+        "eps": "ok_basic_only",
+        "entity": "both_mentioned",
+        "eps_magnitude": "plausible",
+        "gated_ok": false
+      },
+      "verdict": "ambiguous",
+      "fail_reasons": [],
+      "ambiguity_reasons": [
+        "revenue:conflicting_candidates"
+      ],
+      "error": null
+    },
+    {
+      "symbol": "ASIY.N0000",
+      "kind": "quarterly",
+      "title": "Interim Financial Statements for the Quarter ended 31st December 2025",
+      "url": "https://cdn.cse.lk/cmt/upload_report_file/1205_1770800624254.pdf",
+      "pdf_path": "/tmp/cse-financial-pdfs/ASIY.N0000_quarterly_50195.pdf",
+      "pages_scored": 9,
+      "sopl_pages": [
+        2,
+        3,
+        5,
+        1,
+        6
+      ],
+      "tables_found": 2,
+      "sopl_tables": 2,
+      "extractor": "page_text+pdfplumber",
+      "scale": "unknown",
+      "period_tags": [
+        "annual",
+        "has_comparative",
+        "quarter",
+        "ytd"
+      ],
+      "entity_tags": [
+        "company",
+        "group"
+      ],
+      "revenue": {
+        "value": 722810895.0,
+        "raw": "722,810,895",
+        "label": "Revenue Reserves",
+        "page": 1,
+        "column": 0,
+        "notes": [
+          "multi_value_no_header"
+        ]
+      },
+      "profit": {
+        "value": 132643543.0,
+        "raw": "132,643,543",
+        "label": "Profit after tax",
+        "page": 6,
+        "column": 0,
+        "notes": [
+          "multi_value_no_header"
+        ]
+      },
+      "eps_basic": {
+        "value": 0.17,
+        "raw": "0.17",
+        "label": "Basic Earnings Per Share (Rs.)",
+        "page": 2,
+        "column": 0,
+        "notes": [
+          "multi_value_no_header"
+        ]
+      },
+      "eps_diluted": null,
+      "eps_generic": null,
+      "validators": {
+        "period": "ok_resolved_current_quarter",
+        "period_resolve": "leftmost_current_quarter",
+        "period_resolve_confidence": "assumed",
+        "multi_value_notes": [
+          "revenue",
+          "profit",
+          "eps_basic"
+        ],
+        "scale": "unknown",
+        "eps": "ok_basic_only",
+        "entity": "both_mentioned",
+        "eps_magnitude": "plausible",
+        "gated_ok": false
+      },
+      "verdict": "ambiguous",
+      "fail_reasons": [],
+      "ambiguity_reasons": [
+        "revenue:conflicting_candidates"
+      ],
+      "error": null
+    },
+    {
+      "symbol": "ASIY.N0000",
+      "kind": "annual",
+      "title": "Annual Report 2024/2025",
+      "url": "https://cdn.cse.lk/cmt/upload_report_file/1205_1756459445644.pdf",
+      "pdf_path": "/tmp/cse-financial-pdfs/ASIY.N0000_annual_46526.pdf",
+      "pages_scored": 40,
+      "sopl_pages": [
+        1,
+        7,
+        8,
+        9,
+        11,
+        13
+      ],
+      "tables_found": 6,
+      "sopl_tables": 6,
+      "extractor": "page_text+pdfplumber",
+      "scale": "millions",
+      "period_tags": [
+        "annual",
+        "has_comparative",
+        "ytd"
+      ],
+      "entity_tags": [
+        "company",
+        "group"
+      ],
+      "revenue": {
+        "value": 1275.0,
+        "raw": "1,275",
+        "label": "Group revenue, while declining by 2%",
+        "page": 11,
+        "column": 0,
+        "notes": [
+          "assumed_current_vs_comparative"
+        ]
+      },
+      "profit": null,
+      "eps_basic": null,
+      "eps_diluted": null,
+      "eps_generic": {
+        "value": -0.2,
+        "raw": "(0.20)",
+        "label": "Earnings Per Share",
+        "page": 8,
+        "column": 0,
+        "notes": [
+          "multi_value_no_header"
+        ]
+      },
+      "validators": {
+        "period": "ok_or_assumed_annual",
+        "multi_value_notes": [
+          "eps_generic"
+        ],
+        "scale": "ok_millions",
+        "eps": "generic_only",
+        "entity": "both_mentioned",
+        "eps_magnitude": "plausible",
+        "gated_ok": false
+      },
+      "verdict": "fail",
+      "fail_reasons": [
+        "profit:missing"
+      ],
+      "ambiguity_reasons": [
+        "eps:generic_unlabeled_basic_or_diluted"
+      ],
+      "error": null
+    },
+    {
+      "symbol": "ASIY.N0000",
+      "kind": "annual",
+      "title": "Annual Report 2023/2024",
+      "url": "https://cdn.cse.lk/cmt/upload_report_file/1205_1724841296347.pdf",
+      "pdf_path": "/tmp/cse-financial-pdfs/ASIY.N0000_annual_46526.pdf",
+      "pages_scored": 40,
+      "sopl_pages": [
+        1,
+        7,
+        8,
+        9,
+        11,
+        13
+      ],
+      "tables_found": 6,
+      "sopl_tables": 6,
+      "extractor": "page_text+pdfplumber",
+      "scale": "millions",
+      "period_tags": [
+        "annual",
+        "has_comparative",
+        "ytd"
+      ],
+      "entity_tags": [
+        "company",
+        "group"
+      ],
+      "revenue": {
+        "value": 1275.0,
+        "raw": "1,275",
+        "label": "Group revenue, while declining by 2%",
+        "page": 11,
+        "column": 0,
+        "notes": [
+          "assumed_current_vs_comparative"
+        ]
+      },
+      "profit": null,
+      "eps_basic": null,
+      "eps_diluted": null,
+      "eps_generic": {
+        "value": -0.2,
+        "raw": "(0.20)",
+        "label": "Earnings Per Share",
+        "page": 8,
+        "column": 0,
+        "notes": [
+          "multi_value_no_header"
+        ]
+      },
+      "validators": {
+        "period": "ok_or_assumed_annual",
+        "multi_value_notes": [
+          "eps_generic"
+        ],
+        "scale": "ok_millions",
+        "eps": "generic_only",
+        "entity": "both_mentioned",
+        "eps_magnitude": "plausible",
+        "gated_ok": false
+      },
+      "verdict": "fail",
+      "fail_reasons": [
+        "profit:missing"
+      ],
+      "ambiguity_reasons": [
+        "eps:generic_unlabeled_basic_or_diluted"
+      ],
+      "error": null
+    },
+    {
+      "symbol": "ASPH.N0000",
+      "kind": "quarterly",
+      "title": "Interim Financial Statements for the Quarter ended 31st March 2026",
+      "url": "https://cdn.cse.lk/cmt/upload_report_file/495_1779875598785.pdf",
+      "pdf_path": "/tmp/cse-financial-pdfs/ASPH.N0000_quarterly_50153.pdf",
+      "pages_scored": 11,
+      "sopl_pages": [
+        2,
+        3,
+        4,
+        6
+      ],
+      "tables_found": 2,
+      "sopl_tables": 2,
+      "extractor": "page_text+pdfplumber",
+      "scale": "thousands",
+      "period_tags": [
+        "annual",
+        "has_comparative",
+        "quarter",
+        "ytd"
+      ],
+      "entity_tags": [
+        "company"
+      ],
+      "revenue": {
+        "value": 3777.0,
+        "raw": "3,777",
+        "label": "Interest Income on Short term Investments",
+        "page": 6,
+        "column": 0,
+        "notes": [
+          "resolved_current_quarter_leftmost"
+        ]
+      },
+      "profit": null,
+      "eps_basic": null,
+      "eps_diluted": null,
+      "eps_generic": {
+        "value": 0.003,
+        "raw": "0.003",
+        "label": "Earnings per share (Rs.):",
+        "page": 2,
+        "column": 0,
+        "notes": [
+          "multi_value_no_header"
+        ]
+      },
+      "validators": {
+        "period": "ok_resolved_current_quarter",
+        "period_resolve": "leftmost_current_quarter",
+        "multi_value_notes": [
+          "eps_generic"
+        ],
+        "scale": "ok_thousands",
+        "eps": "generic_only",
+        "entity": "company",
+        "eps_magnitude": "plausible",
+        "gated_ok": false
+      },
+      "verdict": "fail",
+      "fail_reasons": [
+        "profit:missing"
+      ],
+      "ambiguity_reasons": [
+        "eps:generic_unlabeled_basic_or_diluted"
+      ],
+      "error": null
+    },
+    {
+      "symbol": "ASPH.N0000",
+      "kind": "quarterly",
+      "title": "Interim Financial Statements for the Quarter ended 31st December 2025",
+      "url": "https://cdn.cse.lk/cmt/upload_report_file/495_1770692351251.pdf",
+      "pdf_path": "/tmp/cse-financial-pdfs/ASPH.N0000_quarterly_50153.pdf",
+      "pages_scored": 11,
+      "sopl_pages": [
+        2,
+        3,
+        4,
+        6
+      ],
+      "tables_found": 2,
+      "sopl_tables": 2,
+      "extractor": "page_text+pdfplumber",
+      "scale": "thousands",
+      "period_tags": [
+        "annual",
+        "has_comparative",
+        "quarter",
+        "ytd"
+      ],
+      "entity_tags": [
+        "company"
+      ],
+      "revenue": {
+        "value": 3777.0,
+        "raw": "3,777",
+        "label": "Interest Income on Short term Investments",
+        "page": 6,
+        "column": 0,
+        "notes": [
+          "resolved_current_quarter_leftmost"
+        ]
+      },
+      "profit": null,
+      "eps_basic": null,
+      "eps_diluted": null,
+      "eps_generic": {
+        "value": 0.003,
+        "raw": "0.003",
+        "label": "Earnings per share (Rs.):",
+        "page": 2,
+        "column": 0,
+        "notes": [
+          "multi_value_no_header"
+        ]
+      },
+      "validators": {
+        "period": "ok_resolved_current_quarter",
+        "period_resolve": "leftmost_current_quarter",
+        "multi_value_notes": [
+          "eps_generic"
+        ],
+        "scale": "ok_thousands",
+        "eps": "generic_only",
+        "entity": "company",
+        "eps_magnitude": "plausible",
+        "gated_ok": false
+      },
+      "verdict": "fail",
+      "fail_reasons": [
+        "profit:missing"
+      ],
+      "ambiguity_reasons": [
+        "eps:generic_unlabeled_basic_or_diluted"
+      ],
+      "error": null
+    },
+    {
+      "symbol": "ASPH.N0000",
+      "kind": "annual",
+      "title": "Annual Report 2024/2025",
+      "url": "https://cdn.cse.lk/cmt/upload_report_file/495_1751621412491.pdf",
+      "pdf_path": "/tmp/cse-financial-pdfs/ASPH.N0000_annual_46151.pdf",
+      "pages_scored": 40,
+      "sopl_pages": [
+        3,
+        8,
+        9,
+        7,
+        19
+      ],
+      "tables_found": 4,
+      "sopl_tables": 4,
+      "extractor": "page_text+pdfplumber",
+      "scale": "thousands",
+      "period_tags": [
+        "annual",
+        "has_comparative"
+      ],
+      "entity_tags": [
+        "company"
+      ],
+      "revenue": {
+        "value": 29255062.0,
+        "raw": "29,255,062",
+        "label": "Revenue",
+        "page": 3,
+        "column": 0,
+        "notes": [
+          "assumed_current_vs_comparative"
+        ]
+      },
+      "profit": {
+        "value": 18862011.0,
+        "raw": "18,862,011",
+        "label": "Profit after Tax",
+        "page": 3,
+        "column": 0,
+        "notes": [
+          "assumed_current_vs_comparative"
+        ]
+      },
+      "eps_basic": null,
+      "eps_diluted": null,
+      "eps_generic": {
+        "value": 0.01,
+        "raw": "0.01",
+        "label": "Earnings per Share - Rs.",
+        "page": 3,
+        "column": 0,
+        "notes": [
+          "multi_value_no_header"
+        ]
+      },
+      "validators": {
+        "period": "ok_or_assumed_annual",
+        "multi_value_notes": [
+          "eps_generic"
+        ],
+        "scale": "ok_thousands",
+        "eps": "generic_only",
+        "entity": "company",
+        "eps_magnitude": "plausible",
+        "gated_ok": false
+      },
+      "verdict": "ambiguous",
+      "fail_reasons": [],
+      "ambiguity_reasons": [
+        "eps:generic_unlabeled_basic_or_diluted"
+      ],
+      "error": null
+    },
+    {
+      "symbol": "ASPH.N0000",
+      "kind": "annual",
+      "title": "Annual Report 2023/2024",
+      "url": "https://cdn.cse.lk/cmt/upload_report_file/495_1722333270401.pdf",
+      "pdf_path": "/tmp/cse-financial-pdfs/ASPH.N0000_annual_46151.pdf",
+      "pages_scored": 40,
+      "sopl_pages": [
+        3,
+        8,
+        9,
+        7,
+        19
+      ],
+      "tables_found": 4,
+      "sopl_tables": 4,
+      "extractor": "page_text+pdfplumber",
+      "scale": "thousands",
+      "period_tags": [
+        "annual",
+        "has_comparative"
+      ],
+      "entity_tags": [
+        "company"
+      ],
+      "revenue": {
+        "value": 29255062.0,
+        "raw": "29,255,062",
+        "label": "Revenue",
+        "page": 3,
+        "column": 0,
+        "notes": [
+          "assumed_current_vs_comparative"
+        ]
+      },
+      "profit": {
+        "value": 18862011.0,
+        "raw": "18,862,011",
+        "label": "Profit after Tax",
+        "page": 3,
+        "column": 0,
+        "notes": [
+          "assumed_current_vs_comparative"
+        ]
+      },
+      "eps_basic": null,
+      "eps_diluted": null,
+      "eps_generic": {
+        "value": 0.01,
+        "raw": "0.01",
+        "label": "Earnings per Share - Rs.",
+        "page": 3,
+        "column": 0,
+        "notes": [
+          "multi_value_no_header"
+        ]
+      },
+      "validators": {
+        "period": "ok_or_assumed_annual",
+        "multi_value_notes": [
+          "eps_generic"
+        ],
+        "scale": "ok_thousands",
+        "eps": "generic_only",
+        "entity": "company",
+        "eps_magnitude": "plausible",
+        "gated_ok": false
+      },
+      "verdict": "ambiguous",
+      "fail_reasons": [],
+      "ambiguity_reasons": [
+        "eps:generic_unlabeled_basic_or_diluted"
+      ],
+      "error": null
+    },
+    {
+      "symbol": "ATL.N0000",
+      "kind": "quarterly",
+      "title": "Interim Financial Statements for the Quarter ended 31st March 2026",
+      "url": "https://cdn.cse.lk/cmt/upload_report_file/361_1778840315341.pdf",
+      "pdf_path": "/tmp/cse-financial-pdfs/ATL.N0000_quarterly_50642.pdf",
+      "pages_scored": 14,
+      "sopl_pages": [
+        2,
+        3,
+        4,
+        5,
+        9,
+        11
+      ],
+      "tables_found": 15,
+      "sopl_tables": 8,
+      "extractor": "page_text+pdfplumber",
+      "scale": "unknown",
+      "period_tags": [
+        "annual",
+        "has_comparative",
+        "quarter"
+      ],
+      "entity_tags": [
+        "company",
+        "group"
+      ],
+      "revenue": null,
+      "profit": {
+        "value": 664654323.0,
+        "raw": "664,654,323",
+        "label": "Net Profit / (Loss) for the Period",
+        "page": 2,
+        "column": 0,
+        "notes": [
+          "multi_value_no_header"
+        ]
+      },
+      "eps_basic": {
+        "value": 21.0,
+        "raw": "21",
+        "label": "21. Basic Earnings per Share is calculated by dividing the net profit for the period attributable to ordinary shareholde",
+        "page": 11,
+        "column": 0,
+        "notes": []
+      },
+      "eps_diluted": {
+        "value": 1.15,
+        "raw": "1.15",
+        "label": "Diluted Earnings Per Share",
+        "page": 2,
+        "column": 0,
+        "notes": [
+          "multi_value_no_header"
+        ]
+      },
+      "eps_generic": null,
+      "validators": {
+        "period": "ok_tagged",
+        "multi_value_notes": [
+          "profit",
+          "eps_diluted",
+          "eps_generic"
+        ],
+        "scale": "unknown",
+        "eps": "ok_basic_and_diluted",
+        "entity": "both_mentioned",
+        "eps_magnitude": "plausible",
+        "gated_ok": false
+      },
+      "verdict": "fail",
+      "fail_reasons": [
+        "revenue:missing"
+      ],
+      "ambiguity_reasons": [
+        "profit:conflicting_candidates"
+      ],
+      "error": null
+    },
+    {
+      "symbol": "ATL.N0000",
+      "kind": "quarterly",
+      "title": "Interim Financial Statements for the Quarter ended 31st December 2025",
+      "url": "https://cdn.cse.lk/cmt/upload_report_file/361_1772183921528.12.2025.pdf",
+      "pdf_path": "/tmp/cse-financial-pdfs/ATL.N0000_quarterly_50642.pdf",
+      "pages_scored": 14,
+      "sopl_pages": [
+        2,
+        3,
+        4,
+        5,
+        9,
+        11
+      ],
+      "tables_found": 15,
+      "sopl_tables": 8,
+      "extractor": "page_text+pdfplumber",
+      "scale": "unknown",
+      "period_tags": [
+        "annual",
+        "has_comparative",
+        "quarter"
+      ],
+      "entity_tags": [
+        "company",
+        "group"
+      ],
+      "revenue": null,
+      "profit": {
+        "value": 664654323.0,
+        "raw": "664,654,323",
+        "label": "Net Profit / (Loss) for the Period",
+        "page": 2,
+        "column": 0,
+        "notes": [
+          "multi_value_no_header"
+        ]
+      },
+      "eps_basic": {
+        "value": 21.0,
+        "raw": "21",
+        "label": "21. Basic Earnings per Share is calculated by dividing the net profit for the period attributable to ordinary shareholde",
+        "page": 11,
+        "column": 0,
+        "notes": []
+      },
+      "eps_diluted": {
+        "value": 1.15,
+        "raw": "1.15",
+        "label": "Diluted Earnings Per Share",
+        "page": 2,
+        "column": 0,
+        "notes": [
+          "multi_value_no_header"
+        ]
+      },
+      "eps_generic": null,
+      "validators": {
+        "period": "ok_tagged",
+        "multi_value_notes": [
+          "profit",
+          "eps_diluted",
+          "eps_generic"
+        ],
+        "scale": "unknown",
+        "eps": "ok_basic_and_diluted",
+        "entity": "both_mentioned",
+        "eps_magnitude": "plausible",
+        "gated_ok": false
+      },
+      "verdict": "fail",
+      "fail_reasons": [
+        "revenue:missing"
+      ],
+      "ambiguity_reasons": [
+        "profit:conflicting_candidates"
+      ],
+      "error": null
+    },
+    {
+      "symbol": "ATLL.N0000",
+      "kind": "quarterly",
+      "title": "Interim Financial Statements for the Quarter ended 31st March 2026",
+      "url": "https://cdn.cse.lk/cmt/upload_report_file/1484_1778840391344.pdf",
+      "pdf_path": "/tmp/cse-financial-pdfs/ATLL.N0000_quarterly_50638.pdf",
+      "pages_scored": 15,
+      "sopl_pages": [
+        2,
+        3,
+        4,
+        1,
+        6,
+        7
+      ],
+      "tables_found": 8,
+      "sopl_tables": 8,
+      "extractor": "page_text+pdfplumber",
+      "scale": "unknown",
+      "period_tags": [
+        "annual",
+        "quarter"
+      ],
+      "entity_tags": [],
+      "revenue": {
+        "value": 131473201.0,
+        "raw": "131,473,201",
+        "label": "Revenue reserves",
+        "page": 1,
+        "column": 0,
+        "notes": [
+          "assumed_current_vs_comparative"
+        ]
+      },
+      "profit": {
+        "value": 1973769.0,
+        "raw": "1,973,769",
+        "label": "Net profit for the period",
+        "page": 2,
+        "column": 0,
+        "notes": [
+          "assumed_current_vs_comparative"
+        ]
+      },
+      "eps_basic": null,
+      "eps_diluted": {
+        "value": 0.04,
+        "raw": "0.04",
+        "label": "Basic / diluted earnings per share to equity holders",
+        "page": 2,
+        "column": 0,
+        "notes": [
+          "assumed_current_vs_comparative"
+        ]
+      },
+      "eps_generic": null,
+      "validators": {
+        "period": "ok_tagged",
+        "scale": "unknown",
+        "eps": "diluted_only",
+        "entity": "untagged",
+        "eps_magnitude": "plausible",
+        "gated_ok": false
+      },
+      "verdict": "ambiguous",
+      "fail_reasons": [],
+      "ambiguity_reasons": [
+        "eps:diluted_without_basic",
+        "revenue:conflicting_candidates"
+      ],
+      "error": null
+    },
+    {
+      "symbol": "ATLL.N0000",
+      "kind": "quarterly",
+      "title": "Interim Financial Statements for the Quarter ended 31st December 2025",
+      "url": "https://cdn.cse.lk/cmt/upload_report_file/1484_1772183843734.pdf",
+      "pdf_path": "/tmp/cse-financial-pdfs/ATLL.N0000_quarterly_50638.pdf",
+      "pages_scored": 15,
+      "sopl_pages": [
+        2,
+        3,
+        4,
+        1,
+        6,
+        7
+      ],
+      "tables_found": 8,
+      "sopl_tables": 8,
+      "extractor": "page_text+pdfplumber",
+      "scale": "unknown",
+      "period_tags": [
+        "annual",
+        "quarter"
+      ],
+      "entity_tags": [],
+      "revenue": {
+        "value": 131473201.0,
+        "raw": "131,473,201",
+        "label": "Revenue reserves",
+        "page": 1,
+        "column": 0,
+        "notes": [
+          "assumed_current_vs_comparative"
+        ]
+      },
+      "profit": {
+        "value": 1973769.0,
+        "raw": "1,973,769",
+        "label": "Net profit for the period",
+        "page": 2,
+        "column": 0,
+        "notes": [
+          "assumed_current_vs_comparative"
+        ]
+      },
+      "eps_basic": null,
+      "eps_diluted": {
+        "value": 0.04,
+        "raw": "0.04",
+        "label": "Basic / diluted earnings per share to equity holders",
+        "page": 2,
+        "column": 0,
+        "notes": [
+          "assumed_current_vs_comparative"
+        ]
+      },
+      "eps_generic": null,
+      "validators": {
+        "period": "ok_tagged",
+        "scale": "unknown",
+        "eps": "diluted_only",
+        "entity": "untagged",
+        "eps_magnitude": "plausible",
+        "gated_ok": false
+      },
+      "verdict": "ambiguous",
+      "fail_reasons": [],
+      "ambiguity_reasons": [
+        "eps:diluted_without_basic",
+        "revenue:conflicting_candidates"
+      ],
+      "error": null
+    },
+    {
+      "symbol": "ATLL.N0000",
+      "kind": "annual",
+      "title": "Annual Report as at 31st December 2025",
+      "url": "https://cdn.cse.lk/cmt/upload_report_file/1484_1780222549231.pdf",
+      "pdf_path": "/tmp/cse-financial-pdfs/ATLL.N0000_annual_48111.pdf",
+      "pages_scored": 40,
+      "sopl_pages": [
+        3,
+        5,
+        13,
+        16
+      ],
+      "tables_found": 1,
+      "sopl_tables": 1,
+      "extractor": "page_text+pdfplumber",
+      "scale": "millions",
+      "period_tags": [
+        "annual",
+        "has_comparative"
+      ],
+      "entity_tags": [
+        "company"
+      ],
+      "revenue": {
+        "value": 583.0,
+        "raw": "583",
+        "label": "revenue base, we generated Rs. 583Mn",
+        "page": 16,
+        "column": 0,
+        "notes": []
+      },
+      "profit": null,
+      "eps_basic": null,
+      "eps_diluted": null,
+      "eps_generic": {
+        "value": 0.09,
+        "raw": "0.09",
+        "label": "Earnings per share (Rs.)",
+        "page": 5,
+        "column": 0,
+        "notes": [
+          "assumed_current_vs_comparative"
+        ]
+      },
+      "validators": {
+        "period": "ok_or_assumed_annual",
+        "scale": "ok_millions",
+        "eps": "generic_only",
+        "entity": "company",
+        "eps_magnitude": "plausible",
+        "gated_ok": false
+      },
+      "verdict": "fail",
+      "fail_reasons": [
+        "profit:missing"
+      ],
+      "ambiguity_reasons": [
+        "eps:generic_unlabeled_basic_or_diluted"
+      ],
+      "error": null
+    },
+    {
+      "symbol": "BERU.N0000",
+      "kind": "annual",
+      "title": "Annual Report - 2023/2024",
+      "url": "https://cdn.cse.lk/cmt/upload_report_file/1201_1724297239815.pdf",
+      "pdf_path": "/tmp/cse-financial-pdfs/BERU.N0000_annual_46499.pdf",
+      "pages_scored": 40,
+      "sopl_pages": [
+        28,
+        12,
+        24,
+        37,
+        38,
+        1
+      ],
+      "tables_found": 0,
+      "sopl_tables": 0,
+      "extractor": "page_text+pdfplumber",
+      "scale": "unknown",
+      "period_tags": [
+        "annual",
+        "has_comparative",
+        "ytd"
+      ],
+      "entity_tags": [
+        "company",
+        "group"
+      ],
+      "revenue": {
+        "value": 722.5,
+        "raw": "722.5",
+        "label": "Revenue",
+        "page": 12,
+        "column": 0,
+        "notes": [
+          "multi_value_no_header"
+        ]
+      },
+      "profit": null,
+      "eps_basic": {
+        "value": 2.27,
+        "raw": "2.27",
+        "label": "data for its ordinary shares. Basic EPS is calculated",
+        "page": 38,
+        "column": 0,
+        "notes": [
+          "assumed_current_vs_comparative"
+        ]
+      },
+      "eps_diluted": null,
+      "eps_generic": null,
+      "validators": {
+        "period": "ok_or_assumed_annual",
+        "multi_value_notes": [
+          "revenue",
+          "eps_generic"
+        ],
+        "scale": "unknown",
+        "eps": "ok_basic_only",
+        "entity": "both_mentioned",
+        "eps_magnitude": "plausible",
+        "gated_ok": false
+      },
+      "verdict": "fail",
+      "fail_reasons": [
+        "profit:missing"
+      ],
+      "ambiguity_reasons": [
+        "revenue:conflicting_candidates"
+      ],
+      "error": null
+    }
+  ]
+}

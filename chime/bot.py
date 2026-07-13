@@ -22,7 +22,9 @@ from chime.briefs import briefs_enabled
 from chime.domain import (
     _CTRL_RE,
     BRIEF_BODY_MAX,
+    MARKET_SYMBOL,
     MAX_ALERT_THRESHOLD,
+    NOTICE_ALERT_TYPES,
     AlertType,
     PriceSnapshot,
     _clamp_telegram_message,
@@ -53,7 +55,22 @@ ALERT_USAGE = (
     "/alert SYMBOL below PRICE\n"
     "/alert SYMBOL move PERCENT\n"
     "/alert SYMBOL disclosure [CATEGORY]\n"
-    "Example: /alert JKH.N0000 above 100\n"
+    "/alert SYMBOL eps above|below X\n"
+    "/alert SYMBOL eps yoy above|below PCT\n"
+    "/alert SYMBOL rev yoy above|below PCT\n"
+    "/alert SYMBOL profit yoy above|below PCT\n"
+    "/alert SYMBOL volume MULTIPLIER\n"
+    "/alert SYMBOL volup MULTIPLIER\n"
+    "/alert SYMBOL voldown MULTIPLIER\n"
+    "/alert SYMBOL crossing MULTIPLIER\n"
+    "/alert SYMBOL print QTY\n"
+    "/alert SYMBOL gap PERCENT\n"
+    "/alert SYMBOL buyin\n"
+    "/alert SYMBOL noncompliance\n"
+    "/alert MARKET halt\n"
+    "/alert SYMBOL bidheavy MULTIPLIER\n"
+    "/alert SYMBOL askheavy MULTIPLIER\n"
+    "Example: /alert JKH.N0000 volume 5\n"
     f"{disclaimer()}"
 )
 CANCEL_USAGE = (
@@ -135,7 +152,7 @@ def _env_cmd_rate_per_minute() -> int:
 # Wave5/w20: Browse dash note + disclosure CATEGORY + optional AI brief.
 START_TEXT = (
     "Chime watches the Colombo Stock Exchange and pings Telegram on price, "
-    "move, or disclosure alerts — Browse dash mirrors watchlists; "
+    "move, volume, or disclosure alerts — Browse dash mirrors watchlists; "
     "push stays here.\n"
     "Disclosures: /alert SYMBOL disclosure [CATEGORY]; "
     "optional AI brief when enabled. See /help.\n"
@@ -161,7 +178,7 @@ HELP_TEXT = (
     "Browse dash thin UI; scenarios disabled (Phase 3 stub).\n"
     "Disclosure alerts: new filings after the rule only "
     "(missing publish time → no fire; CATEGORY = category substring; "
-    "optional AI brief when enabled).\n"
+    "optional AI brief when enabled). Also volume/gap/print/buyin/halt — see /alert.\n"
     f"{disclaimer()}"
 )
 
@@ -266,6 +283,122 @@ def parse_alert_args(args: list[str]) -> tuple[ParsedAlert | None, str | None]:
         raw_cat = " ".join(cat_parts).strip() or None
         category = sanitize_disclosure_category(raw_cat)
         return ParsedAlert(AlertType.DISCLOSURE, None, category), None
+
+    # Financial PDF calc / YoY: /alert SYMBOL eps above X
+    # /alert SYMBOL eps yoy above PCT | rev yoy … | profit yoy …
+    if kind in ("eps", "rev", "revenue", "profit", "pat"):
+        rest = [a.lower() if isinstance(a, str) else "" for a in args[2:]]
+        metric = "eps" if kind == "eps" else ("rev" if kind in ("rev", "revenue") else "profit")
+        direction: str | None = None
+        threshold_token: str | None = None
+        if rest and rest[0] in ("above", "below") and len(rest) >= 2:
+            # absolute EPS only
+            if metric != "eps":
+                return None, (
+                    "Absolute thresholds are only for EPS. "
+                    f"Try: /alert SYMBOL eps above X\n{ALERT_USAGE}"
+                )
+            direction = rest[0]
+            threshold_token = args[3] if len(args) > 3 else None
+            if len(args) > 4:
+                return None, (
+                    f"Unexpected extra text after eps {direction}. "
+                    f"Example: /alert JKH.N0000 eps {direction} 5\n{ALERT_USAGE}"
+                )
+            abs_map = {
+                "above": AlertType.EPS_ABOVE,
+                "below": AlertType.EPS_BELOW,
+            }
+            threshold = _parse_threshold_token(str(threshold_token or ""))
+            if threshold is None:
+                return None, (
+                    "EPS threshold must be a positive finite number. "
+                    f"Example: /alert JKH.N0000 eps {direction} 5\n{ALERT_USAGE}"
+                )
+            return ParsedAlert(abs_map[direction], threshold), None
+        if rest and rest[0] == "yoy" and len(rest) >= 3 and rest[1] in ("above", "below"):
+            direction = rest[1]
+            threshold_token = args[4] if len(args) > 4 else None
+            if len(args) > 5:
+                return None, (
+                    f"Unexpected extra text after yoy {direction}. "
+                    f"Example: /alert JKH.N0000 {kind} yoy {direction} 10\n{ALERT_USAGE}"
+                )
+            yoy_map: dict[tuple[str, str], AlertType] = {
+                ("eps", "above"): AlertType.EPS_YOY_ABOVE,
+                ("eps", "below"): AlertType.EPS_YOY_BELOW,
+                ("rev", "above"): AlertType.REV_YOY_ABOVE,
+                ("rev", "below"): AlertType.REV_YOY_BELOW,
+                ("profit", "above"): AlertType.PROFIT_YOY_ABOVE,
+                ("profit", "below"): AlertType.PROFIT_YOY_BELOW,
+            }
+            key = (metric, direction)
+            if key not in yoy_map:
+                return None, ALERT_USAGE
+            threshold = _parse_threshold_token(str(threshold_token or ""))
+            if threshold is None:
+                return None, (
+                    "YoY threshold must be a positive percent "
+                    f"(e.g. 10 for +10% / decline of 10%).\n{ALERT_USAGE}"
+                )
+            return ParsedAlert(yoy_map[key], threshold), None
+        return None, (
+            "Try: /alert SYMBOL eps above X\n"
+            "Or: /alert SYMBOL eps yoy above PCT\n"
+            f"{ALERT_USAGE}"
+        )
+
+    # Activity / notice kinds (peers: Tijori volume, Stock Alarm gap/volume).
+    activity_kinds = {
+        "volume": AlertType.VOLUME_SPIKE,
+        "volspike": AlertType.VOLUME_SPIKE,
+        "volup": AlertType.VOLUME_UP,
+        "voldown": AlertType.VOLUME_DOWN,
+        "crossing": AlertType.CROSSING_VOLUME,
+        "xvol": AlertType.CROSSING_VOLUME,
+        "print": AlertType.BIG_PRINT,
+        "bigprint": AlertType.BIG_PRINT,
+        "gap": AlertType.GAP,
+        "bidheavy": AlertType.BID_HEAVY,
+        "bid_heavy": AlertType.BID_HEAVY,
+        "askheavy": AlertType.ASK_HEAVY,
+        "ask_heavy": AlertType.ASK_HEAVY,
+    }
+    if kind in activity_kinds:
+        if len(args) < 3:
+            return None, (
+                f"Almost — need a number after {kind}. "
+                f"Example: /alert JKH.N0000 {kind} 5\n{ALERT_USAGE}"
+            )
+        if len(args) > 3:
+            return None, (
+                f"Unexpected extra text after the {kind} threshold. "
+                f"Example: /alert JKH.N0000 {kind} 5\n{ALERT_USAGE}"
+            )
+        threshold = _parse_threshold_token(args[2])
+        if threshold is None:
+            return None, (
+                "Threshold must be a positive finite number "
+                f"at most {MAX_ALERT_THRESHOLD:g} "
+                "(use 1000 or 1,000 — not nan/inf or huge values). "
+                f"Example: /alert JKH.N0000 {kind} 5\n{ALERT_USAGE}"
+            )
+        return ParsedAlert(activity_kinds[kind], threshold), None
+    notice_kinds = {
+        "buyin": AlertType.BUY_IN,
+        "buy_in": AlertType.BUY_IN,
+        "noncompliance": AlertType.NON_COMPLIANCE,
+        "non_compliance": AlertType.NON_COMPLIANCE,
+        "halt": AlertType.HALT,
+        "notice": AlertType.HALT,
+    }
+    if kind in notice_kinds:
+        if len(args) > 2:
+            return None, (
+                f"Unexpected extra text after {kind}. "
+                f"Example: /alert JKH.N0000 {kind}\n{ALERT_USAGE}"
+            )
+        return ParsedAlert(notice_kinds[kind], None), None
     return None, (f"I didn't catch that alert type.\n{ALERT_USAGE}")
 
 
@@ -398,6 +531,23 @@ async def cmd_alert(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     threshold = parsed.threshold
     category = parsed.category
 
+    # Market-wide halt notices use synthetic MARKET stock (seeded in migrations).
+    if alert_type == AlertType.HALT and symbol == MARKET_SYMBOL:
+        user_id = await _user_id(storage, update)
+        assert user_id is not None
+        await storage.upsert_stock(
+            MARKET_SYMBOL, "Colombo Stock Exchange (market-wide)"
+        )
+        rule = await storage.create_alert_rule(
+            user_id, symbol, alert_type, threshold, category=category
+        )
+        await update.effective_message.reply_text(
+            _clamp_telegram_message(
+                f"Alert #{rule.id} set: market halt/notice alerts.\n{disclaimer()}"
+            )
+        )
+        return
+
     status, info = await _lookup_symbol(cse, symbol)
     if status == "upstream":
         await update.effective_message.reply_text(
@@ -419,6 +569,7 @@ async def cmd_alert(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         user_id, symbol, alert_type, threshold, category=category
     )
 
+    thr_s = f"{threshold:g}" if threshold is not None and math.isfinite(threshold) else "?"
     if alert_type == AlertType.DISCLOSURE:
         cat = sanitize_disclosure_category(rule.category)
         if cat:
@@ -426,14 +577,57 @@ async def cmd_alert(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         else:
             desc = f"new disclosure for {symbol}"
     elif alert_type == AlertType.DAILY_MOVE:
-        thr_s = f"{threshold:g}" if threshold is not None and math.isfinite(threshold) else "?"
         desc = f"{symbol} daily move ≥ {thr_s}%"
     elif alert_type == AlertType.PRICE_ABOVE:
-        thr_s = f"{threshold:g}" if threshold is not None and math.isfinite(threshold) else "?"
         desc = f"{symbol} crosses above {thr_s}"
-    else:
-        thr_s = f"{threshold:g}" if threshold is not None and math.isfinite(threshold) else "?"
+    elif alert_type == AlertType.PRICE_BELOW:
         desc = f"{symbol} crosses below {thr_s}"
+    elif alert_type == AlertType.VOLUME_SPIKE:
+        desc = f"{symbol} volume ≥ {thr_s}× recent average"
+    elif alert_type == AlertType.VOLUME_UP:
+        desc = f"{symbol} heavy volume while price up (≥ {thr_s}× avg)"
+    elif alert_type == AlertType.VOLUME_DOWN:
+        desc = f"{symbol} heavy volume while price down (≥ {thr_s}× avg)"
+    elif alert_type == AlertType.CROSSING_VOLUME:
+        desc = f"{symbol} crossing volume ≥ {thr_s}× recent average"
+    elif alert_type == AlertType.BIG_PRINT:
+        desc = f"{symbol} single print ≥ {thr_s} shares"
+    elif alert_type == AlertType.GAP:
+        desc = f"{symbol} open gap ≥ {thr_s}%"
+    elif alert_type == AlertType.BUY_IN:
+        desc = f"{symbol} buy-in board notice"
+    elif alert_type == AlertType.NON_COMPLIANCE:
+        desc = f"{symbol} non-compliance notice"
+    elif alert_type == AlertType.HALT:
+        desc = f"{symbol} market halt/notice"
+    elif alert_type == AlertType.BID_HEAVY:
+        desc = f"{symbol} bid-heavy order book ≥ {thr_s}× (bids/asks)"
+    elif alert_type == AlertType.ASK_HEAVY:
+        desc = f"{symbol} ask-heavy order book ≥ {thr_s}× (asks/bids)"
+    elif alert_type == AlertType.EPS_ABOVE:
+        desc = (
+            f"{symbol} next financial filing basic EPS above {thr_s} "
+            "(not live price)"
+        )
+    elif alert_type == AlertType.EPS_BELOW:
+        desc = (
+            f"{symbol} next financial filing basic EPS below {thr_s} "
+            "(not live price)"
+        )
+    elif alert_type == AlertType.EPS_YOY_ABOVE:
+        desc = f"{symbol} filing EPS YoY above +{thr_s}%"
+    elif alert_type == AlertType.EPS_YOY_BELOW:
+        desc = f"{symbol} filing EPS YoY below -{thr_s}%"
+    elif alert_type == AlertType.REV_YOY_ABOVE:
+        desc = f"{symbol} filing revenue YoY above +{thr_s}%"
+    elif alert_type == AlertType.REV_YOY_BELOW:
+        desc = f"{symbol} filing revenue YoY below -{thr_s}%"
+    elif alert_type == AlertType.PROFIT_YOY_ABOVE:
+        desc = f"{symbol} filing profit YoY above +{thr_s}%"
+    elif alert_type == AlertType.PROFIT_YOY_BELOW:
+        desc = f"{symbol} filing profit YoY below -{thr_s}%"
+    else:
+        desc = f"{symbol} alert"
 
     # Clamp: hostile/huge category (or pathological rule id) must not blow past 4096
     # — an oversize confirm would fail while the rule is already persisted.
@@ -525,6 +719,7 @@ async def cmd_myalerts(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
             "/alert JKH.N0000 below 90\n"
             "/alert JKH.N0000 move 5\n"
             "/alert JKH.N0000 disclosure\n"
+            "/alert JKH.N0000 volume 5\n"
             "/alert JKH.N0000 disclosure Financial\n"
             f"{disclaimer()}"
         )
@@ -540,6 +735,13 @@ async def cmd_myalerts(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
                 lines.append(f"#{r.id} {sym} disclosure {cat}")
             else:
                 lines.append(f"#{r.id} {sym} disclosure")
+        elif r.type in NOTICE_ALERT_TYPES:
+            label = {
+                AlertType.BUY_IN: "buyin",
+                AlertType.NON_COMPLIANCE: "noncompliance",
+                AlertType.HALT: "halt",
+            }.get(r.type, r.type.value)
+            lines.append(f"#{r.id} {sym} {label}")
         else:
             # Null / non-finite threshold must not TypeError the whole handler
             # (corrupt DB row / legacy insert); show "?" and keep listing.
@@ -549,8 +751,26 @@ async def cmd_myalerts(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
                 lines.append(f"#{r.id} {sym} move {thr_s}%")
             elif r.type == AlertType.PRICE_ABOVE:
                 lines.append(f"#{r.id} {sym} above {thr_s}")
-            else:
+            elif r.type == AlertType.PRICE_BELOW:
                 lines.append(f"#{r.id} {sym} below {thr_s}")
+            elif r.type == AlertType.VOLUME_SPIKE:
+                lines.append(f"#{r.id} {sym} volume {thr_s}x")
+            elif r.type == AlertType.VOLUME_UP:
+                lines.append(f"#{r.id} {sym} volup {thr_s}x")
+            elif r.type == AlertType.VOLUME_DOWN:
+                lines.append(f"#{r.id} {sym} voldown {thr_s}x")
+            elif r.type == AlertType.CROSSING_VOLUME:
+                lines.append(f"#{r.id} {sym} crossing {thr_s}x")
+            elif r.type == AlertType.BIG_PRINT:
+                lines.append(f"#{r.id} {sym} print {thr_s}")
+            elif r.type == AlertType.GAP:
+                lines.append(f"#{r.id} {sym} gap {thr_s}%")
+            elif r.type == AlertType.BID_HEAVY:
+                lines.append(f"#{r.id} {sym} bidheavy {thr_s}x")
+            elif r.type == AlertType.ASK_HEAVY:
+                lines.append(f"#{r.id} {sym} askheavy {thr_s}x")
+            else:
+                lines.append(f"#{r.id} {sym} {r.type.value} {thr_s}")
     # Category disclosure rules share a symbol with any-disclosure rules; the
     # numeric id from this list is the only way to cancel one filter.
     lines.append("")

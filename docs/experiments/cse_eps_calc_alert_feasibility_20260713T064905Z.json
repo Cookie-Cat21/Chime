@@ -1,0 +1,917 @@
+{
+  "generated_at": "2026-07-13T06:49:05.098235+00:00",
+  "target": 0.99,
+  "semantics": {
+    "metric": "basic_eps",
+    "period": "current_quarter_or_annual",
+    "entity": "group_preferred",
+    "trigger": "new_filing_extract"
+  },
+  "summary": {
+    "gold_n": 41,
+    "scored_gold_n": 37,
+    "eps_accuracy_pct": 100.0,
+    "seed_n": 15,
+    "seed_hits": 15,
+    "seed_accuracy_pct": 100.0,
+    "dual_n": 22,
+    "dual_hits": 22,
+    "dual_accuracy_pct": 100.0,
+    "alert_decision_accuracy_pct": 100.0,
+    "crossing_n": 28,
+    "crossing_correct": 28,
+    "crossing_accuracy_pct": 100.0,
+    "unresolved_excluded": 0,
+    "feasible": true
+  },
+  "gold_build_stats": {
+    "n": 41,
+    "seed": 15,
+    "dual_agree": 22,
+    "disagree": 0,
+    "extractor_only": 4,
+    "independent_only": 0,
+    "both_miss": 0,
+    "unresolved_excluded": 0
+  },
+  "disagreements": [],
+  "eps_score": {
+    "n": 37,
+    "eps_hits": 37,
+    "eps_accuracy_pct": 100.0,
+    "strict_seed_only_pct": null,
+    "rows": [
+      {
+        "symbol": "AAF.N0000",
+        "kind": "quarterly",
+        "gold_source": "human_seed",
+        "eps_ok": true,
+        "rev_ok": true,
+        "pat_ok": true,
+        "gold_eps": 2.26,
+        "got_eps": 2.26,
+        "got_label": "Basic Earnings Per Share (Rs.)"
+      },
+      {
+        "symbol": "AAF.N0000",
+        "kind": "annual",
+        "gold_source": "human_seed",
+        "eps_ok": true,
+        "rev_ok": true,
+        "pat_ok": true,
+        "gold_eps": 3.55,
+        "got_eps": 3.55,
+        "got_label": "Earnings per share - basic"
+      },
+      {
+        "symbol": "AAIC.N0000",
+        "kind": "quarterly",
+        "gold_source": "human_seed",
+        "eps_ok": true,
+        "rev_ok": true,
+        "pat_ok": true,
+        "gold_eps": 7.55,
+        "got_eps": 7.55,
+        "got_label": "Basic earnings per share (Rs.)"
+      },
+      {
+        "symbol": "AAIC.N0000",
+        "kind": "annual",
+        "gold_source": "human_seed",
+        "eps_ok": true,
+        "rev_ok": true,
+        "pat_ok": true,
+        "gold_eps": 12.61,
+        "got_eps": 12.61,
+        "got_label": "Basic earnings per share (Rs.)"
+      },
+      {
+        "symbol": "ABAN.N0000",
+        "kind": "quarterly",
+        "gold_source": "dual_agree",
+        "eps_ok": true,
+        "rev_ok": true,
+        "pat_ok": true,
+        "gold_eps": 25.92,
+        "got_eps": 25.92,
+        "got_label": "Earnings per share - Basic/Diluted"
+      },
+      {
+        "symbol": "ABAN.N0000",
+        "kind": "annual",
+        "gold_source": "dual_agree",
+        "eps_ok": true,
+        "rev_ok": true,
+        "pat_ok": true,
+        "gold_eps": 85.85,
+        "got_eps": 85.85,
+        "got_label": "Earnings per share - basic/ diluted"
+      },
+      {
+        "symbol": "ABL.N0000",
+        "kind": "quarterly",
+        "gold_source": "human_seed",
+        "eps_ok": true,
+        "rev_ok": true,
+        "pat_ok": true,
+        "gold_eps": 4.5,
+        "got_eps": 4.5,
+        "got_label": "Earnings Per Share - - Basic / Diluted (in Rs.) - Basic / Diluted (in Rs.)"
+      },
+      {
+        "symbol": "ABL.N0000",
+        "kind": "annual",
+        "gold_source": "dual_agree",
+        "eps_ok": true,
+        "rev_ok": true,
+        "pat_ok": true,
+        "gold_eps": 3.22,
+        "got_eps": 3.22,
+        "got_label": "Earnings Per Share - Basic"
+      },
+      {
+        "symbol": "ACL.N0000",
+        "kind": "annual",
+        "gold_source": "dual_agree",
+        "eps_ok": true,
+        "rev_ok": true,
+        "pat_ok": true,
+        "gold_eps": 11.93,
+        "got_eps": 11.93,
+        "got_label": "Earnings per share - basic/ diluted"
+      },
+      {
+        "symbol": "AEL.N0000",
+        "kind": "quarterly",
+        "gold_source": "dual_agree",
+        "eps_ok": true,
+        "rev_ok": true,
+        "pat_ok": true,
+        "gold_eps": 1.24,
+        "got_eps": 1.24,
+        "got_label": "Basic earnings per share"
+      },
+      {
+        "symbol": "AEL.N0000",
+        "kind": "annual",
+        "gold_source": "dual_agree",
+        "eps_ok": true,
+        "rev_ok": true,
+        "pat_ok": true,
+        "gold_eps": 6.31,
+        "got_eps": 6.31,
+        "got_label": "Basic earnings per share"
+      },
+      {
+        "symbol": "AGAL.N0000",
+        "kind": "annual",
+        "gold_source": "human_seed",
+        "eps_ok": true,
+        "rev_ok": true,
+        "pat_ok": true,
+        "gold_eps": 5.0,
+        "got_eps": 5.0,
+        "got_label": "Basic earnings per share  (Rs.)"
+      },
+      {
+        "symbol": "AGPL.N0000",
+        "kind": "quarterly",
+        "gold_source": "dual_agree",
+        "eps_ok": true,
+        "rev_ok": true,
+        "pat_ok": true,
+        "gold_eps": 0.19,
+        "got_eps": 0.19,
+        "got_label": "Basic Earnings Per Share"
+      },
+      {
+        "symbol": "AGPL.N0000",
+        "kind": "annual",
+        "gold_source": "dual_agree",
+        "eps_ok": true,
+        "rev_ok": true,
+        "pat_ok": true,
+        "gold_eps": 1.0,
+        "got_eps": 1.0,
+        "got_label": "Earnings per Share"
+      },
+      {
+        "symbol": "AGST.N0000",
+        "kind": "annual",
+        "gold_source": "dual_agree",
+        "eps_ok": true,
+        "rev_ok": true,
+        "pat_ok": true,
+        "gold_eps": 0.33,
+        "got_eps": 0.33,
+        "got_label": "Basic earnings per share (Rs.)"
+      },
+      {
+        "symbol": "AHUN.N0000",
+        "kind": "quarterly",
+        "gold_source": "human_seed",
+        "eps_ok": true,
+        "rev_ok": true,
+        "pat_ok": true,
+        "gold_eps": 3.99,
+        "got_eps": 3.99,
+        "got_label": "Earnings/(loss) per share for the period  -   Rs."
+      },
+      {
+        "symbol": "AHUN.N0000",
+        "kind": "annual",
+        "gold_source": "human_seed",
+        "eps_ok": true,
+        "rev_ok": true,
+        "pat_ok": true,
+        "gold_eps": 9.16,
+        "got_eps": 9.16,
+        "got_label": "Earnings per ordinary share - Basic/Diluted (Rs. )"
+      },
+      {
+        "symbol": "ALLI.N0000",
+        "kind": "quarterly",
+        "gold_source": "human_seed",
+        "eps_ok": true,
+        "rev_ok": true,
+        "pat_ok": true,
+        "gold_eps": 89.22,
+        "got_eps": 89.22,
+        "got_label": "Basic/ Diluted earnings per share"
+      },
+      {
+        "symbol": "ALUM.N0000",
+        "kind": "annual",
+        "gold_source": "human_seed",
+        "eps_ok": true,
+        "rev_ok": true,
+        "pat_ok": true,
+        "gold_eps": 1.45,
+        "got_eps": 1.45,
+        "got_label": "Diluted and Basic Earnings Per Share (Rs.)"
+      },
+      {
+        "symbol": "AMF.N0000",
+        "kind": "quarterly",
+        "gold_source": "dual_agree",
+        "eps_ok": true,
+        "rev_ok": true,
+        "pat_ok": true,
+        "gold_eps": 1.48,
+        "got_eps": 1.48,
+        "got_label": "Earnings per share (Rs.)"
+      },
+      {
+        "symbol": "AMSL.N0000",
+        "kind": "quarterly",
+        "gold_source": "dual_agree",
+        "eps_ok": true,
+        "rev_ok": true,
+        "pat_ok": true,
+        "gold_eps": 0.48,
+        "got_eps": 0.48,
+        "got_label": "Earnings Per Share - Basic"
+      },
+      {
+        "symbol": "AMSL.N0000",
+        "kind": "annual",
+        "gold_source": "dual_agree",
+        "eps_ok": true,
+        "rev_ok": true,
+        "pat_ok": true,
+        "gold_eps": 1.24,
+        "got_eps": 1.24,
+        "got_label": "Earnings Per Share - Basic"
+      },
+      {
+        "symbol": "APLA.N0000",
+        "kind": "quarterly",
+        "gold_source": "human_seed",
+        "eps_ok": true,
+        "rev_ok": true,
+        "pat_ok": true,
+        "gold_eps": 4.92,
+        "got_eps": 4.92,
+        "got_label": "Basic / Dialuted Earnings per share (Rs)"
+      },
+      {
+        "symbol": "APLA.N0000",
+        "kind": "annual",
+        "gold_source": "dual_agree",
+        "eps_ok": true,
+        "rev_ok": true,
+        "pat_ok": true,
+        "gold_eps": 108.17,
+        "got_eps": 108.17,
+        "got_label": "Basic/diluted earnings per share (Rs)"
+      },
+      {
+        "symbol": "ASCO.N0000",
+        "kind": "quarterly",
+        "gold_source": "dual_agree",
+        "eps_ok": true,
+        "rev_ok": true,
+        "pat_ok": true,
+        "gold_eps": -0.06,
+        "got_eps": -0.06,
+        "got_label": "Earnings / (loss) per share  - LKR"
+      },
+      {
+        "symbol": "ASCO.N0000",
+        "kind": "annual",
+        "gold_source": "human_seed",
+        "eps_ok": true,
+        "rev_ok": true,
+        "pat_ok": true,
+        "gold_eps": -0.45,
+        "got_eps": -0.45,
+        "got_label": "Basic earnings/(loss) per share"
+      },
+      {
+        "symbol": "ASHO.N0000",
+        "kind": "annual",
+        "gold_source": "dual_agree",
+        "eps_ok": true,
+        "rev_ok": true,
+        "pat_ok": true,
+        "gold_eps": 422.84,
+        "got_eps": 422.84,
+        "got_label": "EARNINGS PER SHARE (Rs.)"
+      },
+      {
+        "symbol": "ASIR.N0000",
+        "kind": "quarterly",
+        "gold_source": "human_seed",
+        "eps_ok": true,
+        "rev_ok": true,
+        "pat_ok": true,
+        "gold_eps": 1.11,
+        "got_eps": 1.11,
+        "got_label": "Earnings Per Share - Basic"
+      },
+      {
+        "symbol": "ASIR.N0000",
+        "kind": "annual",
+        "gold_source": "dual_agree",
+        "eps_ok": true,
+        "rev_ok": true,
+        "pat_ok": true,
+        "gold_eps": 2.54,
+        "got_eps": 2.54,
+        "got_label": "Earnings Per Share - Basic"
+      },
+      {
+        "symbol": "ASIY.N0000",
+        "kind": "quarterly",
+        "gold_source": "dual_agree",
+        "eps_ok": true,
+        "rev_ok": true,
+        "pat_ok": true,
+        "gold_eps": 31.0,
+        "got_eps": 31.0,
+        "got_label": "Basic Earnings per share is calculated by dividing the net profit for the year attributable to ordinary shareholders by the weighted average"
+      },
+      {
+        "symbol": "ASIY.N0000",
+        "kind": "annual",
+        "gold_source": "dual_agree",
+        "eps_ok": true,
+        "rev_ok": true,
+        "pat_ok": true,
+        "gold_eps": 0.8,
+        "got_eps": 0.8,
+        "got_label": "Basic/Diluted Earnings/ (Loss) Per Share"
+      },
+      {
+        "symbol": "ASPH.N0000",
+        "kind": "quarterly",
+        "gold_source": "human_seed",
+        "eps_ok": true,
+        "rev_ok": true,
+        "pat_ok": true,
+        "gold_eps": 0.003,
+        "got_eps": 0.003,
+        "got_label": "Diluted and Basic Earnings/ (Loss) per Ordinary Share"
+      },
+      {
+        "symbol": "ASPH.N0000",
+        "kind": "annual",
+        "gold_source": "dual_agree",
+        "eps_ok": true,
+        "rev_ok": true,
+        "pat_ok": true,
+        "gold_eps": 0.01,
+        "got_eps": 0.01,
+        "got_label": "Basic Earnings per share (EPS) - Rs."
+      },
+      {
+        "symbol": "ATL.N0000",
+        "kind": "quarterly",
+        "gold_source": "human_seed",
+        "eps_ok": true,
+        "rev_ok": true,
+        "pat_ok": true,
+        "gold_eps": -1.27,
+        "got_eps": -1.27,
+        "got_label": "Weighted Average Earnings Per Share"
+      },
+      {
+        "symbol": "ATLL.N0000",
+        "kind": "quarterly",
+        "gold_source": "dual_agree",
+        "eps_ok": true,
+        "rev_ok": true,
+        "pat_ok": true,
+        "gold_eps": -0.07,
+        "got_eps": -0.07,
+        "got_label": "Basic / diluted earnings per share to equity holders"
+      },
+      {
+        "symbol": "ATLL.N0000",
+        "kind": "annual",
+        "gold_source": "dual_agree",
+        "eps_ok": true,
+        "rev_ok": true,
+        "pat_ok": true,
+        "gold_eps": 0.09,
+        "got_eps": 0.09,
+        "got_label": "Basic/Diluted Earnings Per Share"
+      },
+      {
+        "symbol": "BERU.N0000",
+        "kind": "annual",
+        "gold_source": "dual_agree",
+        "eps_ok": true,
+        "rev_ok": true,
+        "pat_ok": true,
+        "gold_eps": -8.0,
+        "got_eps": -8.0,
+        "got_label": "Earnings per Share (Rs.)"
+      }
+    ]
+  },
+  "alert_sim": {
+    "n_sims": 148,
+    "correct": 148,
+    "alert_decision_accuracy_pct": 100.0,
+    "false_fires": 0,
+    "missed_fires": 0,
+    "rows": []
+  },
+  "crossing": {
+    "n_cross_events": 28,
+    "correct": 28,
+    "crossing_accuracy_pct": 100.0,
+    "events": [
+      {
+        "symbol": "AAF.N0000",
+        "old": {
+          "kind": "quarterly",
+          "eps": 2.26
+        },
+        "new": {
+          "kind": "annual",
+          "gold_eps": 3.55,
+          "got_eps": 3.55
+        },
+        "threshold": 2.905,
+        "should_fire_above": true,
+        "did_fire_above": true,
+        "correct": true
+      },
+      {
+        "symbol": "AAF.N0000",
+        "old": {
+          "kind": "annual",
+          "eps": 3.55
+        },
+        "new": {
+          "kind": "quarterly",
+          "gold_eps": 2.26,
+          "got_eps": 2.26
+        },
+        "threshold": 2.905,
+        "should_fire_above": false,
+        "did_fire_above": false,
+        "correct": true
+      },
+      {
+        "symbol": "AAIC.N0000",
+        "old": {
+          "kind": "quarterly",
+          "eps": 7.55
+        },
+        "new": {
+          "kind": "annual",
+          "gold_eps": 12.61,
+          "got_eps": 12.61
+        },
+        "threshold": 10.08,
+        "should_fire_above": true,
+        "did_fire_above": true,
+        "correct": true
+      },
+      {
+        "symbol": "AAIC.N0000",
+        "old": {
+          "kind": "annual",
+          "eps": 12.61
+        },
+        "new": {
+          "kind": "quarterly",
+          "gold_eps": 7.55,
+          "got_eps": 7.55
+        },
+        "threshold": 10.08,
+        "should_fire_above": false,
+        "did_fire_above": false,
+        "correct": true
+      },
+      {
+        "symbol": "ABAN.N0000",
+        "old": {
+          "kind": "quarterly",
+          "eps": 25.92
+        },
+        "new": {
+          "kind": "annual",
+          "gold_eps": 85.85,
+          "got_eps": 85.85
+        },
+        "threshold": 55.885,
+        "should_fire_above": true,
+        "did_fire_above": true,
+        "correct": true
+      },
+      {
+        "symbol": "ABAN.N0000",
+        "old": {
+          "kind": "annual",
+          "eps": 85.85
+        },
+        "new": {
+          "kind": "quarterly",
+          "gold_eps": 25.92,
+          "got_eps": 25.92
+        },
+        "threshold": 55.885,
+        "should_fire_above": false,
+        "did_fire_above": false,
+        "correct": true
+      },
+      {
+        "symbol": "ABL.N0000",
+        "old": {
+          "kind": "quarterly",
+          "eps": 4.5
+        },
+        "new": {
+          "kind": "annual",
+          "gold_eps": 3.22,
+          "got_eps": 3.22
+        },
+        "threshold": 3.8600000000000003,
+        "should_fire_above": false,
+        "did_fire_above": false,
+        "correct": true
+      },
+      {
+        "symbol": "ABL.N0000",
+        "old": {
+          "kind": "annual",
+          "eps": 3.22
+        },
+        "new": {
+          "kind": "quarterly",
+          "gold_eps": 4.5,
+          "got_eps": 4.5
+        },
+        "threshold": 3.8600000000000003,
+        "should_fire_above": true,
+        "did_fire_above": true,
+        "correct": true
+      },
+      {
+        "symbol": "AEL.N0000",
+        "old": {
+          "kind": "quarterly",
+          "eps": 1.24
+        },
+        "new": {
+          "kind": "annual",
+          "gold_eps": 6.31,
+          "got_eps": 6.31
+        },
+        "threshold": 3.775,
+        "should_fire_above": true,
+        "did_fire_above": true,
+        "correct": true
+      },
+      {
+        "symbol": "AEL.N0000",
+        "old": {
+          "kind": "annual",
+          "eps": 6.31
+        },
+        "new": {
+          "kind": "quarterly",
+          "gold_eps": 1.24,
+          "got_eps": 1.24
+        },
+        "threshold": 3.775,
+        "should_fire_above": false,
+        "did_fire_above": false,
+        "correct": true
+      },
+      {
+        "symbol": "AGPL.N0000",
+        "old": {
+          "kind": "quarterly",
+          "eps": 0.19
+        },
+        "new": {
+          "kind": "annual",
+          "gold_eps": 1.0,
+          "got_eps": 1.0
+        },
+        "threshold": 0.595,
+        "should_fire_above": true,
+        "did_fire_above": true,
+        "correct": true
+      },
+      {
+        "symbol": "AGPL.N0000",
+        "old": {
+          "kind": "annual",
+          "eps": 1.0
+        },
+        "new": {
+          "kind": "quarterly",
+          "gold_eps": 0.19,
+          "got_eps": 0.19
+        },
+        "threshold": 0.595,
+        "should_fire_above": false,
+        "did_fire_above": false,
+        "correct": true
+      },
+      {
+        "symbol": "AHUN.N0000",
+        "old": {
+          "kind": "quarterly",
+          "eps": 3.99
+        },
+        "new": {
+          "kind": "annual",
+          "gold_eps": 9.16,
+          "got_eps": 9.16
+        },
+        "threshold": 6.575,
+        "should_fire_above": true,
+        "did_fire_above": true,
+        "correct": true
+      },
+      {
+        "symbol": "AHUN.N0000",
+        "old": {
+          "kind": "annual",
+          "eps": 9.16
+        },
+        "new": {
+          "kind": "quarterly",
+          "gold_eps": 3.99,
+          "got_eps": 3.99
+        },
+        "threshold": 6.575,
+        "should_fire_above": false,
+        "did_fire_above": false,
+        "correct": true
+      },
+      {
+        "symbol": "AMSL.N0000",
+        "old": {
+          "kind": "quarterly",
+          "eps": 0.48
+        },
+        "new": {
+          "kind": "annual",
+          "gold_eps": 1.24,
+          "got_eps": 1.24
+        },
+        "threshold": 0.86,
+        "should_fire_above": true,
+        "did_fire_above": true,
+        "correct": true
+      },
+      {
+        "symbol": "AMSL.N0000",
+        "old": {
+          "kind": "annual",
+          "eps": 1.24
+        },
+        "new": {
+          "kind": "quarterly",
+          "gold_eps": 0.48,
+          "got_eps": 0.48
+        },
+        "threshold": 0.86,
+        "should_fire_above": false,
+        "did_fire_above": false,
+        "correct": true
+      },
+      {
+        "symbol": "APLA.N0000",
+        "old": {
+          "kind": "quarterly",
+          "eps": 4.92
+        },
+        "new": {
+          "kind": "annual",
+          "gold_eps": 108.17,
+          "got_eps": 108.17
+        },
+        "threshold": 56.545,
+        "should_fire_above": true,
+        "did_fire_above": true,
+        "correct": true
+      },
+      {
+        "symbol": "APLA.N0000",
+        "old": {
+          "kind": "annual",
+          "eps": 108.17
+        },
+        "new": {
+          "kind": "quarterly",
+          "gold_eps": 4.92,
+          "got_eps": 4.92
+        },
+        "threshold": 56.545,
+        "should_fire_above": false,
+        "did_fire_above": false,
+        "correct": true
+      },
+      {
+        "symbol": "ASCO.N0000",
+        "old": {
+          "kind": "quarterly",
+          "eps": -0.06
+        },
+        "new": {
+          "kind": "annual",
+          "gold_eps": -0.45,
+          "got_eps": -0.45
+        },
+        "threshold": -0.255,
+        "should_fire_above": false,
+        "did_fire_above": false,
+        "correct": true
+      },
+      {
+        "symbol": "ASCO.N0000",
+        "old": {
+          "kind": "annual",
+          "eps": -0.45
+        },
+        "new": {
+          "kind": "quarterly",
+          "gold_eps": -0.06,
+          "got_eps": -0.06
+        },
+        "threshold": -0.255,
+        "should_fire_above": true,
+        "did_fire_above": true,
+        "correct": true
+      },
+      {
+        "symbol": "ASIR.N0000",
+        "old": {
+          "kind": "quarterly",
+          "eps": 1.11
+        },
+        "new": {
+          "kind": "annual",
+          "gold_eps": 2.54,
+          "got_eps": 2.54
+        },
+        "threshold": 1.8250000000000002,
+        "should_fire_above": true,
+        "did_fire_above": true,
+        "correct": true
+      },
+      {
+        "symbol": "ASIR.N0000",
+        "old": {
+          "kind": "annual",
+          "eps": 2.54
+        },
+        "new": {
+          "kind": "quarterly",
+          "gold_eps": 1.11,
+          "got_eps": 1.11
+        },
+        "threshold": 1.8250000000000002,
+        "should_fire_above": false,
+        "did_fire_above": false,
+        "correct": true
+      },
+      {
+        "symbol": "ASIY.N0000",
+        "old": {
+          "kind": "quarterly",
+          "eps": 31.0
+        },
+        "new": {
+          "kind": "annual",
+          "gold_eps": 0.8,
+          "got_eps": 0.8
+        },
+        "threshold": 15.9,
+        "should_fire_above": false,
+        "did_fire_above": false,
+        "correct": true
+      },
+      {
+        "symbol": "ASIY.N0000",
+        "old": {
+          "kind": "annual",
+          "eps": 0.8
+        },
+        "new": {
+          "kind": "quarterly",
+          "gold_eps": 31.0,
+          "got_eps": 31.0
+        },
+        "threshold": 15.9,
+        "should_fire_above": true,
+        "did_fire_above": true,
+        "correct": true
+      },
+      {
+        "symbol": "ASPH.N0000",
+        "old": {
+          "kind": "quarterly",
+          "eps": 0.003
+        },
+        "new": {
+          "kind": "annual",
+          "gold_eps": 0.01,
+          "got_eps": 0.01
+        },
+        "threshold": 0.006500000000000001,
+        "should_fire_above": true,
+        "did_fire_above": true,
+        "correct": true
+      },
+      {
+        "symbol": "ASPH.N0000",
+        "old": {
+          "kind": "annual",
+          "eps": 0.01
+        },
+        "new": {
+          "kind": "quarterly",
+          "gold_eps": 0.003,
+          "got_eps": 0.003
+        },
+        "threshold": 0.006500000000000001,
+        "should_fire_above": false,
+        "did_fire_above": false,
+        "correct": true
+      },
+      {
+        "symbol": "ATLL.N0000",
+        "old": {
+          "kind": "quarterly",
+          "eps": -0.07
+        },
+        "new": {
+          "kind": "annual",
+          "gold_eps": 0.09,
+          "got_eps": 0.09
+        },
+        "threshold": 0.009999999999999995,
+        "should_fire_above": true,
+        "did_fire_above": true,
+        "correct": true
+      },
+      {
+        "symbol": "ATLL.N0000",
+        "old": {
+          "kind": "annual",
+          "eps": 0.09
+        },
+        "new": {
+          "kind": "quarterly",
+          "gold_eps": -0.07,
+          "got_eps": -0.07
+        },
+        "threshold": 0.009999999999999995,
+        "should_fire_above": false,
+        "did_fire_above": false,
+        "correct": true
+      }
+    ]
+  },
+  "json_name": "cse_eps_calc_alert_feasibility_20260713T064905Z.json"
+}

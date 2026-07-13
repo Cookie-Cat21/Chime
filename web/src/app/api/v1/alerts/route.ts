@@ -9,7 +9,11 @@ import {
 import { readJsonBody } from "@/lib/api/read-json-body";
 import { toSafePositiveInt } from "@/lib/api/safe-int";
 import { toIso } from "@/lib/api/time";
-import { isAlertType, normalizeSymbol } from "@/lib/api/symbol";
+import {
+  isAlertType,
+  NOTICE_ALERT_TYPES,
+  normalizeSymbol,
+} from "@/lib/api/symbol";
 import { jsonError, jsonOk } from "@/lib/auth/errors";
 import { requireSession, requireSessionAndCsrf } from "@/lib/auth/guard";
 import { createAlertRule, getPool, getStock } from "@/lib/db";
@@ -156,18 +160,19 @@ export async function POST(request: NextRequest) {
     return jsonError(
       400,
       "validation_error",
-      "type must be price_above, price_below, daily_move, or disclosure.",
+      "type must be a supported alert type (price, move, disclosure, volume, print, gap, or notice).",
     );
   }
   const alertType = obj.type;
 
   let threshold: number | null = null;
-  if (alertType === "disclosure") {
+  const isNotice = (NOTICE_ALERT_TYPES as readonly string[]).includes(alertType);
+  if (isNotice) {
     if (obj.threshold !== undefined && obj.threshold !== null) {
       return jsonError(
         400,
         "validation_error",
-        "disclosure alerts must not include a threshold.",
+        "this alert type must not include a threshold.",
       );
     }
     threshold = null;

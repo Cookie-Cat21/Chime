@@ -20,6 +20,7 @@ import {
 import { toSafePositiveInt } from "@/lib/api/safe-int";
 import {
   ALERT_TYPES,
+  NOTICE_ALERT_TYPES,
   type AlertType,
   isAlertType,
   normalizeSymbol,
@@ -30,6 +31,17 @@ const TYPE_OPTIONS: { value: AlertType; label: string }[] = [
   { value: "price_below", label: "Below price" },
   { value: "daily_move", label: "Daily move %" },
   { value: "disclosure", label: "New disclosure" },
+  { value: "volume_spike", label: "Volume spike (× avg)" },
+  { value: "volume_up", label: "Heavy volume + up" },
+  { value: "volume_down", label: "Heavy volume + down" },
+  { value: "crossing_volume", label: "Crossing volume (×)" },
+  { value: "big_print", label: "Big print (shares)" },
+  { value: "gap", label: "Open gap %" },
+  { value: "buy_in", label: "Buy-in board" },
+  { value: "non_compliance", label: "Non-compliance" },
+  { value: "halt", label: "Market halt (MARKET)" },
+  { value: "bid_heavy", label: "Bid-heavy book (×)" },
+  { value: "ask_heavy", label: "Ask-heavy book (×)" },
 ];
 
 type FieldErrors = {
@@ -50,7 +62,7 @@ export function AlertCreateForm() {
   const [errors, setErrors] = useState<FieldErrors>({});
   const [pending, setPending] = useState(false);
 
-  const needsThreshold = type !== "disclosure";
+  const needsThreshold = !(NOTICE_ALERT_TYPES as readonly string[]).includes(type);
   const showCategory = type === "disclosure";
 
   function clearField(key: keyof FieldErrors) {
@@ -97,13 +109,15 @@ export function AlertCreateForm() {
           const n = toFiniteNumber(raw);
           if (n == null) {
             next.threshold = "Threshold must be a number.";
-          } else if (type === "daily_move" && n <= 0) {
-            next.threshold = "Daily move percent must be greater than zero.";
-          } else if (
-            (type === "price_above" || type === "price_below") &&
-            n <= 0
-          ) {
-            next.threshold = "Price threshold must be greater than zero.";
+          } else if (n <= 0) {
+            next.threshold =
+              type === "daily_move" || type === "gap"
+                ? "Percent threshold must be greater than zero."
+                : type === "big_print"
+                  ? "Share quantity must be greater than zero."
+                  : type.startsWith("volume") || type === "crossing_volume"
+                    ? "Multiplier must be greater than zero."
+                    : "Threshold must be greater than zero.";
           } else if (n > MAX_ALERT_THRESHOLD) {
             next.threshold = "Threshold is too large.";
           } else {
