@@ -1600,7 +1600,7 @@ Phase 1 foundations and Phase 2 Tijori-core plumbing are **landed** across waves
 | SHA | Commit |
 |---|---|
 | `b1c7a060` | docs(w81): loop status push |
-| `af48980e` | docs(w85): report push *(notify/CSE soft-accept close; report body follow-on)* |
+| `8c7b4e59` | fix(w81): fail-closed notify RetryAfter/chat_id + disclosure ids |
 
 **Shipped**
 
