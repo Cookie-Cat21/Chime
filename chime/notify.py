@@ -39,11 +39,11 @@ def _retry_delay_seconds(retry_after: int | float | timedelta) -> float:
     """
     if isinstance(retry_after, timedelta):
         delay = retry_after.total_seconds()
+    elif isinstance(retry_after, bool) or not isinstance(retry_after, (int, float)):
+        # Fail closed — bool soft-accepts via float(True)==1.0 mid flood sleep.
+        return 0.0
     else:
-        try:
-            delay = float(retry_after)
-        except (TypeError, ValueError):
-            return 0.0
+        delay = float(retry_after)
     if not math.isfinite(delay) or delay < 0:
         return 0.0
     return min(delay, _RETRY_AFTER_CAP_SECONDS)
@@ -63,6 +63,14 @@ async def send_message(
     not held for the flood wait. Callers leave ``alert_log.message_sent=False``
     and may bump ``attempt_count`` toward ``MAX_DEFERRED_ATTEMPTS``.
     """
+    # Fail closed — bool chat_id soft-accepts via Telegram kwargs; non-str text
+    # used to throw or coerce mid deliver.
+    if isinstance(chat_id, bool) or not isinstance(chat_id, int):
+        log.error("telegram_bad_chat_id", chat_id=chat_id)
+        return SendResult.FAILED
+    if not isinstance(text, str) or not text:
+        log.error("telegram_bad_text", text_type=type(text).__name__)
+        return SendResult.FAILED
     try:
         await bot.send_message(chat_id=chat_id, text=text, **_SEND_KWARGS)
         return SendResult.OK

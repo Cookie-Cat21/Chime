@@ -288,12 +288,14 @@ def legacy_pdf_urls_by_id(rows: list[LegacyAnnouncementRow]) -> dict[str, str]:
     """Build ``announcementId`` → CDN PDF URL map (skips null / empty paths)."""
     out: dict[str, str] = {}
     for row in rows:
-        if row.announcementId is None:
+        raw_id = row.announcementId
+        # Fail closed — bool soft-accepts via str(True)=="True" map keys.
+        if isinstance(raw_id, bool) or not isinstance(raw_id, int):
             continue
         pdf_url = resolve_pdf_url(row.filePath)
         if pdf_url is None:
             continue
-        out[str(row.announcementId)] = pdf_url
+        out[str(raw_id)] = pdf_url
     return out
 
 
@@ -475,6 +477,10 @@ def announcement_to_disclosure(
 ) -> Disclosure | None:
     external = row.announcementId if row.announcementId is not None else row.id
     if external is None:
+        return None
+    # Fail closed — bool soft-accepts via str(True)=="True" mid disclosure
+    # identity / Telegram URL fragment (parity PG id guards).
+    if isinstance(external, bool) or not isinstance(external, int):
         return None
     # Prefer createdDate (epoch ms) for published_at / alert gating.
     # Treat <=0 as missing. DOA is never used for gating — laggy calendar
