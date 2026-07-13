@@ -62,7 +62,8 @@ export async function GET(request: NextRequest) {
   const url = request.nextUrl;
   const symbolRaw = url.searchParams.get("symbol");
   let symbol: string | null = null;
-  if (symbolRaw != null && symbolRaw.trim()) {
+  // Fail closed — non-string searchParams mocks used to throw on .trim.
+  if (typeof symbolRaw === "string" && symbolRaw.trim()) {
     symbol = normalizeSymbol(symbolRaw);
     if (!symbol) {
       return jsonError(400, "invalid_symbol", "Invalid CSE symbol.");

@@ -33,27 +33,29 @@ class BriefStatus(StrEnum):
 
 
 def _env_int(name: str, default: int) -> int:
-    """Parse int env; invalid / empty → default (never raise)."""
+    """Parse int env; invalid / empty / non-string → default (never raise)."""
     raw = os.getenv(name)
-    if raw is None or not str(raw).strip():
+    # Fail closed — non-string getenv mocks used to soft-accept via str().
+    if not isinstance(raw, str) or not raw.strip():
         return default
     try:
-        return int(str(raw).strip())
+        return int(raw.strip())
     except ValueError:
         return default
 
 
 def _env_float(name: str, default: float) -> float:
-    """Parse float env; invalid / empty / non-finite → default (never raise).
+    """Parse float env; invalid / empty / non-string / non-finite → default.
 
     ``max(1.0, float('nan'))`` is nan in Python — reject non-finite before clamp
     so AI timeout/sleep knobs cannot poison httpx or drain pacing.
     """
     raw = os.getenv(name)
-    if raw is None or not str(raw).strip():
+    # Fail closed — non-string getenv mocks used to soft-accept via str().
+    if not isinstance(raw, str) or not raw.strip():
         return default
     try:
-        value = float(str(raw).strip())
+        value = float(raw.strip())
     except ValueError:
         return default
     if not math.isfinite(value):

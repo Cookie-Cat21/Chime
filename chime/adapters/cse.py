@@ -375,6 +375,9 @@ def trade_row_to_snapshot(
     """
     if not math.isfinite(row.price):
         return None
+    # Fail closed — non-string / blank symbol used to throw on .strip mid board.
+    if not isinstance(row.symbol, str) or not row.symbol.strip():
+        return None
     fallback = now or datetime.now(UTC)
     ts = (
         _try_ms_to_dt(row.lastTradedTime) or fallback
@@ -399,8 +402,19 @@ def trade_row_to_snapshot(
     )
 
 
-def sector_row_to_snapshot(row: SectorRow, *, now: datetime | None = None) -> SectorSnapshot:
-    """Normalize an allSectors row; overflow transactionTime → poll time."""
+def sector_row_to_snapshot(
+    row: SectorRow, *, now: datetime | None = None
+) -> SectorSnapshot | None:
+    """Normalize an allSectors row; overflow transactionTime → poll time.
+
+    Returns ``None`` when symbol/name are non-string or blank so one hostile
+    row cannot abort the whole board normalize loop.
+    """
+    # Fail closed — non-string / blank symbol or name used to throw on .strip.
+    if not isinstance(row.symbol, str) or not row.symbol.strip():
+        return None
+    if not isinstance(row.name, str) or not row.name.strip():
+        return None
     fallback = now or datetime.now(UTC)
     ts = (
         _try_ms_to_dt(row.transactionTime) or fallback
@@ -431,6 +445,9 @@ def symbol_info_to_snapshot(
 ) -> PriceSnapshot | None:
     """Normalize companyInfoSummery. ``None`` when last price is non-finite."""
     if not math.isfinite(info.lastTradedPrice):
+        return None
+    # Fail closed — non-string / blank symbol used to throw on .strip mid quote.
+    if not isinstance(info.symbol, str) or not info.symbol.strip():
         return None
     return PriceSnapshot(
         symbol=info.symbol.strip().upper(),
@@ -465,6 +482,11 @@ def announcement_to_disclosure(
     # to Unix epoch so rules see published_at as stale. Still parse DOA into
     # doa_display for logging / title context.
     doa = _parse_date_of_announcement(row.dateOfAnnouncement)
+    # Fail closed — non-string symbol used to throw on .strip mid disclosure
+    # normalize (poller / bulk path must not abort on one hostile symbol).
+    if not isinstance(symbol, str) or not symbol.strip():
+        return None
+    symbol_norm = symbol.strip().upper()
     if row.createdDate is not None and row.createdDate > 0:
         published = _ms_to_dt(row.createdDate)
     else:
@@ -473,7 +495,7 @@ def announcement_to_disclosure(
             log.warning(
                 "cse_disclosure_doa_display_only",
                 external_id=str(external),
-                symbol=symbol.strip().upper(),
+                symbol=symbol_norm,
                 date_of_announcement=row.dateOfAnnouncement,
                 doa_display=doa.isoformat(),
                 published_at=published.isoformat(),
@@ -483,7 +505,7 @@ def announcement_to_disclosure(
         title = f"{title}: {row.remarks}"
     return Disclosure(
         external_id=str(external),
-        symbol=symbol.strip().upper(),
+        symbol=symbol_norm,
         company_name=row.company,
         title=title,
         category=row.announcementCategory,
@@ -579,6 +601,9 @@ class CSEClient:
         min_interval_seconds: float = 0.0,
         client: httpx.AsyncClient | None = None,
     ) -> None:
+        # Fail closed — non-string base_url used to throw on .rstrip mid boot.
+        if not isinstance(base_url, str) or not base_url.strip():
+            base_url = "https://www.cse.lk/api"
         self.base_url = base_url.rstrip("/")
         self._owns_client = client is None
         self._client = client or httpx.AsyncClient(
@@ -781,7 +806,8 @@ class CSEClient:
                         row=str(item)[:200],
                     )
                     continue
-                if not row.symbol.strip() or not row.name.strip():
+                snap = sector_row_to_snapshot(row, now=now)
+                if snap is None:
                     log.warning(
                         "cse_sector_row_skipped",
                         endpoint=ALL_SECTORS_ENDPOINT,
@@ -789,13 +815,18 @@ class CSEClient:
                         row=str(item)[:200],
                     )
                     continue
-                out.append(sector_row_to_snapshot(row, now=now))
+                out.append(snap)
             return out
 
         return cast(list[SectorSnapshot], await self._guarded(ALL_SECTORS_ENDPOINT, _call))
 
     async def fetch_company_info(self, symbol: str) -> PriceSnapshot | None:
+        # Fail closed — non-string symbol used to throw on .strip mid quote fetch.
+        if not isinstance(symbol, str):
+            return None
         symbol = symbol.strip().upper()
+        if not symbol:
+            return None
 
         async def _call() -> PriceSnapshot | None:
             raw = await self._request(
@@ -827,7 +858,12 @@ class CSEClient:
         from_date: str | None = None,
         to_date: str | None = None,
     ) -> list[Disclosure]:
+        # Fail closed — non-string symbol used to throw on .strip mid disclosure fetch.
+        if not isinstance(symbol, str):
+            return []
         symbol = symbol.strip().upper()
+        if not symbol:
+            return []
         form: dict[str, Any] = {"symbol": symbol}
         if from_date:
             form["fromDate"] = from_date
@@ -881,7 +917,12 @@ class CSEClient:
         Prefer ``fetch_announcements_for_symbol`` for structured categories; use
         this only to resolve CDN PDF URLs for enrichment.
         """
+        # Fail closed — non-string symbol used to throw on .strip mid legacy PDF fetch.
+        if not isinstance(symbol, str):
+            return []
         symbol = symbol.strip().upper()
+        if not symbol:
+            return []
 
         async def _call() -> list[LegacyAnnouncementRow]:
             raw = await self._request(

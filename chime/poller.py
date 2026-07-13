@@ -119,9 +119,11 @@ def _delivery_ok_token(
     log_id: int,
     rule_id: int | None,
     telegram_id: int,
-    message: str,
+    message: object,
 ) -> str:
-    digest = hashlib.sha256(message.encode("utf-8")).hexdigest()
+    # Fail closed — non-string message used to throw on .encode mid ledger token.
+    msg = message if isinstance(message, str) else ""
+    digest = hashlib.sha256(msg.encode("utf-8")).hexdigest()
     rule_part = "" if rule_id is None else str(rule_id)
     return f"{log_id}:{rule_part}:{telegram_id}:{digest}"
 
@@ -280,7 +282,11 @@ class Poller:
             fired.extend(disc_events)
             symbols = await self.storage.watched_symbols()
             rules = await self.storage.active_rules_for_symbols(symbols) if symbols else []
-            needs_disclosure = any(r.type.value == "disclosure" for r in rules)
+            # Fail closed — non-enum rule.type used to throw on .value mid tick
+            # health aggregation (poisoned row / hostile model_construct).
+            needs_disclosure = any(
+                getattr(r.type, "value", r.type) == "disclosure" for r in rules
+            )
             ok = True
             # Market-wide persist is the browse foundation: degrade on price_ok
             # False even with an empty watchlist (fetch/persist/empty board).
@@ -396,12 +402,14 @@ class Poller:
         self._delivered_ok_tokens.add(token)
         if token in self._delivery_ok_records:
             return token
+        # Fail closed — non-string pending.message used to throw on .encode.
+        msg = pending.message if isinstance(pending.message, str) else ""
         record: dict[str, Any] = {
             "token": token,
             "id": pending.log_id,
             "rule_id": pending.rule_id,
             "telegram_id": pending.telegram_id,
-            "message_sha256": hashlib.sha256(pending.message.encode("utf-8")).hexdigest(),
+            "message_sha256": hashlib.sha256(msg.encode("utf-8")).hexdigest(),
             "event_key": event_key,
             "recorded_at": datetime.now(UTC).isoformat(),
         }
@@ -512,8 +520,12 @@ class Poller:
             log.exception("market_persist_failed", error=str(exc), count=len(all_snaps))
             # Fetch succeeded — report watchlist gaps from the board we saw.
             if wanted:
+                # Fail closed — non-string symbols used to throw on .strip mid
+                # board gap reporting after persist failure.
                 present = {
-                    s.symbol.strip().upper() for s in all_snaps if s.symbol and s.symbol.strip()
+                    s.symbol.strip().upper()
+                    for s in all_snaps
+                    if isinstance(s.symbol, str) and s.symbol.strip()
                 }
                 self.watched_missing = sorted(wanted - present)
             else:
@@ -628,7 +640,11 @@ class Poller:
         if not symbols:
             return [], True
         rules = await self.storage.active_rules_for_symbols(symbols)
-        disclosure_rules = [r for r in rules if r.type.value == "disclosure"]
+        # Fail closed — non-enum rule.type used to throw on .value mid disclosure
+        # poll (parity tick needs_disclosure getattr).
+        disclosure_rules = [
+            r for r in rules if getattr(r.type, "value", r.type) == "disclosure"
+        ]
         # Only hit CSE announcements for symbols with active disclosure rules
         # (price-only watchlist symbols skip this leg — rate-limit priority).
         disclosure_symbols = sorted({r.symbol for r in disclosure_rules})
@@ -1004,12 +1020,16 @@ class Poller:
 
     async def _ready_filing_brief_for(self, event: AlertEvent) -> str | None:
         """Best-effort ready brief for a disclosure alert; never raises."""
-        if event.type.value != "disclosure":
+        # Fail closed — non-enum type used to throw on .value before lookup try.
+        type_val = getattr(event.type, "value", event.type)
+        if type_val != "disclosure":
             return None
         external_id: str | None = None
         # event_key = disclosure:{rule_id}:{external_id}
-        if event.event_key.startswith("disclosure:"):
-            parts = event.event_key.split(":", 2)
+        # Fail closed — non-string event_key used to throw on .startswith mid claim.
+        key = event.event_key
+        if isinstance(key, str) and key.startswith("disclosure:"):
+            parts = key.split(":", 2)
             if len(parts) == 3 and parts[2].strip():
                 external_id = parts[2].strip()
         try:

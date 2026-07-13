@@ -31,8 +31,16 @@ export async function GET(request: NextRequest) {
   const activeParam = url.searchParams.get("active");
   // Default true; only exact "true"/"false" — junk used to soft-accept as
   // cancelled (?active=TRUE / ?active=1 listed inactive rules).
+  // Fail closed — non-string searchParams mocks must not soft-match.
   let activeOnly = true;
   if (activeParam != null) {
+    if (typeof activeParam !== "string") {
+      return jsonError(
+        400,
+        "validation_error",
+        "active must be true or false.",
+      );
+    }
     if (activeParam === "true") {
       activeOnly = true;
     } else if (activeParam === "false") {
@@ -48,7 +56,8 @@ export async function GET(request: NextRequest) {
 
   const symbolRaw = url.searchParams.get("symbol");
   let symbol: string | null = null;
-  if (symbolRaw != null && symbolRaw.trim()) {
+  // Fail closed — non-string searchParams mocks used to throw on .trim.
+  if (typeof symbolRaw === "string" && symbolRaw.trim()) {
     symbol = normalizeSymbol(symbolRaw);
     if (!symbol) {
       return jsonError(400, "invalid_symbol", "Invalid CSE symbol.");

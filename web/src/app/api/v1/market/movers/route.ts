@@ -25,7 +25,8 @@ export async function GET(request: NextRequest) {
   const sp = request.nextUrl.searchParams;
   const directionParam = sp.get("direction");
   let direction: "up" | "down" = "up";
-  if (directionParam != null && directionParam.trim() !== "") {
+  // Fail closed — non-string searchParams mocks used to throw on .trim.
+  if (typeof directionParam === "string" && directionParam.trim() !== "") {
     const directionRaw = directionParam.trim().toLowerCase();
     if (directionRaw !== "up" && directionRaw !== "down") {
       return jsonError(

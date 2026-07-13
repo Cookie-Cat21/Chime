@@ -114,8 +114,14 @@ class Storage:
             ).fetchall()
         out: list[tuple[str, str]] = []
         for row in _as_rows(rows):
-            symbol = str(row["symbol"]).strip().upper()
-            name = str(row["name"]).strip()
+            # Fail closed — non-string PG values used to soft-accept via str()
+            # (int/None became "123"/"None" symbols in the bulk name map).
+            raw_sym = row["symbol"]
+            raw_name = row["name"]
+            if not isinstance(raw_sym, str) or not isinstance(raw_name, str):
+                continue
+            symbol = raw_sym.strip().upper()
+            name = raw_name.strip()
             if symbol and name:
                 out.append((symbol, name))
         return out
@@ -144,6 +150,10 @@ class Storage:
         # and non-finite prices (NaN/±Inf must not poison price_snapshots).
         by_symbol: dict[str, PriceSnapshot] = {}
         for snap in snaps:
+            # Fail closed — non-string symbol used to throw on .strip and abort
+            # the whole tradeSummary board persist.
+            if not isinstance(snap.symbol, str):
+                continue
             symbol = snap.symbol.strip().upper()
             if not symbol:
                 continue
@@ -301,6 +311,10 @@ class Storage:
 
         by_id: dict[int, SectorSnapshot] = {}
         for sector in sectors:
+            # Fail closed — non-string symbol used to throw on .strip and abort
+            # the whole allSectors persist.
+            if not isinstance(sector.symbol, str):
+                continue
             symbol = sector.symbol.strip().upper()
             if not symbol:
                 continue
@@ -427,6 +441,13 @@ class Storage:
         return _row_to_snapshot(_as_row(row))
 
     async def get_previous_state(self, symbol: str, *, before_id: int) -> PreviousPriceState:
+        # Fail closed — non-string symbol used to throw on .strip after
+        # previous_snapshot already returned None (parity previous_snapshot).
+        if not isinstance(symbol, str):
+            return PreviousPriceState(price=None, change_pct=None, move_fired_keys=set())
+        symbol = symbol.strip().upper()
+        if not symbol:
+            return PreviousPriceState(price=None, change_pct=None, move_fired_keys=set())
         prev = await self.previous_snapshot(symbol, before_id=before_id)
         async with self._pool.connection() as conn:
             rows = await (
@@ -437,7 +458,7 @@ class Storage:
                     JOIN alert_rules ar ON ar.id = al.rule_id
                     WHERE ar.symbol = %s AND al.event_key LIKE 'move:%%'
                     """,
-                    (symbol.strip().upper(),),
+                    (symbol,),
                 )
             ).fetchall()
             move_keys = {r["event_key"] for r in _as_rows(rows)}

@@ -31,7 +31,8 @@ export async function readJsonBody(
   // abs-cap via resolveBoundedBodyCap (parity response body reader).
   const cap = resolveBoundedBodyCap(maxBytes);
   const lenHeader = request.headers.get("content-length");
-  if (lenHeader != null && lenHeader.trim()) {
+  // Fail closed — non-string header mocks used to throw on .trim.
+  if (typeof lenHeader === "string" && lenHeader.trim()) {
     const claimed = toNonNegativeSafeInt(lenHeader.trim(), -1);
     if (claimed < 0 || claimed > cap) {
       return { ok: false, reason: "too_large" };

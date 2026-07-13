@@ -247,7 +247,8 @@ async def _notify_brief_followups(
     try:
         symbol = str(row.get("symbol") or "").strip()
         external_id = str(row.get("external_id") or "").strip()
-        brief_text = brief.strip()
+        # Fail closed — non-string brief used to throw on .strip mid follow-up.
+        brief_text = brief.strip() if isinstance(brief, str) else ""
         if not symbol or not brief_text or not external_id:
             log.debug(
                 "brief_followup_skipped_incomplete",

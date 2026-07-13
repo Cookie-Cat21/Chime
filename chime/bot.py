@@ -259,7 +259,10 @@ def parse_alert_args(args: list[str]) -> tuple[ParsedAlert | None, str | None]:
             return ParsedAlert(AlertType.PRICE_BELOW, threshold), None
         return ParsedAlert(AlertType.DAILY_MOVE, threshold), None
     if kind in ("disclosure", "announcement"):
-        raw_cat = " ".join(args[2:]).strip() or None
+        # Fail closed — non-string category tokens used to throw on " ".join
+        # mid /alert disclosure parse (TypeError aborts the handler).
+        cat_parts = [a for a in args[2:] if isinstance(a, str)]
+        raw_cat = " ".join(cat_parts).strip() or None
         category = sanitize_disclosure_category(raw_cat)
         return ParsedAlert(AlertType.DISCLOSURE, None, category), None
     return None, (f"I didn't catch that alert type.\n{ALERT_USAGE}")
@@ -463,10 +466,12 @@ async def cmd_cancel(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None
     if not context.args:
         await update.effective_message.reply_text(CANCEL_USAGE)
         return
-    rule_id = parse_cancel_alert_id(context.args[0])
+    raw_arg = context.args[0]
+    rule_id = parse_cancel_alert_id(raw_arg)
     if rule_id is None:
         # Distinguish empty/zero from garbage for actionable copy.
-        cleaned = context.args[0].lstrip("#").strip()
+        # Fail closed — non-string args used to throw on .lstrip after parse None.
+        cleaned = raw_arg.lstrip("#").strip() if isinstance(raw_arg, str) else ""
         if (
             cleaned.isdigit()
             and len(cleaned) <= 18

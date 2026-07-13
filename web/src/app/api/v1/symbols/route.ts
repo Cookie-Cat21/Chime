@@ -37,7 +37,13 @@ export async function GET(request: NextRequest) {
   offset = Math.min(offset, MAX_SYMBOLS_OFFSET);
 
   const q = normalizeMarketQuery(sp.get("q"));
-  const sortRaw = (sp.get("sort") ?? "change_pct").trim().toLowerCase();
+  // Fail closed — non-string searchParams mocks used to throw on .trim.
+  const sortParam = sp.get("sort");
+  const sortBase =
+    typeof sortParam === "string" && sortParam.trim()
+      ? sortParam
+      : "change_pct";
+  const sortRaw = sortBase.trim().toLowerCase();
   const sort = sortRaw === "symbol" ? "symbol" : "change_pct";
 
   try {

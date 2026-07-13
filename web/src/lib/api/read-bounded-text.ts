@@ -53,7 +53,8 @@ export async function readBoundedResponseText(
   // abs-cap so hostile SafeInteger maxBytes cannot OOM the stream buffer.
   const cap = resolveBoundedBodyCap(maxBytes);
   const lenHeader = res.headers.get("content-length");
-  if (lenHeader != null && lenHeader.trim()) {
+  // Fail closed — non-string header mocks used to throw on .trim.
+  if (typeof lenHeader === "string" && lenHeader.trim()) {
     const claimed = toNonNegativeSafeInt(lenHeader.trim(), -1);
     if (claimed < 0 || claimed > cap) {
       return { ok: false, reason: "too_large" };

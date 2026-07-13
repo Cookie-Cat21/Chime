@@ -52,6 +52,7 @@ def test_sector_row_to_snapshot_maps_sample_fields() -> None:
         transactionTime=1_720_000_000_000,
     )
     snap = sector_row_to_snapshot(row)
+    assert snap is not None
     assert snap.sector_id == 223
     assert snap.symbol == "EGY"
     assert snap.name == "Energy"
@@ -260,5 +261,6 @@ def test_sector_row_to_snapshot_uses_now_when_no_transaction_time() -> None:
         transactionTime=None,
     )
     snap = sector_row_to_snapshot(row, now=now)
+    assert snap is not None
     assert snap.ts == now
     assert snap.symbol == "EGY"

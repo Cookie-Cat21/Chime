@@ -154,6 +154,7 @@ def test_sector_row_to_snapshot_defaults_ts_when_now_omitted() -> None:
     row = SectorRow(sectorId=1, symbol="egy", name="Energy", indexValue=10.0)
     snap = sector_row_to_snapshot(row)
     after = datetime.now(UTC) + timedelta(seconds=1)
+    assert snap is not None
     assert before <= snap.ts <= after
     assert snap.symbol == "EGY"
 
