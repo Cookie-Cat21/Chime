@@ -302,6 +302,8 @@ def main(argv: list[str] | None = None) -> None:
     )
     parser.add_argument("--force", action="store_true", help="For tick: ignore market hours")
     args = parser.parse_args(argv)
+    if args.force and args.command != "tick":
+        parser.error("--force is only valid for tick")
 
     if args.command == "migrate":
         configure_logging()
