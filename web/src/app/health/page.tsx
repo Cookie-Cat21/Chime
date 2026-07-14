@@ -6,6 +6,7 @@ import { StatCard } from "@/components/kit/stat-card";
 import { LiveIndicator } from "@/components/live-indicator";
 import { NfaFooter } from "@/components/nfa-footer";
 import { PageHeader } from "@/components/page-header";
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { sanitizeDisclosureText } from "@/lib/api/disclosure-safe";
 import { toNonNegativeSafeInt } from "@/lib/api/safe-int";
 import { serverApiGet } from "@/lib/api/server-fetch";
@@ -661,13 +662,9 @@ function StaleOpsNotice({ title, copy }: { title: string; copy: string }) {
   );
   const safeCopy = sanitizeOpsNoticeText(copy, MAX_OPS_NOTICE_COPY, "");
   return (
-    <div className="mt-5 rounded-lg border border-[oklch(0.78_0.08_65)] bg-[oklch(0.97_0.03_80)] p-4">
-      <p className="text-sm font-medium text-[oklch(0.36_0.1_55)]">
-        {safeTitle}
-      </p>
-      {safeCopy ? (
-        <p className="mt-1 text-sm text-[oklch(0.32_0.07_55)]">{safeCopy}</p>
-      ) : null}
-    </div>
+    <Alert className="mt-5" variant="default">
+      <AlertTitle>{safeTitle}</AlertTitle>
+      {safeCopy ? <AlertDescription>{safeCopy}</AlertDescription> : null}
+    </Alert>
   );
 }

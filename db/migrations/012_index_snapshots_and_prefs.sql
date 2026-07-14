@@ -1,4 +1,6 @@
 -- Wave 3-5: market index snapshots, dashboard preferences, sessions, and mutes.
+-- Quiet-hour bounds are enforced in app code (0–23); no DO-block CHECKs
+-- (statement splitter in migrate sanity cannot keep $$ bodies intact).
 
 CREATE EXTENSION IF NOT EXISTS pgcrypto;
 
@@ -25,37 +27,6 @@ ALTER TABLE users
 
 ALTER TABLE users
     ADD COLUMN IF NOT EXISTS alert_quota_max INT NOT NULL DEFAULT 100;
-
-DO $$
-BEGIN
-    IF NOT EXISTS (
-        SELECT 1
-        FROM pg_constraint
-        WHERE conname = 'users_quiet_hours_start_check'
-          AND conrelid = 'users'::regclass
-    ) THEN
-        ALTER TABLE users
-            ADD CONSTRAINT users_quiet_hours_start_check
-            CHECK (
-                quiet_hours_start IS NULL
-                OR (quiet_hours_start >= 0 AND quiet_hours_start <= 23)
-            );
-    END IF;
-
-    IF NOT EXISTS (
-        SELECT 1
-        FROM pg_constraint
-        WHERE conname = 'users_quiet_hours_end_check'
-          AND conrelid = 'users'::regclass
-    ) THEN
-        ALTER TABLE users
-            ADD CONSTRAINT users_quiet_hours_end_check
-            CHECK (
-                quiet_hours_end IS NULL
-                OR (quiet_hours_end >= 0 AND quiet_hours_end <= 23)
-            );
-    END IF;
-END $$;
 
 ALTER TABLE alert_rules
     ADD COLUMN IF NOT EXISTS muted_until TIMESTAMPTZ NULL;

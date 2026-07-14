@@ -71,10 +71,14 @@ type FieldErrors = {
   form?: string;
 };
 
-export function AlertCreateForm() {
+export function AlertCreateForm({
+  initialSymbol = "",
+}: {
+  initialSymbol?: string;
+} = {}) {
   const router = useRouter();
   const toast = useToast();
-  const [symbol, setSymbol] = useState("");
+  const [symbol, setSymbol] = useState(() => normalizeSymbol(initialSymbol) ?? "");
   const [type, setType] = useState<AlertType>("price_above");
   const [threshold, setThreshold] = useState("");
   const [category, setCategory] = useState("");

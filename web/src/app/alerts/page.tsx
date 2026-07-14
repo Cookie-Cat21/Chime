@@ -144,7 +144,12 @@ export default async function AlertsPage({
           ) : null}
         </form>
 
-        <AlertCreateForm />
+        <AlertCreateForm initialSymbol={symbolFilter} />
+        <p className="mt-3 text-xs text-muted-foreground">
+          Quiet hours / digest preferences and per-rule mute live in Postgres
+          (users.quiet_hours_*, digest_enabled, alert_rules.muted_until). Bot
+          skips muted rules; dash mute UI ships next.
+        </p>
 
         {!payload ? (
           <EmptyState

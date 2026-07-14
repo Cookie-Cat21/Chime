@@ -10,6 +10,7 @@ import {
 } from "@/components/kit/disclosure-timeline";
 import { NfaFooter } from "@/components/nfa-footer";
 import { NfaInline } from "@/components/nfa-inline";
+import { OptionalLwcNote } from "@/components/optional-lwc-note";
 import { PageHeader } from "@/components/page-header";
 import { PriceRefresh } from "@/components/price-refresh";
 import { Sparkline } from "@/components/sparkline";
@@ -412,6 +413,9 @@ export default async function SymbolDetailPage({
             ) : (
               <Sparkline points={snaps.points} />
             )}
+            <OptionalLwcNote
+              enabled={process.env.NEXT_PUBLIC_CHIME_LWC === "1"}
+            />
           </div>
         </div>
       </section>

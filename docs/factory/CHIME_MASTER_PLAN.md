@@ -1,6 +1,6 @@
 # Chime Master Plan — Maximum inside the fence
 
-**Status:** Active (2026-07-14)  
+**Status:** Active — Waves 1–5 implemented on `cursor/wire-chime-brand-assets-0a71` (2026-07-14). Phased P1–P5 still gated.  
 **Authority:** [CLAUDE.md](../../CLAUDE.md) · [DASH_CAKE_CHERRY.md](DASH_CAKE_CHERRY.md) · [FINANCE_DASH_INSPIRATION.md](../brand/FINANCE_DASH_INSPIRATION.md) · [COMMIT_FACTORY.md](COMMIT_FACTORY.md)  
 **Supersedes operating one-liner in** [CHIME_HORIZON.md](CHIME_HORIZON.md) §1 (horizon score targets still apply)
 
@@ -185,12 +185,11 @@ Wave 7+ P2–P5                 (portfolio → P&L → PWA → pay) only if want
 
 ## 7. Immediate next action
 
-Start **Wave 1** implementation:
+Waves 1–5 are implemented on the brand/dash branch. Next:
 
-1. `ChangeBadge`  
-2. shadcn `Alert` + `AlertDialog`  
-3. Market desktop table  
-4. Dismissible cake/cherry banner  
-5. Wire freshness chip copy on Overview  
+1. Soak near-realtime (15s poll + PriceRefresh + SSE) during a market session  
+2. Turn on `DASH_TELEGRAM_LOGIN=1` only with bot domain allowlisted  
+3. Optionally amend constitution for **Wave 6 / P1** light screener  
+4. Keep adversarial check: denser cake ≠ trading terminal  
 
-Then open Wave 2 without waiting for Tracker-Pro features.
+Do **not** start P2+ until Overview/Browse/Symbol feel “daily driver” dense and Telegram cherry is boringly reliable.

@@ -1019,7 +1019,9 @@ def test_symbol_page_watch_and_new_alert_shortcuts() -> None:
     assert "/api/v1/watchlist" in controls_src
     assert "normalizeSymbol(symbol)" in controls_src
     assert "New alert" in page_src
-    assert "/alerts?symbol=${encoded}" in page_src or 'href={`/alerts?symbol=${encoded}`}' in page_src
+    assert "/alerts?symbol=${encoded}" in page_src or (
+        "href={`/alerts?symbol=${encoded}`}" in page_src
+    )
     assert "PageHeader" in page_src
     assert 'eyebrow="Symbol"' in page_src
     # Still no direct CSE scrape from the symbol page.
