@@ -81,6 +81,10 @@ export function SettingsForm({ initial }: { initial: SettingsPreferences }) {
       setError("Quiet hours must be off or between 00:00 and 23:00.");
       return;
     }
+    if ((start == null) !== (end == null)) {
+      setError("Set both quiet-hour ends, or leave both off.");
+      return;
+    }
 
     setPending(true);
     try {

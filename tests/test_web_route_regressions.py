@@ -1076,8 +1076,22 @@ def test_bot_dash_parity_filing_metrics_and_settings() -> None:
     assert "eps_yoy_above" in alerts_ctrl
     assert "MuteAlertButton" in alerts_ctrl
     assert "EPS YoY above" in fmt
-    assert (WEB / "src" / "app" / "api" / "v1" / "symbols" / "[symbol]" / "metrics" / "route.ts").is_file()
-    assert (WEB / "src" / "app" / "api" / "v1" / "me" / "preferences" / "route.ts").is_file()
+    metrics_route = (
+        WEB
+        / "src"
+        / "app"
+        / "api"
+        / "v1"
+        / "symbols"
+        / "[symbol]"
+        / "metrics"
+        / "route.ts"
+    )
+    assert metrics_route.is_file()
+    prefs_route = (
+        WEB / "src" / "app" / "api" / "v1" / "me" / "preferences" / "route.ts"
+    )
+    assert prefs_route.is_file()
     assert (WEB / "src" / "app" / "settings" / "page.tsx").is_file()
     assert 'href: "/settings"' in nav
     assert "FilingMetricsPanel" in (

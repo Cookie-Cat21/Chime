@@ -31,3 +31,10 @@ the same Postgres-backed watchlist, rules, and fire history.
 | Test fire | Audit-only dry run | Inserts `[dry-run]` `alert_log` row; no Telegram send. |
 | Mute | Temporary suppression | Dashboard PATCH writes `alert_rules.muted_until`; the rule engine skips future-dated mutes. |
 | User preferences | Delivery settings | Dashboard settings reads/writes `digest_enabled`, `quiet_hours_start`, and `quiet_hours_end`. |
+
+## Runtime notes
+
+- Halt create on the dash forces symbol `MARKET` (bot parity).
+- Quiet hours from Settings are honored by the poller delivery path: Telegram
+  sends are held until outside the Colombo local window (no retry-counter burn).
+- Digest flag is stored for a future EOD digest job.

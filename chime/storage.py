@@ -1927,6 +1927,42 @@ class Storage:
             raise ValueError("inserted alert rule row failed validation")
         return rule
 
+    async def get_user_quiet_hours_by_telegram(
+        self, telegram_id: int
+    ) -> tuple[int | None, int | None] | None:
+        """Return (start_hour, end_hour) in Asia/Colombo local hours, or None.
+
+        Missing user → None. Malformed hours fail closed to (None, None)
+        meaning quiet hours off.
+        """
+        if not isinstance(telegram_id, int) or isinstance(telegram_id, bool):
+            return None
+        if telegram_id <= 0 or not (telegram_id.bit_length() <= 63):
+            return None
+        async with self._pool.connection() as conn:
+            row = await (
+                await conn.execute(
+                    """
+                    SELECT quiet_hours_start, quiet_hours_end
+                      FROM users
+                     WHERE telegram_id = %s
+                    """,
+                    (telegram_id,),
+                )
+            ).fetchone()
+        if row is None:
+            return None
+        r = _as_row(row)
+        start = r.get("quiet_hours_start")
+        end = r.get("quiet_hours_end")
+        def _hour(v: object) -> int | None:
+            if v is None:
+                return None
+            if isinstance(v, bool) or not isinstance(v, int):
+                return None
+            return v if 0 <= v <= 23 else None
+        return _hour(start), _hour(end)
+
     async def _fetch_active_rule(
         self,
         conn: Any,

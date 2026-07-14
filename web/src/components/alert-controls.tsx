@@ -118,7 +118,11 @@ export function AlertCreateForm({
     setPending(true);
     try {
       const next: FieldErrors = {};
-      const normalized = normalizeSymbol(symbol);
+      let normalized = normalizeSymbol(symbol);
+      if (type === "halt") {
+        normalized = "MARKET";
+        setSymbol("MARKET");
+      }
       if (!normalized) {
         next.symbol = "Enter a CSE symbol (e.g. JKH.N0000).";
       }
@@ -275,6 +279,10 @@ export function AlertCreateForm({
                   if (!isAlertType(value)) return;
                   const nextType = value;
                   setType(nextType);
+                  if (nextType === "halt") {
+                    setSymbol("MARKET");
+                    clearField("symbol");
+                  }
                   if (nextType === "disclosure") {
                     setThreshold("");
                   } else {
@@ -529,7 +537,13 @@ export function MuteAlertButton({
   const toast = useToast();
   const [error, setError] = useState<string | null>(null);
   const [pending, setPending] = useState(false);
-  const isMuted = Boolean(mutedUntil);
+  // Snapshot once per mount — purity rule; refresh remounts after mute PATCH.
+  const [nowMs] = useState(() => Date.now());
+  const mutedMs =
+    typeof mutedUntil === "string" && mutedUntil
+      ? Date.parse(mutedUntil)
+      : Number.NaN;
+  const isMuted = Number.isFinite(mutedMs) && mutedMs > nowMs;
 
   async function onClick() {
     setError(null);

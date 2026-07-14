@@ -40,6 +40,12 @@ export const metadata = {
   description: "Active alert rules for your Chime watchlist.",
 };
 
+function isActivelyMuted(mutedUntil: string | null): boolean {
+  if (!mutedUntil) return false;
+  const t = Date.parse(mutedUntil);
+  return Number.isFinite(t) && t > Date.now();
+}
+
 type AlertsPayload = {
   rules: {
     id: number;
@@ -255,7 +261,7 @@ export default async function AlertsPage({
                         {rule.symbol}
                       </Link>
                       <ArmedBadge armed={rule.armed} />
-                      {rule.muted_until ? (
+                      {isActivelyMuted(rule.muted_until) ? (
                         <Badge
                           variant="outline"
                           className="border-amber-500/30 bg-amber-500/10 text-amber-700 dark:text-amber-300"
@@ -278,7 +284,7 @@ export default async function AlertsPage({
                     ) : null}
                     <p className="mt-1 text-xs text-muted-foreground">
                       Created {formatTs(rule.created_at)}
-                      {rule.muted_until
+                      {isActivelyMuted(rule.muted_until)
                         ? ` · muted until ${formatTs(rule.muted_until)}`
                         : ""}
                     </p>

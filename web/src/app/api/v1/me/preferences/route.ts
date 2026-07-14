@@ -105,6 +105,13 @@ export async function PATCH(request: NextRequest) {
       "quiet hours must be null or an integer from 0 to 23.",
     );
   }
+  if ((start.value == null) !== (end.value == null)) {
+    return jsonError(
+      400,
+      "validation_error",
+      "Set both quiet hours, or clear both.",
+    );
+  }
 
   try {
     const pool = getPool();
