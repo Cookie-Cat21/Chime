@@ -1,4 +1,8 @@
+import { Activity, Database, Radio, Timer } from "lucide-react";
+
 import { AppNav } from "@/components/app-nav";
+import { AlertBanner } from "@/components/kit/alert-banner";
+import { StatCard } from "@/components/kit/stat-card";
 import { LiveIndicator } from "@/components/live-indicator";
 import { NfaFooter } from "@/components/nfa-footer";
 import { PageHeader } from "@/components/page-header";
@@ -268,18 +272,47 @@ export default async function HealthPage() {
             </div>
 
             {pollerUnreachable ? (
-              <OpsNotice
-                tone="danger"
-                title="Poller health unreachable"
-                copy="HEALTH_URL is configured, but the dashboard could not reach the poller health endpoint. DB liveness is separate; check HEALTH_URL, routing, and the poller process before trusting alert freshness."
-              />
+              <div className="mt-6">
+                <AlertBanner
+                  tone="danger"
+                  icon={Radio}
+                  title="Poller health unreachable"
+                  description="HEALTH_URL is configured, but the dashboard could not reach the poller health endpoint. DB liveness is separate; check HEALTH_URL, routing, and the poller process before trusting alert freshness."
+                />
+              </div>
             ) : pollerDegraded ? (
-              <OpsNotice
-                tone="warning"
-                title="Poller reachable but degraded"
-                copy="The poller health endpoint responded, but one or more poller checks reported unhealthy. Review tick flags, price/disclosure poll flags, watched-missing symbols, circuits, and recent poller logs."
-              />
+              <div className="mt-6">
+                <AlertBanner
+                  tone="warning"
+                  icon={Activity}
+                  title="Poller reachable but degraded"
+                  description="The poller health endpoint responded, but one or more poller checks reported unhealthy. Review tick flags, price/disclosure poll flags, watched-missing symbols, circuits, and recent poller logs."
+                />
+              </div>
             ) : null}
+
+            <div className="mt-8 grid grid-cols-1 gap-4 sm:grid-cols-2">
+              <StatCard
+                label="Database"
+                value={payload.db_ok ? "ok" : "down"}
+                icon={Database}
+              />
+              <StatCard
+                label="Status"
+                value={statusLabel}
+                icon={Activity}
+              />
+              <StatCard
+                label="Snapshot age"
+                value={formatAge(snapshotAge)}
+                icon={Timer}
+              />
+              <StatCard
+                label="Tick age"
+                value={formatAge(tickAge)}
+                icon={Radio}
+              />
+            </div>
 
             <dl className="mt-8 grid grid-cols-1 gap-5 sm:grid-cols-2">
               <Row label="Database" value={payload.db_ok ? "ok" : "down"} />
@@ -511,44 +544,6 @@ function sanitizeOpsNoticeText(
     maxLen,
   );
   return cleaned ?? fallback;
-}
-
-function OpsNotice({
-  tone,
-  title,
-  copy,
-}: {
-  tone: "danger" | "warning";
-  title: string;
-  copy: string;
-}) {
-  const className =
-    tone === "danger"
-      ? "border-[oklch(0.72_0.12_25)] bg-[oklch(0.97_0.03_25)]"
-      : "border-[oklch(0.78_0.08_65)] bg-[oklch(0.97_0.03_80)]";
-  const titleClassName =
-    tone === "danger"
-      ? "text-[oklch(0.36_0.13_25)]"
-      : "text-[oklch(0.36_0.1_55)]";
-  const copyClassName =
-    tone === "danger"
-      ? "text-[oklch(0.32_0.09_25)]"
-      : "text-[oklch(0.32_0.07_55)]";
-  const safeTitle = sanitizeOpsNoticeText(
-    title,
-    MAX_OPS_NOTICE_TITLE,
-    "Notice",
-  );
-  const safeCopy = sanitizeOpsNoticeText(copy, MAX_OPS_NOTICE_COPY, "");
-
-  return (
-    <div className={`mt-5 rounded-lg border p-4 ${className}`}>
-      <p className={`text-sm font-medium ${titleClassName}`}>{safeTitle}</p>
-      {safeCopy ? (
-        <p className={`mt-1 text-sm ${copyClassName}`}>{safeCopy}</p>
-      ) : null}
-    </div>
-  );
 }
 
 function Row({ label, value }: { label: string; value: string }) {
