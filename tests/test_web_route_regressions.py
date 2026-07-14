@@ -577,7 +577,7 @@ def test_next_config_security_headers() -> None:
 
 
 def test_login_form_posts_demo_auth() -> None:
-    """Demo form keeps JS fetch path and a native POST fallback action."""
+    """Demo form: JS fetch preferred; native POST + relative redirect as fallback."""
     form = WEB / "src" / "components" / "login-form.tsx"
     route = WEB / "src" / "app" / "api" / "v1" / "auth" / "demo" / "route.ts"
     assert form.is_file()
@@ -586,13 +586,15 @@ def test_login_form_posts_demo_auth() -> None:
     route_src = route.read_text(encoding="utf-8")
 
     assert 'fetch("/api/v1/auth/demo"' in form_src
+    assert "e.preventDefault()" in form_src
     assert 'method="post"' in form_src
     assert 'action="/api/v1/auth/demo"' in form_src
     assert "application/x-www-form-urlencoded" in route_src
-    assert 'NextResponse.redirect(new URL("/watchlist"' in route_src or "watchlistRedirect" in route_src
+    assert "watchlistRedirect" in route_src
+    # Relative Location — absolute http://0.0.0.0 breaks Cloud Agent routing.
+    assert 'Location: "/watchlist"' in route_src
     assert "toSafePositiveInt" in route_src
     assert "allowlist.has(telegramId)" in route_src
-    assert "x-forwarded-host" in route_src
 
 
 def test_sectors_route_static() -> None:

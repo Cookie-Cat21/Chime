@@ -1,4 +1,4 @@
-import { type NextRequest, NextResponse } from "next/server";
+import { NextResponse } from "next/server";
 
 import { readJsonBody } from "@/lib/api/read-json-body";
 import { toSafePositiveInt } from "@/lib/api/safe-int";
@@ -69,24 +69,16 @@ async function readTelegramId(
   return { ok: true, telegramId: body.telegram_id, redirect: false };
 }
 
-function watchlistRedirect(request: NextRequest): NextResponse {
-  // Prefer forwarded host from Cloud Agent / reverse proxies so we never
-  // bounce the browser to http://0.0.0.0:3000/...
-  const forwardedHost = request.headers.get("x-forwarded-host");
-  const host =
-    (typeof forwardedHost === "string" && forwardedHost.trim()) ||
-    request.headers.get("host") ||
-    request.nextUrl.host;
-  const forwardedProto = request.headers.get("x-forwarded-proto");
-  const proto =
-    (typeof forwardedProto === "string" && forwardedProto.trim()) ||
-    request.nextUrl.protocol.replace(/:$/, "") ||
-    "http";
-  const base = `${proto}://${host}`;
-  return NextResponse.redirect(new URL("/watchlist", base), 303);
+function watchlistRedirect(): NextResponse {
+  // Relative Location keeps the Cloud Agent preview Host (never bounce to
+  // http://0.0.0.0:3000/... which surfaces as "request could not be routed").
+  return new NextResponse(null, {
+    status: 303,
+    headers: { Location: "/watchlist" },
+  });
 }
 
-export async function POST(request: NextRequest) {
+export async function POST(request: Request) {
   const cfg = getDashAuthConfig();
 
   if (!cfg.demoAuthEnabled) {
@@ -153,7 +145,7 @@ export async function POST(request: NextRequest) {
   const csrf = mintCsrfToken();
 
   const res = parsed.redirect
-    ? watchlistRedirect(request)
+    ? watchlistRedirect()
     : NextResponse.json(
         {
           user: { id: userId, telegram_id: telegramId },
