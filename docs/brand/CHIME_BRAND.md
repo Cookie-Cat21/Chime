@@ -1,129 +1,104 @@
-# Chime Brand — Signal Mist
+# Chime CSE — Brand Constitution (Ticker Strike)
 
-**Status:** Locked direction for the fuller product UI  
-**Date:** 2026-07-14  
-**Amendment:** Extends past the thin-dash fence for marketing + product surfaces; Telegram remains the **push** channel. Web may become a full inspect/manage product home — still not a trading terminal, portfolio tracker, or screener.
+**Locked:** 2026-07-14  
+**Research:** 10 parallel brand probes (alert precedents, SA fintech, sonic marks, type, anti-AI clichés, Telegram-first, logo SVG craft, color systems, name collision, landing composition).  
+**Supersedes:** Signal Mist (rejected — too soft / AI-mist default).
+
+---
+
+## Verdict from research
+
+| Finding | Decision |
+|---|---|
+| Bare **Chime** collides with US neobank + doorbell | Ship as **Chime CSE** in lockups; bot `@ChimeCSE` |
+| Soft mist teal reads as Midjourney fintech | Kill mist. Paper or void — hard ink. |
+| Product is a **ping**, not a wealth app | Brand = interrupter. Web enrolls + inspects. Telegram delivers. |
+| Cartoon bells = US Chime / Ring | Mark = **threshold cross**, not a bell |
+| Purple / cream-terracotta / Fraunces-café / glow = ass | Hard grotesque + mono numbers |
+| Best one-liner cluster | **CSE moves. You hear it.** |
 
 ---
 
 ## 1. One-liner
 
-**Chime watches the CSE so you don’t have to leave a tab open.**
+**CSE moves. You hear it.**
 
-Secondary (when space allows): *Set a condition. Get pinged on Telegram when it fires.*
-
----
-
-## 2. Voice — five rules
-
-1. **Lead with the event, not the product.**  
-   “JKH crossed 22.50” beats “Chime is excited to notify you…”
-
-2. **Quiet until it matters.**  
-   Default copy is calm and short. Energy only when an alert fires.
-
-3. **Precise numbers, plain words.**  
-   Prices, %, EPS, YoY — tabular and exact. No hype adjectives.
-
-4. **Honest about limits.**  
-   Always carry NFA. Say “verify in the filing” for extracted fundamentals. Never imply advice.
-
-5. **Name the channel.**  
-   Pushes live on Telegram. The site manages and inspects; it does not replace the ping.
-
-**Tone words:** clear · local · unhurried · exact  
-**Avoid:** “unlock,” “crush the market,” emoji rows, purple-SaaS optimism, broker cosplay
+Support: *Price, move, disclosure, and filing rules — pinged on Telegram the moment they fire.*
 
 ---
 
-## 3. Logo treatment
+## 2. Voice (5)
 
-**Primary: wordmark only — `Chime`**
-
-- Display face: Fraunces semibold, tight tracking  
-- Color: deep teal ink on mist; inverted mist-on-ink for dark chrome only if needed later  
-- No icon required for v1 marketing or app chrome
-
-**Optional mark (secondary, never alone on first viewport):**
-
-A single soft **bell-arc** — one open curve suggesting a strike, not a cartoon bell. Stroke in brand teal. Use in favicon / app icon only after wordmark is established.
-
-**Do not:** monogram in a rounded square, gradient orb, stock-chart chevron, Sri Lankan flag lockup as logo.
+1. Event first — “JKH crossed 22.50”
+2. Quiet until it fires — no hype resting state
+3. Exact numbers — tabular, never rounded for vibes
+4. Honest NFA — “verify in the filing”
+5. Name the channel — Telegram is the ping; web manages
 
 ---
 
-## 4. Color tokens
+## 3. System name: **Ticker Strike**
 
-Cool mist + deep teal ink. **Brass/amber is alert-fired only** — never the brand color.
+Light default (scannable lists, daylight trust). Dark is optional later — not the brand.
 
-| Token | OKLCH (approx) | Hex guide | Use |
-|---|---|---|---|
-| `--mist` | `oklch(0.97 0.015 205)` | `#F2F7F8` | Page ground |
-| `--mist-deep` | `oklch(0.91 0.025 195)` | `#D7E8E6` | Atmosphere wash |
-| `--ink` | `oklch(0.24 0.035 230)` | `#1A2A36` | Body / wordmark |
-| `--ink-soft` | `oklch(0.48 0.03 220)` | `#5A6B78` | Secondary text |
-| `--teal` | `oklch(0.36 0.055 200)` | `#1F4A52` | Primary actions, links |
-| `--teal-signal` | `oklch(0.55 0.08 185)` | `#2A8A7A` | Focus / live “watching” |
-| `--jade` | `oklch(0.62 0.09 165)` | `#3BA88A` | Positive Δ (price up, YoY up) |
-| `--coral` | `oklch(0.55 0.18 25)` | `#C44B3A` | Destructive / price down |
-| `--brass` | `oklch(0.72 0.12 85)` | `#C9A227` | **Alert fired only** |
-| `--brass-soft` | `oklch(0.88 0.06 90)` | `#F0E4B8` | Fired row wash (sparingly) |
-| `--line` | `oklch(0.86 0.02 210)` | `#C9D5DA` | Hairline borders |
-
-**Atmosphere:** full-bleed radial mist (teal + cool blue), soft grain, slow drift. No purple. No cream/terracotta. No neon terminal green on black as default.
+| Token | Hex | Role |
+|---|---|---|
+| `--paper` | `#EDE6D9` | Ground (newsprint — not cream café) |
+| `--ink` | `#12110F` | Wordmark / body |
+| `--mute` | `#5C574E` | Secondary |
+| `--line` | `#C8C0B4` | Rules |
+| `--signal` | `#0B6E4F` | Brand accent / watching |
+| `--up` | `#0F6B3C` | Positive Δ |
+| `--down` | `#B91C1C` | Negative Δ |
+| `--fired` | `#D97706` | **Alert fired only** |
 
 ---
 
-## 5. Type scale
+## 4. Type
 
-| Role | Family | Weight | Size (desktop → mobile) | Notes |
-|---|---|---|---|---|
-| Wordmark | Fraunces | 600 | 72→48 | Hero brand; never overpowered by H1 |
-| Display | Fraunces | 500–600 | 40→28 | Section titles sparingly |
-| Headline | Sora | 500–600 | 24→20 | One per section |
-| Body | Sora | 400 | 16→15 | Comfortable line-height ~1.5 |
-| Meta / NFA | Sora | 400 | 13→12 | Muted ink-soft |
-| Numbers | JetBrains Mono | 400–500 | match context | Prices, EPS, % — always tabular |
+| Role | Face | Weight |
+|---|---|---|
+| Wordmark | IBM Plex Sans | 700 |
+| Headline | IBM Plex Sans | 600 |
+| Body | IBM Plex Sans | 400 |
+| Numbers | IBM Plex Mono | 500 |
 
----
-
-## 6. Landing — first viewport (brand-first)
-
-**One composition. Full-bleed mist atmosphere. No cards in the hero.**
-
-Allowed in the first viewport only:
-
-1. **Chime** wordmark (hero-level)  
-2. One headline (must not overpower the wordmark)  
-3. One supporting sentence  
-4. One CTA group (primary + optional secondary)  
-5. Dominant atmospheric plane (mist gradients + grain) — not an inset image card  
-
-**Headline:** `CSE alerts that find you.`  
-**Support:** `Watch prices, moves, disclosures, and filings. Chime pings Telegram the moment a rule fires.`  
-**Primary CTA:** `Open Telegram bot`  
-**Secondary CTA:** `Manage in browser`  
-
-**Not in first viewport:** stats strips, schedule, feature grids, alert type pills, testimonials, address blocks.
-
-**Motion (2–3):**  
-1. Atmosphere drift (slow)  
-2. Wordmark + copy rise-in  
-3. Primary CTA soft underline pulse once on load (respect `prefers-reduced-motion`)
+Wordmark: Title case `Chime` · tracking −0.02em · never all-caps stretch.
 
 ---
 
-## 7. Product UI implications (fuller frontend)
+## 5. Mark — Threshold Cross
 
-When we expand past thin CRUD:
+Not a bell. A horizontal threshold line with a vertical price tick crossing it — the moment a rule trips.
 
-- Same tokens everywhere; brass appears **only** on fired alert rows / toast / history “sent” flash  
-- Filings / YoY panels use jade/coral for Δ%, ink for values — never brass for “EPS looks good”  
-- Landing can sell the product; app shell stays quieter (mist + ink), still brand-first in nav wordmark  
-- Still no portfolio P&L, TA charts, or screener unless the constitution is amended again  
+Geometry (24×24): baseline y=14 from x=3→21; tick from (12,5)→(12,19); stroke 2, square caps.
+
+---
+
+## 6. Logo set (SVG)
+
+| File | Contents |
+|---|---|
+| `mark.svg` | Threshold cross only |
+| `wordmark.svg` | `Chime` |
+| `lockup.svg` | Mark + `Chime CSE` |
+| `brand-board.svg` | Palette + lockup |
+| `landing.svg` | First viewport composition |
+
+---
+
+## 7. Landing first viewport
+
+Full-bleed paper. Giant **Chime**. One line. One CTA pair. Fake Telegram ping as the only visual proof (not feature grid).
+
+- Wordmark dominates
+- Headline: `CSE moves. You hear it.`
+- Primary CTA: Open Telegram bot
+- Secondary: Manage in browser
+- Brass/amber nowhere on landing — only in product when something fires
 
 ---
 
 ## 8. Brand test
 
-Remove the nav. If the first viewport could belong to another fintech after deleting the wordmark, branding is too weak — enlarge **Chime**, shorten the headline, strengthen mist.
+Strip the wordmark. If it still looks like purple SaaS, mist teal, or cream lifestyle fintech — scrap it.

@@ -1,0 +1,20 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 560 100" role="img" aria-label="Chime CSE lockup">
+  <title>Chime CSE lockup</title>
+  <rect width="560" height="100" fill="#EDE6D9"/>
+  <g fill="none" stroke="#0B6E4F" stroke-width="3.25" stroke-linecap="square" transform="translate(20 22) scale(2.35)">
+    <path d="M3.5 14 H20.5"/>
+    <path d="M12 4.5 V19.5"/>
+  </g>
+  <text x="92" y="68"
+        font-family="Helvetica Neue, Helvetica, Arial, sans-serif"
+        font-size="52"
+        font-weight="700"
+        letter-spacing="-1.2"
+        fill="#12110F">Chime</text>
+  <text x="290" y="68"
+        font-family="Helvetica Neue, Helvetica, Arial, sans-serif"
+        font-size="52"
+        font-weight="700"
+        letter-spacing="-1.2"
+        fill="#0B6E4F">CSE</text>
+</svg>
