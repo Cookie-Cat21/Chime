@@ -31,7 +31,9 @@ Catalog of the bookmark folder vs what Chime will actually ship.
 - `components/kit/status-badge.tsx` — armed + delivery chips (alerts / history)
 - `components/ui/badge.tsx` + `select.tsx` — shadcn P0 gaps from DASH_COMPONENT_FILTER
 
-Ceyfi already adapted HyperUI / DaisyUI-style / Aceternity under `frontend/components/{hyperui,daisyui-style,aceternity,blocks}` — we reuse that approach, not scrape marketplaces.
+Also see: `docs/brand/FINANCE_DASH_INSPIRATION.md` — OSS stock dash repos +
+Ardeno bookmark filter + ranked next ports (2026-07-14 survey).
+
 
 ## Dash polish (agentic loop 2)
 - Alerts / History: `PageHeader`, `ArmedBadge` / `DeliveryBadge`, history **limit** control
