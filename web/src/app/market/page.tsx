@@ -4,6 +4,7 @@ import { AppNav } from "@/components/app-nav";
 import { EmptyState } from "@/components/empty-state";
 import { NfaFooter } from "@/components/nfa-footer";
 import { NfaInline } from "@/components/nfa-inline";
+import { PageHeader } from "@/components/page-header";
 import { Button } from "@/components/ui/button";
 import {
   MAX_SECTOR_NAME_LENGTH,
@@ -27,8 +28,7 @@ export const dynamic = "force-dynamic";
 
 export const metadata = {
   title: "Browse · Chime",
-  description:
-    "Thin CSE symbol browse from Chime snapshots — not a trading terminal.",
+  description: "CSE symbol browse from Chime snapshots — pick what to watch.",
 };
 
 /** Cap market/movers rows parse — parity with symbols API max limit. */
@@ -239,15 +239,13 @@ export default async function MarketPage({
       <main
         id="main-content"
         tabIndex={-1}
-        className="mx-auto flex w-full max-w-3xl flex-1 flex-col px-4 py-8 sm:px-6 sm:py-10"
+        className="mx-auto flex w-full max-w-6xl flex-1 flex-col px-4 py-8 sm:px-6 sm:py-10"
       >
-        <h1 className="font-display text-3xl font-semibold tracking-tight">
-          Browse
-        </h1>
-        <p className="mt-2 max-w-lg text-sm text-muted-foreground">
-          CSE symbols from Chime&apos;s latest poller snapshots. Use this to find
-          names to watch — alerts still fire on Telegram.
-        </p>
+        <PageHeader
+          eyebrow="Market"
+          title="Browse"
+          description="CSE symbols from Chime’s latest poller snapshots. Find names to watch — Telegram still delivers the push when your rules fire."
+        />
 
         <form
           className="mt-6 flex flex-wrap gap-2"

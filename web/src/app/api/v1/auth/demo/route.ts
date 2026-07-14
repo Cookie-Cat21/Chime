@@ -20,7 +20,7 @@ type DemoBody = {
 
 /**
  * Parse telegram_id from JSON (SPA fetch) or form POST (no-JS fallback).
- * Form path redirects to /watchlist after Set-Cookie so Cloud Agent
+ * Form path redirects to /overview after Set-Cookie so Cloud Agent
  * previews still work if client JS is blocked mid-hydration.
  */
 async function readTelegramId(
@@ -69,12 +69,12 @@ async function readTelegramId(
   return { ok: true, telegramId: body.telegram_id, redirect: false };
 }
 
-function watchlistRedirect(): NextResponse {
+function overviewRedirect(): NextResponse {
   // Relative Location keeps the Cloud Agent preview Host (never bounce to
   // http://0.0.0.0:3000/... which surfaces as "request could not be routed").
   return new NextResponse(null, {
     status: 303,
-    headers: { Location: "/watchlist" },
+    headers: { Location: "/overview" },
   });
 }
 
@@ -145,7 +145,7 @@ export async function POST(request: Request) {
   const csrf = mintCsrfToken();
 
   const res = parsed.redirect
-    ? watchlistRedirect()
+    ? overviewRedirect()
     : NextResponse.json(
         {
           user: { id: userId, telegram_id: telegramId },

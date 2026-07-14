@@ -96,7 +96,7 @@ export default async function WatchlistPage() {
   return (
     <div className="flex min-h-full flex-1 flex-col bg-background">
       <AppNav active="/watchlist" />
-      <main id="main-content" tabIndex={-1} className="mx-auto flex w-full max-w-3xl flex-1 flex-col px-4 py-8 sm:px-6 sm:py-10">
+      <main id="main-content" tabIndex={-1} className="mx-auto flex w-full max-w-6xl flex-1 flex-col px-4 py-8 sm:px-6 sm:py-10">
         <PageHeader
           eyebrow="Watch"
           title="Watchlist"

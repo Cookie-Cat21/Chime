@@ -105,7 +105,7 @@ export function LoginForm({ allowlist, defaultTelegramId, demoEnabled }: Props) 
         setError(loginError(detail));
         return;
       }
-      router.push("/watchlist");
+      router.push("/overview");
       router.refresh();
     } catch {
       setError(loginError("Chime couldn't reach the sign-in endpoint. Try again."));

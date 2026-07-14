@@ -15,7 +15,7 @@ import { verifySessionToken } from "@/lib/auth/session";
 
 export const metadata = {
   title: "Sign in · Chime",
-  description: "Sign in to manage Chime CSE alerts that push to Telegram.",
+  description: "Sign in to the Chime CSE dashboard — Telegram alerts on top.",
 };
 
 export default async function LoginPage({
@@ -31,7 +31,7 @@ export default async function LoginPage({
       ? verifySessionToken(raw, cfg.sessionSecret)
       : null;
   if (session) {
-    redirect("/watchlist");
+    redirect("/overview");
   }
 
   const sp = await searchParams;
@@ -58,7 +58,7 @@ export default async function LoginPage({
           </Link>
         </div>
         <h1 className="chime-rise chime-rise-delay-1 mt-5 text-xl font-medium text-foreground sm:text-2xl">
-          CSE alerts, Telegram first
+          CSE dash. Telegram when it fires.
         </h1>
         {sessionExpired ? (
           <p
@@ -66,24 +66,24 @@ export default async function LoginPage({
             data-testid="session-expired-notice"
             className="chime-rise chime-rise-delay-1 mt-4 text-sm text-foreground"
           >
-            Your session expired. Sign in again to manage watchlists and alerts.
+            Your session expired. Sign in again to open the dashboard.
           </p>
         ) : null}
         <p
           id="login-explainer"
           className="chime-rise chime-rise-delay-2 mt-3 text-sm text-muted-foreground sm:text-base"
         >
-          Use this thin page to manage symbols and rules. Chime watches in the
-          background and pings Telegram when a price, move, or disclosure rule
-          fires.
+          Browse the market, watch symbols, and manage rules here. Telegram is
+          the cherry — you still get the ping when a rule fires with the tab
+          closed.
         </p>
         <ul
           className="chime-rise chime-rise-delay-2 mt-4 list-disc space-y-2 pl-5 text-sm text-muted-foreground"
           aria-labelledby="login-explainer"
         >
-          <li>Price crosses above or below your threshold</li>
-          <li>Daily moves exceed your chosen percent</li>
-          <li>New company disclosures appear for watched symbols</li>
+          <li>Overview of movers, watchlist, and armed rules</li>
+          <li>Price, move, and disclosure alerts</li>
+          <li>Push on Telegram when something matches</li>
         </ul>
         <NfaInline className="chime-rise chime-rise-delay-2 mt-4" />
         <div className="chime-rise chime-rise-delay-3 mt-8">

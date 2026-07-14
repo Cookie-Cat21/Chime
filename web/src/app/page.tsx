@@ -14,14 +14,14 @@ import { verifySessionToken } from "@/lib/auth/session";
 
 const FAQ = [
   {
-    question: "Does Chime replace the CSE app?",
+    question: "Is Chime a CSE Tracker Pro clone?",
     answer:
-      "No. Chime is a background watcher. You set conditions; Telegram gets the ping. The exchange app and brokers stay where they are.",
+      "No. Chime is a CSE market dash for browse, watch, and rules — with Telegram push as the cherry when something fires. Portfolio, tax, and heavy TA stay deferred.",
   },
   {
     question: "Where do alerts fire?",
     answer:
-      "On Telegram. This site manages watchlists and rules. Push delivery is the product — keep the bot open in Telegram, not a browser tab.",
+      "On Telegram. Manage symbols and rules in the dash; when a rule matches, you get the ping even if the browser is closed.",
   },
   {
     question: "Is this financial advice?",
@@ -36,8 +36,8 @@ const FAQ = [
 ];
 
 /**
- * Brand landing — Dinaya composition + Ceyfi kit ports (chat / steps / FAQ).
- * Signed-in users still land on watchlist.
+ * Brand landing — dash is the cake; Telegram push is the cherry.
+ * Signed-in users land on Overview.
  */
 export default async function HomePage() {
   const cfg = getDashAuthConfig();
@@ -49,7 +49,7 @@ export default async function HomePage() {
       : null;
 
   if (session) {
-    redirect("/watchlist");
+    redirect("/overview");
   }
 
   return (
@@ -64,11 +64,11 @@ export default async function HomePage() {
           <ChimeWordmark size="hero" priority />
         </div>
         <h1 className="chime-rise chime-rise-delay-1 mt-6 max-w-xl text-2xl font-medium leading-snug text-foreground sm:text-3xl">
-          CSE moves. You hear it.
+          CSE on your screen. Telegram when it matters.
         </h1>
         <p className="chime-rise chime-rise-delay-2 mt-4 max-w-md text-base text-muted-foreground sm:text-lg">
-          Set a price, move, disclosure, or filing rule. Chime pings Telegram
-          the moment it fires — no tab left open.
+          Browse the market, watch symbols, and manage rules in the dash.
+          Alerts fire on Telegram — the cherry on top when the tab is closed.
         </p>
         <NfaInline className="chime-rise chime-rise-delay-2 mt-4" />
         <div className="chime-rise chime-rise-delay-3 mt-10 flex flex-wrap items-center gap-3">
@@ -77,10 +77,10 @@ export default async function HomePage() {
             size="lg"
             className="min-w-36 motion-safe:transition-transform motion-safe:hover:-translate-y-0.5"
           >
-            <Link href="/login">Sign in</Link>
+            <Link href="/login">Open the dash</Link>
           </Button>
           <Button asChild variant="outline" size="lg">
-            <Link href="/login">Manage in browser</Link>
+            <Link href="/login">Sign in</Link>
           </Button>
         </div>
 
@@ -91,7 +91,7 @@ export default async function HomePage() {
               aria-hidden
               className="absolute top-1/2 left-0 h-3 w-[3px] -translate-y-1/2 rounded-sm bg-primary"
             />
-            On Telegram
+            The cherry — Telegram
           </p>
           <div className="rounded-xl border border-border bg-card/80 p-5 sm:p-6">
             <ChatBubble
@@ -119,14 +119,14 @@ export default async function HomePage() {
             How it works
           </p>
           <h2 className="font-display text-2xl font-semibold tracking-tight">
-            Three steps
+            Dash first. Push when it fires.
           </h2>
           <div className="mt-8">
             <Steps
               steps={[
-                { label: "Watch a CSE symbol", status: "complete" },
-                { label: "Set a rule", status: "complete" },
-                { label: "Get the Telegram ping", status: "active" },
+                { label: "Browse & watch CSE symbols", status: "complete" },
+                { label: "Set rules in the dash", status: "complete" },
+                { label: "Telegram pings on fire", status: "active" },
               ]}
             />
           </div>
@@ -137,7 +137,7 @@ export default async function HomePage() {
           className="mt-16 mb-8"
           eyebrow="FAQ"
           heading="Before you start"
-          description="Short answers. Telegram stays the push channel."
+          description="Short answers. The dash is daily; Telegram is the push cherry."
           items={FAQ}
         />
       </div>

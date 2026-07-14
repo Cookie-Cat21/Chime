@@ -118,6 +118,7 @@ def test_dashboard_pages_render_nfa_footer() -> None:
     page_paths = [
         WEB / "src" / "app" / "page.tsx",
         WEB / "src" / "app" / "login" / "page.tsx",
+        WEB / "src" / "app" / "overview" / "page.tsx",
         WEB / "src" / "app" / "watchlist" / "page.tsx",
         WEB / "src" / "app" / "market" / "page.tsx",
         WEB / "src" / "app" / "alerts" / "page.tsx",
@@ -145,6 +146,7 @@ def test_dashboard_price_surfaces_render_nfa_inline() -> None:
     page_paths = [
         WEB / "src" / "app" / "page.tsx",
         WEB / "src" / "app" / "login" / "page.tsx",
+        WEB / "src" / "app" / "overview" / "page.tsx",
         WEB / "src" / "app" / "watchlist" / "page.tsx",
         WEB / "src" / "app" / "market" / "page.tsx",
         WEB / "src" / "app" / "alerts" / "page.tsx",
@@ -590,11 +592,38 @@ def test_login_form_posts_demo_auth() -> None:
     assert 'method="post"' in form_src
     assert 'action="/api/v1/auth/demo"' in form_src
     assert "application/x-www-form-urlencoded" in route_src
-    assert "watchlistRedirect" in route_src
+    assert "overviewRedirect" in route_src
     # Relative Location — absolute http://0.0.0.0 breaks Cloud Agent routing.
-    assert 'Location: "/watchlist"' in route_src
+    assert 'Location: "/overview"' in route_src
     assert "toSafePositiveInt" in route_src
     assert "allowlist.has(telegramId)" in route_src
+
+
+def test_overview_page_is_signed_in_home() -> None:
+    """Cake layer: signed-in home is /overview with movers + watch + alerts."""
+    page = WEB / "src" / "app" / "overview" / "page.tsx"
+    landing = WEB / "src" / "app" / "page.tsx"
+    nav = WEB / "src" / "components" / "app-nav.tsx"
+    login = WEB / "src" / "components" / "login-form.tsx"
+    assert page.is_file()
+    page_src = page.read_text(encoding="utf-8")
+    landing_src = landing.read_text(encoding="utf-8")
+    nav_src = nav.read_text(encoding="utf-8")
+    login_src = login.read_text(encoding="utf-8")
+
+    assert "requirePageSession" in page_src
+    assert "PageHeader" in page_src
+    assert 'eyebrow="Home"' in page_src
+    assert "/api/v1/watchlist" in page_src
+    assert "/api/v1/market/movers" in page_src
+    assert "/api/v1/alerts" in page_src
+    assert "ArmedBadge" in page_src
+    assert "StatCard" in page_src
+    assert "Telegram" in page_src
+    assert 'href: "/overview", label: "Overview"' in nav_src
+    assert 'redirect("/overview")' in landing_src
+    assert 'router.push("/overview")' in login_src
+    assert "max-w-6xl" in page_src
 
 
 def test_sectors_route_static() -> None:

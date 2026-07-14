@@ -8,6 +8,7 @@ import { ChimeWordmark } from "@/components/brand/chime-brand";
 import { NavSession } from "@/components/nav-session";
 
 const links = [
+  { href: "/overview", label: "Overview" },
   { href: "/market", label: "Browse" },
   { href: "/watchlist", label: "Watchlist" },
   { href: "/alerts", label: "Alerts" },
@@ -53,7 +54,7 @@ export function AppNav({ active }: { active?: string }) {
 
   return (
     <header className="sticky top-0 z-40 border-b border-border/70 bg-background/80 backdrop-blur-sm">
-      <div className="mx-auto flex max-w-3xl items-center justify-between gap-3 px-4 py-3 sm:px-6">
+      <div className="mx-auto flex max-w-6xl items-center justify-between gap-3 px-4 py-3 sm:px-6">
         <Link
           href="/"
           aria-label="Chime home"
