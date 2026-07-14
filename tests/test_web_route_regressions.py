@@ -561,6 +561,10 @@ def test_next_config_security_headers() -> None:
     assert "poweredByHeader: false" in source
     assert 'source: "/:path*"' in source
     assert "async headers()" in source
+    # Cloud Agent previews need non-localhost Hosts allowlisted in next dev,
+    # otherwise /_next/* is blocked → login never hydrates.
+    assert "allowedDevOrigins" in source
+    assert '"*.agent.cvm.dev"' in source or "'*.agent.cvm.dev'" in source
     # Strict CSP stays deferred — do not claim a full CSP ship.
     csp_lines = [
         line
@@ -570,6 +574,25 @@ def test_next_config_security_headers() -> None:
     ]
     assert csp_lines == [], f"unexpected CSP header ship: {csp_lines}"
     assert "deferred" in source.lower()  # comment documents CSP deferral
+
+
+def test_login_form_posts_demo_auth() -> None:
+    """Demo form keeps JS fetch path and a native POST fallback action."""
+    form = WEB / "src" / "components" / "login-form.tsx"
+    route = WEB / "src" / "app" / "api" / "v1" / "auth" / "demo" / "route.ts"
+    assert form.is_file()
+    assert route.is_file()
+    form_src = form.read_text(encoding="utf-8")
+    route_src = route.read_text(encoding="utf-8")
+
+    assert 'fetch("/api/v1/auth/demo"' in form_src
+    assert 'method="post"' in form_src
+    assert 'action="/api/v1/auth/demo"' in form_src
+    assert "application/x-www-form-urlencoded" in route_src
+    assert 'NextResponse.redirect(new URL("/watchlist"' in route_src or "watchlistRedirect" in route_src
+    assert "toSafePositiveInt" in route_src
+    assert "allowlist.has(telegramId)" in route_src
+    assert "x-forwarded-host" in route_src
 
 
 def test_sectors_route_static() -> None:

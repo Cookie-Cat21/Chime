@@ -1,4 +1,4 @@
-import { NextResponse } from "next/server";
+import { type NextRequest, NextResponse } from "next/server";
 
 import { readJsonBody } from "@/lib/api/read-json-body";
 import { toSafePositiveInt } from "@/lib/api/safe-int";
@@ -18,7 +18,75 @@ type DemoBody = {
   telegram_id?: unknown;
 };
 
-export async function POST(request: Request) {
+/**
+ * Parse telegram_id from JSON (SPA fetch) or form POST (no-JS fallback).
+ * Form path redirects to /watchlist after Set-Cookie so Cloud Agent
+ * previews still work if client JS is blocked mid-hydration.
+ */
+async function readTelegramId(
+  request: Request,
+): Promise<
+  | { ok: true; telegramId: unknown; redirect: boolean }
+  | { ok: false; response: NextResponse }
+> {
+  const contentType = request.headers.get("content-type") ?? "";
+  const isForm =
+    contentType.includes("application/x-www-form-urlencoded") ||
+    contentType.includes("multipart/form-data");
+
+  if (isForm) {
+    try {
+      const form = await request.formData();
+      return { ok: true, telegramId: form.get("telegram_id"), redirect: true };
+    } catch {
+      return {
+        ok: false,
+        response: jsonError(400, "validation_error", "Invalid form body."),
+      };
+    }
+  }
+
+  const parsed = await readJsonBody(request);
+  if (!parsed.ok) {
+    if (parsed.reason === "too_large") {
+      return {
+        ok: false,
+        response: jsonError(400, "validation_error", "Request body too large."),
+      };
+    }
+    return {
+      ok: false,
+      response: jsonError(400, "validation_error", "Invalid JSON body."),
+    };
+  }
+  if (typeof parsed.value !== "object" || parsed.value === null) {
+    return {
+      ok: false,
+      response: jsonError(400, "validation_error", "Invalid JSON body."),
+    };
+  }
+  const body = parsed.value as DemoBody;
+  return { ok: true, telegramId: body.telegram_id, redirect: false };
+}
+
+function watchlistRedirect(request: NextRequest): NextResponse {
+  // Prefer forwarded host from Cloud Agent / reverse proxies so we never
+  // bounce the browser to http://0.0.0.0:3000/...
+  const forwardedHost = request.headers.get("x-forwarded-host");
+  const host =
+    (typeof forwardedHost === "string" && forwardedHost.trim()) ||
+    request.headers.get("host") ||
+    request.nextUrl.host;
+  const forwardedProto = request.headers.get("x-forwarded-proto");
+  const proto =
+    (typeof forwardedProto === "string" && forwardedProto.trim()) ||
+    request.nextUrl.protocol.replace(/:$/, "") ||
+    "http";
+  const base = `${proto}://${host}`;
+  return NextResponse.redirect(new URL("/watchlist", base), 303);
+}
+
+export async function POST(request: NextRequest) {
   const cfg = getDashAuthConfig();
 
   if (!cfg.demoAuthEnabled) {
@@ -45,21 +113,14 @@ export async function POST(request: Request) {
     );
   }
 
-  const parsed = await readJsonBody(request);
+  const parsed = await readTelegramId(request);
   if (!parsed.ok) {
-    if (parsed.reason === "too_large") {
-      return jsonError(400, "validation_error", "Request body too large.");
-    }
-    return jsonError(400, "validation_error", "Invalid JSON body.");
+    return parsed.response;
   }
-  if (typeof parsed.value !== "object" || parsed.value === null) {
-    return jsonError(400, "validation_error", "Invalid JSON body.");
-  }
-  const body = parsed.value as DemoBody;
 
   // Digits-only SafeInteger — Number("9…093") can alias MAX_SAFE_INTEGER and
   // pass a bare isSafeInteger gate; reject floats / sci-notation / oversized.
-  const telegramId = toSafePositiveInt(body.telegram_id);
+  const telegramId = toSafePositiveInt(parsed.telegramId);
   if (telegramId == null) {
     return jsonError(
       400,
@@ -91,16 +152,18 @@ export async function POST(request: Request) {
   const { token } = mintSessionToken(userId, cfg.sessionSecret);
   const csrf = mintCsrfToken();
 
-  const res = NextResponse.json(
-    {
-      user: { id: userId, telegram_id: telegramId },
-      csrf_token: csrf,
-    },
-    {
-      status: 200,
-      headers: { "Content-Type": "application/json; charset=utf-8" },
-    },
-  );
+  const res = parsed.redirect
+    ? watchlistRedirect(request)
+    : NextResponse.json(
+        {
+          user: { id: userId, telegram_id: telegramId },
+          csrf_token: csrf,
+        },
+        {
+          status: 200,
+          headers: { "Content-Type": "application/json; charset=utf-8" },
+        },
+      );
 
   res.cookies.set(SESSION_COOKIE, token, sessionCookieOptions(cfg));
   res.cookies.set(CSRF_COOKIE, csrf, csrfCookieOptions());
