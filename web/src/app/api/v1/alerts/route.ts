@@ -163,7 +163,7 @@ export async function POST(request: NextRequest) {
     return jsonError(
       400,
       "validation_error",
-      "type must be a supported alert type (price, move, disclosure, volume, print, gap, or notice).",
+      "type must be a supported alert type (price, move, disclosure, volume, print, gap, notice, book, or filing metrics).",
     );
   }
   const alertType = obj.type;

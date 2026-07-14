@@ -8,6 +8,12 @@ import {
   DisclosureCategoryHint,
   DisclosureTimeline,
 } from "@/components/kit/disclosure-timeline";
+import {
+  FilingMetricsPanel,
+  type FilingMetricComparison,
+  type FilingMetricRow,
+  type LatestBrief,
+} from "@/components/kit/filing-metrics-panel";
 import { NfaFooter } from "@/components/nfa-footer";
 import { NfaInline } from "@/components/nfa-inline";
 import { OptionalLwcNote } from "@/components/optional-lwc-note";
@@ -50,6 +56,10 @@ const STALE_MS = 24 * 60 * 60 * 1000;
 const MAX_PAGE_SNAPSHOT_POINTS = 200;
 /** Cap disclosures parse — parity with disclosures API max 100. */
 const MAX_PAGE_DISCLOSURES = 100;
+/** Short filing metric labels; never echo arbitrary long extraction text. */
+const MAX_METRIC_KIND_LENGTH = 32;
+const MAX_METRIC_ENTITY_LENGTH = 128;
+const MAX_METRIC_CURRENCY_LENGTH = 16;
 
 /** ECMAScript Date absolute millisecond bound (parity sparkline / toIso). */
 const MAX_DATE_MS = 8.64e15;
@@ -237,6 +247,119 @@ function parseDisclosuresPayload(body: unknown): DisclosuresPayload {
   return { items };
 }
 
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return value != null && typeof value === "object" && !Array.isArray(value);
+}
+
+function firstRecord(value: unknown): Record<string, unknown> | null {
+  if (isRecord(value)) return value;
+  if (!Array.isArray(value)) return null;
+  for (const item of value) {
+    if (isRecord(item)) return item;
+  }
+  return null;
+}
+
+function normalizeMetricText(raw: unknown, maxLen: number): string | null {
+  return sanitizeDisclosureText(typeof raw === "string" ? raw : null, maxLen);
+}
+
+function parseMetricRow(raw: unknown): FilingMetricRow | null {
+  if (!isRecord(raw)) return null;
+  const eps_basic = toFiniteNumber(raw.eps_basic);
+  const revenue = toFiniteNumber(raw.revenue);
+  const profit = toFiniteNumber(raw.profit ?? raw.profit_after_tax);
+  const hasMetric = eps_basic != null || revenue != null || profit != null;
+  if (!hasMetric && raw.extract_ok !== true) return null;
+
+  return {
+    kind: normalizeMetricText(raw.kind, MAX_METRIC_KIND_LENGTH),
+    entity: normalizeMetricText(raw.entity, MAX_METRIC_ENTITY_LENGTH),
+    currency: normalizeMetricText(raw.currency, MAX_METRIC_CURRENCY_LENGTH),
+    fiscal_period_end: toIso(raw.fiscal_period_end),
+    eps_basic,
+    revenue,
+    profit,
+    extract_ok: raw.extract_ok === true,
+  };
+}
+
+function parseMetricComparison(raw: unknown): FilingMetricComparison | null {
+  if (!isRecord(raw)) return null;
+  const matchRaw =
+    typeof raw.match_quality === "string" ? raw.match_quality : null;
+  const match_quality =
+    matchRaw === "exact_yoy" || matchRaw === "approx_yoy" ? matchRaw : null;
+  return {
+    match_quality,
+    eps_delta_pct: toFiniteNumber(raw.eps_delta_pct),
+    revenue_delta_pct: toFiniteNumber(raw.revenue_delta_pct),
+    profit_delta_pct: toFiniteNumber(raw.profit_delta_pct),
+  };
+}
+
+function parseMetricsPayload(body: unknown): {
+  metrics: FilingMetricRow | null;
+  comparison: FilingMetricComparison | null;
+} {
+  if (!isRecord(body)) return { metrics: null, comparison: null };
+  const latestRaw =
+    body.latest ??
+    body.metric ??
+    body.filing_metric ??
+    body.item ??
+    firstRecord(body.items) ??
+    firstRecord(body.metrics);
+  const latest = isRecord(latestRaw) ? latestRaw : null;
+  const metrics = parseMetricRow(latest ?? body);
+  const comparisonRaw =
+    (latest && latest.comparison) ??
+    body.comparison ??
+    body.latest_comparison ??
+    body.filing_comparison;
+  return {
+    metrics,
+    comparison: parseMetricComparison(comparisonRaw),
+  };
+}
+
+function parseLatestBriefPayload(body: unknown): LatestBrief | null {
+  if (!isRecord(body)) return null;
+  const candidateRaw =
+    (isRecord(body.brief) && body.brief) ||
+    (isRecord(body.latest_brief) && body.latest_brief) ||
+    (isRecord(body.item) && body.item) ||
+    body;
+  const candidate = isRecord(candidateRaw) ? candidateRaw : null;
+  if (!candidate) return null;
+
+  const statusRaw = candidate.status ?? candidate.brief_status;
+  const status =
+    typeof statusRaw === "string" ? normalizeBriefStatus(statusRaw) : null;
+  if (statusRaw != null && status !== "ready") return null;
+
+  const title = sanitizeDisclosureText(
+    typeof candidate.title === "string"
+      ? candidate.title
+      : typeof candidate.disclosure_title === "string"
+        ? candidate.disclosure_title
+        : null,
+    MAX_DISCLOSURE_TITLE_LENGTH,
+  );
+  const textRaw = candidate.text ?? candidate.brief;
+  const text = sanitizeBriefText(textRaw, "ready");
+  if (!title || !text) return null;
+  return { title, text };
+}
+
+function latestBriefFromDisclosures(discs: DisclosuresPayload): LatestBrief | null {
+  const item = discs.items.find(
+    (disc) => disc.brief_status === "ready" && Boolean(disc.brief?.trim()),
+  );
+  if (!item?.brief) return null;
+  return { title: item.title, text: item.brief };
+}
+
 export default async function SymbolDetailPage({
   params,
   searchParams,
@@ -259,10 +382,12 @@ export default async function SymbolDetailPage({
   const categoryFilter = sanitizeDisclosureCategory(categoryRaw);
 
   const encoded = encodeURIComponent(symbol);
-  const [symRes, snapRes, discRes] = await Promise.all([
+  const [symRes, snapRes, discRes, metricsRes, briefRes] = await Promise.all([
     serverApiGet(`/api/v1/symbols/${encoded}`),
     serverApiGet(`/api/v1/symbols/${encoded}/snapshots?limit=60`),
     serverApiGet(`/api/v1/symbols/${encoded}/disclosures?limit=20`),
+    serverApiGet(`/api/v1/symbols/${encoded}/metrics`),
+    serverApiGet(`/api/v1/symbols/${encoded}/brief`),
   ]);
 
   if (symRes.status === 404) {
@@ -322,6 +447,9 @@ export default async function SymbolDetailPage({
 
   let snaps: SnapshotsPayload = { points: [] };
   let discs: DisclosuresPayload = { items: [] };
+  let filingMetrics: FilingMetricRow | null = null;
+  let filingComparison: FilingMetricComparison | null = null;
+  let latestBrief: LatestBrief | null = null;
   if (snapRes.ok) {
     try {
       snaps = parseSnapshotsPayload(await snapRes.json());
@@ -336,6 +464,27 @@ export default async function SymbolDetailPage({
       discs = { items: [] };
     }
   }
+  if (metricsRes.ok) {
+    try {
+      const metricsBody: unknown = await metricsRes.json();
+      const parsed = parseMetricsPayload(metricsBody);
+      filingMetrics = parsed.metrics;
+      filingComparison = parsed.comparison;
+      latestBrief = parseLatestBriefPayload(metricsBody);
+    } catch {
+      filingMetrics = null;
+      filingComparison = null;
+      latestBrief = null;
+    }
+  }
+  if (!latestBrief && briefRes.ok) {
+    try {
+      latestBrief = parseLatestBriefPayload(await briefRes.json());
+    } catch {
+      latestBrief = null;
+    }
+  }
+  latestBrief ??= latestBriefFromDisclosures(discs);
 
   const snapsFailed = !snapRes.ok;
   const discsFailed = !discRes.ok;
@@ -504,6 +653,12 @@ export default async function SymbolDetailPage({
         ) : null}
         <NfaInline className="mt-2" />
       </section>
+
+      <FilingMetricsPanel
+        metrics={filingMetrics}
+        comparison={filingComparison}
+        latestBrief={latestBrief}
+      />
 
       <section
         className="mt-8 border-t border-border/60 pt-6"

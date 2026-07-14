@@ -20,8 +20,8 @@ the same Postgres-backed watchlist, rules, and fire history.
 | Market halt / notice | Yes | Yes | Telegram | Uses synthetic `MARKET` symbol. |
 | Bid-heavy order book | Yes | Yes | Telegram | Uses public order-book totals. |
 | Ask-heavy order book | Yes | Yes | Telegram | Uses public order-book totals. |
-| EPS above / below | Bot only | Not yet | Telegram | Financial metrics feature-flagged. |
-| EPS / revenue / profit YoY | Bot only | Not yet | Telegram | Financial metrics feature-flagged. |
+| EPS above / below | Yes | Yes | Telegram | Financial metrics feature-flagged; dashboard metrics API exposes latest extracted rows. |
+| EPS / revenue / profit YoY | Yes | Yes | Telegram | Financial metrics feature-flagged; dashboard metrics API exposes YoY comparisons. |
 
 ## Dashboard-only operations
 
@@ -29,5 +29,5 @@ the same Postgres-backed watchlist, rules, and fire history.
 |---|---|---|
 | Alert quota | Abuse guard | `users.alert_quota_max` caps active dashboard alert creates. |
 | Test fire | Audit-only dry run | Inserts `[dry-run]` `alert_log` row; no Telegram send. |
-| Mute column | Temporary suppression | `alert_rules.muted_until` is read by the rule engine and skipped while future-dated. |
-| User preferences | Future UX | `digest_enabled`, `quiet_hours_start`, and `quiet_hours_end` exist for later dashboard/bot preference wiring. |
+| Mute | Temporary suppression | Dashboard PATCH writes `alert_rules.muted_until`; the rule engine skips future-dated mutes. |
+| User preferences | Delivery settings | Dashboard settings reads/writes `digest_enabled`, `quiet_hours_start`, and `quiet_hours_end`. |

@@ -3,6 +3,7 @@ import Link from "next/link";
 import {
   AlertCreateForm,
   CancelAlertButton,
+  MuteAlertButton,
   TestFireButton,
 } from "@/components/alert-controls";
 import { AppNav } from "@/components/app-nav";
@@ -11,6 +12,7 @@ import { ArmedBadge } from "@/components/kit/status-badge";
 import { NfaFooter } from "@/components/nfa-footer";
 import { NfaInline } from "@/components/nfa-inline";
 import { PageHeader } from "@/components/page-header";
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -24,7 +26,12 @@ import { toSafePositiveInt } from "@/lib/api/safe-int";
 import { isAlertType, normalizeSymbol } from "@/lib/api/symbol";
 import { toIso } from "@/lib/api/time";
 import { requirePageSession } from "@/lib/auth/page-session";
-import { alertTypeLabel, formatNumber, formatTs } from "@/lib/format";
+import {
+  alertTypeBotHint,
+  alertTypeLabel,
+  formatNumber,
+  formatTs,
+} from "@/lib/format";
 
 export const dynamic = "force-dynamic";
 
@@ -43,6 +50,7 @@ type AlertsPayload = {
     active: boolean;
     armed: boolean;
     created_at: string | null;
+    muted_until: string | null;
   }[];
 };
 
@@ -98,6 +106,7 @@ export default async function AlertsPage({
             active: r.active === true,
             armed: r.armed === true,
             created_at: toIso(r.created_at),
+            muted_until: toIso(r.muted_until),
           });
           // Cap parser — hostile / uncapped API JSON must not balloon SSR.
           if (rules.length >= 500) break;
@@ -146,9 +155,12 @@ export default async function AlertsPage({
 
         <AlertCreateForm initialSymbol={symbolFilter} />
         <p className="mt-3 text-xs text-muted-foreground">
-          Quiet hours / digest preferences and per-rule mute live in Postgres
-          (users.quiet_hours_*, digest_enabled, alert_rules.muted_until). Bot
-          skips muted rules; dash mute UI ships next.
+          Quiet hours / digest:{" "}
+          <Link href="/settings" className="underline underline-offset-4">
+            Settings
+          </Link>
+          . Mute a rule below to pause Telegram fires. Filing EPS/YoY rules need
+          metrics flags to live-fire.
         </p>
 
         {!payload ? (
@@ -227,38 +239,61 @@ export default async function AlertsPage({
           />
         ) : (
           <ul className="mt-8 divide-y divide-border/60">
-            {payload.rules.map((rule) => (
-              <li
-                key={rule.id}
-                className="flex flex-col gap-3 py-4 first:pt-0 sm:flex-row sm:items-center sm:justify-between sm:gap-4"
-              >
-                <div className="min-w-0 flex-1">
-                  <div className="flex flex-wrap items-center gap-2">
-                    <Link
-                      href={`/symbols/${encodeURIComponent(rule.symbol)}`}
-                      className="font-mono text-sm font-medium underline-offset-4 hover:underline"
-                    >
-                      {rule.symbol}
-                    </Link>
-                    <ArmedBadge armed={rule.armed} />
+            {payload.rules.map((rule) => {
+              const hint = alertTypeBotHint(rule.type);
+              return (
+                <li
+                  key={rule.id}
+                  className="flex flex-col gap-3 py-4 first:pt-0 sm:flex-row sm:items-center sm:justify-between sm:gap-4"
+                >
+                  <div className="min-w-0 flex-1">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <Link
+                        href={`/symbols/${encodeURIComponent(rule.symbol)}`}
+                        className="font-mono text-sm font-medium underline-offset-4 hover:underline"
+                      >
+                        {rule.symbol}
+                      </Link>
+                      <ArmedBadge armed={rule.armed} />
+                      {rule.muted_until ? (
+                        <Badge
+                          variant="outline"
+                          className="border-amber-500/30 bg-amber-500/10 text-amber-700 dark:text-amber-300"
+                        >
+                          Muted
+                        </Badge>
+                      ) : null}
+                    </div>
+                    <p className="mt-0.5 text-sm text-muted-foreground">
+                      #{rule.id} · {alertTypeLabel(rule.type)}
+                      {rule.threshold != null
+                        ? ` · ${formatNumber(rule.threshold)}`
+                        : ""}
+                      {rule.category ? ` · ${rule.category}` : ""}
+                    </p>
+                    {hint ? (
+                      <p className="mt-1 font-mono text-xs text-muted-foreground">
+                        {hint}
+                      </p>
+                    ) : null}
+                    <p className="mt-1 text-xs text-muted-foreground">
+                      Created {formatTs(rule.created_at)}
+                      {rule.muted_until
+                        ? ` · muted until ${formatTs(rule.muted_until)}`
+                        : ""}
+                    </p>
                   </div>
-                  <p className="mt-0.5 text-sm text-muted-foreground">
-                    #{rule.id} · {alertTypeLabel(rule.type)}
-                    {rule.threshold != null
-                      ? ` · ${formatNumber(rule.threshold)}`
-                      : ""}
-                    {rule.category ? ` · ${rule.category}` : ""}
-                  </p>
-                  <p className="mt-1 text-xs text-muted-foreground">
-                    {formatTs(rule.created_at)}
-                  </p>
-                </div>
-                <div className="flex flex-wrap items-center justify-end gap-2">
-                  <TestFireButton ruleId={rule.id} />
-                  <CancelAlertButton ruleId={rule.id} />
-                </div>
-              </li>
-            ))}
+                  <div className="flex flex-wrap items-center justify-end gap-2">
+                    <TestFireButton ruleId={rule.id} />
+                    <MuteAlertButton
+                      ruleId={rule.id}
+                      mutedUntil={rule.muted_until}
+                    />
+                    <CancelAlertButton ruleId={rule.id} />
+                  </div>
+                </li>
+              );
+            })}
           </ul>
         )}
 

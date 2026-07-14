@@ -1059,3 +1059,29 @@ def test_wave_master_plan_kit_wiring() -> None:
     parity = Path("docs/factory/BOT_DASH_PARITY.md")
     assert parity.is_file()
     assert "price_above" in parity.read_text(encoding="utf-8")
+
+
+def test_bot_dash_parity_filing_metrics_and_settings() -> None:
+    """P0–P3: full alert types, metrics API, mute, settings on dash."""
+    symbol_ts = (WEB / "src" / "lib" / "api" / "symbol.ts").read_text(encoding="utf-8")
+    fmt = (WEB / "src" / "lib" / "format.ts").read_text(encoding="utf-8")
+    alerts_ctrl = (WEB / "src" / "components" / "alert-controls.tsx").read_text(
+        encoding="utf-8"
+    )
+    nav = (WEB / "src" / "components" / "app-nav.tsx").read_text(encoding="utf-8")
+    assert '"eps_yoy_above"' in symbol_ts
+    assert '"profit_yoy_below"' in symbol_ts
+    assert "bid_heavy" not in symbol_ts.split("NOTICE_ALERT_TYPES")[1].split("]")[0]
+    assert "isThresholdAlertType" in alerts_ctrl
+    assert "eps_yoy_above" in alerts_ctrl
+    assert "MuteAlertButton" in alerts_ctrl
+    assert "EPS YoY above" in fmt
+    assert (WEB / "src" / "app" / "api" / "v1" / "symbols" / "[symbol]" / "metrics" / "route.ts").is_file()
+    assert (WEB / "src" / "app" / "api" / "v1" / "me" / "preferences" / "route.ts").is_file()
+    assert (WEB / "src" / "app" / "settings" / "page.tsx").is_file()
+    assert 'href: "/settings"' in nav
+    assert "FilingMetricsPanel" in (
+        WEB / "src" / "app" / "symbols" / "[symbol]" / "page.tsx"
+    ).read_text(encoding="utf-8")
+    parity = Path("docs/factory/BOT_DASH_PARITY.md").read_text(encoding="utf-8")
+    assert "EPS above / below" in parity and "| Yes | Yes |" in parity

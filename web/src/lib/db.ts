@@ -397,6 +397,37 @@ export async function cancelAlert(
   return result.rowCount !== null && result.rowCount > 0;
 }
 
+/**
+ * Set or clear alert mute. Returns null when the rule is not owned.
+ */
+export async function muteAlert(
+  userId: number,
+  ruleId: number,
+  mutedUntil: string | null,
+): Promise<AlertRuleRow | null> {
+  const pool = getPool();
+  const result = await pool.query<{
+    id: string | number;
+    symbol: string;
+    type: string;
+    threshold: number | null;
+    category: string | null;
+    active: boolean;
+    armed: boolean;
+    created_at: Date | string;
+    muted_until: Date | string | null;
+  }>(
+    `UPDATE alert_rules
+     SET muted_until = $1
+     WHERE id = $2 AND user_id = $3
+     RETURNING id, symbol, type, threshold, category, active, armed, created_at,
+               muted_until`,
+    [mutedUntil, ruleId, userId],
+  );
+  const row = result.rows[0];
+  return row ? mapRule(row) : null;
+}
+
 /** True if rule id exists and belongs to user (active or not). */
 export async function alertOwnedByUser(
   userId: number,

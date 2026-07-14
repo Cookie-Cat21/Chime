@@ -155,7 +155,10 @@ export default async function WatchlistPage() {
                 </Link>{" "}
                 to discover tickers, or use{" "}
                 <code className="font-mono text-xs">/watch SYMBOL</code> in
-                Telegram — Chime keeps the list in sync either way.
+                Telegram — Chime keeps the list in sync either way. New symbols
+                appear here after a poller tick, and Telegram{" "}
+                <code className="font-mono text-xs">/watch</code> can seed the
+                stocks table before the dashboard sees them.
               </>
             }
             action={

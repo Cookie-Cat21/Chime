@@ -39,9 +39,10 @@ import {
 import { toSafePositiveInt } from "@/lib/api/safe-int";
 import {
   ALERT_TYPES,
-  NOTICE_ALERT_TYPES,
   type AlertType,
   isAlertType,
+  isFilingMetricsAlertType,
+  isThresholdAlertType,
   normalizeSymbol,
 } from "@/lib/api/symbol";
 
@@ -61,7 +62,17 @@ const TYPE_OPTIONS: { value: AlertType; label: string }[] = [
   { value: "halt", label: "Market halt (MARKET)" },
   { value: "bid_heavy", label: "Bid-heavy book (×)" },
   { value: "ask_heavy", label: "Ask-heavy book (×)" },
+  { value: "eps_above", label: "EPS above" },
+  { value: "eps_below", label: "EPS below" },
+  { value: "eps_yoy_above", label: "EPS YoY above" },
+  { value: "eps_yoy_below", label: "EPS YoY below" },
+  { value: "rev_yoy_above", label: "Revenue YoY above" },
+  { value: "rev_yoy_below", label: "Revenue YoY below" },
+  { value: "profit_yoy_above", label: "Profit YoY above" },
+  { value: "profit_yoy_below", label: "Profit YoY below" },
 ];
+
+const MUTE_MS = 24 * 60 * 60 * 1000;
 
 type FieldErrors = {
   symbol?: string;
@@ -85,8 +96,11 @@ export function AlertCreateForm({
   const [errors, setErrors] = useState<FieldErrors>({});
   const [pending, setPending] = useState(false);
 
-  const needsThreshold = !(NOTICE_ALERT_TYPES as readonly string[]).includes(type);
+  const needsThreshold = isThresholdAlertType(type);
   const showCategory = type === "disclosure";
+  const showFilingMetricsNote = isFilingMetricsAlertType(type);
+  const thresholdLabel = thresholdFieldLabel(type);
+  const thresholdPlaceholder = thresholdFieldPlaceholder(type);
 
   function clearField(key: keyof FieldErrors) {
     setErrors((prev) => {
@@ -123,9 +137,9 @@ export function AlertCreateForm({
         const raw = threshold.trim();
         if (!raw) {
           next.threshold =
-            type === "daily_move"
-              ? "Enter a percent move (e.g. 5)."
-              : "Enter a price threshold.";
+            thresholdLabel === "Percent"
+              ? "Enter a percent threshold (e.g. 5)."
+              : `Enter a ${thresholdLabel.toLowerCase()} threshold.`;
         } else {
           // Decimal-only via toFiniteNumber — Number("1e2") / Number("")→0
           // used to soft-accept sci-notation and empty thresholds.
@@ -138,7 +152,7 @@ export function AlertCreateForm({
                 ? "Percent threshold must be greater than zero."
                 : type === "big_print"
                   ? "Share quantity must be greater than zero."
-                  : type.startsWith("volume") || type === "crossing_volume"
+                  : thresholdLabel === "Multiplier"
                     ? "Multiplier must be greater than zero."
                     : "Threshold must be greater than zero.";
           } else if (n > MAX_ALERT_THRESHOLD) {
@@ -305,15 +319,13 @@ export function AlertCreateForm({
           </h3>
           {needsThreshold ? (
             <div className="flex flex-col gap-1.5">
-              <Label htmlFor="alert_threshold">
-                {type === "daily_move" ? "Percent" : "Price"}
-              </Label>
+              <Label htmlFor="alert_threshold">{thresholdLabel}</Label>
               <Input
                 id="alert_threshold"
                 name="threshold"
                 className="h-10 font-mono"
                 inputMode="decimal"
-                placeholder={type === "daily_move" ? "5" : "25.00"}
+                placeholder={thresholdPlaceholder}
                 value={threshold}
                 onChange={(e) => {
                   setThreshold(e.target.value);
@@ -383,8 +395,48 @@ export function AlertCreateForm({
           <InlineError id="alert_form_error" message={formError} />
         </section>
       </div>
+      {showFilingMetricsNote ? (
+        <p className="mt-4 text-xs leading-relaxed text-muted-foreground">
+          Fires when financial metrics extract + flags are on (FINANCIAL_METRICS
+          / YOY_COMPARE). Shadow mode may log without Telegram.
+        </p>
+      ) : null}
     </form>
   );
+}
+
+function thresholdFieldLabel(type: AlertType): string {
+  if (type === "daily_move" || type === "gap" || type.includes("_yoy_")) {
+    return "Percent";
+  }
+  if (type === "big_print") return "Shares";
+  if (
+    type.startsWith("volume") ||
+    type === "crossing_volume" ||
+    type === "bid_heavy" ||
+    type === "ask_heavy"
+  ) {
+    return "Multiplier";
+  }
+  if (type === "eps_above" || type === "eps_below") return "EPS";
+  return "Price";
+}
+
+function thresholdFieldPlaceholder(type: AlertType): string {
+  if (type === "daily_move" || type === "gap" || type.includes("_yoy_")) {
+    return "5";
+  }
+  if (type === "big_print") return "10000";
+  if (
+    type.startsWith("volume") ||
+    type === "crossing_volume" ||
+    type === "bid_heavy" ||
+    type === "ask_heavy"
+  ) {
+    return "2";
+  }
+  if (type === "eps_above" || type === "eps_below") return "1.25";
+  return "25.00";
 }
 
 export function CancelAlertButton({ ruleId }: { ruleId: number }) {
@@ -458,6 +510,78 @@ export function CancelAlertButton({ ruleId }: { ruleId: number }) {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+      <InlineError
+        message={error}
+        className="max-w-[12rem] px-2 py-1 text-right text-xs"
+      />
+    </div>
+  );
+}
+
+export function MuteAlertButton({
+  ruleId,
+  mutedUntil,
+}: {
+  ruleId: number;
+  mutedUntil?: string | null;
+}) {
+  const router = useRouter();
+  const toast = useToast();
+  const [error, setError] = useState<string | null>(null);
+  const [pending, setPending] = useState(false);
+  const isMuted = Boolean(mutedUntil);
+
+  async function onClick() {
+    setError(null);
+    const id = toSafePositiveInt(ruleId);
+    if (id == null) {
+      const msg = "Invalid alert id.";
+      setError(msg);
+      toast.error(msg);
+      return;
+    }
+    const muted_until = isMuted
+      ? null
+      : new Date(Date.now() + MUTE_MS).toISOString();
+    setPending(true);
+    try {
+      const { ok, status, data } = await apiMutate(`/api/v1/alerts/${id}`, {
+        method: "PATCH",
+        body: { muted_until },
+      });
+      if (!ok) {
+        const msg = apiErrorMessage(data, `Could not update mute (${status}).`);
+        setError(msg);
+        toast.error(msg);
+        return;
+      }
+      toast.success(
+        muted_until
+          ? `Muted alert #${id} for 24 hours.`
+          : `Cleared mute for alert #${id}.`,
+      );
+      router.refresh();
+    } catch {
+      const msg = "Network error.";
+      setError(msg);
+      toast.error(msg);
+    } finally {
+      setPending(false);
+    }
+  }
+
+  return (
+    <div className="flex flex-col items-end gap-1">
+      <Button
+        type="button"
+        variant={isMuted ? "outline" : "ghost"}
+        size="sm"
+        disabled={pending}
+        onClick={() => void onClick()}
+        aria-busy={pending || undefined}
+      >
+        {pending ? "…" : isMuted ? "Clear mute" : "Mute 24h"}
+      </Button>
       <InlineError
         message={error}
         className="max-w-[12rem] px-2 py-1 text-right text-xs"
