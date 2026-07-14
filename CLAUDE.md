@@ -24,7 +24,8 @@ app is the daily surface; Telegram is how you hear the market when you’re away
 Overview home, market browse, watchlist, alerts + fire history, symbol detail
 (last price, sparkline, disclosures), and poller health. Stack: Next.js +
 Tailwind + shadcn/ui. See `docs/factory/DASH_IA.md`,
-`docs/factory/DASH_CAKE_CHERRY.md`, and `docs/factory/COMMIT_FACTORY.md`.
+`docs/factory/DASH_CAKE_CHERRY.md`, `docs/factory/CHIME_MASTER_PLAN.md`
+(maximum fence-legal roadmap), and `docs/factory/COMMIT_FACTORY.md`.
 
 **Telegram (cherry on top):**
 `/watch`, `/alert`, `/myalerts`, and fire pushes. Same Postgres truth as the

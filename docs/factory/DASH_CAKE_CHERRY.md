@@ -30,4 +30,6 @@ CSE publishes no public WebSocket tape. Chime’s path is:
 `cse.lk tradeSummary` → poller (`POLL_INTERVAL_SECONDS`, min 5) → Postgres →
 dash `PriceRefresh` soft-reload (~15s).
 
-That is **near-realtime during market hours**, not a broker streaming feed.
+Postgres-only for `web/` remains — no cse.lk from the dashboard.
+
+**Full roadmap:** [CHIME_MASTER_PLAN.md](CHIME_MASTER_PLAN.md) (Waves D/C/E/S/A + phased Tracker-Pro unlocks).
