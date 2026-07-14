@@ -49,6 +49,52 @@ export async function ensureUser(telegramId: number): Promise<number> {
   return id;
 }
 
+/** Record a dash session row for device list / logout-all (A2). */
+export async function recordDashSession(
+  userId: number,
+  sid: string,
+  userAgent: string | null,
+): Promise<void> {
+  if (!Number.isSafeInteger(userId) || userId <= 0) {
+    throw new Error("userId must be a positive SafeInteger");
+  }
+  if (typeof sid !== "string" || !sid || sid.length > 64) {
+    throw new Error("sid must be a non-empty string ≤64");
+  }
+  const ua =
+    typeof userAgent === "string" && userAgent
+      ? userAgent.slice(0, 200)
+      : null;
+  const pool = getPool();
+  await pool.query(
+    `INSERT INTO dash_sessions (user_id, sid, user_agent)
+     VALUES ($1, $2, $3)
+     ON CONFLICT (sid) DO UPDATE
+       SET last_seen_at = now(),
+           revoked_at = NULL,
+           user_agent = COALESCE(EXCLUDED.user_agent, dash_sessions.user_agent)`,
+    [userId, sid, ua],
+  );
+}
+
+/**
+ * True when sid is known and revoked. Unknown sid (pre-migration cookies)
+ * returns false so existing sessions keep working until re-login.
+ */
+export async function isDashSessionRevoked(sid: string): Promise<boolean> {
+  if (typeof sid !== "string" || !sid || sid.length > 64) return true;
+  const pool = getPool();
+  const { rows } = await pool.query<{ revoked: boolean }>(
+    `SELECT (revoked_at IS NOT NULL) AS revoked
+       FROM dash_sessions
+      WHERE sid = $1
+      LIMIT 1`,
+    [sid],
+  );
+  if (rows.length === 0) return false;
+  return rows[0]?.revoked === true;
+}
+
 export type StockRow = {
   symbol: string;
   name: string | null;

@@ -3,6 +3,7 @@ import Link from "next/link";
 import {
   AlertCreateForm,
   CancelAlertButton,
+  TestFireButton,
 } from "@/components/alert-controls";
 import { AppNav } from "@/components/app-nav";
 import { EmptyState } from "@/components/empty-state";
@@ -247,7 +248,10 @@ export default async function AlertsPage({
                     {formatTs(rule.created_at)}
                   </p>
                 </div>
-                <CancelAlertButton ruleId={rule.id} />
+                <div className="flex flex-wrap items-center justify-end gap-2">
+                  <TestFireButton ruleId={rule.id} />
+                  <CancelAlertButton ruleId={rule.id} />
+                </div>
               </li>
             ))}
           </ul>

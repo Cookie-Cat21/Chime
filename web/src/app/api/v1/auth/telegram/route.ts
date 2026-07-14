@@ -11,7 +11,7 @@ import {
   mintSessionToken,
   sessionCookieOptions,
 } from "@/lib/auth/session";
-import { ensureUser } from "@/lib/db";
+import { ensureUser, recordDashSession } from "@/lib/db";
 
 export const runtime = "nodejs";
 
@@ -149,7 +149,19 @@ export async function POST(request: Request) {
     );
   }
 
-  const { token } = mintSessionToken(userId, cfg.sessionSecret);
+  const { token, payload: sessionPayload } = mintSessionToken(
+    userId,
+    cfg.sessionSecret,
+  );
+  try {
+    await recordDashSession(
+      userId,
+      sessionPayload.sid,
+      request.headers.get("user-agent"),
+    );
+  } catch (err) {
+    console.error("telegram auth recordDashSession failed", err);
+  }
   const csrf = mintCsrfToken();
   const res = NextResponse.json(
     {

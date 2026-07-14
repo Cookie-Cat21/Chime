@@ -10,7 +10,7 @@ import {
   mintSessionToken,
   sessionCookieOptions,
 } from "@/lib/auth/session";
-import { ensureUser } from "@/lib/db";
+import { ensureUser, recordDashSession } from "@/lib/db";
 
 export const runtime = "nodejs";
 
@@ -141,7 +141,17 @@ export async function POST(request: Request) {
     );
   }
 
-  const { token } = mintSessionToken(userId, cfg.sessionSecret);
+  const { token, payload } = mintSessionToken(userId, cfg.sessionSecret);
+  try {
+    await recordDashSession(
+      userId,
+      payload.sid,
+      request.headers.get("user-agent"),
+    );
+  } catch (err) {
+    console.error("demo auth recordDashSession failed", err);
+    // Non-fatal — cookie still works; device list may lag.
+  }
   const csrf = mintCsrfToken();
 
   const res = parsed.redirect

@@ -1028,3 +1028,32 @@ def test_symbol_page_watch_and_new_alert_shortcuts() -> None:
         for line in page_src.splitlines()
         if "cse.lk" in line.lower()
     )
+
+
+def test_wave_master_plan_kit_wiring() -> None:
+    """Waves 1–5: kit + API surfaces stay wired (cake/cherry fence)."""
+    overview = (WEB / "src" / "app" / "overview" / "page.tsx").read_text(encoding="utf-8")
+    market = (WEB / "src" / "app" / "market" / "page.tsx").read_text(encoding="utf-8")
+    health = (WEB / "src" / "app" / "health" / "page.tsx").read_text(encoding="utf-8")
+    alerts = (WEB / "src" / "app" / "alerts" / "page.tsx").read_text(encoding="utf-8")
+    nav = (WEB / "src" / "components" / "app-nav.tsx").read_text(encoding="utf-8")
+    assert "CakeCherryBanner" in overview
+    assert "ChangeBadge" in overview
+    assert "MoversBarList" in overview
+    assert "IndexStrip" in overview
+    assert "SectorHeatStrip" in overview
+    assert "/api/v1/indexes" in overview
+    assert "MoversBarList" in market
+    assert "ChangeBadge" in market
+    assert "delivery-heading" in health
+    assert "retention-heading" in health
+    assert "TestFireButton" in alerts
+    assert "CommandPalette" in nav or "command-palette" in nav
+    assert (WEB / "src" / "app" / "api" / "v1" / "indexes" / "route.ts").is_file()
+    assert (WEB / "src" / "app" / "api" / "v1" / "stream" / "snapshots" / "route.ts").is_file()
+    assert (WEB / "src" / "app" / "api" / "v1" / "auth" / "telegram" / "route.ts").is_file()
+    assert (WEB / "src" / "app" / "api" / "v1" / "auth" / "logout-all" / "route.ts").is_file()
+    assert (WEB / "src" / "components" / "command-palette.tsx").is_file()
+    parity = Path("docs/factory/BOT_DASH_PARITY.md")
+    assert parity.is_file()
+    assert "price_above" in parity.read_text(encoding="utf-8")

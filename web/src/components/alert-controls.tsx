@@ -461,3 +461,62 @@ export function CancelAlertButton({ ruleId }: { ruleId: number }) {
     </div>
   );
 }
+
+/** Ops dry-run — writes audit row; does not send Telegram (C2). */
+export function TestFireButton({ ruleId }: { ruleId: number }) {
+  const router = useRouter();
+  const toast = useToast();
+  const [error, setError] = useState<string | null>(null);
+  const [pending, setPending] = useState(false);
+
+  async function onClick() {
+    setError(null);
+    const id = toSafePositiveInt(ruleId);
+    if (id == null) {
+      const msg = "Invalid alert id.";
+      setError(msg);
+      toast.error(msg);
+      return;
+    }
+    setPending(true);
+    try {
+      const { ok, status, data } = await apiMutate(
+        `/api/v1/alerts/${id}/test-fire`,
+        { method: "POST", body: {} },
+      );
+      if (!ok) {
+        const msg = apiErrorMessage(data, `Test fire failed (${status}).`);
+        setError(msg);
+        toast.error(msg);
+        return;
+      }
+      toast.success(`Dry-run logged for alert #${id} — no Telegram send.`);
+      router.refresh();
+    } catch {
+      const msg = "Network error.";
+      setError(msg);
+      toast.error(msg);
+    } finally {
+      setPending(false);
+    }
+  }
+
+  return (
+    <div className="flex flex-col items-end gap-1">
+      <Button
+        type="button"
+        variant="ghost"
+        size="sm"
+        disabled={pending}
+        onClick={() => void onClick()}
+        aria-busy={pending || undefined}
+      >
+        {pending ? "…" : "Test fire"}
+      </Button>
+      <InlineError
+        message={error}
+        className="max-w-[12rem] px-2 py-1 text-right text-xs"
+      />
+    </div>
+  );
+}

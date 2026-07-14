@@ -56,6 +56,14 @@ type HealthPayload = {
     /** Ops hint only — omit section when absent. */
     brief_queue?: BriefQueueHint;
   } | null;
+  delivery?: {
+    delivered_24h: number;
+    retrying: number;
+    dead_lettered: number;
+  };
+  retention?: {
+    snapshot_retention_days: number;
+  };
 };
 
 function healthUiString(raw: unknown): string | null {
@@ -193,7 +201,37 @@ function parseHealthPayload(body: unknown): HealthPayload | null {
     started_at: healthTs(r.started_at),
     last_snapshot_at: healthTs(r.last_snapshot_at),
     poller,
+    delivery: parseDelivery(r.delivery),
+    retention: parseRetention(r.retention),
   };
+}
+
+function parseDelivery(raw: unknown): HealthPayload["delivery"] {
+  if (raw == null || typeof raw !== "object" || Array.isArray(raw)) {
+    return undefined;
+  }
+  const d = raw as Record<string, unknown>;
+  const delivered = toNonNegativeSafeInt(d.delivered_24h, -1);
+  const retrying = toNonNegativeSafeInt(d.retrying, -1);
+  const dead = toNonNegativeSafeInt(d.dead_lettered, -1);
+  if (delivered < 0 || retrying < 0 || dead < 0) return undefined;
+  return {
+    delivered_24h: delivered,
+    retrying,
+    dead_lettered: dead,
+  };
+}
+
+function parseRetention(raw: unknown): HealthPayload["retention"] {
+  if (raw == null || typeof raw !== "object" || Array.isArray(raw)) {
+    return undefined;
+  }
+  const days = toNonNegativeSafeInt(
+    (raw as Record<string, unknown>).snapshot_retention_days,
+    -1,
+  );
+  if (days < 0) return undefined;
+  return { snapshot_retention_days: days };
 }
 
 export default async function HealthPage() {
@@ -212,6 +250,8 @@ export default async function HealthPage() {
   const missing = payload?.poller?.watched_missing ?? [];
   const circuits = payload?.poller?.circuits ?? null;
   const briefQueue = payload?.poller?.brief_queue ?? null;
+  const delivery = payload?.delivery ?? null;
+  const retention = payload?.retention ?? null;
   const snapshotAge = timestampAge(payload?.last_snapshot_at);
   const tickAge = timestampAge(payload?.poller?.last_tick_at);
   const pollerUnreachable =
@@ -428,6 +468,62 @@ export default async function HealthPage() {
                 </dl>
               </section>
             )}
+
+            {delivery != null ? (
+              <section
+                className="mt-10 border-t border-border/60 pt-6"
+                aria-labelledby="delivery-heading"
+              >
+                <h2
+                  id="delivery-heading"
+                  className="text-sm font-medium tracking-wide text-muted-foreground uppercase"
+                >
+                  Telegram delivery
+                </h2>
+                <p className="mt-2 text-sm text-muted-foreground">
+                  Cherry reliability slice — fire attempts from alert_log (not
+                  a send console).
+                </p>
+                <div className="mt-4 grid gap-3 sm:grid-cols-3">
+                  <StatCard
+                    label="Delivered (24h)"
+                    value={String(delivery.delivered_24h)}
+                    hint="message_sent or attempted_ok"
+                  />
+                  <StatCard
+                    label="Retrying"
+                    value={String(delivery.retrying)}
+                    hint="Pending retries"
+                  />
+                  <StatCard
+                    label="Dead-lettered"
+                    value={String(delivery.dead_lettered)}
+                    hint="Stopped after max attempts"
+                  />
+                </div>
+              </section>
+            ) : null}
+
+            {retention != null ? (
+              <section
+                className="mt-10 border-t border-border/60 pt-6"
+                aria-labelledby="retention-heading"
+              >
+                <h2
+                  id="retention-heading"
+                  className="text-sm font-medium tracking-wide text-muted-foreground uppercase"
+                >
+                  Snapshot retention
+                </h2>
+                <p className="mt-2 text-sm text-muted-foreground">
+                  Poller setting{" "}
+                  <code className="font-mono text-xs">SNAPSHOT_RETENTION_DAYS</code>
+                  {retention.snapshot_retention_days === 0
+                    ? " — 0 means keep all price snapshots (no prune)."
+                    : ` — prune snapshots older than ${retention.snapshot_retention_days} day(s).`}
+                </p>
+              </section>
+            ) : null}
 
             {briefQueue != null && (
               <section className="mt-10 border-t border-border/60 pt-6">
