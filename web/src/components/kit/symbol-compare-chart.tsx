@@ -1,17 +1,8 @@
 "use client";
 
 import { useEffect, useId, useMemo, useState } from "react";
-import { CartesianGrid, Line, LineChart, XAxis, YAxis } from "recharts";
 
 import { Button } from "@/components/ui/button";
-import {
-  ChartContainer,
-  ChartLegend,
-  ChartLegendContent,
-  ChartTooltip,
-  ChartTooltipContent,
-  type ChartConfig,
-} from "@/components/ui/chart";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
@@ -32,7 +23,8 @@ import { formatNumber } from "@/lib/format";
 import { finiteSparklinePoints } from "@/lib/sparkline";
 import { cn } from "@/lib/utils";
 
-const CHART_COLORS = [
+/** Tremor / shadcn chart-1..4 tokens — multi-series overlay. */
+const SERIES_STROKES = [
   "var(--chart-1)",
   "var(--chart-2)",
   "var(--chart-3)",
@@ -43,8 +35,10 @@ const SCALE_OPTIONS = [1, 2, 3, 4] as const;
 
 type Props = {
   baseSymbol: string;
-  /** SSR ticks for the base symbol — chart works even if peer fetch is slow. */
+  /** SSR ticks for the base symbol — chart paints without a client fetch. */
   initialPoints?: { ts: string | null; price: number | null | undefined }[];
+  /** Optional SSR peer series (e.g. from ?compare=) so overlays paint without hydration. */
+  initialPeerSeries?: CompareSeries[];
   className?: string;
 };
 
@@ -81,15 +75,105 @@ function parseComparePayload(body: unknown): CompareSeries[] {
   return out;
 }
 
+type PolySeries = {
+  symbol: string;
+  key: string;
+  stroke: string;
+  pointsAttr: string;
+};
+
+function buildSvgPolylines(
+  symbols: string[],
+  rows: ReturnType<typeof buildCompareChartRows>,
+): {
+  series: PolySeries[];
+  yTicks: { y: number; label: string }[];
+  xTicks: { x: number; label: string }[];
+  width: number;
+  height: number;
+  plot: { left: number; top: number; right: number; bottom: number };
+} | null {
+  if (rows.length < 2 || symbols.length < 1) return null;
+
+  const width = 640;
+  const height = 240;
+  const plot = { left: 48, top: 16, right: 16, bottom: 32 };
+  const plotW = width - plot.left - plot.right;
+  const plotH = height - plot.top - plot.bottom;
+
+  const keys = symbols.map(compareSeriesKey);
+  let min = Number.POSITIVE_INFINITY;
+  let max = Number.NEGATIVE_INFINITY;
+  for (const row of rows) {
+    for (const key of keys) {
+      const v = row[key];
+      if (typeof v === "number" && Number.isFinite(v)) {
+        min = Math.min(min, v);
+        max = Math.max(max, v);
+      }
+    }
+  }
+  if (!Number.isFinite(min) || !Number.isFinite(max)) return null;
+  const span = max !== min ? max - min : 1;
+
+  const series: PolySeries[] = symbols.map((symbol, si) => {
+    const key = keys[si]!;
+    const coords: string[] = [];
+    for (let i = 0; i < rows.length; i++) {
+      const v = rows[i]![key];
+      if (typeof v !== "number" || !Number.isFinite(v)) continue;
+      const x = plot.left + (i / (rows.length - 1)) * plotW;
+      const y = plot.top + (1 - (v - min) / span) * plotH;
+      coords.push(`${x.toFixed(1)},${y.toFixed(1)}`);
+    }
+    return {
+      symbol,
+      key,
+      stroke: SERIES_STROKES[si % SERIES_STROKES.length]!,
+      pointsAttr: coords.join(" "),
+    };
+  });
+
+  if (series.some((s) => s.pointsAttr.split(" ").length < 2)) {
+    // Allow partial peers; require at least one drawable series.
+    if (!series.some((s) => s.pointsAttr.split(" ").length >= 2)) return null;
+  }
+
+  const yTicks = [0, 0.5, 1].map((t) => {
+    const value = max - t * span;
+    return {
+      y: plot.top + t * plotH,
+      label: formatNumber(value, span >= 20 ? 0 : 1),
+    };
+  });
+
+  const xIdx = [0, Math.floor((rows.length - 1) / 2), rows.length - 1];
+  const xTicks = xIdx.map((i) => ({
+    x: plot.left + (i / (rows.length - 1)) * plotW,
+    label: String(rows[i]?.t ?? ""),
+  }));
+
+  return { series, yTicks, xTicks, width, height, plot };
+}
+
+function clampScale(n: number): (typeof SCALE_OPTIONS)[number] {
+  if (n <= 1) return 1;
+  if (n === 2) return 2;
+  if (n === 3) return 3;
+  return 4;
+}
+
 export function SymbolCompareChart({
   baseSymbol,
   initialPoints = [],
+  initialPeerSeries = [],
   className,
 }: Props) {
   const base = normalizeSymbol(baseSymbol) ?? baseSymbol.toUpperCase();
   const scaleGroupId = useId();
   const modeGroupId = useId();
   const peerId = useId();
+  const titleId = useId();
 
   const baseSeries = useMemo<CompareSeries>(() => {
     return {
@@ -98,11 +182,31 @@ export function SymbolCompareChart({
     };
   }, [base, initialPoints]);
 
-  const [scale, setScale] = useState<(typeof SCALE_OPTIONS)[number]>(1);
+  const ssrPeers = useMemo(() => {
+    const list: string[] = [];
+    for (const row of initialPeerSeries) {
+      const symbol = normalizeSymbol(row.symbol);
+      if (!symbol || symbol === base || list.includes(symbol)) continue;
+      list.push(symbol);
+      if (list.length >= MAX_COMPARE_SYMBOLS - 1) break;
+    }
+    return list;
+  }, [base, initialPeerSeries]);
+
+  const [scale, setScale] = useState<(typeof SCALE_OPTIONS)[number]>(() =>
+    clampScale(1 + ssrPeers.length),
+  );
   const [mode, setMode] = useState<CompareScaleMode>("indexed");
-  const [peers, setPeers] = useState<string[]>(["", "", ""]);
+  const [peers, setPeers] = useState<string[]>(() => {
+    const slots = ["", "", ""];
+    ssrPeers.forEach((symbol, i) => {
+      if (i < 3) slots[i] = symbol;
+    });
+    return slots;
+  });
   const [draft, setDraft] = useState("");
-  const [peerSeries, setPeerSeries] = useState<CompareSeries[]>([]);
+  const [peerSeries, setPeerSeries] =
+    useState<CompareSeries[]>(initialPeerSeries);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -171,10 +275,9 @@ export function SymbolCompareChart({
           return;
         }
         if (!cancelled) {
-          const parsed = parseComparePayload(body).filter(
-            (s) => s.symbol !== base,
+          setPeerSeries(
+            parseComparePayload(body).filter((s) => s.symbol !== base),
           );
-          setPeerSeries(parsed);
         }
       } catch {
         if (!cancelled) {
@@ -204,25 +307,19 @@ export function SymbolCompareChart({
     return [baseSeries, ...peersResolved];
   }, [baseSeries, peerSeries, selectedPeers]);
 
-  const chartConfig = useMemo(() => {
-    const cfg: ChartConfig = {};
-    selectedSymbols.forEach((symbol, i) => {
-      cfg[compareSeriesKey(symbol)] = {
-        label: symbol,
-        color: CHART_COLORS[i % CHART_COLORS.length],
-      };
-    });
-    return cfg;
-  }, [selectedSymbols]);
-
   const rows = useMemo(
     () => buildCompareChartRows(series, mode),
     [series, mode],
   );
 
+  const svg = useMemo(
+    () => buildSvgPolylines(selectedSymbols, rows),
+    [selectedSymbols, rows],
+  );
+
   const needsPeers = scale > 1;
   const showChart =
-    rows.length >= 2 && (!needsPeers || selectedPeers.length >= 1);
+    svg != null && (!needsPeers || selectedPeers.length >= 1);
 
   function addPeerFromDraft() {
     const next = normalizeSymbol(draft);
@@ -262,20 +359,18 @@ export function SymbolCompareChart({
       className={cn("mt-8 border-t border-border/60 pt-6", className)}
       aria-labelledby="compare-heading"
     >
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
-        <div>
-          <h2
-            id="compare-heading"
-            className="text-sm font-medium tracking-wide text-muted-foreground uppercase"
-          >
-            Price compare
-          </h2>
-          <p className="mt-1 max-w-xl text-sm text-muted-foreground">
-            Overlay up to {MAX_COMPARE_SYMBOLS} listed symbols from stored
-            ticks. Indexed mode starts each line at 100 so different price
-            levels stay readable. Not financial advice.
-          </p>
-        </div>
+      <div>
+        <h2
+          id="compare-heading"
+          className="text-sm font-medium tracking-wide text-muted-foreground uppercase"
+        >
+          Price compare
+        </h2>
+        <p className="mt-1 max-w-xl text-sm text-muted-foreground">
+          Overlay up to {MAX_COMPARE_SYMBOLS} listed symbols from stored ticks.
+          Indexed mode starts each line at 100 so different price levels stay
+          readable. Not financial advice.
+        </p>
       </div>
 
       <div className="mt-4 flex flex-col gap-4">
@@ -408,63 +503,87 @@ export function SymbolCompareChart({
           </p>
         ) : null}
 
-        {showChart ? (
-          <ChartContainer
-            config={chartConfig}
-            className="aspect-auto h-64 w-full"
-          >
-            <LineChart
-              accessibilityLayer
-              data={rows}
-              margin={{ left: 8, right: 8, top: 8, bottom: 0 }}
+        {showChart && svg ? (
+          <div className="rounded-lg border border-border/70 bg-muted/15 p-3">
+            <ul className="mb-2 flex flex-wrap gap-3" aria-label="Series legend">
+              {svg.series.map((s) => (
+                <li
+                  key={s.key}
+                  className="flex items-center gap-2 font-mono text-xs"
+                >
+                  <span
+                    className="inline-block size-2.5 rounded-full"
+                    style={{ background: s.stroke }}
+                    aria-hidden
+                  />
+                  {s.symbol}
+                </li>
+              ))}
+            </ul>
+            <svg
+              viewBox={`0 0 ${svg.width} ${svg.height}`}
+              className="h-56 w-full"
+              role="img"
+              aria-labelledby={titleId}
             >
-              <CartesianGrid vertical={false} />
-              <XAxis
-                dataKey="t"
-                tickLine={false}
-                axisLine={false}
-                minTickGap={28}
-              />
-              <YAxis
-                tickLine={false}
-                axisLine={false}
-                width={48}
-                tickFormatter={(v) =>
-                  mode === "indexed"
-                    ? formatNumber(Number(v), 0)
-                    : formatNumber(Number(v), 1)
-                }
-              />
-              <ChartTooltip
-                content={
-                  <ChartTooltipContent
-                    labelFormatter={(_, payload) => {
-                      const first = payload?.[0]?.payload as
-                        | { ts?: string | null }
-                        | undefined;
-                      return first?.ts ? String(first.ts) : "";
-                    }}
+              <title id={titleId}>
+                Price compare for {selectedSymbols.join(", ")} (
+                {mode === "indexed" ? "indexed to 100" : "LKR"})
+              </title>
+              {svg.yTicks.map((tick) => (
+                <g key={`y-${tick.y}`}>
+                  <line
+                    x1={svg.plot.left}
+                    x2={svg.width - svg.plot.right}
+                    y1={tick.y}
+                    y2={tick.y}
+                    stroke="currentColor"
+                    strokeOpacity={0.12}
                   />
-                }
-              />
-              <ChartLegend content={<ChartLegendContent />} />
-              {selectedSymbols.map((symbol) => {
-                const key = compareSeriesKey(symbol);
-                return (
-                  <Line
-                    key={key}
-                    dataKey={key}
-                    name={symbol}
-                    type="monotone"
-                    stroke={`var(--color-${key})`}
-                    strokeWidth={2}
-                    dot={false}
-                    connectNulls
+                  <text
+                    x={svg.plot.left - 8}
+                    y={tick.y + 3}
+                    textAnchor="end"
+                    className="fill-muted-foreground"
+                    fontSize="10"
+                  >
+                    {tick.label}
+                  </text>
+                </g>
+              ))}
+              {svg.xTicks.map((tick) => (
+                <text
+                  key={`x-${tick.x}-${tick.label}`}
+                  x={tick.x}
+                  y={svg.height - 10}
+                  textAnchor="middle"
+                  className="fill-muted-foreground"
+                  fontSize="10"
+                >
+                  {tick.label}
+                </text>
+              ))}
+              {svg.series.map((s) =>
+                s.pointsAttr.split(" ").length >= 2 ? (
+                  <polyline
+                    key={s.key}
+                    fill="none"
+                    stroke={s.stroke}
+                    strokeWidth="2.25"
+                    strokeLinejoin="round"
+                    strokeLinecap="round"
+                    points={s.pointsAttr}
                   />
-                );
-              })}
-            </LineChart>
-          </ChartContainer>
+                ) : null,
+              )}
+            </svg>
+            <p className="mt-1 text-xs text-muted-foreground">
+              {mode === "indexed"
+                ? "Y axis: indexed (first tick = 100)."
+                : "Y axis: last price (LKR)."}{" "}
+              Stored poller ticks only — not financial advice.
+            </p>
+          </div>
         ) : !loading && !needsPeers ? (
           <p className="text-sm text-muted-foreground" role="status">
             Need at least two stored ticks for {base}.

@@ -361,12 +361,28 @@ function latestBriefFromDisclosures(discs: DisclosuresPayload): LatestBrief | nu
   return { title: item.title, text: item.brief };
 }
 
+function parseCompareSearchParam(raw: unknown): string[] {
+  const text = Array.isArray(raw) ? raw[0] : raw;
+  if (typeof text !== "string" || !text.trim()) return [];
+  const out: string[] = [];
+  for (const part of text.split(",")) {
+    const symbol = normalizeSymbol(part);
+    if (!symbol || out.includes(symbol)) continue;
+    out.push(symbol);
+    if (out.length >= 3) break; // base + 3 peers = max 4
+  }
+  return out;
+}
+
 export default async function SymbolDetailPage({
   params,
   searchParams,
 }: {
   params: Promise<{ symbol: string }>;
-  searchParams: Promise<{ category?: string | string[] }>;
+  searchParams: Promise<{
+    category?: string | string[];
+    compare?: string | string[];
+  }>;
 }) {
   await requirePageSession();
 
@@ -381,15 +397,26 @@ export default async function SymbolDetailPage({
     ? sp.category[0]
     : sp.category;
   const categoryFilter = sanitizeDisclosureCategory(categoryRaw);
+  const comparePeers = parseCompareSearchParam(sp.compare).filter(
+    (peer) => peer !== symbol,
+  );
 
   const encoded = encodeURIComponent(symbol);
-  const [symRes, snapRes, discRes, metricsRes, briefRes] = await Promise.all([
-    serverApiGet(`/api/v1/symbols/${encoded}`),
-    serverApiGet(`/api/v1/symbols/${encoded}/snapshots?limit=60`),
-    serverApiGet(`/api/v1/symbols/${encoded}/disclosures?limit=20`),
-    serverApiGet(`/api/v1/symbols/${encoded}/metrics`),
-    serverApiGet(`/api/v1/symbols/${encoded}/brief`),
-  ]);
+  const compareQs =
+    comparePeers.length > 0
+      ? `/api/v1/compare?symbols=${encodeURIComponent(
+          [symbol, ...comparePeers].join(","),
+        )}&limit=60`
+      : null;
+  const [symRes, snapRes, discRes, metricsRes, briefRes, compareRes] =
+    await Promise.all([
+      serverApiGet(`/api/v1/symbols/${encoded}`),
+      serverApiGet(`/api/v1/symbols/${encoded}/snapshots?limit=60`),
+      serverApiGet(`/api/v1/symbols/${encoded}/disclosures?limit=20`),
+      serverApiGet(`/api/v1/symbols/${encoded}/metrics`),
+      serverApiGet(`/api/v1/symbols/${encoded}/brief`),
+      compareQs ? serverApiGet(compareQs) : Promise.resolve(null),
+    ]);
 
   if (symRes.status === 404) {
     notFound();
@@ -451,11 +478,48 @@ export default async function SymbolDetailPage({
   let filingMetrics: FilingMetricRow | null = null;
   let filingComparison: FilingMetricComparison | null = null;
   let latestBrief: LatestBrief | null = null;
+  let comparePeerSeries: {
+    symbol: string;
+    points: { ts: string | null; price: number }[];
+  }[] = [];
   if (snapRes.ok) {
     try {
       snaps = parseSnapshotsPayload(await snapRes.json());
     } catch {
       snaps = { points: [] };
+    }
+  }
+  if (compareRes?.ok) {
+    try {
+      const body: unknown = await compareRes.json();
+      if (body && typeof body === "object" && !Array.isArray(body)) {
+        const raw = (body as { series?: unknown }).series;
+        if (Array.isArray(raw)) {
+          for (const row of raw) {
+            if (!row || typeof row !== "object" || Array.isArray(row)) continue;
+            const r = row as Record<string, unknown>;
+            const peer = normalizeSymbol(r.symbol);
+            if (!peer || peer === symbol) continue;
+            const pointsRaw = Array.isArray(r.points) ? r.points : [];
+            const points = pointsRaw.flatMap((p) => {
+              if (!p || typeof p !== "object" || Array.isArray(p)) return [];
+              const point = p as Record<string, unknown>;
+              const price = toFiniteNumber(point.price);
+              if (price == null) return [];
+              return [
+                {
+                  ts: typeof point.ts === "string" ? point.ts : null,
+                  price,
+                },
+              ];
+            });
+            comparePeerSeries.push({ symbol: peer, points });
+            if (comparePeerSeries.length >= 3) break;
+          }
+        }
+      }
+    } catch {
+      comparePeerSeries = [];
     }
   }
   if (discRes.ok) {
@@ -658,6 +722,7 @@ export default async function SymbolDetailPage({
       <SymbolCompareChart
         baseSymbol={data.symbol}
         initialPoints={snaps.points}
+        initialPeerSeries={comparePeerSeries}
       />
 
       <FilingMetricsPanel

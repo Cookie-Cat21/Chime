@@ -1102,7 +1102,7 @@ def test_bot_dash_parity_filing_metrics_and_settings() -> None:
 
 
 def test_symbol_compare_chart_max_four() -> None:
-    """Price compare: shadcn/recharts overlay capped at 4 symbols."""
+    """Price compare: SVG overlay capped at 4 symbols (Tremor/shadcn pattern)."""
     compare_route = WEB / "src" / "app" / "api" / "v1" / "compare" / "route.ts"
     compare_lib = WEB / "src" / "lib" / "compare-chart.ts"
     compare_ui = WEB / "src" / "components" / "kit" / "symbol-compare-chart.tsx"
@@ -1118,10 +1118,10 @@ def test_symbol_compare_chart_max_four() -> None:
     assert "MAX_COMPARE_SYMBOLS = 4" in route_src
     assert "MAX_COMPARE_SYMBOLS = 4" in lib_src
     assert "price_snapshots" in route_src
-    assert "cse.lk" not in route_src.lower() or "no cse" in route_src.lower()
+    assert "no cse.lk" in route_src.lower() or "No cse.lk" in route_src or "no cse" in route_src.lower()
     assert "buildCompareChartRows" in lib_src
-    assert 'mode === "indexed"' in lib_src or 'mode === "indexed"' in ui_src
+    assert "indexed" in lib_src and "polyline" in ui_src
     assert "SymbolCompareChart" in page
     assert "SCALE_OPTIONS" in ui_src
-    assert "recharts" in (WEB / "package.json").read_text(encoding="utf-8")
-    assert (WEB / "src" / "components" / "ui" / "chart.tsx").is_file()
+    assert "initialPeerSeries" in ui_src
+    assert "compare=" in page or "comparePeers" in page
