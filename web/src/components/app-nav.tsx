@@ -4,6 +4,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useState } from "react";
 
+import { ChimeWordmark } from "@/components/brand/chime-brand";
 import { NavSession } from "@/components/nav-session";
 
 const links = [
@@ -55,10 +56,11 @@ export function AppNav({ active }: { active?: string }) {
       <div className="mx-auto flex max-w-3xl items-center justify-between gap-3 px-4 py-3 sm:px-6">
         <Link
           href="/"
-          className="rounded-sm font-display text-xl font-semibold tracking-tight text-foreground focus-visible:ring-2 focus-visible:ring-ring/50 focus-visible:outline-none"
+          aria-label="Chime home"
+          className="rounded-sm focus-visible:ring-2 focus-visible:ring-ring/50 focus-visible:outline-none"
           onClick={() => setOpen(false)}
         >
-          Chime
+          <ChimeWordmark size="sm" className="motion-safe:transition-opacity motion-safe:hover:opacity-80" />
         </Link>
 
         {/* Desktop / tablet */}

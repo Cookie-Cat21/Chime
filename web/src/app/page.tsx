@@ -2,6 +2,7 @@ import Link from "next/link";
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 
+import { ChimeWordmark } from "@/components/brand/chime-brand";
 import { NfaFooter } from "@/components/nfa-footer";
 import { NfaInline } from "@/components/nfa-inline";
 import { Button } from "@/components/ui/button";
@@ -28,9 +29,9 @@ export default async function HomePage() {
   return (
     <main id="main-content" tabIndex={-1} className="chime-atmosphere flex min-h-full flex-1 flex-col">
       <div className="mx-auto flex w-full max-w-3xl flex-1 flex-col justify-center px-6 py-16 sm:py-24">
-        <p className="chime-rise font-display text-6xl font-semibold tracking-tight text-foreground sm:text-7xl md:text-8xl">
-          Chime
-        </p>
+        <div className="chime-rise">
+          <ChimeWordmark size="hero" priority />
+        </div>
         <h1 className="chime-rise chime-rise-delay-1 mt-6 max-w-xl text-2xl font-medium leading-snug text-foreground sm:text-3xl">
           CSE alerts that reach you on Telegram
         </h1>

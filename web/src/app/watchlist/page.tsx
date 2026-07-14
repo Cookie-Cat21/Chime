@@ -4,6 +4,7 @@ import { AppNav } from "@/components/app-nav";
 import { EmptyState } from "@/components/empty-state";
 import { NfaFooter } from "@/components/nfa-footer";
 import { NfaInline } from "@/components/nfa-inline";
+import { PageHeader } from "@/components/page-header";
 import { Button } from "@/components/ui/button";
 import {
   UnwatchButton,
@@ -96,15 +97,15 @@ export default async function WatchlistPage() {
     <div className="flex min-h-full flex-1 flex-col bg-background">
       <AppNav active="/watchlist" />
       <main id="main-content" tabIndex={-1} className="mx-auto flex w-full max-w-3xl flex-1 flex-col px-4 py-8 sm:px-6 sm:py-10">
-        <h1 className="font-display text-3xl font-semibold tracking-tight">
-          Watchlist
-        </h1>
-        <p className="mt-2 max-w-lg text-sm text-muted-foreground">
-          Symbols you watch for price and disclosure alerts. Pushes still go to
-          Telegram.
-        </p>
+        <PageHeader
+          eyebrow="Watch"
+          title="Watchlist"
+          description="Symbols you watch for price and disclosure alerts. Pushes still go to Telegram."
+        />
 
-        <WatchlistAddForm />
+        <div className="mt-6">
+          <WatchlistAddForm />
+        </div>
 
         {!payload ? (
           <EmptyState

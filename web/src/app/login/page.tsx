@@ -2,6 +2,7 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import { cookies } from "next/headers";
 
+import { ChimeWordmark } from "@/components/brand/chime-brand";
 import { LoginForm } from "@/components/login-form";
 import { NfaFooter } from "@/components/nfa-footer";
 import { NfaInline } from "@/components/nfa-inline";
@@ -47,15 +48,15 @@ export default async function LoginPage({
   return (
     <main id="main-content" tabIndex={-1} className="chime-atmosphere flex min-h-full flex-1 flex-col">
       <div className="mx-auto flex w-full max-w-md flex-1 flex-col justify-center px-6 py-16">
-        <p className="chime-rise font-display text-5xl font-semibold tracking-tight text-foreground sm:text-6xl">
+        <div className="chime-rise">
           <Link
             href="/"
-            className="transition-opacity hover:opacity-80"
+            className="inline-block motion-safe:transition-opacity motion-safe:hover:opacity-80"
             aria-label="Chime home"
           >
-            Chime
+            <ChimeWordmark size="hero" priority />
           </Link>
-        </p>
+        </div>
         <h1 className="chime-rise chime-rise-delay-1 mt-5 text-xl font-medium text-foreground sm:text-2xl">
           CSE alerts, Telegram first
         </h1>

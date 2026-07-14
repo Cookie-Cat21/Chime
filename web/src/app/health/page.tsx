@@ -1,5 +1,7 @@
 import { AppNav } from "@/components/app-nav";
+import { LiveIndicator } from "@/components/live-indicator";
 import { NfaFooter } from "@/components/nfa-footer";
+import { PageHeader } from "@/components/page-header";
 import { sanitizeDisclosureText } from "@/lib/api/disclosure-safe";
 import { toNonNegativeSafeInt } from "@/lib/api/safe-int";
 import { serverApiGet } from "@/lib/api/server-fetch";
@@ -223,13 +225,27 @@ export default async function HealthPage() {
     <div className="flex min-h-full flex-1 flex-col bg-background">
       <AppNav active="/health" />
       <main id="main-content" tabIndex={-1} className="mx-auto flex w-full max-w-3xl flex-1 flex-col px-4 py-8 sm:px-6 sm:py-10">
-        <h1 className="font-display text-3xl font-semibold tracking-tight">
-          Health
-        </h1>
-        <p className="mt-2 max-w-lg text-sm text-muted-foreground">
-          Read-only ops view — database ping and optional poller status. No
-          deploy controls here.
-        </p>
+        <PageHeader
+          eyebrow="Ops"
+          title="Health"
+          description="Read-only ops view — database ping and optional poller status. No deploy controls here."
+          action={
+            payload ? (
+              <LiveIndicator
+                tone={pollerUnreachable || !ok ? (pollerUnreachable ? "down" : "stale") : "ok"}
+                label={
+                  pollerUnreachable
+                    ? "Unreachable"
+                    : ok
+                      ? "Live"
+                      : "Degraded"
+                }
+              />
+            ) : (
+              <LiveIndicator tone="down" label="Unreachable" />
+            )
+          }
+        />
 
         {!payload ? (
           <p className="mt-8 text-sm text-muted-foreground">
