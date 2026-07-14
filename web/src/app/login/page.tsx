@@ -44,6 +44,7 @@ export default async function LoginPage({
     cfg.defaultTelegramId && cfg.allowlist.has(cfg.defaultTelegramId)
       ? cfg.defaultTelegramId
       : null;
+  const telegramLoginEnabled = process.env.DASH_TELEGRAM_LOGIN === "1";
 
   return (
     <main id="main-content" tabIndex={-1} className="chime-atmosphere flex min-h-full flex-1 flex-col">
@@ -92,6 +93,15 @@ export default async function LoginPage({
             defaultTelegramId={defaultId}
             demoEnabled={cfg.demoAuthEnabled}
           />
+          {telegramLoginEnabled ? (
+            <p
+              aria-disabled="true"
+              className="mt-4 rounded-lg border border-border bg-muted/40 px-3 py-2 text-sm text-muted-foreground"
+            >
+              Telegram Login Widget when{" "}
+              <code className="font-mono text-xs">DASH_TELEGRAM_LOGIN=1</code>
+            </p>
+          ) : null}
         </div>
       </div>
       <NfaFooter />

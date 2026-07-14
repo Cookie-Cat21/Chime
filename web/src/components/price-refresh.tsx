@@ -4,6 +4,7 @@ import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 
 import { LiveIndicator } from "@/components/live-indicator";
+import { toIso } from "@/lib/api/time";
 
 /** Soft-cap refresh interval — never hammer the dash SSR path. */
 export const MIN_PRICE_REFRESH_MS = 5_000;
@@ -19,6 +20,32 @@ function clampInterval(ms: number): number {
     MAX_PRICE_REFRESH_MS,
     Math.max(MIN_PRICE_REFRESH_MS, Math.round(ms)),
   );
+}
+
+function readSnapshotTs(raw: unknown): string | null {
+  if (!raw || typeof raw !== "object" || Array.isArray(raw)) return null;
+  const r = raw as Record<string, unknown>;
+  const direct =
+    toIso(r.ts) ??
+    toIso(r.lastSnapshotAt) ??
+    toIso(r.last_snapshot_at) ??
+    toIso(r.snapshot_at);
+  if (direct) return direct;
+  if (r.snapshot && typeof r.snapshot === "object" && !Array.isArray(r.snapshot)) {
+    return toIso((r.snapshot as { ts?: unknown }).ts);
+  }
+  return null;
+}
+
+function newestSnapshotAt(
+  left: string | null | undefined,
+  right: string | null | undefined,
+): string | null {
+  const leftIso = toIso(left);
+  const rightIso = toIso(right);
+  if (!leftIso) return rightIso;
+  if (!rightIso) return leftIso;
+  return Date.parse(leftIso) >= Date.parse(rightIso) ? leftIso : rightIso;
 }
 
 /**
@@ -37,6 +64,7 @@ export function PriceRefresh({
   const router = useRouter();
   const period = clampInterval(intervalMs);
   const [now, setNow] = useState(() => Date.now());
+  const [streamSnapshotAt, setStreamSnapshotAt] = useState<string | null>(null);
 
   useEffect(() => {
     const tick = window.setInterval(() => {
@@ -50,10 +78,43 @@ export function PriceRefresh({
     };
   }, [period, router]);
 
+  useEffect(() => {
+    if (typeof window.EventSource === "undefined") return;
+    let source: EventSource;
+    try {
+      source = new window.EventSource("/api/v1/stream/snapshots");
+    } catch {
+      return;
+    }
+    const handleSnapshot = (event: Event) => {
+      if (!(event instanceof MessageEvent)) return;
+      try {
+        const data = typeof event.data === "string" ? event.data : "";
+        const next = readSnapshotTs(JSON.parse(data));
+        if (!next) return;
+        setStreamSnapshotAt(next);
+        setNow(Date.now());
+        router.refresh();
+      } catch {
+        // Ignore malformed stream events; interval refresh remains active.
+      }
+    };
+    source.addEventListener("snapshot", handleSnapshot);
+    source.onmessage = handleSnapshot;
+    source.onerror = () => {
+      source.close();
+    };
+    return () => {
+      source.removeEventListener("snapshot", handleSnapshot);
+      source.close();
+    };
+  }, [router]);
+
   let tone: "ok" | "stale" | "down" = "ok";
   let label = "Refreshing";
-  if (typeof lastSnapshotAt === "string" && lastSnapshotAt) {
-    const t = Date.parse(lastSnapshotAt);
+  const snapshotAt = newestSnapshotAt(streamSnapshotAt, lastSnapshotAt);
+  if (typeof snapshotAt === "string" && snapshotAt) {
+    const t = Date.parse(snapshotAt);
     if (!Number.isNaN(t)) {
       const ageMs = Math.max(0, now - t);
       const ageSec = Math.floor(ageMs / 1000);

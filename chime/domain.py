@@ -224,6 +224,29 @@ class SectorSnapshot(BaseModel):
     cse_row_id: int | None = None
 
 
+class IndexSnapshot(BaseModel):
+    """Normalized CSE market index row (POST /aspiData, /snpData)."""
+
+    model_config = ConfigDict(extra="ignore")
+
+    code: str
+    name: str | None = None
+    value: float
+    change: float | None = None
+    change_pct: float | None = None
+    ts: datetime
+
+    @field_validator("value", mode="before")
+    @classmethod
+    def _value_must_not_be_bool(cls, value: Any) -> Any:
+        return _reject_bool_numeric(value)
+
+    @field_validator("change", "change_pct", mode="before")
+    @classmethod
+    def _optional_numeric_must_not_be_bool(cls, value: Any) -> Any:
+        return _none_if_bool_numeric(value)
+
+
 class AlertRule(BaseModel):
     """Active user alert rule loaded from storage for evaluation."""
 
@@ -241,6 +264,7 @@ class AlertRule(BaseModel):
     active: bool = True
     armed: bool = True
     created_at: datetime | None = None
+    muted_until: datetime | None = None
 
     @field_validator("threshold", mode="before")
     @classmethod

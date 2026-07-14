@@ -5,7 +5,9 @@ import { usePathname } from "next/navigation";
 import { useState } from "react";
 
 import { ChimeWordmark } from "@/components/brand/chime-brand";
+import { CommandPalette } from "@/components/command-palette";
 import { NavSession } from "@/components/nav-session";
+import { Button } from "@/components/ui/button";
 
 const links = [
   { href: "/overview", label: "Overview" },
@@ -50,6 +52,7 @@ export function resolveActiveNavHref(
 export function AppNav({ active }: { active?: string }) {
   const pathname = usePathname();
   const [open, setOpen] = useState(false);
+  const [searchOpen, setSearchOpen] = useState(false);
   const activeHref = resolveActiveNavHref(active ?? pathname);
 
   return (
@@ -86,6 +89,21 @@ export function AppNav({ active }: { active?: string }) {
         </nav>
 
         <div className="flex items-center gap-2">
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            onClick={() => {
+              setSearchOpen(true);
+              setOpen(false);
+            }}
+            aria-haspopup="dialog"
+          >
+            Search
+            <span className="ml-1 hidden text-xs text-muted-foreground md:inline">
+              Ctrl K
+            </span>
+          </Button>
           <NavSession />
 
           {/* Mobile menu toggle */}
@@ -145,6 +163,7 @@ export function AppNav({ active }: { active?: string }) {
           <NavSession compact />
         </div>
       </nav>
+      <CommandPalette open={searchOpen} onOpenChange={setSearchOpen} />
     </header>
   );
 }

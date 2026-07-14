@@ -3,6 +3,11 @@ import { notFound } from "next/navigation";
 
 import { AppNav } from "@/components/app-nav";
 import { EmptyState } from "@/components/empty-state";
+import { ChangeBadge } from "@/components/kit/change-badge";
+import {
+  DisclosureCategoryHint,
+  DisclosureTimeline,
+} from "@/components/kit/disclosure-timeline";
 import { NfaFooter } from "@/components/nfa-footer";
 import { NfaInline } from "@/components/nfa-inline";
 import { PageHeader } from "@/components/page-header";
@@ -25,6 +30,7 @@ import {
   safeFilingHref,
   safePdfUrl,
   sanitizeBriefText,
+  sanitizeDisclosureCategory,
   sanitizeDisclosureText,
 } from "@/lib/api/disclosure-safe";
 import { toFiniteNumber } from "@/lib/api/finite-number";
@@ -33,7 +39,7 @@ import { serverApiGet } from "@/lib/api/server-fetch";
 import { normalizeSymbol, normalizeSymbolParam } from "@/lib/api/symbol";
 import { toIso } from "@/lib/api/time";
 import { requirePageSession } from "@/lib/auth/page-session";
-import { formatNumber, formatPct, formatTs } from "@/lib/format";
+import { formatNumber, formatTs } from "@/lib/format";
 
 export const dynamic = "force-dynamic";
 
@@ -73,6 +79,7 @@ type SymbolPayload = {
   symbol: string;
   name: string | null;
   sector: string | null;
+  market_cap: number | null;
   last: {
     price: number;
     change: number | null;
@@ -142,6 +149,7 @@ function parseSymbolPayload(body: unknown): SymbolPayload | null {
       typeof r.sector === "string" ? r.sector : null,
       MAX_STOCK_SECTOR_LENGTH,
     ),
+    market_cap: toFiniteNumber(r.market_cap),
     last,
   };
 }
@@ -230,17 +238,24 @@ function parseDisclosuresPayload(body: unknown): DisclosuresPayload {
 
 export default async function SymbolDetailPage({
   params,
+  searchParams,
 }: {
   params: Promise<{ symbol: string }>;
+  searchParams: Promise<{ category?: string | string[] }>;
 }) {
   await requirePageSession();
 
   const { symbol: raw } = await params;
+  const sp = await searchParams;
   // safeDecode — malformed % sequences → notFound (not URIError 500).
   const symbol = normalizeSymbolParam(raw);
   if (!symbol) {
     notFound();
   }
+  const categoryRaw = Array.isArray(sp.category)
+    ? sp.category[0]
+    : sp.category;
+  const categoryFilter = sanitizeDisclosureCategory(categoryRaw);
 
   const encoded = encodeURIComponent(symbol);
   const [symRes, snapRes, discRes] = await Promise.all([
@@ -324,15 +339,17 @@ export default async function SymbolDetailPage({
   const snapsFailed = !snapRes.ok;
   const discsFailed = !discRes.ok;
 
-  const changePct = data.last?.change_pct ?? null;
-  const changeTone =
-    changePct == null
-      ? "text-muted-foreground"
-      : changePct > 0
-        ? "text-[oklch(0.42_0.09_165)]"
-        : changePct < 0
-          ? "text-destructive"
-          : "text-muted-foreground";
+  const sparkPoints = finiteSparklinePoints(snaps.points);
+  const disclosureCategories = Array.from(
+    new Set(
+      discs.items
+        .map((item) => item.category)
+        .filter((category): category is string => Boolean(category)),
+    ),
+  ).sort((a, b) => a.localeCompare(b));
+  const visibleDisclosures = categoryFilter
+    ? discs.items.filter((item) => item.category === categoryFilter)
+    : discs.items;
 
   return (
     <Shell>
@@ -359,25 +376,68 @@ export default async function SymbolDetailPage({
         </div>
       </div>
 
+      <section className="mt-6 rounded-lg border border-border/70 p-4">
+        <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
+          <div className="min-w-0">
+            <p className="text-xs font-medium tracking-wide text-muted-foreground uppercase">
+              Last price
+            </p>
+            {data.last ? (
+              <div className="mt-1 flex flex-wrap items-center gap-3">
+                <span className="font-mono text-3xl font-semibold tracking-tight tabular-nums">
+                  {formatNumber(data.last.price)}
+                </span>
+                <ChangeBadge changePct={data.last.change_pct} />
+              </div>
+            ) : (
+              <p className="mt-1 text-sm text-muted-foreground">
+                No stored price yet.
+              </p>
+            )}
+            {data.last?.ts ? (
+              <p className="mt-1 text-xs text-muted-foreground">
+                As of {formatTs(data.last.ts)} (SLT)
+              </p>
+            ) : null}
+          </div>
+          <div className="min-h-20 min-w-0 flex-1 md:max-w-sm">
+            {snapsFailed ? (
+              <p className="text-sm text-muted-foreground" role="status">
+                Couldn’t load recent ticks right now.
+              </p>
+            ) : sparkPoints.length < 2 ? (
+              <p className="text-sm text-muted-foreground">
+                Need two stored ticks for a sparkline.
+              </p>
+            ) : (
+              <Sparkline points={snaps.points} />
+            )}
+          </div>
+        </div>
+      </section>
+
       <section className="mt-8 border-t border-border/60 pt-6">
         <h2 className="text-sm font-medium tracking-wide text-muted-foreground uppercase">
           Last snapshot
         </h2>
         {data.last ? (
-          <div className="mt-3 grid grid-cols-2 gap-4 sm:grid-cols-4">
+          <div
+            className={`mt-3 grid grid-cols-2 gap-4 ${
+              data.market_cap != null ? "sm:grid-cols-5" : "sm:grid-cols-4"
+            }`}
+          >
             <Stat label="Price" value={formatNumber(data.last.price)} mono />
             <Stat
               label="Change"
               value={formatNumber(data.last.change)}
-              className={changeTone}
               mono
             />
-            <Stat
-              label="Change %"
-              value={formatPct(data.last.change_pct)}
-              className={changeTone}
-              mono
-            />
+            <div className="min-w-0">
+              <p className="text-xs text-muted-foreground">Change %</p>
+              <div className="mt-1">
+                <ChangeBadge changePct={data.last.change_pct} />
+              </div>
+            </div>
             <Stat
               label="Volume"
               value={
@@ -387,6 +447,13 @@ export default async function SymbolDetailPage({
               }
               mono
             />
+            {data.market_cap != null ? (
+              <Stat
+                label="Market cap"
+                value={formatNumber(data.market_cap)}
+                mono
+              />
+            ) : null}
           </div>
         ) : (
           <EmptyState
@@ -434,32 +501,6 @@ export default async function SymbolDetailPage({
         <NfaInline className="mt-2" />
       </section>
 
-      <section className="mt-8 border-t border-border/60 pt-6">
-        <h2 className="text-sm font-medium tracking-wide text-muted-foreground uppercase">
-          Recent ticks
-        </h2>
-        <div className="mt-3">
-          {snapsFailed ? (
-            <p className="text-sm text-muted-foreground" role="status">
-              Couldn’t load recent ticks right now.
-            </p>
-          ) : finiteSparklinePoints(snaps.points).length < 2 ? (
-            <EmptyState
-              className="mt-1"
-              title="Not enough ticks"
-              description={
-                <>
-                  Need at least two stored snapshots for a sparkline. Chime
-                  keeps polling during market hours (09:30–14:30 SLT).
-                </>
-              }
-            />
-          ) : (
-            <Sparkline points={snaps.points} />
-          )}
-        </div>
-      </section>
-
       <section
         className="mt-8 border-t border-border/60 pt-6"
         aria-labelledby="disclosures-heading"
@@ -470,6 +511,21 @@ export default async function SymbolDetailPage({
         >
           Disclosures
         </h2>
+        {!discsFailed && disclosureCategories.length > 0 ? (
+          <div className="mt-3 flex flex-wrap gap-3">
+            <DisclosureCategoryHint
+              href={`/symbols/${encoded}`}
+              label={categoryFilter ? "All disclosures" : "All"}
+            />
+            {disclosureCategories.map((category) => (
+              <DisclosureCategoryHint
+                key={category}
+                href={`/symbols/${encoded}?category=${encodeURIComponent(category)}`}
+                label={categoryFilter === category ? `${category} (selected)` : category}
+              />
+            ))}
+          </div>
+        ) : null}
         {discsFailed ? (
           <EmptyState
             className="mt-4"
@@ -488,10 +544,10 @@ export default async function SymbolDetailPage({
               </Button>
             }
           />
-        ) : discs.items.length === 0 ? (
+        ) : visibleDisclosures.length === 0 ? (
           <EmptyState
             className="mt-4"
-            title="No disclosures yet"
+            title={categoryFilter ? `No ${categoryFilter} disclosures` : "No disclosures yet"}
             description={
               <>
                 Nothing stored for{" "}
@@ -516,71 +572,30 @@ export default async function SymbolDetailPage({
           />
         ) : (
           <>
-            <ul
-              className="mt-4 divide-y divide-border/60"
-              aria-labelledby="disclosures-heading"
-            >
-              {discs.items.map((item) => {
-                const href = safeFilingHref(item.pdf_url, item.url);
-                const pdfOk = Boolean(safePdfUrl(item.pdf_url));
-                const briefText = sanitizeBriefText(
-                  item.brief,
-                  item.brief_status,
-                );
-                const briefHeadingId = `disclosure-brief-${item.id}`;
-                const titleClass =
-                  "block rounded-sm text-sm font-medium text-foreground underline-offset-4 focus-visible:ring-2 focus-visible:ring-ring/50 focus-visible:outline-none";
-                return (
-                  <li key={item.id} className="py-3 first:pt-0">
-                    {href ? (
-                      <a
-                        href={href}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className={`${titleClass} hover:underline`}
-                      >
-                        {item.title}
-                        {pdfOk ? (
-                          <span className="ml-1.5 text-xs font-normal text-muted-foreground">
-                            (PDF)
-                          </span>
-                        ) : null}
-                        <span className="sr-only"> (opens in new tab)</span>
-                      </a>
-                    ) : (
-                      <span className={titleClass}>
-                        {item.title}
-                      </span>
-                    )}
-                    <p className="mt-1 text-xs text-muted-foreground">
-                      {formatTs(item.published_at)}
-                      {item.category ? ` · ${item.category}` : ""}
-                    </p>
-                    {briefText ? (
-                      <div
-                        className="mt-2"
-                        role="group"
-                        aria-labelledby={briefHeadingId}
-                      >
-                        <p
-                          id={briefHeadingId}
-                          className="text-xs font-medium tracking-wide text-muted-foreground uppercase"
-                        >
-                          Filing brief
-                        </p>
-                        <p className="mt-1 text-sm leading-relaxed text-foreground/90">
-                          {briefText}
-                        </p>
-                      </div>
-                    ) : null}
-                  </li>
-                );
-              })}
-            </ul>
+            <DisclosureTimeline
+              items={visibleDisclosures.map((item) => ({
+                id: item.id,
+                title: item.title,
+                published_at: item.published_at,
+                url: safeFilingHref(item.pdf_url, item.url),
+                category: item.category,
+                brief: item.brief,
+                brief_status: item.brief_status,
+              }))}
+              className="mt-5"
+            />
             <NfaInline className="mt-3" />
           </>
         )}
       </section>
+      <div className="fixed inset-x-0 bottom-0 z-30 border-t border-border/70 bg-background/95 p-3 shadow-lg backdrop-blur md:hidden">
+        <div className="mx-auto flex max-w-6xl items-center justify-between gap-3">
+          <WatchButton symbol={data.symbol} />
+          <Button asChild className="flex-1" size="sm">
+            <Link href={`/alerts?symbol=${encoded}`}>New alert</Link>
+          </Button>
+        </div>
+      </div>
     </Shell>
   );
 }
@@ -592,7 +607,7 @@ function Shell({ children }: { children: React.ReactNode }) {
       <main
         id="main-content"
         tabIndex={-1}
-        className="mx-auto flex w-full max-w-6xl flex-1 flex-col px-4 py-8 sm:px-6 sm:py-10"
+        className="mx-auto flex w-full max-w-6xl flex-1 flex-col px-4 pt-8 pb-24 sm:px-6 sm:pt-10 md:pb-10"
       >
         {children}
       </main>

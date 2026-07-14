@@ -54,6 +54,7 @@ type HistoryPayload = {
   }[];
   limit: number;
   offset: number;
+  total: number | null;
 };
 
 /**
@@ -207,10 +208,18 @@ export default async function AlertHistoryPage({
             : offset,
           offset,
         );
+        const totalRaw =
+          body && typeof body === "object" && !Array.isArray(body)
+            ? ((body as { total?: unknown; count?: unknown }).total ??
+              (body as { count?: unknown }).count)
+            : null;
+        const total =
+          totalRaw == null ? null : toNonNegativeSafeInt(totalRaw, -1);
         payload = {
           events,
           limit: Math.min(Math.max(limitOut, 1), 200),
           offset: Math.min(offsetOut, MAX_HISTORY_OFFSET),
+          total: total != null && total >= 0 ? total : null,
         };
       }
     } catch {
@@ -236,6 +245,14 @@ export default async function AlertHistoryPage({
     payload != null &&
     payload.events.length >= pageLimit &&
     nextOffset > pageOffset;
+  const showingStart = pageOffset + 1;
+  const showingEnd = pageOffset + (payload?.events.length ?? 0);
+  const showingLabel =
+    payload && payload.events.length > 0
+      ? payload.total == null
+        ? `Showing ${showingStart}–${showingEnd} (limit ${pageLimit})`
+        : `Showing ${showingStart}–${showingEnd} of ${payload.total}`
+      : null;
 
   return (
     <div className="flex min-h-full flex-1 flex-col bg-background">
@@ -287,6 +304,12 @@ export default async function AlertHistoryPage({
             </Button>
           ) : null}
         </form>
+
+        {showingLabel ? (
+          <p className="mt-4 text-sm text-muted-foreground" role="status">
+            {showingLabel}
+          </p>
+        ) : null}
 
         {!payload ? (
           <EmptyState

@@ -5,9 +5,21 @@ import { useState } from "react";
 
 import { InlineError } from "@/components/inline-error";
 import { useToast } from "@/components/toast";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from "@/components/ui/alert-dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Separator } from "@/components/ui/separator";
 import {
   Select,
   SelectContent,
@@ -203,129 +215,170 @@ export function AlertCreateForm() {
   return (
     <form
       onSubmit={onSubmit}
-      className="mt-6 grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4"
+      className="mt-6 rounded-lg border border-border/70 p-4 sm:p-5"
       noValidate
     >
-      <div className="flex flex-col gap-1.5">
-        <Label htmlFor="alert_symbol">Symbol</Label>
-        <Input
-          id="alert_symbol"
-          name="symbol"
-          className="h-10 font-mono"
-          placeholder="JKH.N0000"
-          value={symbol}
-          onChange={(e) => {
-            setSymbol(e.target.value);
-            clearField("symbol");
-          }}
-          autoComplete="off"
-          aria-invalid={errors.symbol ? true : undefined}
-          aria-describedby={errors.symbol ? "alert_form_error" : undefined}
-          required
-        />
-      </div>
-      <div className="flex flex-col gap-1.5">
-        <Label htmlFor="alert_type">Type</Label>
-        <Select
-          value={type}
-          onValueChange={(value) => {
-            // Fail closed — tampered Select values must not cast into state.
-            if (!isAlertType(value)) return;
-            const nextType = value;
-            setType(nextType);
-            if (nextType === "disclosure") {
-              setThreshold("");
-            } else {
-              setCategory("");
-            }
-            clearField("type");
-            clearField("threshold");
-            clearField("category");
-          }}
+      <div className="grid gap-5 lg:grid-cols-[minmax(0,1.2fr)_auto_minmax(0,1fr)_auto_minmax(12rem,auto)] lg:items-start">
+        <section
+          aria-labelledby="alert-symbol-type-heading"
+          className="flex flex-col gap-3"
         >
-          <SelectTrigger
-            id="alert_type"
-            className="h-10 w-full"
-            aria-invalid={errors.type ? true : undefined}
+          <h3
+            id="alert-symbol-type-heading"
+            className="text-xs font-medium tracking-wide text-muted-foreground uppercase"
           >
-            <SelectValue placeholder="Alert type" />
-          </SelectTrigger>
-          <SelectContent>
-            {TYPE_OPTIONS.map((opt) => (
-              <SelectItem key={opt.value} value={opt.value}>
-                {opt.label}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-      </div>
-      {needsThreshold ? (
-        <div className="flex flex-col gap-1.5">
-          <Label htmlFor="alert_threshold">
-            {type === "daily_move" ? "Percent" : "Price"}
-          </Label>
-          <Input
-            id="alert_threshold"
-            name="threshold"
-            className="h-10 font-mono"
-            inputMode="decimal"
-            placeholder={type === "daily_move" ? "5" : "25.00"}
-            value={threshold}
-            onChange={(e) => {
-              setThreshold(e.target.value);
-              clearField("threshold");
-            }}
-            aria-invalid={errors.threshold ? true : undefined}
-            aria-describedby={
-              errors.threshold ? "alert_form_error" : undefined
-            }
-            required
-          />
-        </div>
-      ) : showCategory ? (
-        <div className="flex flex-col gap-1.5">
-          <Label htmlFor="alert_category">Category (optional)</Label>
-          <Input
-            id="alert_category"
-            name="category"
-            className="h-10"
-            placeholder="e.g. Financial Report"
-            value={category}
-            onChange={(e) => {
-              setCategory(e.target.value);
-              clearField("category");
-            }}
-            autoComplete="off"
-            maxLength={DISCLOSURE_CATEGORY_MAX}
-            aria-invalid={errors.category ? true : undefined}
-            aria-describedby={
-              errors.category
-                ? "alert_category_hint alert_form_error"
-                : "alert_category_hint"
-            }
-          />
-          <p id="alert_category_hint" className="text-xs text-muted-foreground">
-            Leave blank for any filing; substring match when set.
-          </p>
-        </div>
-      ) : (
-        <div className="hidden lg:block" aria-hidden />
-      )}
-      <div className="flex flex-col justify-end gap-1.5">
-        <Button
-          type="submit"
-          disabled={pending}
-          className="h-10 w-full sm:w-auto"
-          aria-busy={pending || undefined}
+            Symbol & type
+          </h3>
+          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-1">
+            <div className="flex flex-col gap-1.5">
+              <Label htmlFor="alert_symbol">Symbol</Label>
+              <Input
+                id="alert_symbol"
+                name="symbol"
+                className="h-10 font-mono"
+                placeholder="JKH.N0000"
+                value={symbol}
+                onChange={(e) => {
+                  setSymbol(e.target.value);
+                  clearField("symbol");
+                }}
+                autoComplete="off"
+                aria-invalid={errors.symbol ? true : undefined}
+                aria-describedby={errors.symbol ? "alert_form_error" : undefined}
+                required
+              />
+            </div>
+            <div className="flex flex-col gap-1.5">
+              <Label htmlFor="alert_type">Type</Label>
+              <Select
+                value={type}
+                onValueChange={(value) => {
+                  // Fail closed — tampered Select values must not cast into state.
+                  if (!isAlertType(value)) return;
+                  const nextType = value;
+                  setType(nextType);
+                  if (nextType === "disclosure") {
+                    setThreshold("");
+                  } else {
+                    setCategory("");
+                  }
+                  clearField("type");
+                  clearField("threshold");
+                  clearField("category");
+                }}
+              >
+                <SelectTrigger
+                  id="alert_type"
+                  className="h-10 w-full"
+                  aria-invalid={errors.type ? true : undefined}
+                >
+                  <SelectValue placeholder="Alert type" />
+                </SelectTrigger>
+                <SelectContent>
+                  {TYPE_OPTIONS.map((opt) => (
+                    <SelectItem key={opt.value} value={opt.value}>
+                      {opt.label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+        </section>
+
+        <Separator className="lg:hidden" />
+        <Separator orientation="vertical" className="hidden lg:block" />
+
+        <section
+          aria-labelledby="alert-threshold-category-heading"
+          className="flex flex-col gap-3"
         >
-          {pending ? "Creating…" : "Create alert"}
-        </Button>
+          <h3
+            id="alert-threshold-category-heading"
+            className="text-xs font-medium tracking-wide text-muted-foreground uppercase"
+          >
+            Threshold / category
+          </h3>
+          {needsThreshold ? (
+            <div className="flex flex-col gap-1.5">
+              <Label htmlFor="alert_threshold">
+                {type === "daily_move" ? "Percent" : "Price"}
+              </Label>
+              <Input
+                id="alert_threshold"
+                name="threshold"
+                className="h-10 font-mono"
+                inputMode="decimal"
+                placeholder={type === "daily_move" ? "5" : "25.00"}
+                value={threshold}
+                onChange={(e) => {
+                  setThreshold(e.target.value);
+                  clearField("threshold");
+                }}
+                aria-invalid={errors.threshold ? true : undefined}
+                aria-describedby={
+                  errors.threshold ? "alert_form_error" : undefined
+                }
+                required
+              />
+            </div>
+          ) : showCategory ? (
+            <div className="flex flex-col gap-1.5">
+              <Label htmlFor="alert_category">Category (optional)</Label>
+              <Input
+                id="alert_category"
+                name="category"
+                className="h-10"
+                placeholder="e.g. Financial Report"
+                value={category}
+                onChange={(e) => {
+                  setCategory(e.target.value);
+                  clearField("category");
+                }}
+                autoComplete="off"
+                maxLength={DISCLOSURE_CATEGORY_MAX}
+                aria-invalid={errors.category ? true : undefined}
+                aria-describedby={
+                  errors.category
+                    ? "alert_category_hint alert_form_error"
+                    : "alert_category_hint"
+                }
+              />
+              <p id="alert_category_hint" className="text-xs text-muted-foreground">
+                Leave blank for any filing; substring match when set.
+              </p>
+            </div>
+          ) : (
+            <p className="text-sm text-muted-foreground">
+              This notice rule does not need a threshold.
+            </p>
+          )}
+        </section>
+
+        <Separator className="lg:hidden" />
+        <Separator orientation="vertical" className="hidden lg:block" />
+
+        <section
+          aria-labelledby="alert-submit-heading"
+          className="flex flex-col gap-3"
+        >
+          <h3
+            id="alert-submit-heading"
+            className="text-xs font-medium tracking-wide text-muted-foreground uppercase"
+          >
+            Submit
+          </h3>
+          <Button
+            type="submit"
+            disabled={pending}
+            className="h-10 w-full"
+            aria-busy={pending || undefined}
+          >
+            {pending ? "Creating…" : "Create alert"}
+          </Button>
+          <InlineError id="alert_form_error" message={formError} />
+        </section>
       </div>
-      <InlineError
-        id="alert_form_error"
-        message={formError}
-        className="sm:col-span-2 lg:col-span-4"
-      />
     </form>
   );
 }
@@ -335,8 +388,9 @@ export function CancelAlertButton({ ruleId }: { ruleId: number }) {
   const toast = useToast();
   const [error, setError] = useState<string | null>(null);
   const [pending, setPending] = useState(false);
+  const [open, setOpen] = useState(false);
 
-  async function onClick() {
+  async function confirmCancel() {
     setError(null);
     // Fail closed — NaN / float / ≤0 must not hit DELETE /alerts/{id}.
     const id = toSafePositiveInt(ruleId);
@@ -358,6 +412,7 @@ export function CancelAlertButton({ ruleId }: { ruleId: number }) {
         return;
       }
       toast.success(`Cancelled alert #${id}.`);
+      setOpen(false);
       router.refresh();
     } catch {
       const msg = "Network error.";
@@ -370,15 +425,35 @@ export function CancelAlertButton({ ruleId }: { ruleId: number }) {
 
   return (
     <div className="flex flex-col items-end gap-1">
-      <Button
-        type="button"
-        variant="outline"
-        size="sm"
-        disabled={pending}
-        onClick={onClick}
-      >
-        {pending ? "…" : "Cancel"}
-      </Button>
+      <AlertDialog open={open} onOpenChange={setOpen}>
+        <AlertDialogTrigger asChild>
+          <Button type="button" variant="outline" size="sm" disabled={pending}>
+            Cancel
+          </Button>
+        </AlertDialogTrigger>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Cancel alert #{ruleId}?</AlertDialogTitle>
+            <AlertDialogDescription>
+              Deactivates this rule. Telegram will no longer fire for it. You
+              can create a new rule anytime.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={pending}>Keep</AlertDialogCancel>
+            <AlertDialogAction
+              variant="destructive"
+              disabled={pending}
+              onClick={(e) => {
+                e.preventDefault();
+                void confirmCancel();
+              }}
+            >
+              {pending ? "Cancelling…" : "Cancel alert"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
       <InlineError
         message={error}
         className="max-w-[12rem] px-2 py-1 text-right text-xs"

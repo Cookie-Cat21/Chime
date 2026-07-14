@@ -300,6 +300,7 @@ class Poller:
             print_events, print_ok = await self._poll_big_prints()
             notice_events, notice_ok = await self._poll_market_notices()
             book_events, book_ok = await self._poll_order_books()
+            await self._poll_indexes()
             await self._poll_sectors()
             fired.extend(price_events)
             fired.extend(disc_events)
@@ -651,6 +652,35 @@ class Poller:
             log.info("sectors_persist_ok", fetched=len(sectors), persisted=len(stored))
         except Exception as exc:
             log.exception("sectors_persist_failed", error=str(exc), count=len(sectors))
+
+    async def _poll_indexes(self) -> None:
+        """Market index board persist — fail-soft, never degrades tick."""
+        indexes = []
+        fetchers = (
+            getattr(self.cse, "fetch_aspi_data", None),
+            getattr(self.cse, "fetch_snp_data", None),
+        )
+        for fetch in fetchers:
+            if fetch is None:
+                continue
+            try:
+                index = await fetch()
+            except Exception as exc:
+                log.warning(
+                    "index_poll_failed",
+                    endpoint=getattr(fetch, "__name__", ""),
+                    error=str(exc),
+                )
+                continue
+            if index is not None:
+                indexes.append(index)
+        if not indexes:
+            return
+        try:
+            stored = await self.storage.persist_index_snapshots(indexes)
+            log.info("indexes_persist_ok", fetched=len(indexes), persisted=len(stored))
+        except Exception as exc:
+            log.exception("indexes_persist_failed", error=str(exc), count=len(indexes))
 
     async def _evaluate_price_snaps(
         self,

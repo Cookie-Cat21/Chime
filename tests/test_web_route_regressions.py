@@ -478,13 +478,19 @@ def test_market_page_fence_no_screener_or_quote_board() -> None:
     assert 'aria-labelledby="sectors-heading"' in market_src
     assert 'aria-label="Sectors"' not in market_src
     # Wave9 a11y: movers Watch is one labelled link; sectors list labelled by heading.
-    assert "Open ${item.symbol} detail to watch" in market_src
+    # Bars live in kit/movers-bar-list (extracted from page); keep page heading ids.
+    movers_kit = (
+        WEB / "src" / "components" / "kit" / "movers-bar-list.tsx"
+    ).read_text(encoding="utf-8")
+    assert "Open ${item.symbol} detail to watch" in movers_kit
     assert "movers-gainers-heading" in market_src
     assert "movers-losers-heading" in market_src
-    assert "Watch\n                  </span>" in market_src
+    assert "Watch" in movers_kit and "</span>" in movers_kit
     assert "title={item.name}" in market_src
     assert 'role="status"' in market_src
-    assert "changeDirectionSr" in market_src
+    assert "changeDirectionSr" in market_src or "changeDirectionSr" in movers_kit
+    assert "MoversBarList" in market_src
+    assert "ChangeBadge" in market_src
 
 
 def test_scenarios_dash_stub_page() -> None:
@@ -819,12 +825,17 @@ def test_symbol_page_prefers_pdf_and_shows_ready_brief() -> None:
     assert "NfaFooter" in source
     assert '"processing"' in source
     # W16 a11y: disclosures list labelled by heading; ready brief is a named group.
+    # Timeline kit owns brief group markup (Wave D6).
+    timeline = (
+        WEB / "src" / "components" / "kit" / "disclosure-timeline.tsx"
+    ).read_text(encoding="utf-8")
     assert 'id="disclosures-heading"' in source
     assert 'aria-labelledby="disclosures-heading"' in source
-    assert 'role="group"' in source
-    assert "Filing brief" in source
-    assert "disclosure-brief-" in source
-    assert "(opens in new tab)" in source
+    assert 'role="group"' in timeline
+    assert "Filing brief" in timeline
+    assert "disclosure-brief-" in timeline
+    assert "(opens in new tab)" in timeline
+    assert "DisclosureTimeline" in source
     assert "cse.lk" not in source.lower() or all(
         _is_comment_only_hit(line, "cse.lk")
         for line in source.splitlines()

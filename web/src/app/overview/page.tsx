@@ -2,6 +2,14 @@ import Link from "next/link";
 
 import { AppNav } from "@/components/app-nav";
 import { EmptyState } from "@/components/empty-state";
+import { CakeCherryBanner } from "@/components/kit/cake-cherry-banner";
+import { ChangeBadge } from "@/components/kit/change-badge";
+import { IndexStrip, type IndexStripItem } from "@/components/kit/index-strip";
+import { MoversBarList } from "@/components/kit/movers-bar-list";
+import {
+  SectorHeatStrip,
+  type SectorHeatItem,
+} from "@/components/kit/sector-heat-strip";
 import { ArmedBadge } from "@/components/kit/status-badge";
 import { StatCard } from "@/components/kit/stat-card";
 import { NfaFooter } from "@/components/nfa-footer";
@@ -10,6 +18,7 @@ import { PageHeader } from "@/components/page-header";
 import { PriceRefresh } from "@/components/price-refresh";
 import { Button } from "@/components/ui/button";
 import {
+  MAX_SECTOR_NAME_LENGTH,
   MAX_STOCK_NAME_LENGTH,
   sanitizeDisclosureText,
 } from "@/lib/api/disclosure-safe";
@@ -22,7 +31,7 @@ import { serverApiGet } from "@/lib/api/server-fetch";
 import { isAlertType, normalizeSymbol } from "@/lib/api/symbol";
 import { toIso } from "@/lib/api/time";
 import { requirePageSession } from "@/lib/auth/page-session";
-import { alertTypeLabel, formatNumber, formatPct, formatTs } from "@/lib/format";
+import { alertTypeLabel, formatNumber, formatTs } from "@/lib/format";
 
 export const dynamic = "force-dynamic";
 
@@ -62,13 +71,6 @@ type HistoryEvent = {
   fired_at: string | null;
   message_text: string | null;
 };
-
-function pctTone(pct: number | null): string {
-  if (pct == null) return "text-muted-foreground";
-  if (pct > 0) return "text-[oklch(0.42_0.09_165)]";
-  if (pct < 0) return "text-destructive";
-  return "text-muted-foreground";
-}
 
 async function readJson(res: Response | null): Promise<unknown> {
   if (!res || !res.ok) return null;
@@ -187,6 +189,62 @@ function parseHistory(body: unknown): HistoryEvent[] {
   return out;
 }
 
+function parseIndexes(body: unknown): IndexStripItem[] {
+  if (!body || typeof body !== "object" || Array.isArray(body)) return [];
+  const raw = (body as { items?: unknown }).items;
+  if (!Array.isArray(raw)) return [];
+  const out: IndexStripItem[] = [];
+  for (const row of raw) {
+    if (out.length >= 8) break;
+    if (!row || typeof row !== "object" || Array.isArray(row)) continue;
+    const r = row as Record<string, unknown>;
+    const code =
+      typeof r.code === "string" && r.code.trim()
+        ? r.code.trim().slice(0, 32)
+        : null;
+    if (!code) continue;
+    const name =
+      sanitizeDisclosureText(
+        typeof r.name === "string" ? r.name : null,
+        64,
+      ) ?? code;
+    out.push({
+      code,
+      name,
+      value: toFiniteNumber(r.value),
+      change_pct: toFiniteNumber(r.change_pct),
+      ts: toIso(r.ts),
+    });
+  }
+  return out;
+}
+
+function parseSectors(body: unknown): SectorHeatItem[] {
+  if (!body || typeof body !== "object" || Array.isArray(body)) return [];
+  const raw = (body as { items?: unknown }).items;
+  if (!Array.isArray(raw)) return [];
+  const out: SectorHeatItem[] = [];
+  for (const row of raw) {
+    if (out.length >= 24) break;
+    if (!row || typeof row !== "object" || Array.isArray(row)) continue;
+    const r = row as Record<string, unknown>;
+    const sectorId = toSafePositiveInt(r.sector_id);
+    if (sectorId == null) continue;
+    const name =
+      sanitizeDisclosureText(
+        typeof r.name === "string" ? r.name : null,
+        MAX_SECTOR_NAME_LENGTH,
+      ) ?? "";
+    if (!name) continue;
+    out.push({
+      sector_id: sectorId,
+      name,
+      change_pct: toFiniteNumber(r.change_pct),
+    });
+  }
+  return out;
+}
+
 /**
  * Signed-in home — cake layer of the dash.
  * Telegram push stays the cherry (see Alerts / History + bot).
@@ -194,12 +252,22 @@ function parseHistory(body: unknown): HistoryEvent[] {
 export default async function OverviewPage() {
   await requirePageSession();
 
-  const [watchRes, upRes, downRes, alertsRes, historyRes] = await Promise.all([
+  const [
+    watchRes,
+    upRes,
+    downRes,
+    alertsRes,
+    historyRes,
+    indexesRes,
+    sectorsRes,
+  ] = await Promise.all([
     serverApiGet("/api/v1/watchlist"),
     serverApiGet("/api/v1/market/movers?direction=up&limit=5"),
     serverApiGet("/api/v1/market/movers?direction=down&limit=5"),
     serverApiGet("/api/v1/alerts"),
     serverApiGet("/api/v1/alerts/history?limit=6"),
+    serverApiGet("/api/v1/indexes"),
+    serverApiGet("/api/v1/sectors"),
   ]);
 
   const watch = parseWatch(await readJson(watchRes));
@@ -207,7 +275,17 @@ export default async function OverviewPage() {
   const losers = parseMovers(await readJson(downRes));
   const rules = parseRules(await readJson(alertsRes));
   const fires = parseHistory(await readJson(historyRes));
+  const indexes = parseIndexes(await readJson(indexesRes));
+  const sectors = parseSectors(await readJson(sectorsRes));
   const armedCount = rules.filter((r) => r.armed).length;
+  const freshestTs =
+    [
+      ...watch.map((w) => w.ts),
+      ...indexes.map((i) => i.ts),
+    ]
+      .filter((t): t is string => typeof t === "string" && !!t)
+      .sort()
+      .at(-1) ?? null;
 
   return (
     <div className="flex min-h-full flex-1 flex-col bg-background">
@@ -223,11 +301,7 @@ export default async function OverviewPage() {
           description="CSE snapshots from Chime’s poller. Set rules here — Telegram is the cherry that pings you when they fire."
           action={
             <div className="flex flex-wrap items-center gap-2">
-              <PriceRefresh
-                lastSnapshotAt={
-                  watch.map((w) => w.ts).filter(Boolean).sort().at(-1) ?? null
-                }
-              />
+              <PriceRefresh lastSnapshotAt={freshestTs} />
               <Button asChild size="sm">
                 <Link href="/alerts">New alert</Link>
               </Button>
@@ -237,6 +311,30 @@ export default async function OverviewPage() {
             </div>
           }
         />
+
+        <CakeCherryBanner />
+
+        <section className="mt-6" aria-labelledby="overview-indexes-heading">
+          <h2
+            id="overview-indexes-heading"
+            className="sr-only"
+          >
+            Market indexes
+          </h2>
+          <IndexStrip items={indexes} />
+        </section>
+
+        {sectors.length > 0 ? (
+          <section className="mt-4" aria-labelledby="overview-sectors-heading">
+            <h2
+              id="overview-sectors-heading"
+              className="mb-2 text-sm font-medium tracking-wide text-muted-foreground uppercase"
+            >
+              Sectors
+            </h2>
+            <SectorHeatStrip items={sectors} />
+          </section>
+        ) : null}
 
         <div className="mt-8 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
           <StatCard label="Watching" value={String(watch.length)} hint="On your list" />
@@ -287,7 +385,10 @@ export default async function OverviewPage() {
             ) : (
               <ul className="mt-4 divide-y divide-border/60">
                 {watch.map((item) => (
-                  <li key={item.symbol} className="flex items-baseline justify-between gap-3 py-3">
+                  <li
+                    key={item.symbol}
+                    className="flex items-center justify-between gap-3 py-3"
+                  >
                     <Link
                       href={`/symbols/${encodeURIComponent(item.symbol)}`}
                       className="min-w-0 font-mono text-sm font-medium underline-offset-4 hover:underline"
@@ -299,11 +400,11 @@ export default async function OverviewPage() {
                         </span>
                       ) : null}
                     </Link>
-                    <div className="shrink-0 text-right">
-                      <p className="font-mono text-sm">{formatNumber(item.price)}</p>
-                      <p className={`font-mono text-xs ${pctTone(item.change_pct)}`}>
-                        {formatPct(item.change_pct)}
-                      </p>
+                    <div className="flex shrink-0 items-center gap-3">
+                      <span className="font-mono text-sm tabular-nums">
+                        {formatNumber(item.price)}
+                      </span>
+                      <ChangeBadge changePct={item.change_pct} />
                     </div>
                   </li>
                 ))}
@@ -367,18 +468,34 @@ export default async function OverviewPage() {
         </div>
 
         <div className="mt-10 grid gap-10 lg:grid-cols-2">
-          <MoversColumn
-            id="overview-gainers-heading"
-            title="Top gainers"
-            items={gainers}
-            empty="No gainer snapshots yet — run the poller / tick."
-          />
-          <MoversColumn
-            id="overview-losers-heading"
-            title="Top losers"
-            items={losers}
-            empty="No loser snapshots yet — run the poller / tick."
-          />
+          <section aria-labelledby="overview-gainers-heading">
+            <h2
+              id="overview-gainers-heading"
+              className="text-sm font-medium tracking-wide text-muted-foreground uppercase"
+            >
+              Top gainers
+            </h2>
+            <div className="mt-4">
+              <MoversBarList
+                items={gainers}
+                empty="No gainer snapshots yet — run the poller / tick."
+              />
+            </div>
+          </section>
+          <section aria-labelledby="overview-losers-heading">
+            <h2
+              id="overview-losers-heading"
+              className="text-sm font-medium tracking-wide text-muted-foreground uppercase"
+            >
+              Top losers
+            </h2>
+            <div className="mt-4">
+              <MoversBarList
+                items={losers}
+                empty="No loser snapshots yet — run the poller / tick."
+              />
+            </div>
+          </section>
         </div>
 
         <section className="mt-10" aria-labelledby="overview-fires-heading">
@@ -430,58 +547,5 @@ export default async function OverviewPage() {
       </main>
       <NfaFooter />
     </div>
-  );
-}
-
-function MoversColumn({
-  id,
-  title,
-  items,
-  empty,
-}: {
-  id: string;
-  title: string;
-  items: MoverItem[];
-  empty: string;
-}) {
-  return (
-    <section aria-labelledby={id}>
-      <h2
-        id={id}
-        className="text-sm font-medium tracking-wide text-muted-foreground uppercase"
-      >
-        {title}
-      </h2>
-      {items.length === 0 ? (
-        <p className="mt-4 text-sm text-muted-foreground">{empty}</p>
-      ) : (
-        <ul className="mt-4 divide-y divide-border/60">
-          {items.map((item) => (
-            <li
-              key={item.symbol}
-              className="flex items-baseline justify-between gap-3 py-3"
-            >
-              <Link
-                href={`/symbols/${encodeURIComponent(item.symbol)}`}
-                className="min-w-0 font-mono text-sm font-medium underline-offset-4 hover:underline"
-              >
-                {item.symbol}
-                {item.name ? (
-                  <span className="mt-0.5 block truncate font-sans text-xs font-normal text-muted-foreground">
-                    {item.name}
-                  </span>
-                ) : null}
-              </Link>
-              <div className="shrink-0 text-right">
-                <p className="font-mono text-sm">{formatNumber(item.price)}</p>
-                <p className={`font-mono text-xs ${pctTone(item.change_pct)}`}>
-                  {formatPct(item.change_pct)}
-                </p>
-              </div>
-            </li>
-          ))}
-        </ul>
-      )}
-    </section>
   );
 }

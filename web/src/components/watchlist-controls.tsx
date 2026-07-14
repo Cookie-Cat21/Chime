@@ -5,6 +5,17 @@ import { useState } from "react";
 
 import { InlineError } from "@/components/inline-error";
 import { useToast } from "@/components/toast";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from "@/components/ui/alert-dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -173,8 +184,9 @@ export function UnwatchButton({ symbol }: { symbol: string }) {
   const toast = useToast();
   const [error, setError] = useState<string | null>(null);
   const [pending, setPending] = useState(false);
+  const [open, setOpen] = useState(false);
 
-  async function onClick() {
+  async function confirmUnwatch() {
     setError(null);
     // Fail closed — hostile / non-SYMBOL_RE props must not hit DELETE.
     const normalized = normalizeSymbol(symbol);
@@ -197,6 +209,7 @@ export function UnwatchButton({ symbol }: { symbol: string }) {
         return;
       }
       toast.success(`Removed ${normalized}. Telegram pushes for it are off.`);
+      setOpen(false);
       router.refresh();
     } catch {
       const msg = "Network error.";
@@ -209,15 +222,34 @@ export function UnwatchButton({ symbol }: { symbol: string }) {
 
   return (
     <div className="flex flex-col items-end gap-1">
-      <Button
-        type="button"
-        variant="outline"
-        size="sm"
-        disabled={pending}
-        onClick={onClick}
-      >
-        {pending ? "…" : "Unwatch"}
-      </Button>
+      <AlertDialog open={open} onOpenChange={setOpen}>
+        <AlertDialogTrigger asChild>
+          <Button type="button" variant="outline" size="sm" disabled={pending}>
+            Unwatch
+          </Button>
+        </AlertDialogTrigger>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Unwatch {symbol}?</AlertDialogTitle>
+            <AlertDialogDescription>
+              Removes it from your watchlist and deactivates related alerts.
+              Telegram pushes for this symbol stop.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={pending}>Keep</AlertDialogCancel>
+            <AlertDialogAction
+              disabled={pending}
+              onClick={(e) => {
+                e.preventDefault();
+                void confirmUnwatch();
+              }}
+            >
+              {pending ? "…" : "Unwatch"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
       <InlineError
         message={error}
         className="max-w-[12rem] px-2 py-1 text-right text-xs"

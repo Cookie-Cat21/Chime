@@ -3,7 +3,7 @@ import { Pool, type PoolClient } from "pg";
 import { sanitizeDisclosureCategory } from "@/lib/api/disclosure-safe";
 import { toFiniteNumber } from "@/lib/api/market-browse";
 import { cappedAlertThreshold } from "@/lib/api/finite-number";
-import { toSafePositiveInt } from "@/lib/api/safe-int";
+import { toNonNegativeSafeInt, toSafePositiveInt } from "@/lib/api/safe-int";
 import { toIso } from "@/lib/api/time";
 import { isAlertType, normalizeSymbol, type AlertType } from "@/lib/api/symbol";
 
@@ -131,6 +131,7 @@ export type AlertRuleRow = {
   active: boolean;
   armed: boolean;
   created_at: string | null;
+  muted_until: string | null;
 };
 
 function mapRule(row: {
@@ -142,6 +143,7 @@ function mapRule(row: {
   active: boolean;
   armed: boolean;
   created_at: Date | string;
+  muted_until?: Date | string | null;
 }): AlertRuleRow | null {
   // Digits-only SafeInteger — Number(oversized) used to precision-lose and
   // alias the wrong rule on create/idempotent return.
@@ -162,6 +164,7 @@ function mapRule(row: {
     active: row.active === true,
     armed: row.armed === true,
     created_at: toIso(row.created_at),
+    muted_until: toIso(row.muted_until ?? null),
   };
 }
 
@@ -182,8 +185,10 @@ async function fetchActiveRule(
     active: boolean;
     armed: boolean;
     created_at: Date | string;
+    muted_until: Date | string | null;
   }>(
-    `SELECT id, symbol, type, threshold, category, active, armed, created_at
+    `SELECT id, symbol, type, threshold, category, active, armed, created_at,
+            muted_until
      FROM alert_rules
      WHERE user_id = $1 AND symbol = $2 AND type = $3
        AND COALESCE(threshold, -1) = COALESCE($4::double precision, -1)
@@ -258,10 +263,12 @@ export async function createAlertRule(
         active: boolean;
         armed: boolean;
         created_at: Date | string;
+        muted_until: Date | string | null;
       }>(
         `INSERT INTO alert_rules (user_id, symbol, type, threshold, category, active, armed)
          VALUES ($1, $2, $3, $4, $5, TRUE, TRUE)
-         RETURNING id, symbol, type, threshold, category, active, armed, created_at`,
+         RETURNING id, symbol, type, threshold, category, active, armed, created_at,
+                   muted_until`,
         [userId, symbol, alertType, threshold, cat],
       );
       const row = inserted.rows[0];
@@ -297,6 +304,32 @@ export async function createAlertRule(
   } finally {
     client.release();
   }
+}
+
+export async function activeAlertQuota(userId: number): Promise<{
+  active_count: number;
+  alert_quota_max: number;
+}> {
+  const pool = getPool();
+  const result = await pool.query<{
+    active_count: string | number;
+    alert_quota_max: string | number;
+  }>(
+    `SELECT
+       (SELECT COUNT(*)::int FROM alert_rules WHERE user_id = $1 AND active) AS active_count,
+       alert_quota_max
+     FROM users
+     WHERE id = $1`,
+    [userId],
+  );
+  const row = result.rows[0];
+  if (!row) throw new Error("active_alert_quota returned no row");
+  const active_count = toNonNegativeSafeInt(row.active_count, 0);
+  const quota = toNonNegativeSafeInt(row.alert_quota_max, 100);
+  return {
+    active_count,
+    alert_quota_max: quota,
+  };
 }
 
 /**

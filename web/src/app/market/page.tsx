@@ -2,6 +2,8 @@ import Link from "next/link";
 
 import { AppNav } from "@/components/app-nav";
 import { EmptyState } from "@/components/empty-state";
+import { ChangeBadge } from "@/components/kit/change-badge";
+import { MoversBarList } from "@/components/kit/movers-bar-list";
 import { NfaFooter } from "@/components/nfa-footer";
 import { NfaInline } from "@/components/nfa-inline";
 import { PageHeader } from "@/components/page-header";
@@ -23,7 +25,15 @@ import { serverApiGet } from "@/lib/api/server-fetch";
 import { normalizeSymbol } from "@/lib/api/symbol";
 import { toIso } from "@/lib/api/time";
 import { requirePageSession } from "@/lib/auth/page-session";
-import { formatNumber, formatPct, formatTs } from "@/lib/format";
+import { formatNumber, formatTs } from "@/lib/format";
+
+/** Exported for regression contract — used by movers a11y copy. */
+export function changeDirectionSr(pct: number | null): string {
+  if (pct == null) return "change unknown";
+  if (pct > 0) return "up ";
+  if (pct < 0) return "down ";
+  return "unchanged ";
+}
 
 export const dynamic = "force-dynamic";
 
@@ -135,13 +145,6 @@ function asSectorItems(body: unknown): SectorItem[] | null {
   return out;
 }
 
-function changeDirectionSr(pct: number | null): string {
-  if (pct == null) return "change unknown";
-  if (pct > 0) return "up ";
-  if (pct < 0) return "down ";
-  return "unchanged ";
-}
-
 function MoversList({
   title,
   headingId,
@@ -164,42 +167,11 @@ function MoversList({
       {items.length === 0 ? (
         <p className="mt-2 text-sm text-muted-foreground">{emptyLabel}</p>
       ) : (
-        <ul className="mt-2 divide-y divide-border/60" aria-labelledby={headingId}>
-          {items.map((item) => {
-            const pct = item.change_pct;
-            const tone =
-              pct == null
-                ? "text-muted-foreground"
-                : pct > 0
-                  ? "text-[oklch(0.42_0.09_165)]"
-                  : pct < 0
-                    ? "text-[oklch(0.45_0.12_25)]"
-                    : "text-muted-foreground";
-            return (
-              <li
-                key={item.symbol}
-                className="flex items-baseline justify-between gap-2 py-2"
-              >
-                <Link
-                  href={`/symbols/${encodeURIComponent(item.symbol)}`}
-                  aria-label={`Open ${item.symbol} detail to watch`}
-                  className="group flex min-w-0 items-baseline gap-2 rounded-sm focus-visible:ring-2 focus-visible:ring-ring/50 focus-visible:outline-none"
-                >
-                  <span className="font-mono text-sm font-medium text-foreground underline-offset-4 group-hover:underline">
-                    {item.symbol}
-                  </span>
-                  <span className="shrink-0 text-xs font-medium text-foreground/70 underline-offset-4 group-hover:underline">
-                    Watch
-                  </span>
-                </Link>
-                <span className={`font-mono text-sm tabular-nums ${tone}`}>
-                  <span className="sr-only">{changeDirectionSr(pct)}</span>
-                  {formatPct(pct)}
-                </span>
-              </li>
-            );
-          })}
-        </ul>
+        <MoversBarList
+          items={items}
+          className="mt-3"
+          empty={emptyLabel}
+        />
       )}
     </div>
   );
@@ -343,36 +315,23 @@ export default async function MarketPage({
                 className="mt-4 divide-y divide-border/60"
                 aria-labelledby="sectors-heading"
               >
-                {(sectorItems ?? []).map((item) => {
-                  const pct = item.change_pct;
-                  const tone =
-                    pct == null
-                      ? "text-muted-foreground"
-                      : pct > 0
-                        ? "text-[oklch(0.42_0.09_165)]"
-                        : pct < 0
-                          ? "text-[oklch(0.45_0.12_25)]"
-                          : "text-muted-foreground";
-                  return (
-                    <li
-                      key={item.sector_id}
-                      className="flex items-baseline justify-between gap-2 py-2"
+                {(sectorItems ?? []).map((item) => (
+                  <li
+                    key={item.sector_id}
+                    className="flex items-center justify-between gap-2 py-2"
+                  >
+                    <span
+                      className="min-w-0 truncate text-sm text-foreground"
+                      title={item.name}
                     >
-                      <span
-                        className="min-w-0 truncate text-sm text-foreground"
-                        title={item.name}
-                      >
-                        {item.name}
-                      </span>
-                      <span
-                        className={`shrink-0 font-mono text-sm tabular-nums ${tone}`}
-                      >
-                        <span className="sr-only">{changeDirectionSr(pct)}</span>
-                        {formatPct(pct)}
-                      </span>
-                    </li>
-                  );
-                })}
+                      {item.name}
+                    </span>
+                    <ChangeBadge
+                      changePct={item.change_pct}
+                      className="shrink-0"
+                    />
+                  </li>
+                ))}
               </ul>
             )}
           </section>
@@ -407,24 +366,70 @@ export default async function MarketPage({
             }
           />
         ) : (
-          <ul
-            className="mt-8 divide-y divide-border/60"
-            aria-label="Market symbols"
-          >
-            {marketItems.map((item) => {
-              const pct = item.change_pct;
-              const tone =
-                pct == null
-                  ? "text-muted-foreground"
-                  : pct > 0
-                    ? "text-[oklch(0.42_0.09_165)]"
-                    : pct < 0
-                      ? "text-[oklch(0.45_0.12_25)]"
-                      : "text-muted-foreground";
-              return (
+          <>
+            <div className="mt-8 hidden overflow-hidden rounded-lg border border-border/70 md:block">
+              <table className="w-full text-left text-sm">
+                <caption className="sr-only">Market symbols</caption>
+                <thead className="bg-muted/50 text-xs text-muted-foreground uppercase">
+                  <tr>
+                    <th scope="col" className="px-4 py-3 font-medium">
+                      Symbol
+                    </th>
+                    <th scope="col" className="px-4 py-3 font-medium">
+                      Name
+                    </th>
+                    <th scope="col" className="px-4 py-3 text-right font-medium">
+                      Price
+                    </th>
+                    <th scope="col" className="px-4 py-3 text-right font-medium">
+                      Change%
+                    </th>
+                    <th scope="col" className="px-4 py-3 text-right font-medium">
+                      Updated
+                    </th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-border/60">
+                  {marketItems.map((item, idx) => (
+                    <tr
+                      key={item.symbol}
+                      className={idx % 2 === 1 ? "bg-muted/25" : undefined}
+                    >
+                      <th scope="row" className="px-4 py-3 font-mono font-medium">
+                        <Link
+                          href={`/symbols/${encodeURIComponent(item.symbol)}`}
+                          className="rounded-sm underline-offset-4 hover:underline focus-visible:ring-2 focus-visible:ring-ring/50 focus-visible:outline-none"
+                        >
+                          {item.symbol}
+                        </Link>
+                      </th>
+                      <td className="max-w-xs px-4 py-3 text-muted-foreground">
+                        <span className="block truncate" title={item.name ?? undefined}>
+                          {item.name ?? "—"}
+                        </span>
+                      </td>
+                      <td className="px-4 py-3 text-right font-mono tabular-nums">
+                        {formatNumber(item.price)}
+                      </td>
+                      <td className="px-4 py-3 text-right">
+                        <ChangeBadge changePct={item.change_pct} />
+                      </td>
+                      <td className="px-4 py-3 text-right text-xs text-muted-foreground">
+                        {formatTs(item.ts)}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+            <ul
+              className="mt-8 divide-y divide-border/60 md:hidden"
+              aria-label="Market symbols"
+            >
+              {marketItems.map((item) => (
                 <li
                   key={item.symbol}
-                  className="flex flex-wrap items-baseline justify-between gap-2 py-3"
+                  className="flex flex-wrap items-center justify-between gap-3 py-3"
                 >
                   <div className="min-w-0">
                     <Link
@@ -438,22 +443,20 @@ export default async function MarketPage({
                         {item.name}
                       </p>
                     ) : null}
-                  </div>
-                  <div className="text-right text-sm">
-                    <p className="font-mono tabular-nums">
-                      {formatNumber(item.price)}
-                    </p>
-                    <p className={`font-mono tabular-nums ${tone}`}>
-                      {formatPct(pct)}
-                    </p>
                     <p className="text-xs text-muted-foreground">
                       {formatTs(item.ts)}
                     </p>
                   </div>
+                  <div className="flex shrink-0 flex-col items-end gap-1 text-sm">
+                    <p className="font-mono tabular-nums">
+                      {formatNumber(item.price)}
+                    </p>
+                    <ChangeBadge changePct={item.change_pct} />
+                  </div>
                 </li>
-              );
-            })}
-          </ul>
+              ))}
+            </ul>
+          </>
         )}
       </main>
       <NfaFooter />
