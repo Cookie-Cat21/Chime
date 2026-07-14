@@ -1,7 +1,12 @@
 import { ArrowDown, ArrowUp, Minus } from "lucide-react";
 
 import { Badge } from "@/components/ui/badge";
-import { formatNumber, formatPct, formatTs } from "@/lib/format";
+import {
+  formatCompactNumber,
+  formatNumber,
+  formatPct,
+  formatTs,
+} from "@/lib/format";
 import { cn } from "@/lib/utils";
 
 export type FilingMetricRow = {
@@ -71,16 +76,19 @@ export function FilingMetricsPanel({
                 <MetricValue
                   label="Basic EPS"
                   value={formatNumber(metrics.eps_basic, 4)}
+                  fullValue={formatNumber(metrics.eps_basic, 4)}
                   deltaPct={comparable ? comparison?.eps_delta_pct : null}
                 />
                 <MetricValue
                   label="Revenue"
-                  value={formatNumber(metrics.revenue)}
+                  value={formatCompactNumber(metrics.revenue)}
+                  fullValue={formatNumber(metrics.revenue, 0)}
                   deltaPct={comparable ? comparison?.revenue_delta_pct : null}
                 />
                 <MetricValue
                   label="Profit"
-                  value={formatNumber(metrics.profit)}
+                  value={formatCompactNumber(metrics.profit)}
+                  fullValue={formatNumber(metrics.profit, 0)}
                   deltaPct={comparable ? comparison?.profit_delta_pct : null}
                 />
               </div>
@@ -138,18 +146,32 @@ function formatMetricDate(value: string | null): string {
 function MetricValue({
   label,
   value,
+  fullValue,
   deltaPct,
 }: {
   label: string;
   value: string;
+  /** Exact figure for title / screen readers when value is compact. */
+  fullValue?: string;
   deltaPct: number | null | undefined;
 }) {
+  const title =
+    fullValue && fullValue !== "—" && fullValue !== value ? fullValue : undefined;
   return (
     <div className="min-w-0 rounded-md bg-muted/30 p-3">
       <p className="text-xs text-muted-foreground">{label}</p>
-      <p className="mt-1 truncate font-mono text-lg font-medium tabular-nums">
+      <p
+        className="mt-1 break-words font-mono text-lg font-medium leading-snug tabular-nums"
+        title={title}
+      >
+        <span className="sr-only">{title ? `${fullValue}. Displayed as ` : null}</span>
         {value}
       </p>
+      {title ? (
+        <p className="mt-0.5 font-mono text-[11px] leading-snug text-muted-foreground tabular-nums">
+          {fullValue}
+        </p>
+      ) : null}
       <div className="mt-2">
         <YoyBadge value={deltaPct} />
       </div>

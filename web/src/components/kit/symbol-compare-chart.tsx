@@ -227,12 +227,9 @@ export function SymbolCompareChart({
   const peerKey = selectedPeers.join(",");
 
   useEffect(() => {
-    if (!peerKey) {
-      setPeerSeries([]);
-      setLoading(false);
-      setError(null);
-      return;
-    }
+    // Empty peerKey: series useMemo already falls back to base-only — no
+    // sync setState (react-hooks/set-state-in-effect).
+    if (!peerKey) return;
 
     let cancelled = false;
     const ctrl = new AbortController();

@@ -41,6 +41,44 @@ export function formatNumber(
   });
 }
 
+/**
+ * Compact filing / large-amount labels (e.g. 21.2B) so metric cards do not
+ * truncate mid-digit. Below 10 000 keeps full ``formatNumber`` precision.
+ */
+export function formatCompactNumber(
+  value: number | null | undefined,
+  digits = 2,
+): string {
+  if (!isFiniteNumber(value)) return "—";
+  if (Math.abs(value) > MAX_FORMAT_ABS_VALUE) return "—";
+  const frac =
+    typeof digits === "number" &&
+    Number.isInteger(digits) &&
+    digits >= 0 &&
+    digits <= MAX_FORMAT_FRACTION_DIGITS
+      ? digits
+      : 2;
+
+  const abs = Math.abs(value);
+  const sign = value < 0 ? "-" : "";
+  const tiers: { div: number; suffix: string }[] = [
+    { div: 1e12, suffix: "T" },
+    { div: 1e9, suffix: "B" },
+    { div: 1e6, suffix: "M" },
+    { div: 1e3, suffix: "K" },
+  ];
+  for (const tier of tiers) {
+    if (abs >= tier.div) {
+      const scaled = abs / tier.div;
+      return `${sign}${scaled.toLocaleString("en-LK", {
+        minimumFractionDigits: 0,
+        maximumFractionDigits: frac,
+      })}${tier.suffix}`;
+    }
+  }
+  return formatNumber(value, frac);
+}
+
 export function formatPct(value: number | null | undefined): string {
   // Fail closed: string/boolean/NaN/±Infinity must not throw on toFixed.
   if (!isFiniteNumber(value)) return "—";

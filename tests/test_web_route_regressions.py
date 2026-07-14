@@ -1097,6 +1097,12 @@ def test_bot_dash_parity_filing_metrics_and_settings() -> None:
     assert "FilingMetricsPanel" in (
         WEB / "src" / "app" / "symbols" / "[symbol]" / "page.tsx"
     ).read_text(encoding="utf-8")
+    panel = (
+        WEB / "src" / "components" / "kit" / "filing-metrics-panel.tsx"
+    ).read_text(encoding="utf-8")
+    assert "formatCompactNumber" in panel
+    assert "truncate" not in panel.split("MetricValue")[1].split("YoyBadge")[0]
+    assert "formatCompactNumber" in fmt
     parity = Path("docs/factory/BOT_DASH_PARITY.md").read_text(encoding="utf-8")
     assert "EPS above / below" in parity and "| Yes | Yes |" in parity
 
