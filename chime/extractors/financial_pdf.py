@@ -5,8 +5,10 @@ Fail closed: callers must check ``extract_ok`` before using numbers as alert tru
 
 from __future__ import annotations
 
+import os
 import re
 import tempfile
+from contextlib import suppress
 from dataclasses import dataclass, field
 from datetime import date
 from pathlib import Path
@@ -296,9 +298,17 @@ def extract_filing_from_bytes(
             extract_ok=False,
             notes={"error": "empty_pdf"},
         )
-    with tempfile.NamedTemporaryFile(suffix=".pdf", delete=True) as tmp:
+    # delete=False + manual unlink: on Windows, delete=True keeps an exclusive
+    # lock on the handle, so a second open (pypdf/fitz reading tmp.name) fails
+    # with PermissionError while this file object is still open.
+    tmp = tempfile.NamedTemporaryFile(suffix=".pdf", delete=False)  # noqa: SIM115
+    try:
         tmp.write(data)
         tmp.flush()
+        tmp.close()
         return extract_filing_from_path(
             tmp.name, kind=kind, title=title, category=category
         )
+    finally:
+        with suppress(OSError):
+            os.unlink(tmp.name)
