@@ -113,13 +113,13 @@ export default async function HomePage() {
           </div>
         </section>
 
-        {/* Proof — below-fold full-width band (not hero side panel) */}
+        {/* Proof — phone clipped hard where the band colour ends */}
         <section
           aria-labelledby="proof-heading"
-          className="border-y border-border/70 bg-foreground/[0.03]"
+          className="overflow-hidden border-y border-border/70 bg-foreground/[0.03]"
         >
-          <div className="mx-auto grid w-full max-w-5xl gap-10 px-6 py-14 sm:py-16 lg:grid-cols-12 lg:items-center lg:gap-12">
-            <div className="lg:col-span-5">
+          <div className="mx-auto grid w-full max-w-5xl gap-10 px-6 pt-14 sm:pt-16 lg:grid-cols-12 lg:items-stretch lg:gap-12">
+            <div className="pb-14 sm:pb-16 lg:col-span-5">
               <SectionEyebrow>The cherry — Telegram</SectionEyebrow>
               <h2
                 id="proof-heading"
@@ -132,8 +132,10 @@ export default async function HomePage() {
                 the cross without keeping a browser tab open.
               </p>
             </div>
-            <div className="chime-rise flex items-start justify-center lg:col-span-7 lg:justify-end">
-              <TelegramProof />
+            <div className="chime-rise relative h-[300px] overflow-hidden sm:h-[340px] lg:col-span-7 lg:h-auto lg:min-h-0">
+              <div className="flex justify-center pt-2 lg:absolute lg:inset-0 lg:justify-end lg:pt-10 lg:pr-2">
+                <TelegramProof />
+              </div>
             </div>
           </div>
         </section>
