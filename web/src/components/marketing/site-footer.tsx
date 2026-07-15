@@ -18,13 +18,13 @@ export function SiteFooter({
         className,
       )}
     >
-      <div className="mx-auto flex w-full max-w-2xl flex-col gap-4">
-        <p className="text-center text-xs leading-relaxed text-muted-foreground">
+      <div className="mx-auto flex w-full max-w-5xl flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+        <p className="max-w-md text-xs leading-relaxed text-muted-foreground">
           {NFA_FOOTER}
         </p>
         <nav
           aria-label="Marketing footer"
-          className="flex flex-wrap items-center justify-center gap-x-5 gap-y-2 text-xs text-muted-foreground"
+          className="flex flex-wrap items-center gap-x-5 gap-y-2 text-xs text-muted-foreground sm:justify-end"
         >
           <Link
             href="/login"

@@ -2,14 +2,14 @@ import { ChatBubble } from "@/components/kit/chat-bubble";
 import { cn } from "@/lib/utils";
 
 /**
- * Product proof — daisy chat inside a quiet plane.
- * Cult-style proof column without device frames / accent rails.
+ * Product proof — daisy chat for the below-fold band.
+ * Not an in-hero side panel; no device frames / accent rails.
  */
 export function TelegramProof({ className }: { className?: string }) {
   return (
     <div
       className={cn(
-        "relative overflow-hidden rounded-xl border border-border/80 bg-card/90 p-5 shadow-sm sm:p-6",
+        "relative overflow-hidden rounded-xl border border-border/80 bg-card/95 p-5 sm:p-6",
         className,
       )}
     >
