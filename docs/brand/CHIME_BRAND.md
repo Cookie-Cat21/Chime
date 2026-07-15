@@ -1,31 +1,29 @@
-# Chime — Brand v3 (post-reject)
+# Chime — Brand
 
-**Status:** Candidate — Signal Mist and Ticker Strike both rejected.  
-**Date:** 2026-07-14
+**Status:** Shipped assets = Claude lowercase lockup (`branding/` + `web/public/brand/`).  
+**Date:** 2026-07-15
 
-## Why the last two failed
-- Mist = calm/spa. Product is an **interruption**.
-- Beige + forest green + plus = local bank leaflet. Plus reads medical/cross.
-- Both optimized for “tasteful” instead of **inevitable**.
+## Official product chrome
+
+| Asset | Use |
+| --- | --- |
+| Lowercase **chime** wordmark | Nav, landing hero, login, legal, pricing |
+| **C** mark | Favicon / apple touch / compact chrome |
+| Cool paper + near-black ink | UI tokens in `web/src/app/globals.css` |
+| Cal Sans (display) · Inter (body) · JetBrains Mono (code) | Type stack |
+
+Wire only through `ChimeWordmark` / `ChimeMark`. Web SVGs are tight-cropped; masters stay square under `branding/`.
 
 ## Locked bans
-mist teal · newsprint beige · forest green · plus/cross · purple SaaS · cream/terracotta · cartoon bell
 
-## Candidate A — Signal Ice (recommended)
-Cold steel ground. Near-black type. **Blood red is the brand** (alert = identity).
-- paper `#F4F6F8` · ink `#0A0B0D` · accent/fired `#E10600` · mute `#6B7280`
-- Wordmark: `CHIME` condensed, all caps, wordmark-first
-- Mark (favicon only): **Strike Notch** — vertical bar with a triangular bite
-- One-liner: **CSE moves. You hear it.**
+mist teal · newsprint beige · forest green · plus/cross · purple SaaS · cream/terracotta · cartoon bell · blood-red “Signal Ice” marketing CTAs
 
-## Candidate B — Wire Strike
-Black field. Bone type. Red only when something fires.
-- void `#0A0B0D` · bone `#F4F6F8` · fired `#E10600`
-- Same wordmark + mark
-- Feels like wire desk / night ping
+## Archived candidates (do not ship)
 
-## Mark
-Strike Notch — not a bell, not a plus. A struck edge.
+Signal Mist, Ticker Strike, and Signal Ice (`docs/brand/svg/`) were explored and rejected for product chrome:
 
-## SVG
-`docs/brand/svg/` — mark, wordmark, lockup, landing-ice, landing-wire, board-ice
+- Mist = calm/spa — product is an interruption
+- Beige + forest green + plus = bank leaflet / medical
+- Signal Ice blood red (`#E10600`) + “CSE moves. You hear it.” — rejected on marketing pass
+
+Keep those SVGs as research only. Product brand = Claude lowercase lockup + charcoal primary.

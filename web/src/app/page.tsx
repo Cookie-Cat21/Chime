@@ -3,20 +3,32 @@ import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 
 import { ChimeWordmark } from "@/components/brand/chime-brand";
-import { ChatBubble } from "@/components/kit/chat-bubble";
 import { FaqSection } from "@/components/kit/faq-section";
-import { Steps } from "@/components/kit/steps";
-import { NfaFooter } from "@/components/nfa-footer";
+import { EndCta } from "@/components/marketing/end-cta";
+import { FeatureList } from "@/components/marketing/feature-list";
+import { HowItWorks } from "@/components/marketing/how-it-works";
+import { MarketingNav } from "@/components/marketing/marketing-nav";
+import { MidCta } from "@/components/marketing/mid-cta";
+import { SectionEyebrow } from "@/components/marketing/section-eyebrow";
+import { SiteFooter } from "@/components/marketing/site-footer";
+import { TelegramProof } from "@/components/marketing/telegram-proof";
 import { NfaInline } from "@/components/nfa-inline";
 import { Button } from "@/components/ui/button";
 import { getDashAuthConfig, SESSION_COOKIE } from "@/lib/auth/config";
 import { verifySessionToken } from "@/lib/auth/session";
+import { telegramBotUrl } from "@/lib/marketing";
+
+export const metadata = {
+  title: "Chime — CSE alerts on Telegram",
+  description:
+    "Telegram-first Colombo Stock Exchange alerts. Watch symbols, set rules in a thin dash, get pinged when something fires.",
+};
 
 const FAQ = [
   {
     question: "Is Chime a CSE Tracker Pro clone?",
     answer:
-      "No. Chime is a CSE market dash for browse, watch, and rules — with Telegram push as the cherry when something fires. Portfolio, tax, and heavy TA stay deferred.",
+      "No. Chime is Telegram-first CSE alerting with a thin management dash. Portfolio, tax, screener, and heavy TA stay out of scope.",
   },
   {
     question: "Where do alerts fire?",
@@ -33,11 +45,16 @@ const FAQ = [
     answer:
       "Price above/below, daily % move, disclosures, activity signals, and (when enabled) EPS / YoY filing metrics.",
   },
+  {
+    question: "Do I need to keep the dash open?",
+    answer:
+      "No. The dash is for setup and review. Push delivery is the point — Telegram carries the alert.",
+  },
 ];
 
 /**
- * Brand landing — dash is the cake; Telegram push is the cherry.
- * Signed-in users land on Overview.
+ * Option A — wide left-rail hero + below-fold full-width proof band.
+ * No announcement bar, no in-hero side proof panel.
  */
 export default async function HomePage() {
   const cfg = getDashAuthConfig();
@@ -52,96 +69,111 @@ export default async function HomePage() {
     redirect("/overview");
   }
 
+  const botUrl = telegramBotUrl();
+
   return (
-    <main
-      id="main-content"
-      tabIndex={-1}
-      className="chime-atmosphere flex min-h-full flex-1 flex-col"
-    >
-      <div className="mx-auto flex w-full max-w-3xl flex-1 flex-col px-6 py-16 sm:py-20">
-        {/* Hero — brand first */}
-        <div className="chime-rise">
-          <ChimeWordmark size="hero" priority />
-        </div>
-        <h1 className="chime-rise chime-rise-delay-1 mt-6 max-w-xl text-2xl font-medium leading-snug text-foreground sm:text-3xl">
-          CSE on your screen. Telegram when it matters.
-        </h1>
-        <p className="chime-rise chime-rise-delay-2 mt-4 max-w-md text-base text-muted-foreground sm:text-lg">
-          Browse the market, watch symbols, and manage rules in the dash.
-          Alerts fire on Telegram — the cherry on top when the tab is closed.
-        </p>
-        <NfaInline className="chime-rise chime-rise-delay-2 mt-4" />
-        <div className="chime-rise chime-rise-delay-3 mt-10 flex flex-wrap items-center gap-3">
-          <Button
-            asChild
-            size="lg"
-            className="min-w-36 motion-safe:transition-transform motion-safe:hover:-translate-y-0.5"
-          >
-            <Link href="/login">Open the dash</Link>
-          </Button>
-          <Button asChild variant="outline" size="lg">
-            <Link href="/login">Sign in</Link>
-          </Button>
-        </div>
+    <div className="chime-atmosphere flex min-h-full flex-1 flex-col">
+      <MarketingNav />
+      <main id="main-content" tabIndex={-1} className="flex flex-1 flex-col">
+        {/* Hero — fills first viewport; proof stays below the fold */}
+        <section className="mx-auto flex min-h-[calc(100svh-3.5rem)] w-full max-w-5xl flex-col justify-center px-6 py-16 sm:py-20">
+          <div className="max-w-xl lg:max-w-2xl">
+            <div className="chime-rise">
+              <ChimeWordmark size="hero" priority />
+            </div>
+            <h1 className="chime-rise chime-rise-delay-1 mt-10 font-display text-4xl font-semibold tracking-tight text-foreground sm:text-5xl sm:leading-[1.08]">
+              CSE alerts on Telegram.
+              <span className="mt-2 block text-muted-foreground">
+                Dash when you need to manage.
+              </span>
+            </h1>
+            <p className="chime-rise chime-rise-delay-2 mt-6 max-w-md text-base leading-relaxed text-muted-foreground sm:text-lg">
+              Watch symbols, set price / move / disclosure rules, and get pinged
+              the moment something fires — even with the tab closed.
+            </p>
+            <NfaInline className="chime-rise chime-rise-delay-2 mt-4" />
+            <div className="chime-rise chime-rise-delay-3 mt-10 flex flex-wrap items-center gap-3">
+              <Button
+                asChild
+                size="lg"
+                className="min-w-36 motion-safe:transition-transform motion-safe:hover:-translate-y-0.5"
+              >
+                {botUrl ? (
+                  <a href={botUrl} target="_blank" rel="noopener noreferrer">
+                    Open Telegram bot
+                  </a>
+                ) : (
+                  <Link href="/login">Get started</Link>
+                )}
+              </Button>
+              <Button asChild variant="outline" size="lg">
+                <Link href="/login">Open the dash</Link>
+              </Button>
+            </div>
+          </div>
+        </section>
 
-        {/* Product proof — DaisyUI chat pattern */}
-        <section className="chime-rise chime-rise-delay-3 mt-16">
-          <p className="relative mb-4 pl-3 text-xs font-semibold uppercase tracking-[0.18em] text-primary">
-            <span
-              aria-hidden
-              className="absolute top-1/2 left-0 h-3 w-[3px] -translate-y-1/2 rounded-sm bg-primary"
-            />
-            The cherry — Telegram
-          </p>
-          <div className="rounded-xl border border-border bg-card/80 p-5 sm:p-6">
-            <ChatBubble
-              header="Chime CSE"
-              footer="Not financial advice"
+        {/* Proof — phone clipped flush with the band’s bottom edge (no pad under it) */}
+        <section
+          aria-labelledby="proof-heading"
+          className="overflow-hidden border-y border-border/70 bg-foreground/[0.03]"
+        >
+          <div className="mx-auto grid w-full max-w-5xl grid-cols-1 items-stretch px-6 pt-14 sm:pt-16 lg:grid-cols-12 lg:gap-12">
+            <div className="pb-14 sm:pb-16 lg:col-span-5">
+              <SectionEyebrow>The cherry — Telegram</SectionEyebrow>
+              <h2
+                id="proof-heading"
+                className="font-display text-2xl font-semibold tracking-tight sm:text-3xl"
+              >
+                The ping is the product.
+              </h2>
+              <p className="mt-4 max-w-sm text-base leading-relaxed text-muted-foreground">
+                Rules live in a thin dash. Delivery is Telegram — so you hear
+                the cross without keeping a browser tab open.
+              </p>
+            </div>
+
+            {/* Clip column: no bottom padding — cut lands on the colour edge */}
+            <div className="relative h-[300px] overflow-hidden sm:h-[340px] lg:col-span-7 lg:h-auto lg:min-h-0">
+              <div className="absolute top-6 left-1/2 w-[320px] -translate-x-1/2 sm:w-[360px] lg:top-8 lg:right-0 lg:left-auto lg:w-[420px] lg:translate-x-0">
+                <TelegramProof />
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <div className="mx-auto flex w-full max-w-5xl flex-1 flex-col px-6 py-16 sm:py-20">
+          <HowItWorks />
+
+          <section className="mt-20" aria-labelledby="alerts-heading">
+            <SectionEyebrow>Alerts</SectionEyebrow>
+            <h2
+              id="alerts-heading"
+              className="max-w-xl font-display text-2xl font-semibold tracking-tight sm:text-3xl"
             >
-              <p className="font-medium">JKH.N0000 crossed above</p>
-              <p className="mt-1 font-mono text-2xl font-semibold tabular-nums">
-                22.50
-              </p>
-              <p className="mt-2 text-xs text-muted-foreground">
-                Last 22.75 · rule #184
-              </p>
-            </ChatBubble>
-          </div>
-        </section>
+              What you can watch for
+            </h2>
+            <p className="mt-3 max-w-xl text-base text-muted-foreground">
+              Public CSE data only. Not a screener, not a trading terminal —
+              just the conditions you care about.
+            </p>
+            <FeatureList className="mt-10" />
+          </section>
 
-        {/* How it works — DaisyUI steps */}
-        <section className="mt-16">
-          <p className="relative mb-4 pl-3 text-xs font-semibold uppercase tracking-[0.18em] text-primary">
-            <span
-              aria-hidden
-              className="absolute top-1/2 left-0 h-3 w-[3px] -translate-y-1/2 rounded-sm bg-primary"
-            />
-            How it works
-          </p>
-          <h2 className="font-display text-2xl font-semibold tracking-tight">
-            Dash first. Push when it fires.
-          </h2>
-          <div className="mt-8">
-            <Steps
-              steps={[
-                { label: "Browse & watch CSE symbols", status: "complete" },
-                { label: "Set rules in the dash", status: "complete" },
-                { label: "Telegram pings on fire", status: "active" },
-              ]}
-            />
-          </div>
-        </section>
+          <MidCta telegramHref={botUrl} className="mt-20" />
 
-        {/* FAQ — HyperUI pattern */}
-        <FaqSection
-          className="mt-16 mb-8"
-          eyebrow="FAQ"
-          heading="Before you start"
-          description="Short answers. The dash is daily; Telegram is the push cherry."
-          items={FAQ}
-        />
-      </div>
-      <NfaFooter />
-    </main>
+          <FaqSection
+            className="mt-20"
+            eyebrow="FAQ"
+            heading="Before you start"
+            description="Short answers. The dash is daily; Telegram is the push cherry."
+            items={FAQ}
+          />
+
+          <EndCta telegramHref={botUrl} className="mt-20" />
+        </div>
+      </main>
+      <SiteFooter telegramHref={botUrl} />
+    </div>
   );
 }
