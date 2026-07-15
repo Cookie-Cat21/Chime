@@ -7,10 +7,7 @@ import { cn } from "@/lib/utils";
 export function TelegramProof({ className }: { className?: string }) {
   return (
     <div
-      className={cn(
-        "relative w-[300px] sm:w-[340px] lg:w-[380px]",
-        className,
-      )}
+      className={cn("relative w-full", className)}
       aria-label="Example Telegram alert notification on a phone"
     >
       <div className="rounded-[2.75rem] border border-foreground/25 bg-foreground p-[10px] shadow-sm">

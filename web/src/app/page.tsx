@@ -113,13 +113,13 @@ export default async function HomePage() {
           </div>
         </section>
 
-        {/* Proof — phone hard-cut flush with the band’s bottom colour edge */}
+        {/* Proof — phone hard-cut where the grey band ends */}
         <section
           aria-labelledby="proof-heading"
-          className="overflow-hidden border-y border-border/70 bg-foreground/[0.03]"
+          className="relative overflow-hidden border-y border-border/70 bg-foreground/[0.03]"
         >
-          <div className="mx-auto grid w-full max-w-5xl lg:grid-cols-12 lg:items-stretch lg:gap-12">
-            <div className="px-6 py-14 sm:py-16 lg:col-span-5">
+          <div className="mx-auto grid w-full max-w-5xl px-6 py-14 sm:py-16 lg:grid-cols-12 lg:gap-12">
+            <div className="lg:col-span-5">
               <SectionEyebrow>The cherry — Telegram</SectionEyebrow>
               <h2
                 id="proof-heading"
@@ -133,12 +133,19 @@ export default async function HomePage() {
               </p>
             </div>
 
-            {/* Clip box: height = left column on lg; phone hangs past and is cut */}
-            <div className="relative h-[290px] overflow-hidden sm:h-[320px] lg:col-span-7 lg:h-full lg:min-h-0">
-              <div className="absolute top-5 left-1/2 -translate-x-1/2 lg:top-8 lg:right-4 lg:left-auto lg:translate-x-0">
+            {/* Mobile: short clip well */}
+            <div className="relative mt-10 h-[250px] overflow-hidden sm:h-[280px] lg:hidden">
+              <div className="mx-auto w-[300px] sm:w-[340px]">
                 <TelegramProof />
               </div>
             </div>
+
+            <div className="hidden lg:col-span-7 lg:block" aria-hidden />
+          </div>
+
+          {/* Desktop: fills band from top offset to bottom edge, clips phone there */}
+          <div className="pointer-events-none absolute top-12 right-[max(1.25rem,calc((100%-64rem)/2))] bottom-0 hidden w-[400px] overflow-hidden lg:block">
+            <TelegramProof />
           </div>
         </section>
 
