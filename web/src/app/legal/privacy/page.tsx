@@ -18,7 +18,7 @@ export default function PrivacyPage() {
         tabIndex={-1}
         className="mx-auto w-full max-w-3xl flex-1 px-6 py-14"
       >
-        <ChimeWordmark size="md" className="opacity-90" />
+        <ChimeWordmark size="lg" priority />
         <h1 className="mt-6 font-display text-3xl font-semibold tracking-tight">
           Privacy
         </h1>

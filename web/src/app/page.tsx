@@ -128,7 +128,7 @@ export default async function HomePage() {
           </section>
 
           {/* How it works */}
-          <section id="how-it-works" className="mt-16 scroll-mt-24">
+          <section id="how-it-works" className="mt-16 scroll-mt-36">
             <p className="relative mb-4 pl-3 text-xs font-semibold uppercase tracking-[0.18em] text-primary">
               <span
                 aria-hidden

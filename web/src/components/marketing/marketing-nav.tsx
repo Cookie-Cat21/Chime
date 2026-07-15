@@ -11,6 +11,7 @@ import { cn } from "@/lib/utils";
 export function MarketingNav() {
   const pathname = usePathname();
   const onPricing = pathname === "/pricing";
+  const onLegal = pathname?.startsWith("/legal/") ?? false;
 
   return (
     <header className="sticky top-0 z-40 border-b border-border/60 bg-background/75 backdrop-blur-sm">
@@ -28,7 +29,10 @@ export function MarketingNav() {
         >
           <Link
             href="/#how-it-works"
-            className="hidden hover:text-foreground sm:inline"
+            className={cn(
+              "hidden hover:text-foreground sm:inline",
+              onLegal && "sm:hidden",
+            )}
           >
             How it works
           </Link>
@@ -37,7 +41,7 @@ export function MarketingNav() {
             aria-current={onPricing ? "page" : undefined}
             className={cn(
               "hover:text-foreground",
-              onPricing && "font-medium text-foreground",
+              onPricing && "font-medium text-foreground underline underline-offset-4",
             )}
           >
             Pricing

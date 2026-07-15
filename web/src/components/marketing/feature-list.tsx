@@ -1,5 +1,6 @@
 import type { LucideIcon } from "lucide-react";
 import {
+  Activity,
   Bell,
   FileText,
   Percent,
@@ -34,6 +35,12 @@ const DEFAULT_FEATURES: Feature[] = [
     icon: FileText,
   },
   {
+    title: "Activity signals",
+    description:
+      "Unusual volume or board activity on watched names — a nudge when the tape gets loud.",
+    icon: Activity,
+  },
+  {
     title: "Filing EPS / YoY",
     description:
       "When metrics extract is on, alert on EPS levels or year-over-year moves from interim filings.",
@@ -54,9 +61,12 @@ export function FeatureList({
       {features.map((feature) => {
         const Icon = feature.icon;
         return (
-          <li key={feature.title} className="flex gap-4 py-5">
+          <li
+            key={feature.title}
+            className="group flex gap-4 py-5 motion-safe:transition-colors motion-safe:hover:bg-foreground/[0.03]"
+          >
             <span
-              className="mt-0.5 flex size-9 shrink-0 items-center justify-center rounded-md border border-border/70 bg-card/60"
+              className="mt-0.5 flex size-9 shrink-0 items-center justify-center rounded-md border border-border/70 bg-card/60 motion-safe:transition-transform motion-safe:group-hover:scale-105"
               aria-hidden
             >
               <Icon className="size-4 text-foreground" />

@@ -10,3 +10,12 @@ export function telegramBotUrl(): string | null {
   if (!/^https:\/\/(t\.me|telegram\.me)\//i.test(trimmed)) return null;
   return trimmed;
 }
+
+/** True for public marketing surfaces (not dash App Router pages). */
+export function isMarketingPath(pathname: string | null | undefined): boolean {
+  if (!pathname) return false;
+  if (pathname === "/") return true;
+  if (pathname === "/pricing") return true;
+  if (pathname.startsWith("/legal/")) return true;
+  return false;
+}
