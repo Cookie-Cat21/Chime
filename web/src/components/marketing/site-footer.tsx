@@ -18,7 +18,7 @@ export function SiteFooter({
         className,
       )}
     >
-      <div className="mx-auto flex w-full max-w-3xl flex-col gap-4">
+      <div className="mx-auto flex w-full max-w-5xl flex-col gap-4">
         <p className="text-center text-xs leading-relaxed text-muted-foreground">
           {NFA_FOOTER}
         </p>

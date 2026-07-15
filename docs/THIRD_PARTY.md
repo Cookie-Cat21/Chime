@@ -60,5 +60,8 @@ dev-only.
 | Announcement bar | Banner pattern (21st / Shadcnblocks-inspired) | MIT pattern only | 2026-07-15 | `AnnouncementBar` — no upstream copy-paste |
 | End CTA band | Shadcnblocks `cta34` rhythm | Pattern only | 2026-07-15 | `EndCta` — dual CTA, no tinted hero card |
 | 2-tier pricing stub | [HyperUI Pricing](https://www.hyperui.dev/components/marketing/pricing) | MIT | 2026-07-15 | `/pricing` — Free / Later, **no checkout** |
+| Split hero structure | Cult Hero Color Panels (structure only) | Pattern only | 2026-07-15 | Copy left / proof right — **no shaders** |
+| Mid CTA left/right | [HyperUI CTAs](https://www.hyperui.dev/components/marketing/ctas) | MIT | 2026-07-15 | `MidCta` — ink band, dual actions |
+| Telegram proof panel | Daisy chat pattern (in-tree) | Pattern | 2026-07-15 | `TelegramProof` — not a device-frame hero |
 
 For usage notes and related bookmarks, see [RESOURCES.md](RESOURCES.md).

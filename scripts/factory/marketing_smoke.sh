@@ -21,6 +21,8 @@ check() {
 check "/" \
   "chime-atmosphere" \
   "CSE alerts on Telegram" \
+  "Live on Telegram" \
+  "Alerts fire on Telegram" \
   "How it works" \
   "What you can watch for" \
   "Activity signals" \

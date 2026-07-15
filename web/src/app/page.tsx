@@ -3,14 +3,16 @@ import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 
 import { ChimeWordmark } from "@/components/brand/chime-brand";
-import { ChatBubble } from "@/components/kit/chat-bubble";
 import { FaqSection } from "@/components/kit/faq-section";
 import { Steps } from "@/components/kit/steps";
 import { AnnouncementBar } from "@/components/marketing/announcement-bar";
 import { EndCta } from "@/components/marketing/end-cta";
 import { FeatureList } from "@/components/marketing/feature-list";
 import { MarketingNav } from "@/components/marketing/marketing-nav";
+import { MidCta } from "@/components/marketing/mid-cta";
+import { SectionEyebrow } from "@/components/marketing/section-eyebrow";
 import { SiteFooter } from "@/components/marketing/site-footer";
+import { TelegramProof } from "@/components/marketing/telegram-proof";
 import { NfaInline } from "@/components/nfa-inline";
 import { Button } from "@/components/ui/button";
 import { getDashAuthConfig, SESSION_COOKIE } from "@/lib/auth/config";
@@ -53,6 +55,7 @@ const FAQ = [
 
 /**
  * Brand landing — dash is the cake; Telegram push is the cherry.
+ * Wave 4 split hero (Cult structure, no shaders) + HyperUI mid-CTA.
  * Signed-in users land on Overview.
  */
 export default async function HomePage() {
@@ -75,71 +78,65 @@ export default async function HomePage() {
       <AnnouncementBar />
       <MarketingNav />
       <main id="main-content" tabIndex={-1} className="flex flex-1 flex-col">
-        <div className="mx-auto flex w-full max-w-3xl flex-1 flex-col px-6 py-14 sm:py-20">
-          {/* Hero — brand first; keep first viewport lean */}
-          <div className="chime-rise">
-            <ChimeWordmark size="hero" priority />
-          </div>
-          <h1 className="chime-rise chime-rise-delay-1 mt-8 max-w-xl font-display text-3xl font-semibold tracking-tight text-foreground sm:text-4xl sm:leading-[1.15]">
-            CSE alerts on Telegram. Dash when you need to manage.
-          </h1>
-          <p className="chime-rise chime-rise-delay-2 mt-5 max-w-md text-base leading-relaxed text-muted-foreground sm:text-lg">
-            Watch symbols, set price / move / disclosure rules, and get pinged
-            the moment something fires — even with the tab closed.
-          </p>
-          <NfaInline className="chime-rise chime-rise-delay-2 mt-4" />
-          <div className="chime-rise chime-rise-delay-3 mt-10 flex flex-wrap items-center gap-3">
-            <Button
-              asChild
-              size="lg"
-              className="min-w-36 motion-safe:transition-transform motion-safe:hover:-translate-y-0.5"
-            >
-              {botUrl ? (
-                <a href={botUrl} target="_blank" rel="noopener noreferrer">
-                  Open Telegram bot
-                </a>
-              ) : (
-                <Link href="/login">Get started</Link>
-              )}
-            </Button>
-            <Button asChild variant="outline" size="lg">
-              <Link href="/login">Open the dash</Link>
-            </Button>
+        {/* Cult-style split hero — copy + proof; first viewport stays lean */}
+        <section className="mx-auto grid w-full max-w-5xl gap-10 px-6 py-14 sm:py-16 lg:grid-cols-[minmax(0,1.05fr)_minmax(0,0.95fr)] lg:items-center lg:gap-14 lg:py-20">
+          <div>
+            <div className="chime-rise">
+              <ChimeWordmark size="hero" priority />
+            </div>
+            <h1 className="chime-rise chime-rise-delay-1 mt-8 max-w-xl font-display text-3xl font-semibold tracking-tight text-foreground sm:text-4xl sm:leading-[1.12] lg:text-[2.75rem]">
+              CSE alerts on Telegram.
+              <span className="mt-1 block text-muted-foreground">
+                Dash when you need to manage.
+              </span>
+            </h1>
+            <p className="chime-rise chime-rise-delay-2 mt-5 max-w-md text-base leading-relaxed text-muted-foreground sm:text-lg">
+              Watch symbols, set price / move / disclosure rules, and get pinged
+              the moment something fires — even with the tab closed.
+            </p>
+            <NfaInline className="chime-rise chime-rise-delay-2 mt-4" />
+            <div className="chime-rise chime-rise-delay-3 mt-10 flex flex-wrap items-center gap-3">
+              <Button
+                asChild
+                size="lg"
+                className="min-w-36 motion-safe:transition-transform motion-safe:hover:-translate-y-0.5"
+              >
+                {botUrl ? (
+                  <a href={botUrl} target="_blank" rel="noopener noreferrer">
+                    Open Telegram bot
+                  </a>
+                ) : (
+                  <Link href="/login">Get started</Link>
+                )}
+              </Button>
+              <Button asChild variant="outline" size="lg">
+                <Link href="/login">Open the dash</Link>
+              </Button>
+            </div>
           </div>
 
-          {/* Product proof */}
-          <section className="chime-rise chime-rise-delay-3 mt-16">
-            <p className="relative mb-4 pl-3 text-xs font-semibold uppercase tracking-[0.18em] text-primary">
-              <span
-                aria-hidden
-                className="absolute top-1/2 left-0 h-3 w-[3px] -translate-y-1/2 rounded-sm bg-primary"
-              />
+          <div className="chime-rise chime-rise-delay-3">
+            <SectionEyebrow className="lg:mb-5">
               The cherry — Telegram
-            </p>
-            <ChatBubble header="Chime CSE" footer="Not financial advice">
-              <p className="font-medium">JKH.N0000 crossed above</p>
-              <p className="mt-1 font-mono text-2xl font-semibold tabular-nums">
-                22.50
-              </p>
-              <p className="mt-2 text-xs text-muted-foreground">
-                Last 22.75 · rule #184
-              </p>
-            </ChatBubble>
-          </section>
+            </SectionEyebrow>
+            <TelegramProof />
+          </div>
+        </section>
 
-          {/* How it works */}
-          <section id="how-it-works" className="mt-16 scroll-mt-36">
-            <p className="relative mb-4 pl-3 text-xs font-semibold uppercase tracking-[0.18em] text-primary">
-              <span
-                aria-hidden
-                className="absolute top-1/2 left-0 h-3 w-[3px] -translate-y-1/2 rounded-sm bg-primary"
-              />
-              How it works
-            </p>
-            <h2 className="font-display text-2xl font-semibold tracking-tight sm:text-3xl">
+        {/* How it works — banded HyperUI empty-state rhythm */}
+        <section
+          id="how-it-works"
+          className="scroll-mt-36 border-y border-border/60 bg-foreground/[0.025]"
+        >
+          <div className="mx-auto max-w-5xl px-6 py-16 sm:py-20">
+            <SectionEyebrow>How it works</SectionEyebrow>
+            <h2 className="max-w-xl font-display text-2xl font-semibold tracking-tight sm:text-3xl">
               Set it once. Get pinged when it matters.
             </h2>
-            <div className="mt-8">
+            <p className="mt-3 max-w-lg text-base text-muted-foreground">
+              Three moves. No portfolio tracker. No terminal to keep open.
+            </p>
+            <div className="mt-10">
               <Steps
                 steps={[
                   { label: "Browse & watch CSE symbols", status: "complete" },
@@ -148,40 +145,42 @@ export default async function HomePage() {
                 ]}
               />
             </div>
-          </section>
+          </div>
+        </section>
 
-          {/* What you can alert on */}
-          <section className="mt-16" aria-labelledby="alerts-heading">
-            <p className="relative mb-4 pl-3 text-xs font-semibold uppercase tracking-[0.18em] text-primary">
-              <span
-                aria-hidden
-                className="absolute top-1/2 left-0 h-3 w-[3px] -translate-y-1/2 rounded-sm bg-primary"
-              />
-              Alerts
-            </p>
-            <h2
-              id="alerts-heading"
-              className="font-display text-2xl font-semibold tracking-tight sm:text-3xl"
-            >
-              What you can watch for
-            </h2>
-            <p className="mt-2 max-w-xl text-sm text-muted-foreground">
-              Public CSE data only. Not a screener, not a trading terminal —
-              just the conditions you care about.
-            </p>
-            <FeatureList className="mt-8" />
-          </section>
+        {/* Feature list */}
+        <section
+          className="mx-auto w-full max-w-5xl px-6 py-16 sm:py-20"
+          aria-labelledby="alerts-heading"
+        >
+          <SectionEyebrow>Alerts</SectionEyebrow>
+          <h2
+            id="alerts-heading"
+            className="font-display text-2xl font-semibold tracking-tight sm:text-3xl"
+          >
+            What you can watch for
+          </h2>
+          <p className="mt-3 max-w-xl text-base text-muted-foreground">
+            Public CSE data only. Not a screener, not a trading terminal — just
+            the conditions you care about.
+          </p>
+          <FeatureList className="mt-10" />
+        </section>
 
+        {/* HyperUI mid CTA */}
+        <section className="mx-auto w-full max-w-5xl px-6 pb-4">
+          <MidCta telegramHref={botUrl} />
+        </section>
+
+        <section className="mx-auto w-full max-w-5xl px-6 py-16 sm:py-20">
           <FaqSection
-            className="mt-16"
             eyebrow="FAQ"
             heading="Before you start"
             description="Short answers. The dash is daily; Telegram is the push cherry."
             items={FAQ}
           />
-
           <EndCta telegramHref={botUrl} className="mt-16" />
-        </div>
+        </section>
       </main>
       <SiteFooter telegramHref={botUrl} />
     </div>

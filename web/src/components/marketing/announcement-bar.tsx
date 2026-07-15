@@ -69,7 +69,7 @@ export function AnnouncementBar({
       aria-label="Announcement"
       className="border-b border-border/70 bg-foreground text-background"
     >
-      <div className="mx-auto flex max-w-3xl items-center justify-between gap-3 px-4 py-2 sm:px-6">
+      <div className="mx-auto flex max-w-5xl items-center justify-between gap-3 px-4 py-2 sm:px-6">
         <p className="text-xs leading-snug sm:text-sm">
           {message}{" "}
           <Link
