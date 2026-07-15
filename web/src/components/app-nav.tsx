@@ -62,10 +62,14 @@ export function AppNav({ active }: { active?: string }) {
         <Link
           href="/"
           aria-label="Chime home"
-          className="rounded-sm focus-visible:ring-2 focus-visible:ring-ring/50 focus-visible:outline-none"
+          className="shrink-0 rounded-sm focus-visible:ring-2 focus-visible:ring-ring/50 focus-visible:outline-none"
           onClick={() => setOpen(false)}
         >
-          <ChimeWordmark size="sm" className="motion-safe:transition-opacity motion-safe:hover:opacity-80" />
+          <ChimeWordmark
+            size="sm"
+            priority
+            className="motion-safe:transition-opacity motion-safe:hover:opacity-80"
+          />
         </Link>
 
         {/* Desktop / tablet */}

@@ -51,11 +51,28 @@ export function isLoopbackHost(host: unknown): boolean {
 }
 
 /**
+ * Vercel-injected deployment hostname (build/runtime system env — never
+ * derived from the incoming request), if this process is running there.
+ * There is no shared loopback listener across a serverless invocation, so
+ * on Vercel the ``127.0.0.1:$PORT`` fallback below is unreachable and every
+ * SSR page using ``serverApiGet`` would degrade. Prefer the stable
+ * production alias when set, else the per-deployment URL.
+ */
+function resolveVercelTrustedOrigin(env: NodeJS.ProcessEnv): string {
+  const host = env.VERCEL_PROJECT_PRODUCTION_URL || env.VERCEL_URL;
+  if (typeof host !== "string" || !host.trim()) return "";
+  const bare = host.trim();
+  if (!isSafeInternalHost(bare)) return "";
+  return `https://${bare}`;
+}
+
+/**
  * Origin for cookie-bearing SSR → /api/v1 fetches.
  *
  * Medium: never trust client ``Host`` / ``X-Forwarded-*`` — those used to
  * exfiltrate the session cookie to an attacker-controlled host. Prefer
- * ``DASH_INTERNAL_ORIGIN`` (loopback only) else ``http://127.0.0.1:$PORT``.
+ * ``DASH_INTERNAL_ORIGIN`` (loopback only), else the Vercel platform's own
+ * system env var (also not client-controlled), else ``http://127.0.0.1:$PORT``.
  */
 export function resolveInternalOrigin(
   env: NodeJS.ProcessEnv = process.env,
@@ -81,6 +98,8 @@ export function resolveInternalOrigin(
       /* fall through */
     }
   }
+  const vercelOrigin = resolveVercelTrustedOrigin(env);
+  if (vercelOrigin) return vercelOrigin;
   const portEnv = env.PORT;
   const portRaw = typeof portEnv === "string" ? portEnv.trim() : "";
   const port = /^\d{1,5}$/.test(portRaw) ? portRaw : "3000";

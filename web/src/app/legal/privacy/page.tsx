@@ -1,6 +1,6 @@
 import { ChimeWordmark } from "@/components/brand/chime-brand";
 import { MarketingNav } from "@/components/marketing/marketing-nav";
-import { SiteFooter } from "@/components/marketing/site-footer";
+import { ChimeFooter } from "@/components/marketing/chime-footer";
 import { telegramBotUrl } from "@/lib/marketing";
 
 export const metadata = {
@@ -39,7 +39,7 @@ export default function PrivacyPage() {
           </p>
         </div>
       </main>
-      <SiteFooter telegramHref={botUrl} />
+      <ChimeFooter telegramHref={botUrl} />
     </div>
   );
 }

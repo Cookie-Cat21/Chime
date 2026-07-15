@@ -2,7 +2,7 @@ import Link from "next/link";
 
 import { ChimeWordmark } from "@/components/brand/chime-brand";
 import { MarketingNav } from "@/components/marketing/marketing-nav";
-import { SiteFooter } from "@/components/marketing/site-footer";
+import { ChimeFooter } from "@/components/marketing/chime-footer";
 import { NfaInline } from "@/components/nfa-inline";
 import { Button } from "@/components/ui/button";
 import { telegramBotUrl } from "@/lib/marketing";
@@ -96,7 +96,7 @@ export default function PricingPage() {
           </p>
         ) : null}
       </main>
-      <SiteFooter telegramHref={botUrl} />
+      <ChimeFooter telegramHref={botUrl} />
     </div>
   );
 }

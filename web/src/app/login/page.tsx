@@ -58,8 +58,11 @@ export default async function LoginPage({
             <ChimeWordmark size="hero" priority />
           </Link>
         </div>
-        <h1 className="chime-rise chime-rise-delay-1 mt-5 text-xl font-medium text-foreground sm:text-2xl">
-          CSE dash. Telegram when it fires.
+        <h1 className="chime-rise chime-rise-delay-1 mt-5 font-display text-2xl font-semibold tracking-tight text-foreground sm:text-3xl">
+          CSE alerts on Telegram.
+          <span className="mt-1 block text-muted-foreground">
+            Dash when you need to manage.
+          </span>
         </h1>
         {sessionExpired ? (
           <p
