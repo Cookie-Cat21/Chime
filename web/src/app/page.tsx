@@ -113,13 +113,13 @@ export default async function HomePage() {
           </div>
         </section>
 
-        {/* Proof — phone hard-cut where the grey band ends */}
+        {/* Proof — phone clipped flush with the band’s bottom edge (no pad under it) */}
         <section
           aria-labelledby="proof-heading"
-          className="relative overflow-hidden border-y border-border/70 bg-foreground/[0.03]"
+          className="overflow-hidden border-y border-border/70 bg-foreground/[0.03]"
         >
-          <div className="mx-auto grid w-full max-w-5xl px-6 py-14 sm:py-16 lg:grid-cols-12 lg:gap-12">
-            <div className="lg:col-span-5">
+          <div className="mx-auto grid w-full max-w-5xl grid-cols-1 items-stretch px-6 pt-14 sm:pt-16 lg:grid-cols-12 lg:gap-12">
+            <div className="pb-14 sm:pb-16 lg:col-span-5">
               <SectionEyebrow>The cherry — Telegram</SectionEyebrow>
               <h2
                 id="proof-heading"
@@ -133,19 +133,12 @@ export default async function HomePage() {
               </p>
             </div>
 
-            {/* Mobile: short clip well */}
-            <div className="relative mt-10 h-[250px] overflow-hidden sm:h-[280px] lg:hidden">
-              <div className="mx-auto w-[300px] sm:w-[340px]">
+            {/* Clip column: no bottom padding — cut lands on the colour edge */}
+            <div className="relative h-[300px] overflow-hidden sm:h-[340px] lg:col-span-7 lg:h-auto lg:min-h-0">
+              <div className="absolute top-6 left-1/2 w-[320px] -translate-x-1/2 sm:w-[360px] lg:top-8 lg:right-0 lg:left-auto lg:w-[420px] lg:translate-x-0">
                 <TelegramProof />
               </div>
             </div>
-
-            <div className="hidden lg:col-span-7 lg:block" aria-hidden />
-          </div>
-
-          {/* Desktop: fills band from top offset to bottom edge, clips phone there */}
-          <div className="pointer-events-none absolute top-12 right-[max(1.25rem,calc((100%-64rem)/2))] bottom-0 hidden w-[400px] overflow-hidden lg:block">
-            <TelegramProof />
           </div>
         </section>
 

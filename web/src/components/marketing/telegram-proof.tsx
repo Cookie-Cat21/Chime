@@ -11,7 +11,7 @@ export function TelegramProof({ className }: { className?: string }) {
       aria-label="Example Telegram alert notification on a phone"
     >
       <div className="rounded-[2.75rem] border border-foreground/25 bg-foreground p-[10px] shadow-sm">
-        <div className="relative h-[640px] overflow-hidden rounded-[2.2rem] bg-[oklch(0.13_0.012_260)] text-white">
+        <div className="relative h-[720px] overflow-hidden rounded-[2.2rem] bg-[oklch(0.13_0.012_260)] text-white">
           <div
             aria-hidden
             className="absolute inset-0 bg-[radial-gradient(120%_60%_at_50%_0%,oklch(0.28_0.02_250)_0%,transparent_55%)]"
