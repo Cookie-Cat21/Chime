@@ -114,9 +114,19 @@ def test_web_runtime_sources_do_not_import_or_call_cse_lk() -> None:
 
 
 def test_dashboard_pages_render_nfa_footer() -> None:
-    """Every dash page keeps sitewide NFA footer chrome (WS-028)."""
+    """Every dash page keeps sitewide NFA footer chrome (WS-028).
+
+    Marketing landing uses SiteFooter (embeds NFA_FOOTER) instead of NfaFooter.
+    """
+    landing = WEB / "src" / "app" / "page.tsx"
+    landing_src = landing.read_text(encoding="utf-8")
+    assert 'import { SiteFooter } from "@/components/marketing/site-footer";' in landing_src
+    assert "<SiteFooter" in landing_src
+    assert "NFA_FOOTER" in (
+        WEB / "src" / "components" / "marketing" / "site-footer.tsx"
+    ).read_text(encoding="utf-8")
+
     page_paths = [
-        WEB / "src" / "app" / "page.tsx",
         WEB / "src" / "app" / "login" / "page.tsx",
         WEB / "src" / "app" / "overview" / "page.tsx",
         WEB / "src" / "app" / "watchlist" / "page.tsx",
@@ -931,10 +941,16 @@ def test_ardeno_kit_components_exist_and_are_wired() -> None:
             ), f"{name} must not vendor {tok}"
 
     landing = (WEB / "src" / "app" / "page.tsx").read_text(encoding="utf-8")
-    assert "ChatBubble" in landing
-    assert "Steps" in landing
+    # Option A landing: phone-peek proof + HowItWorks + FAQ (kit still present).
+    assert "TelegramProof" in landing
+    assert "HowItWorks" in landing
     assert "FaqSection" in landing
     assert "ChimeWordmark" in landing
+    assert "SiteFooter" in landing
+    assert (WEB / "src" / "components" / "kit" / "chat-bubble.tsx").is_file()
+    assert (WEB / "src" / "components" / "kit" / "steps.tsx").is_file()
+    assert (WEB / "src" / "components" / "marketing" / "how-it-works.tsx").is_file()
+    assert (WEB / "src" / "components" / "marketing" / "telegram-proof.tsx").is_file()
 
     health = (WEB / "src" / "app" / "health" / "page.tsx").read_text(encoding="utf-8")
     assert "StatCard" in health
