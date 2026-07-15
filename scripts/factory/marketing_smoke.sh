@@ -20,7 +20,7 @@ check() {
 
 check "/" \
   "chime-atmosphere" \
-  "CSE moves. You hear it." \
+  "CSE alerts on Telegram" \
   "Live on Telegram" \
   "Alerts fire on Telegram" \
   "How it works" \
@@ -28,7 +28,6 @@ check "/" \
   "Activity signals" \
   "Ready when the market moves" \
   "chime-announce" \
-  "chime-cta-fired" \
   "Not financial advice"
 
 check "/pricing" \

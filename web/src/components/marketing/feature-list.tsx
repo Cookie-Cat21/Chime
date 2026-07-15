@@ -48,10 +48,7 @@ const DEFAULT_FEATURES: Feature[] = [
   },
 ];
 
-/**
- * HyperUI “List with content” — rows, not a 3-card SaaS wall.
- * Optional split: sticky heading column on large screens (via page layout).
- */
+/** HyperUI feature-list pattern — rows, not a 3-card SaaS wall. */
 export function FeatureList({
   features = DEFAULT_FEATURES,
   className,
@@ -60,7 +57,12 @@ export function FeatureList({
   className?: string;
 }) {
   return (
-    <ul className={cn("space-y-0 divide-y divide-border/70 border-y border-border/70", className)}>
+    <ul
+      className={cn(
+        "divide-y divide-border/70 border-y border-border/70",
+        className,
+      )}
+    >
       {features.map((feature) => {
         const Icon = feature.icon;
         return (
@@ -69,13 +71,13 @@ export function FeatureList({
             className="group flex gap-4 py-5 motion-safe:transition-colors motion-safe:hover:bg-foreground/[0.03]"
           >
             <span
-              className="mt-0.5 flex size-10 shrink-0 items-center justify-center rounded-md border border-border/80 bg-white motion-safe:transition-transform motion-safe:group-hover:scale-105"
+              className="mt-0.5 flex size-9 shrink-0 items-center justify-center rounded-md border border-border/70 bg-card/60"
               aria-hidden
             >
-              <Icon className="size-4 text-[var(--ink)]" />
+              <Icon className="size-4 text-foreground" />
             </span>
             <div className="min-w-0">
-              <p className="font-display text-base font-semibold tracking-tight text-[var(--ink)]">
+              <p className="text-sm font-semibold text-foreground">
                 {feature.title}
               </p>
               <p className="mt-1 text-sm leading-relaxed text-muted-foreground">

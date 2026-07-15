@@ -1,13 +1,9 @@
 import Link from "next/link";
 
-import { FiredCtaLink } from "@/components/marketing/fired-cta";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 
-/**
- * HyperUI CTA rhythm — ink block + fired primary.
- * No logo cloud / device frame.
- */
+/** HyperUI CTA rhythm — quiet bordered band, default primary. */
 export function MidCta({
   telegramHref,
   className,
@@ -21,18 +17,14 @@ export function MidCta({
   return (
     <section
       className={cn(
-        "relative overflow-hidden rounded-xl bg-[var(--ink)] px-6 py-8 text-white sm:px-10 sm:py-12",
+        "rounded-xl border border-border/80 bg-card/70 px-6 py-8 sm:px-10 sm:py-10",
         className,
       )}
       aria-labelledby="mid-cta-heading"
     >
-      <div
-        aria-hidden
-        className="absolute top-0 left-0 h-full w-1.5 bg-[var(--fired)]"
-      />
-      <div className="relative flex flex-col gap-6 sm:flex-row sm:items-end sm:justify-between">
-        <div className="max-w-md pl-2">
-          <p className="text-xs font-semibold tracking-[0.18em] text-white/55 uppercase">
+      <div className="flex flex-col gap-6 sm:flex-row sm:items-end sm:justify-between">
+        <div className="max-w-md">
+          <p className="text-xs font-semibold tracking-[0.18em] text-muted-foreground uppercase">
             Primary surface
           </p>
           <h2
@@ -41,21 +33,26 @@ export function MidCta({
           >
             Alerts fire on Telegram.
           </h2>
-          <p className="mt-3 text-sm leading-relaxed text-white/70 sm:text-base">
+          <p className="mt-3 text-sm leading-relaxed text-muted-foreground sm:text-base">
             The dash is for watchlist and rules. When something crosses, you get
             the ping — even if this tab is closed.
           </p>
         </div>
-        <div className="flex shrink-0 flex-wrap gap-3 pl-2 sm:pl-0">
-          <FiredCtaLink href={botHref} external={botExternal}>
-            {botExternal ? "Open Telegram bot" : "Get started"}
-          </FiredCtaLink>
+        <div className="flex shrink-0 flex-wrap gap-3">
           <Button
             asChild
             size="lg"
-            variant="outline"
-            className="border-white/35 bg-transparent text-white hover:bg-white/10 hover:text-white"
+            className="motion-safe:transition-transform motion-safe:hover:-translate-y-0.5"
           >
+            {botExternal ? (
+              <a href={botHref} target="_blank" rel="noopener noreferrer">
+                Open Telegram bot
+              </a>
+            ) : (
+              <Link href={botHref}>Get started</Link>
+            )}
+          </Button>
+          <Button asChild size="lg" variant="outline">
             <Link href="/login">Open the dash</Link>
           </Button>
         </div>
