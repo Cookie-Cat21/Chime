@@ -1,3 +1,6 @@
+import { TelegramIcon } from "@hugeicons/core-free-icons";
+import { HugeiconsIcon } from "@hugeicons/react";
+
 import { cn } from "@/lib/utils";
 
 /**
@@ -35,9 +38,9 @@ export function TelegramProof({ className }: { className?: string }) {
               <div className="flex items-start gap-3">
                 <span
                   aria-hidden
-                  className="mt-0.5 flex size-10 shrink-0 items-center justify-center rounded-[11px] bg-[#2AABEE] text-xs font-bold tracking-tight text-white"
+                  className="mt-0.5 flex size-10 shrink-0 items-center justify-center rounded-[11px] bg-[#2AABEE] text-white"
                 >
-                  TG
+                  <HugeiconsIcon icon={TelegramIcon} size={20} />
                 </span>
                 <div className="min-w-0 flex-1">
                   <div className="flex items-baseline justify-between gap-2">

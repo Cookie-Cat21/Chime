@@ -4,13 +4,15 @@ import { redirect } from "next/navigation";
 
 import { ChimeWordmark } from "@/components/brand/chime-brand";
 import { FaqSection } from "@/components/kit/faq-section";
+import { ChimeBento } from "@/components/marketing/chime-bento";
 import { EndCta } from "@/components/marketing/end-cta";
 import { FeatureList } from "@/components/marketing/feature-list";
+import { HeroGridBackdrop } from "@/components/marketing/hero-grid-backdrop";
 import { HowItWorks } from "@/components/marketing/how-it-works";
 import { MarketingNav } from "@/components/marketing/marketing-nav";
 import { MidCta } from "@/components/marketing/mid-cta";
 import { SectionEyebrow } from "@/components/marketing/section-eyebrow";
-import { SiteFooter } from "@/components/marketing/site-footer";
+import { ChimeFooter } from "@/components/marketing/chime-footer";
 import { TelegramProof } from "@/components/marketing/telegram-proof";
 import { NfaInline } from "@/components/nfa-inline";
 import { Button } from "@/components/ui/button";
@@ -76,8 +78,9 @@ export default async function HomePage() {
       <MarketingNav />
       <main id="main-content" tabIndex={-1} className="flex flex-1 flex-col">
         {/* Hero — fills first viewport; proof stays below the fold */}
-        <section className="mx-auto flex min-h-[calc(100svh-3.5rem)] w-full max-w-5xl flex-col justify-center px-6 py-16 sm:py-20">
-          <div className="max-w-xl lg:max-w-2xl">
+        <section className="relative mx-auto flex min-h-[calc(100svh-3.5rem)] w-full max-w-5xl flex-col justify-center px-6 py-16 sm:py-20">
+          <HeroGridBackdrop />
+          <div className="relative max-w-xl lg:max-w-2xl">
             <div className="chime-rise">
               <ChimeWordmark size="hero" priority />
             </div>
@@ -160,6 +163,21 @@ export default async function HomePage() {
             <FeatureList className="mt-10" />
           </section>
 
+          <section className="mt-20" aria-labelledby="bento-heading">
+            <SectionEyebrow>Under the hood</SectionEyebrow>
+            <h2
+              id="bento-heading"
+              className="max-w-xl font-display text-2xl font-semibold tracking-tight sm:text-3xl"
+            >
+              The dash, at a glance.
+            </h2>
+            <p className="mt-3 max-w-xl text-base text-muted-foreground">
+              A poller that never stops checking, and a bot that never keeps
+              you waiting.
+            </p>
+            <ChimeBento className="mt-10" />
+          </section>
+
           <MidCta telegramHref={botUrl} className="mt-20" />
 
           <FaqSection
@@ -173,7 +191,7 @@ export default async function HomePage() {
           <EndCta telegramHref={botUrl} className="mt-20" />
         </div>
       </main>
-      <SiteFooter telegramHref={botUrl} />
+      <ChimeFooter telegramHref={botUrl} />
     </div>
   );
 }
