@@ -4,9 +4,9 @@ import { redirect } from "next/navigation";
 
 import { ChimeWordmark } from "@/components/brand/chime-brand";
 import { FaqSection } from "@/components/kit/faq-section";
-import { Steps } from "@/components/kit/steps";
 import { EndCta } from "@/components/marketing/end-cta";
 import { FeatureList } from "@/components/marketing/feature-list";
+import { HowItWorks } from "@/components/marketing/how-it-works";
 import { MarketingNav } from "@/components/marketing/marketing-nav";
 import { MidCta } from "@/components/marketing/mid-cta";
 import { SectionEyebrow } from "@/components/marketing/section-eyebrow";
@@ -139,21 +139,7 @@ export default async function HomePage() {
         </section>
 
         <div className="mx-auto flex w-full max-w-5xl flex-1 flex-col px-6 py-16 sm:py-20">
-          <section id="how-it-works" className="scroll-mt-28">
-            <SectionEyebrow>How it works</SectionEyebrow>
-            <h2 className="max-w-xl font-display text-2xl font-semibold tracking-tight sm:text-3xl">
-              Set it once. Get pinged when it matters.
-            </h2>
-            <div className="mt-10">
-              <Steps
-                steps={[
-                  { label: "Browse & watch CSE symbols", status: "complete" },
-                  { label: "Set rules in the dash", status: "complete" },
-                  { label: "Telegram pings on fire", status: "active" },
-                ]}
-              />
-            </div>
-          </section>
+          <HowItWorks />
 
           <section className="mt-20" aria-labelledby="alerts-heading">
             <SectionEyebrow>Alerts</SectionEyebrow>
