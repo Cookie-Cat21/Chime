@@ -1124,7 +1124,11 @@ def test_symbol_compare_chart_max_four() -> None:
     assert "MAX_COMPARE_SYMBOLS = 4" in route_src
     assert "MAX_COMPARE_SYMBOLS = 4" in lib_src
     assert "price_snapshots" in route_src
-    assert "no cse.lk" in route_src.lower() or "No cse.lk" in route_src or "no cse" in route_src.lower()
+    assert (
+        "no cse.lk" in route_src.lower()
+        or "No cse.lk" in route_src
+        or "no cse" in route_src.lower()
+    )
     assert "buildCompareChartRows" in lib_src
     assert "indexed" in lib_src and "polyline" in ui_src
     assert "SymbolCompareChart" in page
@@ -1136,9 +1140,15 @@ def test_dash_ux_improve_loops() -> None:
     """UX loops: watch state, alert type deep-link, metrics fail, chips, 404."""
     watch = (WEB / "src" / "components" / "watchlist-controls.tsx").read_text(encoding="utf-8")
     alerts = (WEB / "src" / "app" / "alerts" / "page.tsx").read_text(encoding="utf-8")
-    panel = (WEB / "src" / "components" / "kit" / "filing-metrics-panel.tsx").read_text(encoding="utf-8")
+    panel = (
+        (WEB / "src" / "components" / "kit" / "filing-metrics-panel.tsx")
+        .read_text(encoding="utf-8")
+    )
     overview = (WEB / "src" / "app" / "overview" / "page.tsx").read_text(encoding="utf-8")
-    chips = (WEB / "src" / "components" / "kit" / "disclosure-timeline.tsx").read_text(encoding="utf-8")
+    chips = (
+        (WEB / "src" / "components" / "kit" / "disclosure-timeline.tsx")
+        .read_text(encoding="utf-8")
+    )
     spark = (WEB / "src" / "components" / "sparkline.tsx").read_text(encoding="utf-8")
     badge = (WEB / "src" / "components" / "kit" / "change-badge.tsx").read_text(encoding="utf-8")
     assert "watching?: boolean" in watch or "watching = false" in watch
@@ -1150,8 +1160,14 @@ def test_dash_ux_improve_loops() -> None:
     assert (WEB / "src" / "app" / "overview" / "loading.tsx").is_file()
     assert (WEB / "src" / "app" / "settings" / "loading.tsx").is_file()
     assert (WEB / "src" / "app" / "not-found.tsx").is_file()
-    assert "ExpandableBrief" in panel or (WEB / "src" / "components" / "kit" / "expandable-brief.tsx").is_file()
+    assert "ExpandableBrief" in panel or (
+        WEB / "src" / "components" / "kit" / "expandable-brief.tsx"
+    ).is_file()
     assert "stored ticks" in spark
     assert "sr-only" in badge
-    assert "safe-area-inset-bottom" in (WEB / "src" / "app" / "symbols" / "[symbol]" / "page.tsx").read_text(encoding="utf-8")
+    symbol_page_src = (
+        (WEB / "src" / "app" / "symbols" / "[symbol]" / "page.tsx")
+        .read_text(encoding="utf-8")
+    )
+    assert "safe-area-inset-bottom" in symbol_page_src
 
