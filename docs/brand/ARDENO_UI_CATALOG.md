@@ -1,7 +1,8 @@
 # Ardeno UI Elements → Chime
 
 Catalog of the bookmark folder vs what Chime will actually ship.
-**Authority:** `docs/factory/DASH_COMPONENT_FILTER.md` (no dump-all, no Pro, shadcn-first).
+**Authority:** `docs/factory/DASH_COMPONENT_FILTER.md` (no dump-all, no Pro, shadcn-first).  
+**Marketing site plan:** `docs/factory/MARKETING_SITE_MASTER_PLAN.md` (Waves 1–4: densify `/`, pricing stub, light blog).
 
 | Bookmark | Source | Chime action |
 |---|---|---|
