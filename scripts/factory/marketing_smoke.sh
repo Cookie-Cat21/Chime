@@ -21,13 +21,12 @@ check() {
 check "/" \
   "chime-atmosphere" \
   "CSE alerts on Telegram" \
-  "Live on Telegram" \
+  "The cherry — Telegram" \
   "Alerts fire on Telegram" \
   "How it works" \
   "What you can watch for" \
   "Activity signals" \
   "Ready when the market moves" \
-  "chime-announce" \
   "Not financial advice"
 
 check "/pricing" \
