@@ -1,7 +1,8 @@
-"""Transparent path-based research score (v0).
+"""Transparent research scores (path_v0 / path_v1).
 
-Higher score ≠ buy. Components are explainable momentum / risk / liquidity
-factors from ``daily_bars``. Reasons must pass buy/sell guardrails.
+Higher score ≠ buy. Components are explainable factors from ``daily_bars``
+plus optional filing YoY / sector-peer relative strength. Reasons must pass
+buy/sell guardrails.
 """
 
 from __future__ import annotations
@@ -17,7 +18,19 @@ from chime.scenarios.guardrails import (
     assert_safe_scenario_output,
 )
 
-MODEL_VERSION = "path_v0"
+MODEL_VERSION = "path_v1"
+MODEL_VERSION_V0 = "path_v0"
+
+
+@dataclass(frozen=True, slots=True)
+class ExtraFactors:
+    """Optional non-path inputs for ``path_v1`` (all fail-closed / optional)."""
+
+    eps_yoy_pct: float | None = None
+    rev_yoy_pct: float | None = None
+    profit_yoy_pct: float | None = None
+    sector_peer_ret_20d: float | None = None
+    disclosure_count_30d: int | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -59,7 +72,20 @@ def _safe_reason(text: str) -> str | None:
         return None
 
 
-def score_symbol_path(bars: list[DailyBar]) -> ScoreResult | None:
+def _finite_opt(value: float | None) -> float | None:
+    if value is None or isinstance(value, bool):
+        return None
+    if not isinstance(value, int | float) or not math.isfinite(value):
+        return None
+    return float(value)
+
+
+def score_symbol_path(
+    bars: list[DailyBar],
+    *,
+    extra: ExtraFactors | None = None,
+    model_version: str = MODEL_VERSION,
+) -> ScoreResult | None:
     """Score one symbol from ascending daily bars. ``None`` if < 5 bars."""
     if not bars:
         return None
@@ -76,11 +102,23 @@ def score_symbol_path(bars: list[DailyBar]) -> ScoreResult | None:
     rets_20 = _returns(prices[-21:]) if len(prices) >= 21 else _returns(prices)
     vol_20 = statistics.pstdev(rets_20) if len(rets_20) >= 5 else None
 
-    vols = [b.volume for b in ordered[-20:] if b.volume is not None and math.isfinite(b.volume)]
+    vols = [
+        b.volume
+        for b in ordered[-20:]
+        if b.volume is not None and math.isfinite(b.volume)
+    ]
     liq = statistics.fmean(vols) if vols else None
 
-    # Simple transparent blend → roughly [-100, 100].
-    # Momentum positive; vol penalty; log liquidity tilt.
+    last_vol = ordered[-1].volume
+    vol_spike: float | None = None
+    if (
+        last_vol is not None
+        and math.isfinite(last_vol)
+        and liq is not None
+        and liq > 0
+    ):
+        vol_spike = last_vol / liq
+
     mom = 0.0
     mom_w = 0.0
     if ret_5 is not None:
@@ -102,8 +140,48 @@ def score_symbol_path(bars: list[DailyBar]) -> ScoreResult | None:
     if liq is not None and liq > 0:
         liq_term = min(15.0, math.log10(liq + 1.0) * 3.0)
 
-    # mom_term is already in score-ish units (e.g. 0.05*40 = 2). Clamp.
-    raw = mom_term - vol_penalty + liq_term
+    vol_spike_term = 0.0
+    if vol_spike is not None and vol_spike > 1.5:
+        # Mild activity tilt — capped; not a tip.
+        vol_spike_term = min(8.0, (vol_spike - 1.5) * 2.0)
+
+    extras = extra or ExtraFactors()
+    eps_yoy = _finite_opt(extras.eps_yoy_pct)
+    rev_yoy = _finite_opt(extras.rev_yoy_pct)
+    profit_yoy = _finite_opt(extras.profit_yoy_pct)
+    peer_ret = _finite_opt(extras.sector_peer_ret_20d)
+    disc_30 = extras.disclosure_count_30d
+    if isinstance(disc_30, bool) or not isinstance(disc_30, int) or disc_30 < 0:
+        disc_30 = None
+
+    # Filing YoY: percentages are already in % points from extract (e.g. 12.5).
+    filing_term = 0.0
+    if eps_yoy is not None:
+        filing_term += max(-12.0, min(12.0, eps_yoy / 10.0))
+    if rev_yoy is not None:
+        filing_term += max(-8.0, min(8.0, rev_yoy / 15.0))
+    if profit_yoy is not None:
+        filing_term += max(-8.0, min(8.0, profit_yoy / 15.0))
+
+    rs_term = 0.0
+    rs_gap: float | None = None
+    if ret_20 is not None and peer_ret is not None:
+        rs_gap = ret_20 - peer_ret
+        rs_term = max(-15.0, min(15.0, rs_gap * 80.0))
+
+    disc_term = 0.0
+    if disc_30 is not None and disc_30 > 0:
+        disc_term = min(5.0, float(disc_30) * 0.5)
+
+    raw = (
+        mom_term
+        - vol_penalty
+        + liq_term
+        + vol_spike_term
+        + filing_term
+        + rs_term
+        + disc_term
+    )
     score = max(-100.0, min(100.0, raw))
 
     components: dict[str, float | None] = {
@@ -112,9 +190,20 @@ def score_symbol_path(bars: list[DailyBar]) -> ScoreResult | None:
         "ret_60d": ret_60,
         "vol_20d": vol_20,
         "liquidity_20d": liq,
+        "vol_spike": vol_spike,
         "mom_term": mom_term,
         "vol_penalty": vol_penalty,
         "liq_term": liq_term,
+        "vol_spike_term": vol_spike_term,
+        "eps_yoy_pct": eps_yoy,
+        "rev_yoy_pct": rev_yoy,
+        "profit_yoy_pct": profit_yoy,
+        "filing_term": filing_term,
+        "sector_peer_ret_20d": peer_ret,
+        "rs_gap_20d": rs_gap,
+        "rs_term": rs_term,
+        "disclosure_count_30d": float(disc_30) if disc_30 is not None else None,
+        "disc_term": disc_term,
     }
 
     reasons: list[str] = []
@@ -134,18 +223,49 @@ def score_symbol_path(bars: list[DailyBar]) -> ScoreResult | None:
         r = _safe_reason(f"20-session daily volatility {vol_20 * 100.0:.2f}%")
         if r:
             reasons.append(r)
+    if vol_spike is not None and vol_spike > 1.5:
+        r = _safe_reason(f"Latest volume {vol_spike:.1f}× 20-session average")
+        if r:
+            reasons.append(r)
     if liq is not None and liq > 0:
         r = _safe_reason(f"Avg 20-session volume {liq:,.0f} shares")
         if r:
             reasons.append(r)
+    if eps_yoy is not None:
+        direction = "up" if eps_yoy >= 0 else "down"
+        r = _safe_reason(f"Latest filing EPS YoY {direction} {abs(eps_yoy):.1f}%")
+        if r:
+            reasons.append(r)
+    if rev_yoy is not None and (eps_yoy is None or abs(rev_yoy) > abs(eps_yoy)):
+        direction = "up" if rev_yoy >= 0 else "down"
+        r = _safe_reason(f"Latest filing revenue YoY {direction} {abs(rev_yoy):.1f}%")
+        if r:
+            reasons.append(r)
+    if rs_gap is not None:
+        direction = "ahead of" if rs_gap >= 0 else "behind"
+        r = _safe_reason(
+            f"20-session path {direction} sector peers by {abs(rs_gap) * 100.0:.1f} pts"
+        )
+        if r:
+            reasons.append(r)
+    if disc_30 is not None and disc_30 > 0:
+        r = _safe_reason(f"{disc_30} disclosure(s) in last 30 days")
+        if r:
+            reasons.append(r)
     if len(prices) < 60:
-        r = _safe_reason(f"Limited history ({len(prices)} daily bars; max CSE path ~1y)")
+        r = _safe_reason(
+            f"Limited history ({len(prices)} daily bars; max CSE path ~1y)"
+        )
         if r:
             reasons.append(r)
     if not reasons:
         r = _safe_reason("Path factors available; research score only — not advice")
         if r:
             reasons.append(r)
+
+    version = model_version.strip() if isinstance(model_version, str) else MODEL_VERSION
+    if not version:
+        version = MODEL_VERSION
 
     return ScoreResult(
         symbol=symbol,
@@ -154,4 +274,5 @@ def score_symbol_path(bars: list[DailyBar]) -> ScoreResult | None:
         components=components,
         reasons=reasons,
         bar_count=len(prices),
+        model_version=version,
     )

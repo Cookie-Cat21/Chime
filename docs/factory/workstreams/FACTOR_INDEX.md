@@ -1,6 +1,6 @@
 # Signal Board Factor Catalog (F-001…F-100)
 
-**Status:** Skeleton — research IDs for waved execution (≤8 preferred / 16 hard).  
+**Status:** Skeleton + first wave landed in `path_v1`.  
 **Product:** Research scores + forecasts · NFA · never “invest tips”.  
 **Data spine:** CSE Tier A (`daily_bars`, snapshots, filings, sectors). Tier B macros later ([THIRD_PARTY_DATA.md](../../THIRD_PARTY_DATA.md)).
 
@@ -25,18 +25,30 @@
 | F-081…090 | Per-issuer idiosyncrasy (thin names, dual listings) |
 | F-091…100 | External macro (DEFER until ToS-clean adapter) |
 
-## Seed OPEN (implement next waves)
+## Status board
 
 | ID | Hypothesis | Status |
 |---|---|---|
-| F-001 | 5d / 20d / 60d path returns predict next-session direction | PARTIAL (`path_v0`) |
-| F-002 | 20d realized vol penalizes score (risk) | PARTIAL (`path_v0`) |
-| F-003 | Log avg volume tilts liquid names | PARTIAL (`path_v0`) |
-| F-011 | Volume spike vs 20d avg → short-horizon move | OPEN |
-| F-021 | Symbol ret − sector ret (RS) | OPEN |
-| F-031 | EPS YoY from `filing_metrics` when extract_ok | OPEN |
-| F-041 | Disclosure count 30d | OPEN |
-| F-081 | Thin history (<60 bars) confidence discount | PARTIAL (reason only) |
-| F-091…100 | Macro | DEFER |
+| F-001 | 5d / 20d / 60d path returns | **DONE** (`path_v1` mom_term) |
+| F-002 | 20d realized vol penalty | **DONE** |
+| F-003 | Log avg volume tilt | **DONE** |
+| F-004 | Gap / range factors | OPEN |
+| F-011 | Volume spike vs 20d avg | **DONE** (`vol_spike`) |
+| F-012 | Turnover regimes | OPEN |
+| F-021 | Symbol ret − sector-peer median ret | **DONE** (needs `stocks.sector` populated) |
+| F-022 | ASPI-relative strength | OPEN |
+| F-031 | EPS YoY from `filing_comparisons` | **DONE** |
+| F-032 | Revenue / profit YoY | **DONE** |
+| F-041 | Disclosure count 30d | **DONE** |
+| F-042 | Category intensity | OPEN |
+| F-051…060 | Notice flags | OPEN |
+| F-061…070 | Calendar | OPEN |
+| F-071…080 | Rank stability | OPEN |
+| F-081 | Thin history discount | **PARTIAL** (reason) |
+| F-091…100 | Macro | **DEFER** |
 
-Remaining IDs F-004…F-100: fill as waves open (title + data source + kill metric). Do not spawn 100 agents at once.
+## Forecast lane
+
+Naive mean-return forecast walk-forward hit rate ≈ **0.47** on 50 symbols — **noise**. Overlay stays opt-in; see [SIGNAL_WALK_FORWARD.md](../../experiments/SIGNAL_WALK_FORWARD.md).
+
+Remaining IDs: open in waves ≤8. Do not spawn 100 agents at once.

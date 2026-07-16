@@ -311,11 +311,12 @@ def main(argv: list[str] | None = None) -> None:
             "drain-metrics",
             "path-backfill",
             "score-signals",
+            "eval-signals",
         ],
         help=(
             "bot | poller | both | migrate | tick | "
             "drain-pdfs | drain-briefs | drain-metrics | "
-            "path-backfill | score-signals"
+            "path-backfill | score-signals | eval-signals"
         ),
     )
     parser.add_argument(
@@ -469,6 +470,36 @@ def main(argv: list[str] | None = None) -> None:
                 await storage.close()
 
         asyncio.run(_score())
+        return
+
+    if args.command == "eval-signals":
+        configure_logging()
+        settings = Settings.from_env(require_token=False)
+        limit = args.limit if isinstance(args.limit, int) and args.limit > 0 else 40
+
+        async def _eval() -> None:
+            from chime.signals.eval import evaluate_walk_forward
+
+            storage = Storage(settings.database_url)
+            await storage.open()
+            try:
+                symbols = await storage.list_symbols_with_daily_bars()
+                symbols = symbols[:limit]
+                series = {}
+                for symbol in symbols:
+                    series[symbol] = await storage.list_daily_bars(symbol)
+                report = evaluate_walk_forward(series, horizon=5, min_history=30, step=5)
+                print(
+                    "eval-signals: "
+                    f"symbols={report.symbols} origins={report.origins} "
+                    f"dir_hits={report.direction_hits}/{report.direction_total} "
+                    f"hit_rate={report.hit_rate!s} mae={report.mae!s} "
+                    f"horizon={report.horizon}"
+                )
+            finally:
+                await storage.close()
+
+        asyncio.run(_eval())
         return
 
     settings = Settings.from_env(require_token=True)

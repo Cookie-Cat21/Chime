@@ -603,6 +603,115 @@ class Storage:
                 out.append(symbol)
         return out
 
+    async def get_stock_sector(self, symbol: str) -> str | None:
+        if not isinstance(symbol, str) or not symbol.strip():
+            return None
+        sym = symbol.strip().upper()
+        async with self._pool.connection() as conn:
+            row = await (
+                await conn.execute(
+                    "SELECT sector FROM stocks WHERE symbol = %s",
+                    (sym,),
+                )
+            ).fetchone()
+        if row is None:
+            return None
+        raw = _as_row(row).get("sector")
+        if not isinstance(raw, str) or not raw.strip():
+            return None
+        return raw.strip()
+
+    async def list_symbols_in_sector(self, sector: str) -> list[str]:
+        if not isinstance(sector, str) or not sector.strip():
+            return []
+        async with self._pool.connection() as conn:
+            rows = await (
+                await conn.execute(
+                    """
+                    SELECT symbol FROM stocks
+                    WHERE sector IS NOT NULL AND btrim(sector) = %s
+                    ORDER BY symbol ASC
+                    """,
+                    (sector.strip(),),
+                )
+            ).fetchall()
+        out: list[str] = []
+        for row in _as_rows(rows):
+            raw = row.get("symbol")
+            if isinstance(raw, str) and raw.strip():
+                out.append(raw.strip().upper())
+        return out
+
+    async def get_latest_filing_yoy(self, symbol: str) -> dict[str, float | None]:
+        """Latest exact/approx YoY deltas for extract_ok filings (fail soft)."""
+        empty: dict[str, float | None] = {
+            "eps_yoy_pct": None,
+            "rev_yoy_pct": None,
+            "profit_yoy_pct": None,
+        }
+        if not isinstance(symbol, str) or not symbol.strip():
+            return empty
+        sym = symbol.strip().upper()
+        async with self._pool.connection() as conn:
+            row = await (
+                await conn.execute(
+                    """
+                    SELECT
+                        fc.eps_delta_pct,
+                        fc.revenue_delta_pct,
+                        fc.profit_delta_pct
+                    FROM filing_metrics fm
+                    JOIN filing_comparisons fc
+                      ON fc.filing_metrics_id = fm.id
+                    WHERE fm.symbol = %s
+                      AND fm.extract_ok = TRUE
+                      AND fc.match_quality IN ('exact_yoy', 'approx_yoy')
+                    ORDER BY fm.fiscal_period_end DESC NULLS LAST, fm.id DESC
+                    LIMIT 1
+                    """,
+                    (sym,),
+                )
+            ).fetchone()
+        if row is None:
+            return empty
+        data = _as_row(row)
+
+        def _pct(key: str) -> float | None:
+            val = data.get(key)
+            if isinstance(val, bool) or not isinstance(val, int | float):
+                return None
+            if not math.isfinite(float(val)):
+                return None
+            return float(val)
+
+        return {
+            "eps_yoy_pct": _pct("eps_delta_pct"),
+            "rev_yoy_pct": _pct("revenue_delta_pct"),
+            "profit_yoy_pct": _pct("profit_delta_pct"),
+        }
+
+    async def count_disclosures_since(self, symbol: str, *, since: datetime) -> int:
+        if not isinstance(symbol, str) or not symbol.strip():
+            return 0
+        if not isinstance(since, datetime):
+            return 0
+        sym = symbol.strip().upper()
+        async with self._pool.connection() as conn:
+            row = await (
+                await conn.execute(
+                    """
+                    SELECT COUNT(*)::int AS n
+                    FROM disclosures
+                    WHERE symbol = %s AND published_at >= %s
+                    """,
+                    (sym, since),
+                )
+            ).fetchone()
+        if row is None:
+            return 0
+        counted = _pg_count(_as_row(row).get("n"))
+        return 0 if counted is None else counted
+
     async def list_daily_bars(self, symbol: str) -> list[DailyBar]:
         """Return ascending daily bars for ``symbol``."""
         if not isinstance(symbol, str):
