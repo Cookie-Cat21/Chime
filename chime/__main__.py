@@ -389,6 +389,16 @@ def main(argv: list[str] | None = None) -> None:
         action="store_true",
         help="For ml-always-on: fill sector relative-strength features",
     )
+    parser.add_argument(
+        "--aspi",
+        action="store_true",
+        help="For ml-always-on: join ASPI daily regime from POST /chartData",
+    )
+    parser.add_argument(
+        "--financials",
+        action="store_true",
+        help="For ml-always-on: join quarterly/annual filing-date features from POST /financials",
+    )
     args = parser.parse_args(argv)
     if args.force and args.command not in (
         "tick",
@@ -1062,6 +1072,8 @@ def main(argv: list[str] | None = None) -> None:
         )
         use_events = bool(args.events)
         use_sector_rs = bool(getattr(args, "sector_rs", False))
+        use_aspi = bool(getattr(args, "aspi", False))
+        use_financials = bool(getattr(args, "financials", False))
 
         async def _ao() -> None:
             from pathlib import Path
@@ -1070,14 +1082,26 @@ def main(argv: list[str] | None = None) -> None:
 
             storage = Storage(settings.database_url)
             await storage.open()
+            cse = None
+            if use_aspi or use_financials:
+                cse = CSEClient(
+                    base_url=settings.cse_base_url,
+                    timeout=settings.http_timeout_seconds,
+                    fail_max=settings.circuit_fail_max,
+                    reset_timeout=settings.circuit_reset_seconds,
+                    min_interval_seconds=settings.cse_min_interval_seconds,
+                )
             try:
                 baseline_mean = None
-                if use_events or use_sector_rs:
+                needs_delta = use_events or use_sector_rs or use_aspi or use_financials
+                if needs_delta:
                     base = await run_always_on(
                         storage=storage,
                         lever="baseline_cs_lmt_bag",
                         use_events=False,
                         use_sector_rs=False,
+                        use_aspi=False,
+                        use_financials=False,
                         limit_symbols=limit if limit and limit > 0 else None,
                         out_dir=Path("docs/experiments"),
                     )
@@ -1086,18 +1110,26 @@ def main(argv: list[str] | None = None) -> None:
                         "ml-always-on baseline: "
                         f"mean_symbol_hit={base.mean_symbol_hit}"
                     )
-                lever = "baseline_cs_lmt_bag"
-                if use_sector_rs and use_events:
-                    lever = "sector_rs_events_cs_lmt_bag"
-                elif use_sector_rs:
-                    lever = "sector_rs_cs_lmt_bag"
-                elif use_events:
-                    lever = "events_cs_lmt_bag"
+                parts = []
+                if use_aspi:
+                    parts.append("aspi")
+                if use_financials:
+                    parts.append("fin")
+                if use_sector_rs:
+                    parts.append("sector_rs")
+                if use_events:
+                    parts.append("events")
+                lever = (
+                    "_".join(parts) + "_cs_lmt_bag" if parts else "baseline_cs_lmt_bag"
+                )
                 result = await run_always_on(
                     storage=storage,
                     lever=lever,
                     use_events=use_events,
                     use_sector_rs=use_sector_rs,
+                    use_aspi=use_aspi,
+                    use_financials=use_financials,
+                    cse=cse,
                     baseline_mean=baseline_mean,
                     limit_symbols=limit if limit and limit > 0 else None,
                     out_dir=Path("docs/experiments"),
@@ -1109,9 +1141,12 @@ def main(argv: list[str] | None = None) -> None:
                     f"pooled={result.pooled_hit} "
                     f"ge70={result.symbols_ge_070}/{result.n_symbols} "
                     f"delta={result.delta_vs_baseline} "
-                    f"keep={result.keep}"
+                    f"keep={result.keep} "
+                    f"extras={result.extras}"
                 )
             finally:
+                if cse is not None:
+                    await cse.aclose()
                 await storage.close()
 
         asyncio.run(_ao())

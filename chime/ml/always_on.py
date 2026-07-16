@@ -264,12 +264,169 @@ def _walk_lmt_bagged(samples: list[Sample]) -> list[PredRow]:
     return rows
 
 
+def _window_ret(values: list[float], n: int) -> float:
+    if len(values) <= n:
+        return float("nan")
+    a, b = values[-(n + 1)], values[-1]
+    if a == 0 or not math.isfinite(a) or not math.isfinite(b):
+        return float("nan")
+    return (b / a) - 1.0
+
+
+def enrich_samples_with_aspi(
+    samples: list[Sample],
+    aspi: list[tuple[date, float, float | None]],
+) -> list[Sample]:
+    """Append aspi_ret_1/5/20, aspi_vol_20, stock_minus_aspi_5 (using ret_5d)."""
+    from chime.ml.features import FEATURE_NAMES
+
+    i5 = FEATURE_NAMES.index("ret_5d")
+    by_date = {d: v for d, v, _pc in aspi}
+    ordered_dates = sorted(by_date)
+    # prefix closes for each as_of
+    out: list[Sample] = []
+    for s in samples:
+        # closes up to as_of
+        closes = [by_date[d] for d in ordered_dates if d <= s.as_of]
+        if len(closes) < 5:
+            extras = (float("nan"),) * 5
+        else:
+            r1 = _window_ret(closes, 1)
+            r5 = _window_ret(closes, 5)
+            r20 = _window_ret(closes, 20)
+            rets = []
+            for i in range(1, min(21, len(closes))):
+                prev, cur = closes[-i - 1], closes[-i]
+                if prev and math.isfinite(prev) and math.isfinite(cur) and prev != 0:
+                    rets.append((cur / prev) - 1.0)
+            vol = float("nan")
+            if len(rets) >= 5:
+                mean = sum(rets) / len(rets)
+                var = sum((x - mean) ** 2 for x in rets) / len(rets)
+                vol = math.sqrt(var)
+            stock_r5 = s.x[i5] if i5 < len(s.x) else float("nan")
+            gap = (
+                stock_r5 - r5
+                if math.isfinite(stock_r5) and math.isfinite(r5)
+                else float("nan")
+            )
+            extras = (r1, r5, r20, vol, gap)
+        out.append(
+            Sample(
+                symbol=s.symbol,
+                as_of=s.as_of,
+                x=tuple(s.x) + extras,
+                y_ret=s.y_ret,
+                y_dir=s.y_dir,
+                horizon=s.horizon,
+            )
+        )
+    return out
+
+
+def enrich_samples_with_financial_filings(
+    samples: list[Sample],
+    filings: list[tuple[str, date, str]],
+    *,
+    rich: bool = True,
+) -> list[Sample]:
+    """Append quarterly/annual filing-date features (leakage-safe).
+
+    ``filings`` rows: (symbol, filing_date, kind) kind in annual/quarterly/other.
+    Rich mode (default): q90/q365/a365, days since Q/A, q_recent≤45d flag.
+    """
+    by_sym: dict[str, list[tuple[date, str]]] = {}
+    for sym, d, kind in filings:
+        by_sym.setdefault(sym, []).append((d, kind))
+    for sym in by_sym:
+        by_sym[sym].sort(key=lambda t: t[0])
+
+    out: list[Sample] = []
+    for s in samples:
+        rows = by_sym.get(s.symbol, [])
+        start90 = s.as_of - timedelta(days=90)
+        start365 = s.as_of - timedelta(days=365)
+        q90 = q365 = a365 = 0.0
+        last_q: date | None = None
+        last_a: date | None = None
+        for d, kind in rows:
+            if d > s.as_of:
+                break
+            if kind == "quarterly":
+                last_q = d
+                if d >= start90:
+                    q90 += 1.0
+                if d >= start365:
+                    q365 += 1.0
+            elif kind == "annual":
+                last_a = d
+                if d >= start365:
+                    a365 += 1.0
+        days_q = (
+            float(min(400, (s.as_of - last_q).days)) if last_q is not None else 400.0
+        )
+        if rich:
+            days_a = (
+                float(min(800, (s.as_of - last_a).days))
+                if last_a is not None
+                else 800.0
+            )
+            q_recent = 1.0 if days_q <= 45 else 0.0
+            extras = (q90, q365, a365, days_q, days_a, q_recent)
+        else:
+            extras = (q365, a365, days_q)
+        out.append(
+            Sample(
+                symbol=s.symbol,
+                as_of=s.as_of,
+                x=tuple(s.x) + extras,
+                y_ret=s.y_ret,
+                y_dir=s.y_dir,
+                horizon=s.horizon,
+            )
+        )
+    return out
+
+
+async def load_aspi_series(cse: Any) -> list[tuple[date, float, float | None]]:
+    return await cse.fetch_index_chart(period=5)
+
+
+async def load_financial_filing_dates(
+    cse: Any,
+    symbols: list[str],
+    *,
+    sleep_seconds: float = 0.2,
+    limit: int | None = None,
+) -> list[tuple[str, date, str]]:
+    import asyncio
+
+    syms = symbols
+    if limit is not None and limit > 0:
+        syms = symbols[:limit]
+    out: list[tuple[str, date, str]] = []
+    for i, sym in enumerate(syms):
+        try:
+            docs = await cse.fetch_company_financial_docs(sym)
+        except Exception as exc:
+            log.warning("financials_fetch_failed", symbol=sym, error=str(exc))
+            continue
+        for kind, d, _pdf in docs:
+            out.append((sym, d, kind))
+        if sleep_seconds > 0 and i + 1 < len(syms):
+            await asyncio.sleep(sleep_seconds)
+    return out
+
+
 async def run_always_on(
     *,
     storage: Storage,
     lever: str = "baseline_cs_lmt_bag",
     use_events: bool = False,
     use_sector_rs: bool = False,
+    use_aspi: bool = False,
+    use_financials: bool = False,
+    cse: Any | None = None,
     baseline_mean: float | None = None,
     limit_symbols: int | None = None,
     out_dir: Path = Path("docs/experiments"),
@@ -294,6 +451,8 @@ async def run_always_on(
         "disclosures": 0,
         "notices": 0,
         "sector_rs": use_sector_rs,
+        "aspi": use_aspi,
+        "financials": use_financials,
     }
     if use_sector_rs:
         from chime.ml.diagnose import load_sector_map
@@ -301,6 +460,20 @@ async def run_always_on(
         sectors = await load_sector_map(storage)
         extras["sectors_mapped"] = len(sectors)
         samples = enrich_samples_with_sector_rs(samples, sectors)
+    if use_aspi:
+        if cse is None:
+            raise ValueError("use_aspi requires cse client")
+        aspi = await load_aspi_series(cse)
+        extras["aspi_points"] = len(aspi)
+        samples = enrich_samples_with_aspi(samples, aspi)
+    if use_financials:
+        if cse is None:
+            raise ValueError("use_financials requires cse client")
+        filings = await load_financial_filing_dates(
+            cse, sorted(series.keys()), sleep_seconds=0.2
+        )
+        extras["financial_filing_rows"] = len(filings)
+        samples = enrich_samples_with_financial_filings(samples, filings)
     if use_events:
         discs = await load_disclosure_events(storage)
         notices = await load_notice_events(storage)
@@ -332,6 +505,8 @@ async def run_always_on(
                 for p, on in (
                     ("path+CS", True),
                     ("sector_rs", use_sector_rs),
+                    ("aspi", use_aspi),
+                    ("financials", use_financials),
                     ("events", use_events),
                 )
                 if on

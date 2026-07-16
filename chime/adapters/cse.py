@@ -73,6 +73,12 @@ DAYS_TRADE_ENDPOINT = "daysTrade"
 DAYS_TRADE_PATH = "/daysTrade"
 COMPANY_CHART_ENDPOINT = "companyChartDataByStock"
 COMPANY_CHART_PATH = "/companyChartDataByStock"
+INDEX_CHART_ENDPOINT = "chartData"
+INDEX_CHART_PATH = "/chartData"
+COMPANY_FINANCIALS_ENDPOINT = "financials"
+COMPANY_FINANCIALS_PATH = "/financials"
+FINANCIAL_ANNOUNCEMENT_ENDPOINT = "getFinancialAnnouncement"
+FINANCIAL_ANNOUNCEMENT_PATH = "/getFinancialAnnouncement"
 COMPANY_PROFILE_ENDPOINT = "companyProfile"
 COMPANY_PROFILE_PATH = "/companyProfile"
 # Observed period map — docs/experiments/CSE_PATH_HISTORY_PROBE.md
@@ -1717,6 +1723,155 @@ class CSEClient:
             return sorted(by_date.values(), key=lambda b: b.trade_date)
 
         return cast(list[DailyBar], await self._guarded(COMPANY_CHART_ENDPOINT, _call))
+
+    async def fetch_index_chart(
+        self,
+        *,
+        chart_id: int = 1,
+        period: int = CHART_PERIOD_1Y,
+    ) -> list[tuple[date, float, float | None]]:
+        """Index-scale daily series from ``POST /chartData`` (ASPI-like).
+
+        ``symbol`` is ignored by CSE — do not use for per-stock paths.
+        Returns ``(trade_date, value, pct_change)`` ascending.
+        """
+        if isinstance(chart_id, bool) or not isinstance(chart_id, int) or chart_id <= 0:
+            return []
+        if isinstance(period, bool) or not isinstance(period, int):
+            return []
+        if period not in CHART_DAILY_PERIODS and period != CHART_PERIOD_INTRADAY:
+            return []
+
+        async def _call() -> list[tuple[date, float, float | None]]:
+            raw = await self._request(
+                "POST",
+                INDEX_CHART_PATH,
+                data={"chartId": str(chart_id), "period": str(period)},
+                log_context={"chart_id": chart_id, "period": period},
+            )
+            if not isinstance(raw, list):
+                log.error(
+                    "cse_schema_error",
+                    endpoint=INDEX_CHART_ENDPOINT,
+                    error="expected array",
+                )
+                raise ValueError(f"{INDEX_CHART_ENDPOINT}: expected JSON array")
+            by_date: dict[date, tuple[date, float, float | None]] = {}
+            for item in raw:
+                if not isinstance(item, dict):
+                    continue
+                d_raw = item.get("d")
+                v_raw = item.get("v")
+                pc_raw = item.get("pc")
+                if isinstance(d_raw, bool) or not isinstance(d_raw, int | float):
+                    continue
+                if isinstance(v_raw, bool) or not isinstance(v_raw, int | float):
+                    continue
+                if not math.isfinite(float(v_raw)) or float(v_raw) <= 0:
+                    continue
+                try:
+                    td = datetime.fromtimestamp(float(d_raw) / 1000.0, tz=UTC).date()
+                except (OverflowError, OSError, ValueError):
+                    continue
+                pc: float | None = None
+                if (
+                    not isinstance(pc_raw, bool)
+                    and isinstance(pc_raw, int | float)
+                    and math.isfinite(float(pc_raw))
+                ):
+                    pc = float(pc_raw)
+                by_date[td] = (td, float(v_raw), pc)
+            return [by_date[k] for k in sorted(by_date)]
+
+        return cast(
+            list[tuple[date, float, float | None]],
+            await self._guarded(INDEX_CHART_ENDPOINT, _call),
+        )
+
+    async def fetch_company_financial_docs(
+        self, symbol: str
+    ) -> list[tuple[str, date, str | None]]:
+        """Annual/quarterly PDF metadata from ``POST /financials``.
+
+        Returns ``(kind, manual_date, pdf_url)`` where kind is
+        ``annual`` / ``quarterly`` / ``other``. Numeric line items are not in
+        this payload — only filing dates + CDN paths.
+        """
+        if not isinstance(symbol, str) or not symbol.strip():
+            return []
+        sym = symbol.strip().upper()
+
+        async def _call() -> list[tuple[str, date, str | None]]:
+            raw = await self._request(
+                "POST",
+                COMPANY_FINANCIALS_PATH,
+                data={"symbol": sym},
+                log_context={"symbol": sym},
+            )
+            if not isinstance(raw, dict):
+                log.error(
+                    "cse_schema_error",
+                    endpoint=COMPANY_FINANCIALS_ENDPOINT,
+                    symbol=sym,
+                    error="expected object",
+                )
+                raise ValueError(f"{COMPANY_FINANCIALS_ENDPOINT}: expected JSON object")
+            out: list[tuple[str, date, str | None]] = []
+            for kind, key in (
+                ("annual", "infoAnnualData"),
+                ("quarterly", "infoQuarterlyData"),
+                ("other", "infoOtherData"),
+            ):
+                rows = raw.get(key)
+                if not isinstance(rows, list):
+                    continue
+                for row in rows:
+                    if not isinstance(row, dict):
+                        continue
+                    md = row.get("manualDate")
+                    if isinstance(md, bool) or not isinstance(md, int | float):
+                        continue
+                    try:
+                        td = datetime.fromtimestamp(float(md) / 1000.0, tz=UTC).date()
+                    except (OverflowError, OSError, ValueError):
+                        continue
+                    path = row.get("path")
+                    pdf = resolve_pdf_url(path if isinstance(path, str) else None)
+                    out.append((kind, td, pdf))
+            out.sort(key=lambda t: t[1])
+            return out
+
+        return cast(
+            list[tuple[str, date, str | None]],
+            await self._guarded(COMPANY_FINANCIALS_ENDPOINT, _call),
+        )
+
+    async def fetch_financial_announcements_feed(
+        self,
+    ) -> list[dict[str, Any]]:
+        """Recent market-wide financial PDF feed (``getFinancialAnnouncement``)."""
+
+        async def _call() -> list[dict[str, Any]]:
+            raw = await self._request(
+                "POST",
+                FINANCIAL_ANNOUNCEMENT_PATH,
+                json_body={},
+            )
+            if not isinstance(raw, dict):
+                return []
+            rows = raw.get("reqFinancialAnnouncemnets")
+            if not isinstance(rows, list):
+                return []
+            out: list[dict[str, Any]] = []
+            for row in rows:
+                if isinstance(row, dict):
+                    out.append(row)
+            return out
+
+        return cast(
+            list[dict[str, Any]],
+            await self._guarded(FINANCIAL_ANNOUNCEMENT_ENDPOINT, _call),
+        )
 
     async def fetch_company_sector(self, symbol: str) -> str | None:
         """Return sector label from ``POST /companyProfile`` ``reqComSumInfo``.
