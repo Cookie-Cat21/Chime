@@ -15,6 +15,7 @@ The dashboard is the daily surface. Telegram remains the push channel when you�
 | `/login` | Local/demo sign-in (v1); Telegram Login Widget later | public |
 | `/overview` | Signed-in home: movers, watch peek, armed alerts, recent fires | user |
 | `/market` | CSE symbol browse (latest snapshots from Postgres) | user |
+| `/signals` | Signal Board — research scores + reasons (NFA; higher ≠ buy) | user |
 | `/watchlist` | User watchlist + last price / change | user |
 | `/alerts` | Active alert rules CRUD | user |
 | `/alerts/history` | Fire history (`alert_log`) | user |

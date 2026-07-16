@@ -5,12 +5,13 @@ from __future__ import annotations
 import math
 from collections.abc import AsyncIterator, Sequence
 from contextlib import asynccontextmanager
-from datetime import datetime
+from datetime import date, datetime
 from time import perf_counter
 from typing import Any, cast
 
 from psycopg.errors import UniqueViolation
 from psycopg.rows import dict_row
+from psycopg.types.json import Json
 from psycopg_pool import AsyncConnectionPool
 
 from chime.domain import (
@@ -578,6 +579,141 @@ class Storage:
         if isinstance(rowcount, int) and not isinstance(rowcount, bool) and rowcount >= 0:
             return rowcount
         return len(rows)
+
+    async def list_symbols_with_daily_bars(self) -> list[str]:
+        """Symbols that have at least one ``daily_bars`` row (sorted)."""
+        async with self._pool.connection() as conn:
+            rows = await (
+                await conn.execute(
+                    """
+                    SELECT DISTINCT symbol
+                    FROM daily_bars
+                    ORDER BY symbol ASC
+                    """
+                )
+            ).fetchall()
+        out: list[str] = []
+        for row in _as_rows(rows):
+            raw = row.get("symbol")
+            if not isinstance(raw, str):
+                continue
+            symbol = raw.strip().upper()
+            if symbol:
+                out.append(symbol)
+        return out
+
+    async def list_daily_bars(self, symbol: str) -> list[DailyBar]:
+        """Return ascending daily bars for ``symbol``."""
+        if not isinstance(symbol, str):
+            return []
+        symbol = symbol.strip().upper()
+        if not symbol:
+            return []
+        async with self._pool.connection() as conn:
+            rows = await (
+                await conn.execute(
+                    """
+                    SELECT symbol, trade_date, price, high, low, open, volume,
+                           source_period, bar_ts
+                    FROM daily_bars
+                    WHERE symbol = %s
+                    ORDER BY trade_date ASC
+                    """,
+                    (symbol,),
+                )
+            ).fetchall()
+        out: list[DailyBar] = []
+        for row in _as_rows(rows):
+            raw_sym = row.get("symbol")
+            raw_price = row.get("price")
+            raw_period = row.get("source_period")
+            trade_date = row.get("trade_date")
+            bar_ts = row.get("bar_ts")
+            if not isinstance(raw_sym, str) or not raw_sym.strip():
+                continue
+            if isinstance(raw_price, bool) or not isinstance(raw_price, int | float):
+                continue
+            if not math.isfinite(float(raw_price)):
+                continue
+            if isinstance(raw_period, bool) or not isinstance(raw_period, int):
+                continue
+            if not isinstance(trade_date, date) or not isinstance(bar_ts, datetime):
+                continue
+            try:
+                out.append(
+                    DailyBar(
+                        symbol=raw_sym.strip().upper(),
+                        trade_date=trade_date,
+                        price=float(raw_price),
+                        high=row.get("high"),
+                        low=row.get("low"),
+                        open=row.get("open"),
+                        volume=row.get("volume"),
+                        source_period=raw_period,
+                        bar_ts=bar_ts,
+                    )
+                )
+            except (TypeError, ValueError):
+                continue
+        return out
+
+    async def upsert_symbol_score(
+        self,
+        *,
+        symbol: str,
+        as_of: date,
+        model_version: str,
+        score: float,
+        components: dict[str, Any],
+        reasons: list[str],
+        bar_count: int,
+    ) -> None:
+        if not isinstance(symbol, str) or not symbol.strip():
+            return
+        if not isinstance(model_version, str) or not model_version.strip():
+            return
+        if not isinstance(as_of, date):
+            return
+        if isinstance(score, bool) or not isinstance(score, int | float) or not math.isfinite(
+            score
+        ):
+            return
+        sym = symbol.strip().upper()
+        version = model_version.strip()
+        safe_reasons = [
+            r.strip()
+            for r in reasons
+            if isinstance(r, str) and r.strip()
+        ]
+        count = bar_count if isinstance(bar_count, int) and not isinstance(bar_count, bool) else 0
+        if count < 0:
+            count = 0
+        # Json wrapper — plain dict can fail depending on adapter settings.
+        payload = components if isinstance(components, dict) else {}
+        async with self._pool.connection() as conn:
+            await conn.execute(
+                """
+                INSERT INTO symbol_scores (
+                    symbol, as_of, model_version, score, components, reasons, bar_count
+                )
+                VALUES (%s, %s, %s, %s, %s, %s, %s)
+                ON CONFLICT (symbol, as_of, model_version) DO UPDATE SET
+                    score = EXCLUDED.score,
+                    components = EXCLUDED.components,
+                    reasons = EXCLUDED.reasons,
+                    bar_count = EXCLUDED.bar_count,
+                    computed_at = now()
+                """,
+                (
+                    sym,
+                    as_of,
+                    version,
+                    float(score),
+                    Json(payload),
+                    safe_reasons,
+                    count,
+                ),
+            )
 
     async def persist_index_snapshots(
         self,

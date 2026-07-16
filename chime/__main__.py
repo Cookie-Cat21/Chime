@@ -20,6 +20,7 @@ from chime.migrate import apply_migrations
 from chime.notify import SendResult, send_message
 from chime.path_backfill import run_path_backfill
 from chime.poller import Poller, run_poller_forever
+from chime.signals import run_signal_score_job
 from chime.storage import Storage
 
 log = get_logger(__name__)
@@ -309,10 +310,12 @@ def main(argv: list[str] | None = None) -> None:
             "drain-briefs",
             "drain-metrics",
             "path-backfill",
+            "score-signals",
         ],
         help=(
             "bot | poller | both | migrate | tick | "
-            "drain-pdfs | drain-briefs | drain-metrics | path-backfill"
+            "drain-pdfs | drain-briefs | drain-metrics | "
+            "path-backfill | score-signals"
         ),
     )
     parser.add_argument(
@@ -442,6 +445,29 @@ def main(argv: list[str] | None = None) -> None:
                 await storage.close()
 
         asyncio.run(_path_bf())
+        return
+
+    if args.command == "score-signals":
+        configure_logging()
+        settings = Settings.from_env(require_token=False)
+        limit = args.limit if isinstance(args.limit, int) and args.limit > 0 else None
+
+        async def _score() -> None:
+            storage = Storage(settings.database_url)
+            await storage.open()
+            try:
+                result = await run_signal_score_job(storage=storage, limit=limit)
+                print(
+                    "score-signals: "
+                    f"targeted={result.symbols_targeted} "
+                    f"scored={result.symbols_scored} "
+                    f"skipped={result.symbols_skipped} "
+                    f"model={result.model_version}"
+                )
+            finally:
+                await storage.close()
+
+        asyncio.run(_score())
         return
 
     settings = Settings.from_env(require_token=True)
