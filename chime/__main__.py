@@ -17,6 +17,7 @@ from chime.drain import drain_briefs, drain_metrics, drain_pdfs
 from chime.health import HealthState, brief_queue_health_hint, start_health_server
 from chime.logging_setup import configure_logging, get_logger
 from chime.migrate import apply_migrations
+from chime.notices_backfill import run_notices_backfill
 from chime.notify import SendResult, send_message
 from chime.path_backfill import run_path_backfill
 from chime.poller import Poller, run_poller_forever
@@ -314,11 +315,13 @@ def main(argv: list[str] | None = None) -> None:
             "score-signals",
             "eval-signals",
             "sector-backfill",
+            "notices-backfill",
         ],
         help=(
             "bot | poller | both | migrate | tick | "
             "drain-pdfs | drain-briefs | drain-metrics | "
-            "path-backfill | score-signals | eval-signals | sector-backfill"
+            "path-backfill | score-signals | eval-signals | "
+            "sector-backfill | notices-backfill"
         ),
     )
     parser.add_argument(
@@ -326,7 +329,7 @@ def main(argv: list[str] | None = None) -> None:
         action="store_true",
         help=(
             "tick: ignore market hours; "
-            "path-backfill/sector-backfill: run even if flag off"
+            "path-backfill/sector-backfill/notices-backfill: run even if flag off"
         ),
     )
     parser.add_argument(
@@ -352,8 +355,16 @@ def main(argv: list[str] | None = None) -> None:
         help="For path-backfill: skip tradeSummary id seed",
     )
     args = parser.parse_args(argv)
-    if args.force and args.command not in ("tick", "path-backfill", "sector-backfill"):
-        parser.error("--force is only valid for tick, path-backfill, or sector-backfill")
+    if args.force and args.command not in (
+        "tick",
+        "path-backfill",
+        "sector-backfill",
+        "notices-backfill",
+    ):
+        parser.error(
+            "--force is only valid for tick, path-backfill, "
+            "sector-backfill, or notices-backfill"
+        )
     if args.period is not None and args.command != "path-backfill":
         parser.error("--period is only valid for path-backfill")
     if args.no_seed and args.command != "path-backfill":
@@ -488,6 +499,41 @@ def main(argv: list[str] | None = None) -> None:
                 await storage.close()
 
         asyncio.run(_sector_bf())
+        return
+
+    if args.command == "notices-backfill":
+        configure_logging()
+        settings = Settings.from_env(require_token=False)
+
+        async def _notices_bf() -> None:
+            storage = Storage(settings.database_url)
+            await storage.open()
+            cse = CSEClient(
+                base_url=settings.cse_base_url,
+                timeout=settings.http_timeout_seconds,
+                fail_max=settings.circuit_fail_max,
+                reset_timeout=settings.circuit_reset_seconds,
+                min_interval_seconds=settings.cse_min_interval_seconds,
+            )
+            try:
+                result = await run_notices_backfill(
+                    settings=settings,
+                    storage=storage,
+                    cse=cse,
+                    force=args.force,
+                )
+                print(
+                    "notices-backfill: "
+                    f"fetched={result.fetched} "
+                    f"persisted={result.persisted} "
+                    f"resolved={result.resolved_symbols} "
+                    f"failed={result.failed}"
+                )
+            finally:
+                await cse.aclose()
+                await storage.close()
+
+        asyncio.run(_notices_bf())
         return
 
     if args.command == "score-signals":

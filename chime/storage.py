@@ -775,26 +775,64 @@ class Storage:
 
     async def count_notices_since(self, symbol: str, *, since: datetime) -> int:
         """Count buy-in / non-compliance / halt notices for ``symbol`` since."""
+        by_type = await self.count_notices_by_type_since(symbol, since=since)
+        return sum(by_type.values())
+
+    async def count_notices_by_type_since(
+        self, symbol: str, *, since: datetime
+    ) -> dict[str, int]:
+        """Per-type notice counts for ``symbol`` since ``since``."""
         if not isinstance(symbol, str) or not symbol.strip():
-            return 0
+            return {}
         if not isinstance(since, datetime):
-            return 0
+            return {}
         sym = symbol.strip().upper()
         async with self._pool.connection() as conn:
-            row = await (
+            rows = await (
                 await conn.execute(
                     """
-                    SELECT COUNT(*)::int AS n
+                    SELECT notice_type, COUNT(*)::int AS n
                     FROM market_notices
                     WHERE symbol = %s AND published_at >= %s
+                    GROUP BY notice_type
                     """,
                     (sym, since),
                 )
+            ).fetchall()
+        out: dict[str, int] = {}
+        for row in _as_rows(rows):
+            kind = row.get("notice_type")
+            n = _pg_count(row.get("n"))
+            if (
+                isinstance(kind, str)
+                and kind in {"buy_in", "non_compliance", "halt"}
+                and n is not None
+                and n > 0
+            ):
+                out[kind] = n
+        return out
+
+    async def get_paired_listing_symbol(self, symbol: str) -> str | None:
+        """Return the other voting/share class ticker if present (``.N`` ↔ ``.X``)."""
+        if not isinstance(symbol, str) or not symbol.strip():
+            return None
+        sym = symbol.strip().upper()
+        if ".N" in sym:
+            pair = sym.replace(".N", ".X", 1)
+        elif ".X" in sym:
+            pair = sym.replace(".X", ".N", 1)
+        else:
+            return None
+        if pair == sym:
+            return None
+        async with self._pool.connection() as conn:
+            row = await (
+                await conn.execute(
+                    "SELECT 1 FROM stocks WHERE symbol = %s",
+                    (pair,),
+                )
             ).fetchone()
-        if row is None:
-            return 0
-        counted = _pg_count(_as_row(row).get("n"))
-        return 0 if counted is None else counted
+        return pair if row is not None else None
 
     async def count_disclosures_since(self, symbol: str, *, since: datetime) -> int:
         if not isinstance(symbol, str) or not symbol.strip():

@@ -18,7 +18,8 @@ from chime.scenarios.guardrails import (
     assert_safe_scenario_output,
 )
 
-MODEL_VERSION = "path_v3"
+MODEL_VERSION = "path_v4"
+MODEL_VERSION_V3 = "path_v3"
 MODEL_VERSION_V2 = "path_v2"
 MODEL_VERSION_V1 = "path_v1"
 MODEL_VERSION_V0 = "path_v0"
@@ -26,7 +27,7 @@ MODEL_VERSION_V0 = "path_v0"
 
 @dataclass(frozen=True, slots=True)
 class ExtraFactors:
-    """Optional non-path inputs for ``path_v3`` (all fail-closed / optional)."""
+    """Optional non-path inputs for ``path_v4`` (all fail-closed / optional)."""
 
     eps_yoy_pct: float | None = None
     rev_yoy_pct: float | None = None
@@ -37,11 +38,16 @@ class ExtraFactors:
     financial_disclosure_share: float | None = None
     # Latest ASPI change in percent points (e.g. 0.14 = +0.14%).
     aspi_change_pct: float | None = None
-    # F-051: recent buy-in / non-compliance / halt notices.
+    # F-051/F-052: recent notice totals and subtypes.
     notice_count_30d: int | None = None
+    notice_buy_in_30d: int | None = None
+    notice_non_compliance_30d: int | None = None
+    notice_halt_30d: int | None = None
     # F-071: cross-sectional 20d return percentile [0,1] and lag delta.
     ret20_percentile: float | None = None
     ret20_rank_stability: float | None = None  # 1 - |pct_now - pct_lag|
+    # F-082: paired listing (.N vs .X) 20d return gap (this − pair).
+    dual_listing_ret20_gap: float | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -259,10 +265,32 @@ def score_symbol_path(
         aspi_gap = (ret_1 * 100.0) - aspi_pct
         aspi_rs_term = max(-8.0, min(8.0, aspi_gap * 2.0))
 
-    # F-051: compliance / buy-in / halt notices — risk penalty.
+    # F-051/F-052: compliance / board / halt notices — weighted risk penalty.
+    buy_in_n = extras.notice_buy_in_30d
+    noncomp_n = extras.notice_non_compliance_30d
+    halt_n = extras.notice_halt_30d
+    if isinstance(buy_in_n, bool) or not isinstance(buy_in_n, int) or buy_in_n < 0:
+        buy_in_n = None
+    if isinstance(noncomp_n, bool) or not isinstance(noncomp_n, int) or noncomp_n < 0:
+        noncomp_n = None
+    if isinstance(halt_n, bool) or not isinstance(halt_n, int) or halt_n < 0:
+        halt_n = None
     notice_penalty = 0.0
-    if notice_n is not None and notice_n > 0:
+    if buy_in_n is not None and buy_in_n > 0:
+        notice_penalty += min(12.0, float(buy_in_n) * 6.0)
+    if noncomp_n is not None and noncomp_n > 0:
+        notice_penalty += min(14.0, float(noncomp_n) * 7.0)
+    if halt_n is not None and halt_n > 0:
+        notice_penalty += min(16.0, float(halt_n) * 8.0)
+    if notice_penalty == 0.0 and notice_n is not None and notice_n > 0:
         notice_penalty = min(20.0, float(notice_n) * 8.0)
+    notice_penalty = min(25.0, notice_penalty)
+
+    dual_gap = _finite_opt(extras.dual_listing_ret20_gap)
+    dual_term = 0.0
+    if dual_gap is not None:
+        # Mild relative path vs paired share class (research only).
+        dual_term = max(-6.0, min(6.0, dual_gap * 40.0))
 
     # F-061: Colombo calendar — month-end sessions get a small liquidity caution.
     calendar_term = 0.0
@@ -310,6 +338,7 @@ def score_symbol_path(
         + calendar_term
         + rank_term
         - thin_penalty
+        + dual_term
     )
     score = max(-100.0, min(100.0, raw))
 
@@ -346,7 +375,14 @@ def score_symbol_path(
         "aspi_gap_1d": aspi_gap,
         "aspi_rs_term": aspi_rs_term,
         "notice_count_30d": float(notice_n) if notice_n is not None else None,
+        "notice_buy_in_30d": float(buy_in_n) if buy_in_n is not None else None,
+        "notice_non_compliance_30d": (
+            float(noncomp_n) if noncomp_n is not None else None
+        ),
+        "notice_halt_30d": float(halt_n) if halt_n is not None else None,
         "notice_penalty": notice_penalty,
+        "dual_listing_ret20_gap": dual_gap,
+        "dual_term": dual_term,
         "month_end": 1.0 if month_end else 0.0,
         "weekday": float(weekday),
         "calendar_term": calendar_term,
@@ -423,10 +459,27 @@ def score_symbol_path(
         )
         if r:
             reasons.append(r)
-    if notice_n is not None and notice_n > 0:
+    if notice_penalty > 0:
         # Avoid "buy" substring — guardrails reject buy/sell advice language.
+        parts: list[str] = []
+        if buy_in_n:
+            parts.append(f"{buy_in_n} board")
+        if noncomp_n:
+            parts.append(f"{noncomp_n} non-compliance")
+        if halt_n:
+            parts.append(f"{halt_n} halt")
+        if not parts and notice_n:
+            parts.append(f"{notice_n} board/non-compliance/halt")
         r = _safe_reason(
-            f"{notice_n} board/non-compliance/halt notice(s) in last 30 days"
+            f"{' + '.join(parts)} notice(s) in last 30 days"
+        )
+        if r:
+            reasons.append(r)
+    if dual_gap is not None and abs(dual_gap) >= 0.02:
+        direction = "ahead of" if dual_gap >= 0 else "behind"
+        r = _safe_reason(
+            f"20-session path {direction} paired share class by "
+            f"{abs(dual_gap) * 100.0:.1f} pts"
         )
         if r:
             reasons.append(r)

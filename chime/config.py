@@ -166,6 +166,8 @@ class Settings:
     # SECTOR_BACKFILL_ENABLED=1 — allow companyProfile → stocks.sector ingest.
     sector_backfill_enabled: bool = False
     sector_backfill_sleep_seconds: float = 0.35
+    # NOTICES_BACKFILL_ENABLED=1 — allow ops CLI to seed market_notices.
+    notices_backfill_enabled: bool = False
 
     @classmethod
     def from_env(cls, *, require_token: bool = True) -> Settings:
@@ -189,6 +191,7 @@ class Settings:
         sectors_raw = _env_str("SECTORS_INGEST", "0")
         path_bf_raw = _env_str("PATH_BACKFILL_ENABLED", "0")
         sector_bf_raw = _env_str("SECTOR_BACKFILL_ENABLED", "0")
+        notices_bf_raw = _env_str("NOTICES_BACKFILL_ENABLED", "0")
         path_period = _int("PATH_BACKFILL_PERIOD", 5)
         if path_period not in {2, 3, 4, 5}:
             path_period = 5
@@ -234,6 +237,7 @@ class Settings:
             sector_backfill_sleep_seconds=_nonneg_float(
                 "SECTOR_BACKFILL_SLEEP_SECONDS", 0.35
             ),
+            notices_backfill_enabled=notices_bf_raw.strip() == "1",
         )
 
 

@@ -137,7 +137,8 @@ async def run_signal_score_job(
             storage, symbol=symbol, cache=peer_cache
         )
         disc_n = await storage.count_disclosures_since(symbol, since=since)
-        notice_n = await storage.count_notices_since(symbol, since=since)
+        notice_by = await storage.count_notices_by_type_since(symbol, since=since)
+        notice_n = sum(notice_by.values())
         cats = await storage.count_disclosure_categories_since(symbol, since=since)
         fin_share: float | None = None
         if cats and disc_n > 0:
@@ -163,6 +164,20 @@ async def run_signal_score_job(
         if pctile is not None and symbol in pct_lag:
             rank_stability = 1.0 - abs(pctile - pct_lag[symbol])
 
+        dual_gap: float | None = None
+        pair = await storage.get_paired_listing_symbol(symbol)
+        if pair is not None:
+            my_ret = ret20_now.get(symbol)
+            # Pair may not be in this score batch — load if needed.
+            pair_ret = ret20_now.get(pair)
+            if pair_ret is None and pair in bars_by_symbol:
+                pair_ret = _window_return_from_bars(bars_by_symbol[pair], 20)
+            elif pair_ret is None:
+                pair_bars = await storage.list_daily_bars(pair)
+                pair_ret = _window_return_from_bars(pair_bars, 20)
+            if my_ret is not None and pair_ret is not None:
+                dual_gap = my_ret - pair_ret
+
         extra = ExtraFactors(
             eps_yoy_pct=yoy.get("eps_yoy_pct"),
             rev_yoy_pct=yoy.get("rev_yoy_pct"),
@@ -172,8 +187,12 @@ async def run_signal_score_job(
             financial_disclosure_share=fin_share,
             aspi_change_pct=aspi_pct,
             notice_count_30d=notice_n if notice_n > 0 else None,
+            notice_buy_in_30d=notice_by.get("buy_in"),
+            notice_non_compliance_30d=notice_by.get("non_compliance"),
+            notice_halt_30d=notice_by.get("halt"),
             ret20_percentile=pctile,
             ret20_rank_stability=rank_stability,
+            dual_listing_ret20_gap=dual_gap,
         )
         result = score_symbol_path(
             bars, extra=extra, model_version=model_version

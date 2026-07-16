@@ -138,17 +138,21 @@ def test_notice_and_rank_factors() -> None:
     result = score_symbol_path(
         _bars(prices),
         extra=ExtraFactors(
-            notice_count_30d=2,
+            notice_non_compliance_30d=2,
             ret20_percentile=0.9,
             ret20_rank_stability=0.85,
+            dual_listing_ret20_gap=0.05,
         ),
     )
     assert result is not None
-    assert result.components["notice_penalty"] == 16.0
+    assert result.components["notice_penalty"] == 14.0
     assert result.components["rank_term"] is not None
     assert result.components["rank_term"] > 0
-    assert any("halt notice" in r.lower() or "non-compliance" in r.lower() for r in result.reasons)
+    assert result.components["dual_term"] is not None
+    assert result.components["dual_term"] > 0
+    assert any("non-compliance" in r.lower() for r in result.reasons)
     assert any("rank stable" in r for r in result.reasons)
+    assert any("paired share class" in r for r in result.reasons)
 
 
 def test_percentile_ranks_basic() -> None:
