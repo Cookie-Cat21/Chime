@@ -283,7 +283,8 @@ def run_purged_walkforward(
             b["as_of"], b["pred_for_ic"], b["y_ret"]
         )
         gates = sweep_confidence_gates(b["y_dir"], b["scores"])
-        gate_tables[f"{model_id}_h{horizon}"] = gates
+        mode = "panel" if panel else "purged"
+        gate_tables[f"{model_id}::{mode}_h{horizon}"] = gates
         # Best gated hit with coverage >= 10%
         best_hit = None
         best_thr = None

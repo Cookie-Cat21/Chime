@@ -45,9 +45,22 @@ python3 -m chime ml-forecast --force          # or score-signals with flag on
 
 Dash: open a symbol → **Show forecast** (NFA: research estimate, not advice).
 
+## Hardened re-check (purge · RankIC · gate)
+
+See [ML_HARDENED_SUMMARY.md](ML_HARDENED_SUMMARY.md) and
+`ml_hardened_20260716T145857Z.md`. Under purge/embargo + 7–8 folds:
+
+- 1d purged hit still **~0.56–0.57** (did not collapse to chance)
+- Mean daily **RankIC ~0.21–0.24** (panel HGB best)
+- Confidence gate: panel HGB **~66% hit on ~22% of samples** at \|P−0.5\|≥0.15
+
+```bash
+python3 -m chime ml-harden --horizons 1,5
+```
+
 ## Caveats
 
-- Only **~2–3** expanding time folds (one year of CSE path) — promising, not multi-year proof.
+- Only **~1 year** of CSE path — hardened folds help, still not multi-year proof.
 - Path features only in v1 serve (no live filing/notice join in the predictor).
 - Retrain-every-run is simple/ops-friendly; no model registry yet.
 - Always **not financial advice**.

@@ -1,0 +1,965 @@
+{
+  "decision": "GO",
+  "reasons": [
+    "B1_logistic::purged h=1 purged_hit=0.569 folds_ge_0.52=7/8",
+    "B1_logistic::purged h=1 RankIC=0.211 (days=80)",
+    "M1_hgb_clf::purged h=1 purged_hit=0.562 folds_ge_0.52=6/8",
+    "M1_hgb_clf::purged h=1 RankIC=0.211 (days=80)",
+    "M2_hgb_reg::purged h=1 purged_hit=0.551 folds_ge_0.52=7/8",
+    "M2_hgb_reg::purged h=1 RankIC=0.181 (days=80)",
+    "B1_logistic::purged h=5 RankIC=0.139 (days=70)",
+    "M1_hgb_clf::purged h=5 RankIC=0.143 (days=70)",
+    "M2_hgb_reg::purged h=5 RankIC=0.061 (days=70)",
+    "B1_logistic::panel h=1 RankIC=0.209 (days=80)",
+    "M1_hgb_clf::panel h=1 purged_hit=0.564 folds_ge_0.52=8/8",
+    "M1_hgb_clf::panel h=1 RankIC=0.239 (days=80)",
+    "M1_hgb_clf::panel h=1 gated_hit=0.659 @thr=0.15 cov=0.22",
+    "M2_hgb_reg::panel h=1 purged_hit=0.561 folds_ge_0.52=8/8",
+    "M2_hgb_reg::panel h=1 RankIC=0.212 (days=80)",
+    "B1_logistic::panel h=5 RankIC=0.149 (days=70)",
+    "M1_hgb_clf::panel h=5 purged_hit=0.556 folds_ge_0.52=7/7",
+    "M1_hgb_clf::panel h=5 RankIC=0.154 (days=70)",
+    "M2_hgb_reg::panel h=5 RankIC=0.082 (days=70)"
+  ],
+  "cse_symbols": 273,
+  "bars": 64400,
+  "metrics": [
+    {
+      "model_id": "B0_naive",
+      "horizon": 5,
+      "origins": 9500,
+      "direction_hits": 2823,
+      "direction_total": 6366,
+      "hit_rate": 0.44344957587181905,
+      "pooled_ic": null,
+      "mean_rank_ic": null,
+      "rank_ic_days": 0,
+      "folds": 0,
+      "fold_hit_rates": [],
+      "gated_best_hit": null,
+      "gated_best_thr": null,
+      "gated_best_coverage": null,
+      "purged": false
+    },
+    {
+      "model_id": "B1_logistic::purged",
+      "horizon": 1,
+      "origins": 17541,
+      "direction_hits": 9973,
+      "direction_total": 17541,
+      "hit_rate": 0.5685536742489026,
+      "pooled_ic": 0.1281831605996465,
+      "mean_rank_ic": 0.21061054727897038,
+      "rank_ic_days": 80,
+      "folds": 8,
+      "fold_hit_rates": [
+        0.5705882352941176,
+        0.44328493647912887,
+        0.5804676753782668,
+        0.5577542567878508,
+        0.5947156291983878,
+        0.5784269662921349,
+        0.5790731008122313,
+        0.6496101364522417
+      ],
+      "gated_best_hit": 0.6375058166589112,
+      "gated_best_thr": 0.1,
+      "gated_best_coverage": 0.12251296961404709,
+      "purged": true
+    },
+    {
+      "model_id": "M1_hgb_clf::purged",
+      "horizon": 1,
+      "origins": 17541,
+      "direction_hits": 9854,
+      "direction_total": 17541,
+      "hit_rate": 0.5617695684396556,
+      "pooled_ic": 0.12988651219383085,
+      "mean_rank_ic": 0.21119456252258262,
+      "rank_ic_days": 80,
+      "folds": 8,
+      "fold_hit_rates": [
+        0.5176470588235295,
+        0.4727767695099819,
+        0.5777166437414031,
+        0.567878508973769,
+        0.5575459023734886,
+        0.5847191011235955,
+        0.5848064978499761,
+        0.6413255360623782
+      ],
+      "gated_best_hit": 0.6263736263736264,
+      "gated_best_thr": 0.15,
+      "gated_best_coverage": 0.19713813351576306,
+      "purged": true
+    },
+    {
+      "model_id": "M2_hgb_reg::purged",
+      "horizon": 1,
+      "origins": 17541,
+      "direction_hits": 9664,
+      "direction_total": 17541,
+      "hit_rate": 0.5509378028618664,
+      "pooled_ic": 0.12332346178810001,
+      "mean_rank_ic": 0.18123954576210816,
+      "rank_ic_days": 80,
+      "folds": 8,
+      "fold_hit_rates": [
+        0.5273109243697479,
+        0.4895644283121597,
+        0.5515818431911967,
+        0.5669581224114127,
+        0.522615315718764,
+        0.569438202247191,
+        0.57955088389871,
+        0.6081871345029239
+      ],
+      "gated_best_hit": 0.5509378028618664,
+      "gated_best_thr": 0.0,
+      "gated_best_coverage": 1.0,
+      "purged": true
+    },
+    {
+      "model_id": "B1_logistic::purged",
+      "horizon": 5,
+      "origins": 17409,
+      "direction_hits": 9004,
+      "direction_total": 17409,
+      "hit_rate": 0.5172037451892699,
+      "pooled_ic": -0.041576823366073205,
+      "mean_rank_ic": 0.13866866384766735,
+      "rank_ic_days": 70,
+      "folds": 7,
+      "fold_hit_rates": [
+        0.4571768437747819,
+        0.19270833333333334,
+        0.5506122448979592,
+        0.6420387198735678,
+        0.6316001612253124,
+        0.49900754267566494,
+        0.6522821576763486
+      ],
+      "gated_best_hit": 0.5172037451892699,
+      "gated_best_thr": 0.0,
+      "gated_best_coverage": 1.0,
+      "purged": true
+    },
+    {
+      "model_id": "M1_hgb_clf::purged",
+      "horizon": 5,
+      "origins": 17409,
+      "direction_hits": 9453,
+      "direction_total": 17409,
+      "hit_rate": 0.5429950025848699,
+      "pooled_ic": 0.04539104218366636,
+      "mean_rank_ic": 0.1431557372790648,
+      "rank_ic_days": 70,
+      "folds": 7,
+      "fold_hit_rates": [
+        0.6078509119746233,
+        0.2203525641025641,
+        0.5485714285714286,
+        0.6341367048597393,
+        0.5973397823458283,
+        0.5617308455736403,
+        0.6323651452282157
+      ],
+      "gated_best_hit": 0.5461212164785391,
+      "gated_best_thr": 0.05,
+      "gated_best_coverage": 0.7989545637314033,
+      "purged": true
+    },
+    {
+      "model_id": "M2_hgb_reg::purged",
+      "horizon": 5,
+      "origins": 17409,
+      "direction_hits": 8800,
+      "direction_total": 17409,
+      "hit_rate": 0.5054856683324717,
+      "pooled_ic": -0.022137846722646775,
+      "mean_rank_ic": 0.06139663981811155,
+      "rank_ic_days": 70,
+      "folds": 7,
+      "fold_hit_rates": [
+        0.6007137192704203,
+        0.26282051282051283,
+        0.4710204081632653,
+        0.5515606479652312,
+        0.5646916565900847,
+        0.5248114331083763,
+        0.562655601659751
+      ],
+      "gated_best_hit": 0.5054856683324717,
+      "gated_best_thr": 0.0,
+      "gated_best_coverage": 1.0,
+      "purged": true
+    },
+    {
+      "model_id": "B1_logistic::panel",
+      "horizon": 1,
+      "origins": 17541,
+      "direction_hits": 9610,
+      "direction_total": 17541,
+      "hit_rate": 0.5478593010660737,
+      "pooled_ic": 0.17974499881035694,
+      "mean_rank_ic": 0.2088628780324457,
+      "rank_ic_days": 80,
+      "folds": 8,
+      "fold_hit_rates": [
+        0.55,
+        0.5462794918330308,
+        0.5392022008253095,
+        0.5954901058444547,
+        0.5476936856247201,
+        0.5348314606741573,
+        0.5461060678451983,
+        0.5219298245614035
+      ],
+      "gated_best_hit": 0.6418348623853211,
+      "gated_best_thr": 0.1,
+      "gated_best_coverage": 0.1553503221025027,
+      "purged": true
+    },
+    {
+      "model_id": "M1_hgb_clf::panel",
+      "horizon": 1,
+      "origins": 17541,
+      "direction_hits": 9895,
+      "direction_total": 17541,
+      "hit_rate": 0.5641069494327575,
+      "pooled_ic": 0.2046263688586329,
+      "mean_rank_ic": 0.23880740355718016,
+      "rank_ic_days": 80,
+      "folds": 8,
+      "fold_hit_rates": [
+        0.5542016806722689,
+        0.5648820326678766,
+        0.5451627693718478,
+        0.5908881730326737,
+        0.5638154948499776,
+        0.5662921348314607,
+        0.5609173435260392,
+        0.567738791423002
+      ],
+      "gated_best_hit": 0.6587899246948844,
+      "gated_best_thr": 0.15,
+      "gated_best_coverage": 0.21954278547403228,
+      "purged": true
+    },
+    {
+      "model_id": "M2_hgb_reg::panel",
+      "horizon": 1,
+      "origins": 17541,
+      "direction_hits": 9845,
+      "direction_total": 17541,
+      "hit_rate": 0.5612564848070235,
+      "pooled_ic": 0.19010984626592073,
+      "mean_rank_ic": 0.21153474044638018,
+      "rank_ic_days": 80,
+      "folds": 8,
+      "fold_hit_rates": [
+        0.5474789915966387,
+        0.5648820326678766,
+        0.5447042640990372,
+        0.5895075931891395,
+        0.567845947156292,
+        0.5487640449438203,
+        0.5613951266125179,
+        0.5672514619883041
+      ],
+      "gated_best_hit": 0.5612564848070235,
+      "gated_best_thr": 0.0,
+      "gated_best_coverage": 1.0,
+      "purged": true
+    },
+    {
+      "model_id": "B1_logistic::panel",
+      "horizon": 5,
+      "origins": 17409,
+      "direction_hits": 9547,
+      "direction_total": 17409,
+      "hit_rate": 0.5483945085875122,
+      "pooled_ic": 0.13249918988283477,
+      "mean_rank_ic": 0.14916745379021415,
+      "rank_ic_days": 70,
+      "folds": 7,
+      "fold_hit_rates": [
+        0.5337034099920698,
+        0.5705128205128205,
+        0.5526530612244898,
+        0.5784274990122481,
+        0.5203546956872229,
+        0.5490273918221517,
+        0.533195020746888
+      ],
+      "gated_best_hit": 0.6040500932587264,
+      "gated_best_thr": 0.1,
+      "gated_best_coverage": 0.21557814923315527,
+      "purged": true
+    },
+    {
+      "model_id": "M1_hgb_clf::panel",
+      "horizon": 5,
+      "origins": 17409,
+      "direction_hits": 9686,
+      "direction_total": 17409,
+      "hit_rate": 0.5563788844850365,
+      "pooled_ic": 0.13975483312324746,
+      "mean_rank_ic": 0.15407610858986617,
+      "rank_ic_days": 70,
+      "folds": 7,
+      "fold_hit_rates": [
+        0.5515463917525774,
+        0.5749198717948718,
+        0.5395918367346939,
+        0.6017384433030423,
+        0.5304312777106006,
+        0.5414847161572053,
+        0.553941908713693
+      ],
+      "gated_best_hit": 0.6323648103309121,
+      "gated_best_thr": 0.2,
+      "gated_best_coverage": 0.14234016887816647,
+      "purged": true
+    },
+    {
+      "model_id": "M2_hgb_reg::panel",
+      "horizon": 5,
+      "origins": 17409,
+      "direction_hits": 9221,
+      "direction_total": 17409,
+      "hit_rate": 0.5296685622379229,
+      "pooled_ic": 0.0800866515844186,
+      "mean_rank_ic": 0.08185779684945493,
+      "rank_ic_days": 70,
+      "folds": 7,
+      "fold_hit_rates": [
+        0.5479777954004759,
+        0.5801282051282052,
+        0.4889795918367347,
+        0.5369419201896484,
+        0.5151148730350665,
+        0.5192536720921,
+        0.5178423236514523
+      ],
+      "gated_best_hit": 0.5296685622379229,
+      "gated_best_thr": 0.0,
+      "gated_best_coverage": 1.0,
+      "purged": true
+    }
+  ],
+  "gate_tables": {
+    "B1_logistic::purged_h1": [
+      {
+        "threshold": 0.0,
+        "hit_rate": 0.5685536742489026,
+        "n_gated": 17541.0,
+        "coverage": 1.0,
+        "meets_coverage": 1.0
+      },
+      {
+        "threshold": 0.05,
+        "hit_rate": 0.5944730781883979,
+        "n_gated": 9119.0,
+        "coverage": 0.5198677384413659,
+        "meets_coverage": 1.0
+      },
+      {
+        "threshold": 0.1,
+        "hit_rate": 0.6375058166589112,
+        "n_gated": 2149.0,
+        "coverage": 0.12251296961404709,
+        "meets_coverage": 1.0
+      },
+      {
+        "threshold": 0.15,
+        "hit_rate": 0.6435452793834296,
+        "n_gated": 519.0,
+        "coverage": 0.029587822815118865,
+        "meets_coverage": 0.0
+      },
+      {
+        "threshold": 0.2,
+        "hit_rate": 0.6927374301675978,
+        "n_gated": 179.0,
+        "coverage": 0.010204663360127701,
+        "meets_coverage": 0.0
+      },
+      {
+        "threshold": 0.25,
+        "hit_rate": 0.725,
+        "n_gated": 80.0,
+        "coverage": 0.004560743401174391,
+        "meets_coverage": 0.0
+      },
+      {
+        "threshold": 0.3,
+        "hit_rate": 0.7446808510638298,
+        "n_gated": 47.0,
+        "coverage": 0.0026794367481899548,
+        "meets_coverage": 0.0
+      }
+    ],
+    "M1_hgb_clf::purged_h1": [
+      {
+        "threshold": 0.0,
+        "hit_rate": 0.5617695684396556,
+        "n_gated": 17541.0,
+        "coverage": 1.0,
+        "meets_coverage": 1.0
+      },
+      {
+        "threshold": 0.05,
+        "hit_rate": 0.5805413434560158,
+        "n_gated": 12118.0,
+        "coverage": 0.690838606692891,
+        "meets_coverage": 1.0
+      },
+      {
+        "threshold": 0.1,
+        "hit_rate": 0.6005763688760807,
+        "n_gated": 6940.0,
+        "coverage": 0.39564449005187846,
+        "meets_coverage": 1.0
+      },
+      {
+        "threshold": 0.15,
+        "hit_rate": 0.6263736263736264,
+        "n_gated": 3458.0,
+        "coverage": 0.19713813351576306,
+        "meets_coverage": 1.0
+      },
+      {
+        "threshold": 0.2,
+        "hit_rate": 0.6670595167943429,
+        "n_gated": 1697.0,
+        "coverage": 0.09674476939741178,
+        "meets_coverage": 0.0
+      },
+      {
+        "threshold": 0.25,
+        "hit_rate": 0.7105719237435009,
+        "n_gated": 577.0,
+        "coverage": 0.0328943617809703,
+        "meets_coverage": 0.0
+      },
+      {
+        "threshold": 0.3,
+        "hit_rate": 0.8333333333333334,
+        "n_gated": 174.0,
+        "coverage": 0.009919616897554301,
+        "meets_coverage": 0.0
+      }
+    ],
+    "M2_hgb_reg::purged_h1": [
+      {
+        "threshold": 0.0,
+        "hit_rate": 0.5509378028618664,
+        "n_gated": 17541.0,
+        "coverage": 1.0,
+        "meets_coverage": 1.0
+      },
+      {
+        "threshold": 0.05,
+        "hit_rate": 0.7868852459016393,
+        "n_gated": 122.0,
+        "coverage": 0.006955133686790947,
+        "meets_coverage": 0.0
+      },
+      {
+        "threshold": 0.1,
+        "hit_rate": 0.9298245614035088,
+        "n_gated": 57.0,
+        "coverage": 0.003249529673336754,
+        "meets_coverage": 0.0
+      },
+      {
+        "threshold": 0.15,
+        "hit_rate": 0.972972972972973,
+        "n_gated": 37.0,
+        "coverage": 0.002109343823043156,
+        "meets_coverage": 0.0
+      },
+      {
+        "threshold": 0.2,
+        "hit_rate": 1.0,
+        "n_gated": 20.0,
+        "coverage": 0.0011401858502935978,
+        "meets_coverage": 0.0
+      },
+      {
+        "threshold": 0.25,
+        "hit_rate": 1.0,
+        "n_gated": 10.0,
+        "coverage": 0.0005700929251467989,
+        "meets_coverage": 0.0
+      },
+      {
+        "threshold": 0.3,
+        "hit_rate": 1.0,
+        "n_gated": 9.0,
+        "coverage": 0.000513083632632119,
+        "meets_coverage": 0.0
+      }
+    ],
+    "B1_logistic::purged_h5": [
+      {
+        "threshold": 0.0,
+        "hit_rate": 0.5172037451892699,
+        "n_gated": 17409.0,
+        "coverage": 1.0,
+        "meets_coverage": 1.0
+      },
+      {
+        "threshold": 0.05,
+        "hit_rate": 0.5080344099983769,
+        "n_gated": 12322.0,
+        "coverage": 0.7077948187718996,
+        "meets_coverage": 1.0
+      },
+      {
+        "threshold": 0.1,
+        "hit_rate": 0.4511943986820428,
+        "n_gated": 4856.0,
+        "coverage": 0.278936182434373,
+        "meets_coverage": 1.0
+      },
+      {
+        "threshold": 0.15,
+        "hit_rate": 0.493844049247606,
+        "n_gated": 731.0,
+        "coverage": 0.04198977540352691,
+        "meets_coverage": 0.0
+      },
+      {
+        "threshold": 0.2,
+        "hit_rate": 0.5083798882681564,
+        "n_gated": 179.0,
+        "coverage": 0.010282038026308232,
+        "meets_coverage": 0.0
+      },
+      {
+        "threshold": 0.25,
+        "hit_rate": 0.5405405405405406,
+        "n_gated": 74.0,
+        "coverage": 0.00425067493825033,
+        "meets_coverage": 0.0
+      },
+      {
+        "threshold": 0.3,
+        "hit_rate": 0.6470588235294118,
+        "n_gated": 34.0,
+        "coverage": 0.001953012809466368,
+        "meets_coverage": 0.0
+      }
+    ],
+    "M1_hgb_clf::purged_h5": [
+      {
+        "threshold": 0.0,
+        "hit_rate": 0.5429950025848699,
+        "n_gated": 17409.0,
+        "coverage": 1.0,
+        "meets_coverage": 1.0
+      },
+      {
+        "threshold": 0.05,
+        "hit_rate": 0.5461212164785391,
+        "n_gated": 13909.0,
+        "coverage": 0.7989545637314033,
+        "meets_coverage": 1.0
+      },
+      {
+        "threshold": 0.1,
+        "hit_rate": 0.5423927942040336,
+        "n_gated": 10214.0,
+        "coverage": 0.5867080245849848,
+        "meets_coverage": 1.0
+      },
+      {
+        "threshold": 0.15,
+        "hit_rate": 0.5315021725636251,
+        "n_gated": 6444.0,
+        "coverage": 0.37015336894709633,
+        "meets_coverage": 1.0
+      },
+      {
+        "threshold": 0.2,
+        "hit_rate": 0.5131503716409377,
+        "n_gated": 3498.0,
+        "coverage": 0.2009305531621575,
+        "meets_coverage": 1.0
+      },
+      {
+        "threshold": 0.25,
+        "hit_rate": 0.5184952978056426,
+        "n_gated": 1595.0,
+        "coverage": 0.0916192773852605,
+        "meets_coverage": 0.0
+      },
+      {
+        "threshold": 0.3,
+        "hit_rate": 0.580110497237569,
+        "n_gated": 543.0,
+        "coverage": 0.03119076339824229,
+        "meets_coverage": 0.0
+      }
+    ],
+    "M2_hgb_reg::purged_h5": [
+      {
+        "threshold": 0.0,
+        "hit_rate": 0.5054856683324717,
+        "n_gated": 17409.0,
+        "coverage": 1.0,
+        "meets_coverage": 1.0
+      },
+      {
+        "threshold": 0.05,
+        "hit_rate": 0.5596184419713831,
+        "n_gated": 629.0,
+        "coverage": 0.03613073697512781,
+        "meets_coverage": 0.0
+      },
+      {
+        "threshold": 0.1,
+        "hit_rate": 0.6575342465753424,
+        "n_gated": 146.0,
+        "coverage": 0.008386466770061463,
+        "meets_coverage": 0.0
+      },
+      {
+        "threshold": 0.15,
+        "hit_rate": 0.7432432432432432,
+        "n_gated": 74.0,
+        "coverage": 0.00425067493825033,
+        "meets_coverage": 0.0
+      },
+      {
+        "threshold": 0.2,
+        "hit_rate": 0.7906976744186046,
+        "n_gated": 43.0,
+        "coverage": 0.0024699867884427594,
+        "meets_coverage": 0.0
+      },
+      {
+        "threshold": 0.25,
+        "hit_rate": 0.8,
+        "n_gated": 25.0,
+        "coverage": 0.0014360388304899764,
+        "meets_coverage": 0.0
+      },
+      {
+        "threshold": 0.3,
+        "hit_rate": 0.8125,
+        "n_gated": 16.0,
+        "coverage": 0.0009190648515135849,
+        "meets_coverage": 0.0
+      }
+    ],
+    "B1_logistic::panel_h1": [
+      {
+        "threshold": 0.0,
+        "hit_rate": 0.5478593010660737,
+        "n_gated": 17541.0,
+        "coverage": 1.0,
+        "meets_coverage": 1.0
+      },
+      {
+        "threshold": 0.05,
+        "hit_rate": 0.5727035067159469,
+        "n_gated": 11093.0,
+        "coverage": 0.632404081865344,
+        "meets_coverage": 1.0
+      },
+      {
+        "threshold": 0.1,
+        "hit_rate": 0.6418348623853211,
+        "n_gated": 2725.0,
+        "coverage": 0.1553503221025027,
+        "meets_coverage": 1.0
+      },
+      {
+        "threshold": 0.15,
+        "hit_rate": 0.6760070052539404,
+        "n_gated": 571.0,
+        "coverage": 0.032552306025882216,
+        "meets_coverage": 0.0
+      },
+      {
+        "threshold": 0.2,
+        "hit_rate": 0.6942675159235668,
+        "n_gated": 157.0,
+        "coverage": 0.008950458924804743,
+        "meets_coverage": 0.0
+      },
+      {
+        "threshold": 0.25,
+        "hit_rate": 0.703125,
+        "n_gated": 64.0,
+        "coverage": 0.003648594720939513,
+        "meets_coverage": 0.0
+      },
+      {
+        "threshold": 0.3,
+        "hit_rate": 0.71875,
+        "n_gated": 32.0,
+        "coverage": 0.0018242973604697566,
+        "meets_coverage": 0.0
+      }
+    ],
+    "M1_hgb_clf::panel_h1": [
+      {
+        "threshold": 0.0,
+        "hit_rate": 0.5641069494327575,
+        "n_gated": 17541.0,
+        "coverage": 1.0,
+        "meets_coverage": 1.0
+      },
+      {
+        "threshold": 0.05,
+        "hit_rate": 0.5880846141133697,
+        "n_gated": 12102.0,
+        "coverage": 0.6899264580126561,
+        "meets_coverage": 1.0
+      },
+      {
+        "threshold": 0.1,
+        "hit_rate": 0.6170012124477974,
+        "n_gated": 7423.0,
+        "coverage": 0.42317997833646886,
+        "meets_coverage": 1.0
+      },
+      {
+        "threshold": 0.15,
+        "hit_rate": 0.6587899246948844,
+        "n_gated": 3851.0,
+        "coverage": 0.21954278547403228,
+        "meets_coverage": 1.0
+      },
+      {
+        "threshold": 0.2,
+        "hit_rate": 0.6877296105804556,
+        "n_gated": 1361.0,
+        "coverage": 0.07758964711247933,
+        "meets_coverage": 0.0
+      },
+      {
+        "threshold": 0.25,
+        "hit_rate": 0.75,
+        "n_gated": 372.0,
+        "coverage": 0.02120745681546092,
+        "meets_coverage": 0.0
+      },
+      {
+        "threshold": 0.3,
+        "hit_rate": 0.765625,
+        "n_gated": 128.0,
+        "coverage": 0.007297189441879026,
+        "meets_coverage": 0.0
+      }
+    ],
+    "M2_hgb_reg::panel_h1": [
+      {
+        "threshold": 0.0,
+        "hit_rate": 0.5612564848070235,
+        "n_gated": 17541.0,
+        "coverage": 1.0,
+        "meets_coverage": 1.0
+      },
+      {
+        "threshold": 0.05,
+        "hit_rate": 0.7786885245901639,
+        "n_gated": 122.0,
+        "coverage": 0.006955133686790947,
+        "meets_coverage": 0.0
+      },
+      {
+        "threshold": 0.1,
+        "hit_rate": 0.8833333333333333,
+        "n_gated": 60.0,
+        "coverage": 0.0034205575508807935,
+        "meets_coverage": 0.0
+      },
+      {
+        "threshold": 0.15,
+        "hit_rate": 0.9487179487179487,
+        "n_gated": 39.0,
+        "coverage": 0.002223362408072516,
+        "meets_coverage": 0.0
+      },
+      {
+        "threshold": 0.2,
+        "hit_rate": 1.0,
+        "n_gated": 19.0,
+        "coverage": 0.001083176557778918,
+        "meets_coverage": 0.0
+      },
+      {
+        "threshold": 0.25,
+        "hit_rate": 1.0,
+        "n_gated": 13.0,
+        "coverage": 0.0007411208026908386,
+        "meets_coverage": 0.0
+      },
+      {
+        "threshold": 0.3,
+        "hit_rate": 1.0,
+        "n_gated": 8.0,
+        "coverage": 0.00045607434011743915,
+        "meets_coverage": 0.0
+      }
+    ],
+    "B1_logistic::panel_h5": [
+      {
+        "threshold": 0.0,
+        "hit_rate": 0.5483945085875122,
+        "n_gated": 17409.0,
+        "coverage": 1.0,
+        "meets_coverage": 1.0
+      },
+      {
+        "threshold": 0.05,
+        "hit_rate": 0.5613063128735968,
+        "n_gated": 13718.0,
+        "coverage": 0.7879832270664598,
+        "meets_coverage": 1.0
+      },
+      {
+        "threshold": 0.1,
+        "hit_rate": 0.6040500932587264,
+        "n_gated": 3753.0,
+        "coverage": 0.21557814923315527,
+        "meets_coverage": 1.0
+      },
+      {
+        "threshold": 0.15,
+        "hit_rate": 0.6634920634920635,
+        "n_gated": 315.0,
+        "coverage": 0.018094089264173704,
+        "meets_coverage": 0.0
+      },
+      {
+        "threshold": 0.2,
+        "hit_rate": 0.6666666666666666,
+        "n_gated": 60.0,
+        "coverage": 0.0034464931931759437,
+        "meets_coverage": 0.0
+      },
+      {
+        "threshold": 0.25,
+        "hit_rate": 0.625,
+        "n_gated": 32.0,
+        "coverage": 0.0018381297030271699,
+        "meets_coverage": 0.0
+      },
+      {
+        "threshold": 0.3,
+        "hit_rate": 0.6363636363636364,
+        "n_gated": 22.0,
+        "coverage": 0.0012637141708311793,
+        "meets_coverage": 0.0
+      }
+    ],
+    "M1_hgb_clf::panel_h5": [
+      {
+        "threshold": 0.0,
+        "hit_rate": 0.5563788844850365,
+        "n_gated": 17409.0,
+        "coverage": 1.0,
+        "meets_coverage": 1.0
+      },
+      {
+        "threshold": 0.05,
+        "hit_rate": 0.5819491525423729,
+        "n_gated": 11800.0,
+        "coverage": 0.6778103279912688,
+        "meets_coverage": 1.0
+      },
+      {
+        "threshold": 0.1,
+        "hit_rate": 0.6063815702369919,
+        "n_gated": 7553.0,
+        "coverage": 0.4338560514676317,
+        "meets_coverage": 1.0
+      },
+      {
+        "threshold": 0.15,
+        "hit_rate": 0.6214000886132034,
+        "n_gated": 4514.0,
+        "coverage": 0.25929117123327017,
+        "meets_coverage": 1.0
+      },
+      {
+        "threshold": 0.2,
+        "hit_rate": 0.6323648103309121,
+        "n_gated": 2478.0,
+        "coverage": 0.14234016887816647,
+        "meets_coverage": 1.0
+      },
+      {
+        "threshold": 0.25,
+        "hit_rate": 0.6414728682170543,
+        "n_gated": 1032.0,
+        "coverage": 0.059279682922626226,
+        "meets_coverage": 0.0
+      },
+      {
+        "threshold": 0.3,
+        "hit_rate": 0.7321428571428571,
+        "n_gated": 224.0,
+        "coverage": 0.012866907921190189,
+        "meets_coverage": 0.0
+      }
+    ],
+    "M2_hgb_reg::panel_h5": [
+      {
+        "threshold": 0.0,
+        "hit_rate": 0.5296685622379229,
+        "n_gated": 17409.0,
+        "coverage": 1.0,
+        "meets_coverage": 1.0
+      },
+      {
+        "threshold": 0.05,
+        "hit_rate": 0.5460385438972163,
+        "n_gated": 467.0,
+        "coverage": 0.02682520535355276,
+        "meets_coverage": 0.0
+      },
+      {
+        "threshold": 0.1,
+        "hit_rate": 0.5704697986577181,
+        "n_gated": 149.0,
+        "coverage": 0.008558791429720259,
+        "meets_coverage": 0.0
+      },
+      {
+        "threshold": 0.15,
+        "hit_rate": 0.6582278481012658,
+        "n_gated": 79.0,
+        "coverage": 0.004537882704348325,
+        "meets_coverage": 0.0
+      },
+      {
+        "threshold": 0.2,
+        "hit_rate": 0.7169811320754716,
+        "n_gated": 53.0,
+        "coverage": 0.0030444023206387502,
+        "meets_coverage": 0.0
+      },
+      {
+        "threshold": 0.25,
+        "hit_rate": 0.8125,
+        "n_gated": 32.0,
+        "coverage": 0.0018381297030271699,
+        "meets_coverage": 0.0
+      },
+      {
+        "threshold": 0.3,
+        "hit_rate": 0.85,
+        "n_gated": 20.0,
+        "coverage": 0.0011488310643919812,
+        "meets_coverage": 0.0
+      }
+    ]
+  }
+}
