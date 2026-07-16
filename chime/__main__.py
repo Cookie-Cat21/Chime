@@ -320,13 +320,14 @@ def main(argv: list[str] | None = None) -> None:
             "ml-forecast",
             "ml-transfer",
             "ml-harden",
+            "ml-diagnose",
         ],
         help=(
             "bot | poller | both | migrate | tick | "
             "drain-pdfs | drain-briefs | drain-metrics | "
             "path-backfill | score-signals | eval-signals | "
             "sector-backfill | notices-backfill | ml-experiment | "
-            "ml-forecast | ml-transfer | ml-harden"
+            "ml-forecast | ml-transfer | ml-harden | ml-diagnose"
         ),
     )
     parser.add_argument(
@@ -836,6 +837,48 @@ def main(argv: list[str] | None = None) -> None:
                 await storage.close()
 
         asyncio.run(_harden())
+        return
+
+    if args.command == "ml-diagnose":
+        configure_logging()
+        settings = Settings.from_env(require_token=False)
+        limit = (
+            None
+            if not isinstance(args.limit, int)
+            or isinstance(args.limit, bool)
+            or args.limit == 20
+            else args.limit
+        )
+
+        async def _diagnose() -> None:
+            from pathlib import Path
+
+            from chime.ml.diagnose import run_diagnose
+
+            storage = Storage(settings.database_url)
+            await storage.open()
+            try:
+                result = await run_diagnose(
+                    storage=storage,
+                    horizon=1,
+                    panel=True,
+                    model_id="M1_hgb_clf",
+                    limit_symbols=limit if limit and limit > 0 else None,
+                    out_dir=Path("docs/experiments"),
+                )
+                print(
+                    "ml-diagnose: "
+                    f"rows={result.n_rows} "
+                    f"pooled_hit={result.pooled_hit} "
+                    f"mean_symbol_hit={result.mean_symbol_hit} "
+                    f"ge70={result.symbols_ge_070}/{result.n_symbols}"
+                )
+                for r in result.recommendations[:8]:
+                    print(" ", r)
+            finally:
+                await storage.close()
+
+        asyncio.run(_diagnose())
         return
 
     settings = Settings.from_env(require_token=True)
