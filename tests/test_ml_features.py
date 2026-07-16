@@ -43,7 +43,7 @@ def test_labels_horizon() -> None:
     lab = labels_at(prices, index=0, horizon=1)
     assert lab is not None
     ret, direction = lab
-    assert ret == 0.1
+    assert abs(ret - 0.1) < 1e-9
     assert direction == 1.0
     lab5 = labels_at(prices, index=0, horizon=5)
     assert lab5 is None
