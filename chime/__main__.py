@@ -316,12 +316,13 @@ def main(argv: list[str] | None = None) -> None:
             "eval-signals",
             "sector-backfill",
             "notices-backfill",
+            "ml-experiment",
         ],
         help=(
             "bot | poller | both | migrate | tick | "
             "drain-pdfs | drain-briefs | drain-metrics | "
             "path-backfill | score-signals | eval-signals | "
-            "sector-backfill | notices-backfill"
+            "sector-backfill | notices-backfill | ml-experiment"
         ),
     )
     parser.add_argument(
@@ -353,6 +354,12 @@ def main(argv: list[str] | None = None) -> None:
         "--no-seed",
         action="store_true",
         help="For path-backfill: skip tradeSummary id seed",
+    )
+    parser.add_argument(
+        "--horizons",
+        type=str,
+        default="1,5",
+        help="For ml-experiment: comma-separated horizons (default 1,5)",
     )
     args = parser.parse_args(argv)
     if args.force and args.command not in (
@@ -588,6 +595,65 @@ def main(argv: list[str] | None = None) -> None:
                 await storage.close()
 
         asyncio.run(_eval())
+        return
+
+    if args.command == "ml-experiment":
+        configure_logging()
+        settings = Settings.from_env(require_token=False)
+        limit = (
+            args.limit
+            if isinstance(args.limit, int) and args.limit > 0
+            else None
+        )
+        # Default argparse limit is 20 — treat 20 as "full board" unless user
+        # passed an explicit smaller smoke size via env? Better: 0 means all.
+        # For ml-experiment, --limit 0 or omitted-full: use None when limit==20
+        # and user didn't care — actually plan says full board. Use:
+        # --limit default stays 20 for other cmds; for ml, if limit is default
+        # 20, run ALL (None). Explicit --limit N for smoke.
+        raw_horizons = args.horizons if isinstance(args.horizons, str) else "1,5"
+        horizons: list[int] = []
+        for part in raw_horizons.split(","):
+            part = part.strip()
+            if not part:
+                continue
+            try:
+                h = int(part)
+            except ValueError:
+                continue
+            if h >= 1:
+                horizons.append(h)
+        if not horizons:
+            horizons = [1, 5]
+
+        async def _ml() -> None:
+            from pathlib import Path
+
+            from chime.ml.experiment import ExperimentConfig, run_ml_experiment
+
+            storage = Storage(settings.database_url)
+            await storage.open()
+            try:
+                # Smoke: --limit with value other than default 20; full if 20.
+                lim = None if limit == 20 else limit
+                result = await run_ml_experiment(
+                    storage=storage,
+                    config=ExperimentConfig(
+                        horizons=tuple(horizons),
+                        limit_symbols=lim,
+                        out_dir=Path("docs/experiments"),
+                    ),
+                )
+                print(
+                    "ml-experiment: "
+                    f"decision={result.decision} "
+                    f"metrics={len(result.metrics)} "
+                    f"reasons={'; '.join(result.reasons) or '-'}"
+                )
+            finally:
+                await storage.close()
+
+        asyncio.run(_ml())
         return
 
     settings = Settings.from_env(require_token=True)
