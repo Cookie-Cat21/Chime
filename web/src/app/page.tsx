@@ -116,13 +116,13 @@ export default async function HomePage() {
           </div>
         </section>
 
-        {/* Proof — phone clipped flush with the band’s bottom edge (no pad under it) */}
+        {/* Proof — floating Telegram notification cards, no device chrome */}
         <section
           aria-labelledby="proof-heading"
-          className="overflow-hidden border-y border-border/70 bg-foreground/[0.03]"
+          className="border-y border-border/70 bg-foreground/[0.03]"
         >
-          <div className="mx-auto grid w-full max-w-5xl grid-cols-1 items-stretch px-6 pt-14 sm:pt-16 lg:grid-cols-12 lg:gap-12">
-            <div className="pb-14 sm:pb-16 lg:col-span-5">
+          <div className="mx-auto grid w-full max-w-5xl grid-cols-1 items-center gap-10 px-6 py-14 sm:py-16 lg:grid-cols-12 lg:gap-12">
+            <div className="lg:col-span-5">
               <SectionEyebrow>The cherry — Telegram</SectionEyebrow>
               <h2
                 id="proof-heading"
@@ -136,9 +136,8 @@ export default async function HomePage() {
               </p>
             </div>
 
-            {/* Clip column: no bottom padding — cut lands on the colour edge */}
-            <div className="relative h-[300px] overflow-hidden sm:h-[340px] lg:col-span-7 lg:h-auto lg:min-h-0">
-              <div className="absolute top-6 left-1/2 w-[320px] -translate-x-1/2 sm:w-[360px] lg:top-8 lg:right-0 lg:left-auto lg:w-[420px] lg:translate-x-0">
+            <div className="lg:col-span-7">
+              <div className="mx-auto w-full max-w-sm sm:max-w-md lg:mr-0 lg:ml-auto lg:max-w-lg">
                 <TelegramProof />
               </div>
             </div>
