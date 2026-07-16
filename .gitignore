@@ -31,6 +31,9 @@ Thumbs.db
 # local probe artifacts
 *.bin
 
+# Large offline transfer-learning panels (Yahoo/Kaggle downloads)
+/data/
+
 # Next.js dashboard (web/)
 web/node_modules/
 web/.next/

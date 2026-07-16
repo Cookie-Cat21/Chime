@@ -318,13 +318,14 @@ def main(argv: list[str] | None = None) -> None:
             "notices-backfill",
             "ml-experiment",
             "ml-forecast",
+            "ml-transfer",
         ],
         help=(
             "bot | poller | both | migrate | tick | "
             "drain-pdfs | drain-briefs | drain-metrics | "
             "path-backfill | score-signals | eval-signals | "
             "sector-backfill | notices-backfill | ml-experiment | "
-            "ml-forecast"
+            "ml-forecast | ml-transfer"
         ),
     )
     parser.add_argument(
@@ -361,7 +362,13 @@ def main(argv: list[str] | None = None) -> None:
         "--horizons",
         type=str,
         default="1,5",
-        help="For ml-experiment: comma-separated horizons (default 1,5)",
+        help="For ml-experiment/ml-transfer: comma-separated horizons (default 1,5)",
+    )
+    parser.add_argument(
+        "--panel",
+        type=str,
+        default="data/transfer_ohlcv/panel_daily.csv",
+        help="For ml-transfer: path to foreign OHLCV CSV panel",
     )
     args = parser.parse_args(argv)
     if args.force and args.command not in (
@@ -703,6 +710,78 @@ def main(argv: list[str] | None = None) -> None:
                 await storage.close()
 
         asyncio.run(_ml_fc())
+        return
+
+    if args.command == "ml-transfer":
+        configure_logging()
+        settings = Settings.from_env(require_token=False)
+        limit = (
+            None
+            if not isinstance(args.limit, int)
+            or isinstance(args.limit, bool)
+            or args.limit == 20
+            else args.limit
+        )
+        raw_horizons = args.horizons if isinstance(args.horizons, str) else "1,5"
+        horizons: list[int] = []
+        for part in raw_horizons.split(","):
+            part = part.strip()
+            if not part:
+                continue
+            try:
+                h = int(part)
+            except ValueError:
+                continue
+            if h >= 1:
+                horizons.append(h)
+        if not horizons:
+            horizons = [1, 5]
+
+        async def _xfer() -> None:
+            import json
+            from datetime import UTC, datetime
+            from pathlib import Path
+
+            from chime.ml.transfer import (
+                render_transfer_markdown,
+                run_transfer_experiment,
+            )
+
+            panel = Path(args.panel)
+            if not panel.is_file():
+                print(f"ml-transfer: panel not found: {panel}")
+                return
+            storage = Storage(settings.database_url)
+            await storage.open()
+            try:
+                result = await run_transfer_experiment(
+                    storage=storage,
+                    panel_csv=panel,
+                    horizons=tuple(horizons),
+                    limit_cse_symbols=limit if limit and limit > 0 else None,
+                )
+                stamp = datetime.now(UTC).strftime("%Y%m%dT%H%M%SZ")
+                out_dir = Path("docs/experiments")
+                out_dir.mkdir(parents=True, exist_ok=True)
+                out_md = out_dir / f"ml_transfer_{stamp}.md"
+                out_json = out_md.with_suffix(".json")
+                out_md.write_text(render_transfer_markdown(result), encoding="utf-8")
+                out_json.write_text(
+                    json.dumps(result.as_dict(), indent=2) + "\n", encoding="utf-8"
+                )
+                print(
+                    "ml-transfer: "
+                    f"decision={result.decision} "
+                    f"panel_syms={result.panel_symbols} "
+                    f"cse_syms={result.cse_symbols} "
+                    f"report={out_md}"
+                )
+                for r in result.reasons:
+                    print(" ", r)
+            finally:
+                await storage.close()
+
+        asyncio.run(_xfer())
         return
 
     settings = Settings.from_env(require_token=True)
