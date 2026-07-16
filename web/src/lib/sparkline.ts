@@ -5,10 +5,10 @@ type Point = { ts: string | null; price: number | null | undefined };
 export type FiniteSparklinePoint = { ts: string | null; price: number };
 
 /**
- * Cap sparkline series length — snapshots API max is 200; a hostile /
+ * Cap sparkline series length — snapshots API absolute max is 500; a hostile /
  * unbounded points array used to allocate huge SVG polylines.
  */
-export const MAX_SPARKLINE_POINTS = 200;
+export const MAX_SPARKLINE_POINTS = 500;
 
 /**
  * Cap absolute price magnitude (parity ``MAX_FORMAT_ABS_VALUE``).

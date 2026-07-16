@@ -26,6 +26,8 @@ export async function GET(request: NextRequest, context: RouteContext) {
     return jsonError(400, "invalid_symbol", "Invalid symbol.");
   }
 
+  /** Absolute max sparkline / snapshot window (parity MAX_SPARKLINE_POINTS). */
+  const ABSOLUTE_MAX_SNAPSHOT_LIMIT = 500;
   let limit = 60;
   const limitRaw = request.nextUrl.searchParams.get("limit");
   if (limitRaw != null) {
@@ -34,7 +36,7 @@ export async function GET(request: NextRequest, context: RouteContext) {
     if (n == null) {
       return jsonError(400, "validation_error", "limit must be a positive integer.");
     }
-    limit = Math.min(n, 200);
+    limit = Math.min(n, ABSOLUTE_MAX_SNAPSHOT_LIMIT);
   }
 
   try {

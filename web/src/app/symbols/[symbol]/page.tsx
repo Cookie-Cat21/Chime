@@ -47,6 +47,13 @@ import { serverApiGet } from "@/lib/api/server-fetch";
 import { normalizeSymbol, normalizeSymbolParam } from "@/lib/api/symbol";
 import { toIso } from "@/lib/api/time";
 import { requirePageSession } from "@/lib/auth/page-session";
+import { Suspense } from "react";
+
+import {
+  DEFAULT_SPARKLINE_TICKS,
+  parseSparklineTicks,
+  SparklineTicksControl,
+} from "@/components/kit/sparkline-ticks-control";
 import { formatNumber, formatTs } from "@/lib/format";
 
 export const dynamic = "force-dynamic";
@@ -54,7 +61,7 @@ export const dynamic = "force-dynamic";
 /** Snapshots older than this are treated as stale for empty-copy (E11-D02). */
 const STALE_MS = 24 * 60 * 60 * 1000;
 /** Cap sparkline points parse — parity with snapshots API max / sparkline bound. */
-const MAX_PAGE_SNAPSHOT_POINTS = 200;
+const MAX_PAGE_SNAPSHOT_POINTS = 500;
 /** Cap disclosures parse — parity with disclosures API max 100. */
 const MAX_PAGE_DISCLOSURES = 100;
 /** Short filing metric labels; never echo arbitrary long extraction text. */
@@ -382,6 +389,7 @@ export default async function SymbolDetailPage({
   searchParams: Promise<{
     category?: string | string[];
     compare?: string | string[];
+    ticks?: string | string[];
   }>;
 }) {
   await requirePageSession();
@@ -400,18 +408,21 @@ export default async function SymbolDetailPage({
   const comparePeers = parseCompareSearchParam(sp.compare).filter(
     (peer) => peer !== symbol,
   );
+  const tickLimit = parseSparklineTicks(sp.ticks);
 
   const encoded = encodeURIComponent(symbol);
   const compareQs =
     comparePeers.length > 0
       ? `/api/v1/compare?symbols=${encodeURIComponent(
           [symbol, ...comparePeers].join(","),
-        )}&limit=60`
+        )}&limit=${tickLimit}`
       : null;
   const [symRes, snapRes, discRes, metricsRes, briefRes, compareRes, watchRes] =
     await Promise.all([
       serverApiGet(`/api/v1/symbols/${encoded}`),
-      serverApiGet(`/api/v1/symbols/${encoded}/snapshots?limit=60`),
+      serverApiGet(
+        `/api/v1/symbols/${encoded}/snapshots?limit=${tickLimit}`,
+      ),
       serverApiGet(`/api/v1/symbols/${encoded}/disclosures?limit=20`),
       serverApiGet(`/api/v1/symbols/${encoded}/metrics`),
       serverApiGet(`/api/v1/symbols/${encoded}/brief`),
@@ -657,6 +668,15 @@ export default async function SymbolDetailPage({
             ) : null}
           </div>
           <div className="min-h-20 min-w-0 flex-1 md:max-w-sm">
+            <Suspense
+              fallback={
+                <p className="mb-2 text-xs text-muted-foreground">
+                  Ticks {tickLimit === DEFAULT_SPARKLINE_TICKS ? "" : tickLimit}
+                </p>
+              }
+            >
+              <SparklineTicksControl value={tickLimit} className="mb-2" />
+            </Suspense>
             {snapsFailed ? (
               <p className="text-sm text-muted-foreground" role="status">
                 Couldn’t load recent ticks right now.
