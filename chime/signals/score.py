@@ -18,7 +18,8 @@ from chime.scenarios.guardrails import (
     assert_safe_scenario_output,
 )
 
-MODEL_VERSION = "path_v4"
+MODEL_VERSION = "path_v5"
+MODEL_VERSION_V4 = "path_v4"
 MODEL_VERSION_V3 = "path_v3"
 MODEL_VERSION_V2 = "path_v2"
 MODEL_VERSION_V1 = "path_v1"
@@ -27,7 +28,7 @@ MODEL_VERSION_V0 = "path_v0"
 
 @dataclass(frozen=True, slots=True)
 class ExtraFactors:
-    """Optional non-path inputs for ``path_v4`` (all fail-closed / optional)."""
+    """Optional non-path inputs for ``path_v5`` (all fail-closed / optional)."""
 
     eps_yoy_pct: float | None = None
     rev_yoy_pct: float | None = None
@@ -48,6 +49,8 @@ class ExtraFactors:
     ret20_rank_stability: float | None = None  # 1 - |pct_now - pct_lag|
     # F-082: paired listing (.N vs .X) 20d return gap (this − pair).
     dual_listing_ret20_gap: float | None = None
+    # F-072: prior model score percentile [0,1] (for autocorr with ret20 rank).
+    prior_score_percentile: float | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -150,6 +153,18 @@ def score_symbol_path(
         ):
             ranges.append((b.high - b.low) / b.price)
     range_20 = statistics.fmean(ranges) if ranges else None
+
+    # F-062: large calendar gaps in recent path (holiday / halt / illiquid).
+    gap_days: list[int] = []
+    recent_for_gaps = ordered[-40:]
+    for i in range(1, len(recent_for_gaps)):
+        delta = (
+            recent_for_gaps[i].trade_date - recent_for_gaps[i - 1].trade_date
+        ).days
+        if delta > 1:
+            gap_days.append(delta)
+    long_gaps = sum(1 for g in gap_days if g >= 5)
+    max_gap = max(gap_days) if gap_days else 0
 
     # F-012: volume regime — recent 5d avg / prior 15d avg.
     vol_series = [
@@ -292,6 +307,8 @@ def score_symbol_path(
         # Mild relative path vs paired share class (research only).
         dual_term = max(-6.0, min(6.0, dual_gap * 40.0))
 
+    prior_score_pctile = _finite_opt(extras.prior_score_percentile)
+
     # F-061: Colombo calendar — month-end sessions get a small liquidity caution.
     calendar_term = 0.0
     month_end = as_of.day >= 28
@@ -302,6 +319,11 @@ def score_symbol_path(
         calendar_term += 1.0  # mild Monday reopen activity tilt
     elif weekday == 4:
         calendar_term -= 1.0  # mild Friday caution
+
+    # F-062: long path gaps (holiday / halt / illiquid stretches).
+    gap_penalty = 0.0
+    if long_gaps > 0:
+        gap_penalty = min(8.0, float(long_gaps) * 2.0 + max(0, max_gap - 5) * 0.5)
 
     # F-071: stable high/low cross-sectional ranks get a small confirmation tilt.
     rank_term = 0.0
@@ -315,6 +337,18 @@ def score_symbol_path(
             rank_term = 4.0 * rank_stab
         elif ret20_pctile <= 0.2:
             rank_term = -4.0 * rank_stab
+
+    # F-072: prior research-score rank vs current 20d return rank persistence.
+    score_rank_term = 0.0
+    score_rank_gap: float | None = None
+    if prior_score_pctile is not None and ret20_pctile is not None:
+        score_rank_gap = 1.0 - abs(prior_score_pctile - ret20_pctile)
+        if score_rank_gap >= 0.7:
+            # Agreeing high/low ranks → mild confirmation.
+            if prior_score_pctile >= 0.8 and ret20_pctile >= 0.8:
+                score_rank_term = 3.0 * score_rank_gap
+            elif prior_score_pctile <= 0.2 and ret20_pctile <= 0.2:
+                score_rank_term = -3.0 * score_rank_gap
 
     # F-081: thin history discount.
     thin_penalty = 0.0
@@ -339,6 +373,8 @@ def score_symbol_path(
         + rank_term
         - thin_penalty
         + dual_term
+        - gap_penalty
+        + score_rank_term
     )
     score = max(-100.0, min(100.0, raw))
 
@@ -386,9 +422,15 @@ def score_symbol_path(
         "month_end": 1.0 if month_end else 0.0,
         "weekday": float(weekday),
         "calendar_term": calendar_term,
+        "long_gaps_40": float(long_gaps),
+        "max_gap_days": float(max_gap),
+        "gap_penalty": gap_penalty,
         "ret20_percentile": ret20_pctile,
         "ret20_rank_stability": rank_stab,
         "rank_term": rank_term,
+        "prior_score_percentile": prior_score_pctile,
+        "score_rank_gap": score_rank_gap,
+        "score_rank_term": score_rank_term,
         "thin_penalty": thin_penalty,
     }
 
@@ -480,6 +522,19 @@ def score_symbol_path(
         r = _safe_reason(
             f"20-session path {direction} paired share class by "
             f"{abs(dual_gap) * 100.0:.1f} pts"
+        )
+        if r:
+            reasons.append(r)
+    if long_gaps > 0:
+        r = _safe_reason(
+            f"{long_gaps} long calendar gap(s) in recent path (max {max_gap}d)"
+        )
+        if r:
+            reasons.append(r)
+    if score_rank_gap is not None and score_rank_term != 0.0:
+        r = _safe_reason(
+            f"Prior research-score rank aligns with 20-session return rank "
+            f"(agreement {score_rank_gap:.2f})"
         )
         if r:
             reasons.append(r)

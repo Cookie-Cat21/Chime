@@ -12,6 +12,7 @@ from chime.logging_setup import get_logger
 from chime.signals.forecast import forecast_path
 from chime.signals.score import (
     MODEL_VERSION,
+    MODEL_VERSION_V4,
     ExtraFactors,
     score_symbol_path,
 )
@@ -122,6 +123,14 @@ async def run_signal_score_job(
 
     pct_now = _percentile_ranks(ret20_now)
     pct_lag = _percentile_ranks(ret20_lag)
+    prior_scores = await storage.list_latest_scores(model_version=MODEL_VERSION_V4)
+    if not prior_scores:
+        # Fall back through older research score versions.
+        for prior_ver in ("path_v3", "path_v2", "path_v1"):
+            prior_scores = await storage.list_latest_scores(model_version=prior_ver)
+            if prior_scores:
+                break
+    prior_score_pct = _percentile_ranks(prior_scores)
 
     scored = 0
     skipped = 0
@@ -193,6 +202,7 @@ async def run_signal_score_job(
             ret20_percentile=pctile,
             ret20_rank_stability=rank_stability,
             dual_listing_ret20_gap=dual_gap,
+            prior_score_percentile=prior_score_pct.get(symbol),
         )
         result = score_symbol_path(
             bars, extra=extra, model_version=model_version

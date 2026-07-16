@@ -1327,10 +1327,21 @@ class Storage:
         )
 
     async def resolve_symbol_by_company_name(self, company: str | None) -> str | None:
-        """Map a CSE company/name string to a unique stocks.symbol (case-insensitive)."""
+        """Map a CSE company/name string to a unique stocks.symbol.
+
+        Collapses whitespace (CSE stocks often have double spaces in ``name``;
+        notice boards usually do not). Ambiguous matches return None.
+        """
         if not isinstance(company, str) or not company.strip():
             return None
-        name = company.strip()
+        # Skip market-ops labels that are not issuers.
+        collapsed = " ".join(company.split()).upper()
+        if not collapsed or collapsed in {
+            "TRADING AND MARKET SURVEILLANCE",
+            "COLOMBO STOCK EXCHANGE",
+            "CSE",
+        }:
+            return None
         async with self._pool.connection() as conn:
             rows = await (
                 await conn.execute(
@@ -1338,16 +1349,49 @@ class Storage:
                     SELECT symbol
                     FROM stocks
                     WHERE name IS NOT NULL
-                      AND lower(name) = lower(%s)
+                      AND regexp_replace(upper(btrim(name)), '\\s+', ' ', 'g')
+                          = %s
                     LIMIT 2
                     """,
-                    (name,),
+                    (collapsed,),
                 )
             ).fetchall()
         if len(rows) != 1:
             return None
         sym = _as_row(rows[0]).get("symbol")
         return sym.strip().upper() if isinstance(sym, str) and sym.strip() else None
+
+    async def list_latest_scores(
+        self, *, model_version: str
+    ) -> dict[str, float]:
+        """Latest score per symbol for ``model_version`` (for rank autocorr)."""
+        if not isinstance(model_version, str) or not model_version.strip():
+            return {}
+        async with self._pool.connection() as conn:
+            rows = await (
+                await conn.execute(
+                    """
+                    SELECT DISTINCT ON (symbol)
+                        symbol, score
+                    FROM symbol_scores
+                    WHERE model_version = %s
+                    ORDER BY symbol ASC, as_of DESC, computed_at DESC
+                    """,
+                    (model_version.strip(),),
+                )
+            ).fetchall()
+        out: dict[str, float] = {}
+        for row in _as_rows(rows):
+            sym = row.get("symbol")
+            score = row.get("score")
+            if not isinstance(sym, str) or not sym.strip():
+                continue
+            if isinstance(score, bool) or not isinstance(score, int | float):
+                continue
+            if not math.isfinite(float(score)):
+                continue
+            out[sym.strip().upper()] = float(score)
+        return out
 
     async def enqueue_disclosure_brief(
         self,
