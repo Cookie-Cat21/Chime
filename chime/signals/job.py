@@ -95,8 +95,14 @@ async def run_signal_score_job(
     storage: Storage,
     limit: int | None = None,
     model_version: str = MODEL_VERSION,
+    ml_forecast: bool = False,
 ) -> SignalScoreResult:
-    """Score all symbols that have daily bars (or first ``limit`` symbols)."""
+    """Score all symbols that have daily bars (or first ``limit`` symbols).
+
+    When ``ml_forecast`` is True, write HGB ``forecast_points`` once after
+    scoring (requires optional ``[ml]`` extra). Otherwise use naive
+    ``forecast_path`` per symbol (legacy).
+    """
     symbols = await storage.list_symbols_with_daily_bars()
     if (
         limit is not None
@@ -220,9 +226,19 @@ async def run_signal_score_job(
             bar_count=result.bar_count,
         )
         scored += 1
-        points = forecast_path(bars)
-        if points:
-            forecasts += await storage.replace_forecast_points(points)
+        if not ml_forecast:
+            points = forecast_path(bars)
+            if points:
+                forecasts += await storage.replace_forecast_points(points)
+
+    if ml_forecast:
+        from chime.ml.serve import write_ml_forecasts
+
+        ml_result = await write_ml_forecasts(
+            storage=storage,
+            limit_symbols=limit,
+        )
+        forecasts = ml_result.points_written
 
     out = SignalScoreResult(
         symbols_targeted=len(symbols),

@@ -317,12 +317,14 @@ def main(argv: list[str] | None = None) -> None:
             "sector-backfill",
             "notices-backfill",
             "ml-experiment",
+            "ml-forecast",
         ],
         help=(
             "bot | poller | both | migrate | tick | "
             "drain-pdfs | drain-briefs | drain-metrics | "
             "path-backfill | score-signals | eval-signals | "
-            "sector-backfill | notices-backfill | ml-experiment"
+            "sector-backfill | notices-backfill | ml-experiment | "
+            "ml-forecast"
         ),
     )
     parser.add_argument(
@@ -367,10 +369,11 @@ def main(argv: list[str] | None = None) -> None:
         "path-backfill",
         "sector-backfill",
         "notices-backfill",
+        "ml-forecast",
     ):
         parser.error(
             "--force is only valid for tick, path-backfill, "
-            "sector-backfill, or notices-backfill"
+            "sector-backfill, notices-backfill, or ml-forecast"
         )
     if args.period is not None and args.command != "path-backfill":
         parser.error("--period is only valid for path-backfill")
@@ -552,14 +555,19 @@ def main(argv: list[str] | None = None) -> None:
             storage = Storage(settings.database_url)
             await storage.open()
             try:
-                result = await run_signal_score_job(storage=storage, limit=limit)
+                result = await run_signal_score_job(
+                    storage=storage,
+                    limit=limit,
+                    ml_forecast=settings.ml_forecast_enabled,
+                )
                 print(
                     "score-signals: "
                     f"targeted={result.symbols_targeted} "
                     f"scored={result.symbols_scored} "
                     f"skipped={result.symbols_skipped} "
                     f"forecast_pts={result.forecasts_written} "
-                    f"model={result.model_version}"
+                    f"model={result.model_version} "
+                    f"ml_forecast={int(settings.ml_forecast_enabled)}"
                 )
             finally:
                 await storage.close()
@@ -654,6 +662,47 @@ def main(argv: list[str] | None = None) -> None:
                 await storage.close()
 
         asyncio.run(_ml())
+        return
+
+    if args.command == "ml-forecast":
+        configure_logging()
+        settings = Settings.from_env(require_token=False)
+        if not settings.ml_forecast_enabled and not args.force:
+            print(
+                "ml-forecast: disabled "
+                "(set ML_FORECAST_ENABLED=1 or pass --force)"
+            )
+            return
+        limit = (
+            None
+            if not isinstance(args.limit, int)
+            or isinstance(args.limit, bool)
+            or args.limit == 20
+            else args.limit
+        )
+
+        async def _ml_fc() -> None:
+            from chime.ml.serve import write_ml_forecasts
+
+            storage = Storage(settings.database_url)
+            await storage.open()
+            try:
+                result = await write_ml_forecasts(
+                    storage=storage,
+                    limit_symbols=limit if limit and limit > 0 else None,
+                )
+                print(
+                    "ml-forecast: "
+                    f"targeted={result.symbols_targeted} "
+                    f"ok={result.symbols_ok} "
+                    f"skipped={result.symbols_skipped} "
+                    f"points={result.points_written} "
+                    f"model={result.model_version}"
+                )
+            finally:
+                await storage.close()
+
+        asyncio.run(_ml_fc())
         return
 
     settings = Settings.from_env(require_token=True)
