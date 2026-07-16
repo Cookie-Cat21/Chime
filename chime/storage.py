@@ -5,12 +5,13 @@ from __future__ import annotations
 import math
 from collections.abc import AsyncIterator, Sequence
 from contextlib import asynccontextmanager
-from datetime import datetime
+from datetime import date, datetime
 from time import perf_counter
 from typing import Any, cast
 
 from psycopg.errors import UniqueViolation
 from psycopg.rows import dict_row
+from psycopg.types.json import Json
 from psycopg_pool import AsyncConnectionPool
 
 from chime.domain import (
@@ -18,7 +19,9 @@ from chime.domain import (
     AlertRule,
     AlertType,
     BigPrint,
+    DailyBar,
     Disclosure,
+    ForecastPoint,
     IndexSnapshot,
     MarketNotice,
     OrderBookSnapshot,
@@ -103,7 +106,12 @@ class Storage:
             yield conn
 
     async def upsert_stock(
-        self, symbol: str, name: str | None = None, sector: str | None = None
+        self,
+        symbol: str,
+        name: str | None = None,
+        sector: str | None = None,
+        *,
+        cse_stock_id: int | None = None,
     ) -> None:
         # Fail closed — non-string symbol used to throw on .strip mid upsert.
         if not isinstance(symbol, str):
@@ -111,17 +119,30 @@ class Storage:
         symbol = symbol.strip().upper()
         if not symbol:
             return
+        # Fail closed — bool / non-positive must not poison cse_stock_id.
+        stock_id: int | None
+        if (
+            isinstance(cse_stock_id, bool)
+            or not isinstance(cse_stock_id, int)
+            or cse_stock_id <= 0
+        ):
+            stock_id = None
+        else:
+            stock_id = cse_stock_id
         async with self._pool.connection() as conn:
             await conn.execute(
                 """
-                INSERT INTO stocks (symbol, name, sector)
-                VALUES (%s, %s, %s)
+                INSERT INTO stocks (symbol, name, sector, cse_stock_id)
+                VALUES (%s, %s, %s, %s)
                 ON CONFLICT (symbol) DO UPDATE SET
                     name = COALESCE(EXCLUDED.name, stocks.name),
                     sector = COALESCE(EXCLUDED.sector, stocks.sector),
+                    cse_stock_id = COALESCE(
+                        EXCLUDED.cse_stock_id, stocks.cse_stock_id
+                    ),
                     updated_at = now()
                 """,
-                (symbol, name, sector),
+                (symbol, name, sector, stock_id),
             )
 
     async def list_stock_names(self) -> list[tuple[str, str]]:
@@ -196,6 +217,13 @@ class Storage:
         stock_symbols = [symbol for symbol, _ in normalized]
         stock_names = [snap.name for _, snap in normalized]
         stock_sectors = [None] * len(normalized)
+        stock_cse_ids: list[int | None] = []
+        for _, snap in normalized:
+            raw_id = snap.cse_stock_id
+            if isinstance(raw_id, bool) or not isinstance(raw_id, int) or raw_id <= 0:
+                stock_cse_ids.append(None)
+            else:
+                stock_cse_ids.append(raw_id)
         snap_symbols = list(stock_symbols)
         snap_prices = [snap.price for _, snap in normalized]
         snap_changes = [snap.change for _, snap in normalized]
@@ -214,16 +242,20 @@ class Storage:
         async with self._pool.connection() as conn, conn.transaction():
             await conn.execute(
                 """
-                INSERT INTO stocks (symbol, name, sector)
-                SELECT symbol, name, sector
-                FROM UNNEST(%s::text[], %s::text[], %s::text[])
-                    AS t(symbol, name, sector)
+                INSERT INTO stocks (symbol, name, sector, cse_stock_id)
+                SELECT symbol, name, sector, cse_stock_id
+                FROM UNNEST(
+                    %s::text[], %s::text[], %s::text[], %s::int[]
+                ) AS t(symbol, name, sector, cse_stock_id)
                 ON CONFLICT (symbol) DO UPDATE SET
                     name = COALESCE(EXCLUDED.name, stocks.name),
                     sector = COALESCE(EXCLUDED.sector, stocks.sector),
+                    cse_stock_id = COALESCE(
+                        EXCLUDED.cse_stock_id, stocks.cse_stock_id
+                    ),
                     updated_at = now()
                 """,
-                (stock_symbols, stock_names, stock_sectors),
+                (stock_symbols, stock_names, stock_sectors, stock_cse_ids),
             )
             rows = await (
                 await conn.execute(
@@ -436,6 +468,508 @@ class Storage:
                 ),
             )
         return rows
+
+    async def list_stocks_with_cse_ids(self) -> list[tuple[str, int]]:
+        """Return ``(symbol, cse_stock_id)`` for path backfill targets."""
+        async with self._pool.connection() as conn:
+            rows = await (
+                await conn.execute(
+                    """
+                    SELECT symbol, cse_stock_id
+                    FROM stocks
+                    WHERE cse_stock_id IS NOT NULL
+                    ORDER BY symbol ASC
+                    """
+                )
+            ).fetchall()
+        out: list[tuple[str, int]] = []
+        for row in _as_rows(rows):
+            raw_sym = row.get("symbol")
+            raw_id = row.get("cse_stock_id")
+            if not isinstance(raw_sym, str):
+                continue
+            symbol = raw_sym.strip().upper()
+            if not symbol:
+                continue
+            if isinstance(raw_id, bool) or not isinstance(raw_id, int) or raw_id <= 0:
+                continue
+            out.append((symbol, raw_id))
+        return out
+
+    async def persist_daily_bars(self, bars: list[DailyBar]) -> int:
+        """Upsert CSE daily path bars (``UNIQUE (symbol, trade_date)``).
+
+        Last-wins per ``(symbol, trade_date)``. Non-finite prices skipped.
+        Returns number of rows written (insert or update). Empty → 0.
+        """
+        if not bars:
+            return 0
+
+        by_key: dict[tuple[str, object], DailyBar] = {}
+        for bar in bars:
+            if not isinstance(bar.symbol, str):
+                continue
+            symbol = bar.symbol.strip().upper()
+            if not symbol:
+                continue
+            if not math.isfinite(bar.price):
+                continue
+            by_key[(symbol, bar.trade_date)] = bar.model_copy(update={"symbol": symbol})
+        if not by_key:
+            return 0
+
+        rows = list(by_key.values())
+        async with self._pool.connection() as conn:
+            # Ensure parent stocks exist (path backfill may race empty board).
+            await conn.execute(
+                """
+                INSERT INTO stocks (symbol)
+                SELECT DISTINCT symbol
+                FROM UNNEST(%s::text[]) AS t(symbol)
+                ON CONFLICT (symbol) DO NOTHING
+                """,
+                ([b.symbol for b in rows],),
+            )
+            result = await conn.execute(
+                """
+                INSERT INTO daily_bars (
+                    symbol, trade_date, price, high, low, open, volume,
+                    source_period, bar_ts
+                )
+                SELECT
+                    symbol, trade_date, price, high, low, open, volume,
+                    source_period, bar_ts
+                FROM UNNEST(
+                    %s::text[],
+                    %s::date[],
+                    %s::double precision[],
+                    %s::double precision[],
+                    %s::double precision[],
+                    %s::double precision[],
+                    %s::double precision[],
+                    %s::smallint[],
+                    %s::timestamptz[]
+                ) AS t(
+                    symbol, trade_date, price, high, low, open, volume,
+                    source_period, bar_ts
+                )
+                ON CONFLICT (symbol, trade_date) DO UPDATE SET
+                    price = EXCLUDED.price,
+                    high = EXCLUDED.high,
+                    low = EXCLUDED.low,
+                    open = EXCLUDED.open,
+                    volume = EXCLUDED.volume,
+                    source_period = EXCLUDED.source_period,
+                    bar_ts = EXCLUDED.bar_ts,
+                    ingested_at = now()
+                """,
+                (
+                    [b.symbol for b in rows],
+                    [b.trade_date for b in rows],
+                    [b.price for b in rows],
+                    [b.high for b in rows],
+                    [b.low for b in rows],
+                    [b.open for b in rows],
+                    [b.volume for b in rows],
+                    [b.source_period for b in rows],
+                    [b.bar_ts for b in rows],
+                ),
+            )
+        # psycopg Status: "INSERT 0 N" / "UPDATE N" — prefer rowcount when present.
+        rowcount = getattr(result, "rowcount", None)
+        if isinstance(rowcount, int) and not isinstance(rowcount, bool) and rowcount >= 0:
+            return rowcount
+        return len(rows)
+
+    async def list_symbols_with_daily_bars(self) -> list[str]:
+        """Symbols that have at least one ``daily_bars`` row (sorted)."""
+        async with self._pool.connection() as conn:
+            rows = await (
+                await conn.execute(
+                    """
+                    SELECT DISTINCT symbol
+                    FROM daily_bars
+                    ORDER BY symbol ASC
+                    """
+                )
+            ).fetchall()
+        out: list[str] = []
+        for row in _as_rows(rows):
+            raw = row.get("symbol")
+            if not isinstance(raw, str):
+                continue
+            symbol = raw.strip().upper()
+            if symbol:
+                out.append(symbol)
+        return out
+
+    async def list_symbols_missing_sector(self) -> list[str]:
+        """Symbols with daily bars (or any stock) missing a sector label."""
+        async with self._pool.connection() as conn:
+            rows = await (
+                await conn.execute(
+                    """
+                    SELECT s.symbol
+                    FROM stocks s
+                    WHERE (s.sector IS NULL OR btrim(s.sector) = '')
+                      AND EXISTS (
+                          SELECT 1 FROM daily_bars d WHERE d.symbol = s.symbol
+                      )
+                    ORDER BY s.symbol ASC
+                    """
+                )
+            ).fetchall()
+        out: list[str] = []
+        for row in _as_rows(rows):
+            raw = row.get("symbol")
+            if isinstance(raw, str) and raw.strip():
+                out.append(raw.strip().upper())
+        return out
+
+    async def get_stock_sector(self, symbol: str) -> str | None:
+        if not isinstance(symbol, str) or not symbol.strip():
+            return None
+        sym = symbol.strip().upper()
+        async with self._pool.connection() as conn:
+            row = await (
+                await conn.execute(
+                    "SELECT sector FROM stocks WHERE symbol = %s",
+                    (sym,),
+                )
+            ).fetchone()
+        if row is None:
+            return None
+        raw = _as_row(row).get("sector")
+        if not isinstance(raw, str) or not raw.strip():
+            return None
+        return raw.strip()
+
+    async def list_symbols_in_sector(self, sector: str) -> list[str]:
+        if not isinstance(sector, str) or not sector.strip():
+            return []
+        async with self._pool.connection() as conn:
+            rows = await (
+                await conn.execute(
+                    """
+                    SELECT symbol FROM stocks
+                    WHERE sector IS NOT NULL AND btrim(sector) = %s
+                    ORDER BY symbol ASC
+                    """,
+                    (sector.strip(),),
+                )
+            ).fetchall()
+        out: list[str] = []
+        for row in _as_rows(rows):
+            raw = row.get("symbol")
+            if isinstance(raw, str) and raw.strip():
+                out.append(raw.strip().upper())
+        return out
+
+    async def get_latest_filing_yoy(self, symbol: str) -> dict[str, float | None]:
+        """Latest exact/approx YoY deltas for extract_ok filings (fail soft)."""
+        empty: dict[str, float | None] = {
+            "eps_yoy_pct": None,
+            "rev_yoy_pct": None,
+            "profit_yoy_pct": None,
+        }
+        if not isinstance(symbol, str) or not symbol.strip():
+            return empty
+        sym = symbol.strip().upper()
+        async with self._pool.connection() as conn:
+            row = await (
+                await conn.execute(
+                    """
+                    SELECT
+                        fc.eps_delta_pct,
+                        fc.revenue_delta_pct,
+                        fc.profit_delta_pct
+                    FROM filing_metrics fm
+                    JOIN filing_comparisons fc
+                      ON fc.filing_metrics_id = fm.id
+                    WHERE fm.symbol = %s
+                      AND fm.extract_ok = TRUE
+                      AND fc.match_quality IN ('exact_yoy', 'approx_yoy')
+                    ORDER BY fm.fiscal_period_end DESC NULLS LAST, fm.id DESC
+                    LIMIT 1
+                    """,
+                    (sym,),
+                )
+            ).fetchone()
+        if row is None:
+            return empty
+        data = _as_row(row)
+
+        def _pct(key: str) -> float | None:
+            val = data.get(key)
+            if isinstance(val, bool) or not isinstance(val, int | float):
+                return None
+            if not math.isfinite(float(val)):
+                return None
+            return float(val)
+
+        return {
+            "eps_yoy_pct": _pct("eps_delta_pct"),
+            "rev_yoy_pct": _pct("revenue_delta_pct"),
+            "profit_yoy_pct": _pct("profit_delta_pct"),
+        }
+
+    async def count_disclosure_categories_since(
+        self, symbol: str, *, since: datetime
+    ) -> dict[str, int]:
+        """Category → count for disclosures since ``since`` (fail soft)."""
+        if not isinstance(symbol, str) or not symbol.strip():
+            return {}
+        if not isinstance(since, datetime):
+            return {}
+        sym = symbol.strip().upper()
+        async with self._pool.connection() as conn:
+            rows = await (
+                await conn.execute(
+                    """
+                    SELECT COALESCE(NULLIF(btrim(category), ''), 'uncategorized') AS cat,
+                           COUNT(*)::int AS n
+                    FROM disclosures
+                    WHERE symbol = %s AND published_at >= %s
+                    GROUP BY 1
+                    """,
+                    (sym, since),
+                )
+            ).fetchall()
+        out: dict[str, int] = {}
+        for row in _as_rows(rows):
+            cat = row.get("cat")
+            n = _pg_count(row.get("n"))
+            if isinstance(cat, str) and cat.strip() and n is not None and n > 0:
+                out[cat.strip()[:64]] = n
+        return out
+
+    async def latest_index_change_pct(self, code: str = "ASPI") -> float | None:
+        """Latest persisted index change_pct (intraday board; not multi-week)."""
+        if not isinstance(code, str) or not code.strip():
+            return None
+        async with self._pool.connection() as conn:
+            row = await (
+                await conn.execute(
+                    """
+                    SELECT change_pct
+                    FROM index_snapshots
+                    WHERE code = %s AND change_pct IS NOT NULL
+                    ORDER BY ts DESC
+                    LIMIT 1
+                    """,
+                    (code.strip().upper(),),
+                )
+            ).fetchone()
+        if row is None:
+            return None
+        val = _as_row(row).get("change_pct")
+        if isinstance(val, bool) or not isinstance(val, int | float):
+            return None
+        if not math.isfinite(float(val)):
+            return None
+        # CSE stores percent points (e.g. 0.14) or fraction — normalize if huge.
+        pct = float(val)
+        # If already fraction-like tiny, keep; if looks like percent points keep as-is
+        # for comparison against symbol ret * 100 below in score job.
+        return pct
+
+    async def count_disclosures_since(self, symbol: str, *, since: datetime) -> int:
+        if not isinstance(symbol, str) or not symbol.strip():
+            return 0
+        if not isinstance(since, datetime):
+            return 0
+        sym = symbol.strip().upper()
+        async with self._pool.connection() as conn:
+            row = await (
+                await conn.execute(
+                    """
+                    SELECT COUNT(*)::int AS n
+                    FROM disclosures
+                    WHERE symbol = %s AND published_at >= %s
+                    """,
+                    (sym, since),
+                )
+            ).fetchone()
+        if row is None:
+            return 0
+        counted = _pg_count(_as_row(row).get("n"))
+        return 0 if counted is None else counted
+
+    async def list_daily_bars(self, symbol: str) -> list[DailyBar]:
+        """Return ascending daily bars for ``symbol``."""
+        if not isinstance(symbol, str):
+            return []
+        symbol = symbol.strip().upper()
+        if not symbol:
+            return []
+        async with self._pool.connection() as conn:
+            rows = await (
+                await conn.execute(
+                    """
+                    SELECT symbol, trade_date, price, high, low, open, volume,
+                           source_period, bar_ts
+                    FROM daily_bars
+                    WHERE symbol = %s
+                    ORDER BY trade_date ASC
+                    """,
+                    (symbol,),
+                )
+            ).fetchall()
+        out: list[DailyBar] = []
+        for row in _as_rows(rows):
+            raw_sym = row.get("symbol")
+            raw_price = row.get("price")
+            raw_period = row.get("source_period")
+            trade_date = row.get("trade_date")
+            bar_ts = row.get("bar_ts")
+            if not isinstance(raw_sym, str) or not raw_sym.strip():
+                continue
+            if isinstance(raw_price, bool) or not isinstance(raw_price, int | float):
+                continue
+            if not math.isfinite(float(raw_price)):
+                continue
+            if isinstance(raw_period, bool) or not isinstance(raw_period, int):
+                continue
+            if not isinstance(trade_date, date) or not isinstance(bar_ts, datetime):
+                continue
+            try:
+                out.append(
+                    DailyBar(
+                        symbol=raw_sym.strip().upper(),
+                        trade_date=trade_date,
+                        price=float(raw_price),
+                        high=row.get("high"),
+                        low=row.get("low"),
+                        open=row.get("open"),
+                        volume=row.get("volume"),
+                        source_period=raw_period,
+                        bar_ts=bar_ts,
+                    )
+                )
+            except (TypeError, ValueError):
+                continue
+        return out
+
+    async def upsert_symbol_score(
+        self,
+        *,
+        symbol: str,
+        as_of: date,
+        model_version: str,
+        score: float,
+        components: dict[str, Any],
+        reasons: list[str],
+        bar_count: int,
+    ) -> None:
+        if not isinstance(symbol, str) or not symbol.strip():
+            return
+        if not isinstance(model_version, str) or not model_version.strip():
+            return
+        if not isinstance(as_of, date):
+            return
+        if isinstance(score, bool) or not isinstance(score, int | float) or not math.isfinite(
+            score
+        ):
+            return
+        sym = symbol.strip().upper()
+        version = model_version.strip()
+        safe_reasons = [
+            r.strip()
+            for r in reasons
+            if isinstance(r, str) and r.strip()
+        ]
+        count = bar_count if isinstance(bar_count, int) and not isinstance(bar_count, bool) else 0
+        if count < 0:
+            count = 0
+        # Json wrapper — plain dict can fail depending on adapter settings.
+        payload = components if isinstance(components, dict) else {}
+        async with self._pool.connection() as conn:
+            await conn.execute(
+                """
+                INSERT INTO symbol_scores (
+                    symbol, as_of, model_version, score, components, reasons, bar_count
+                )
+                VALUES (%s, %s, %s, %s, %s, %s, %s)
+                ON CONFLICT (symbol, as_of, model_version) DO UPDATE SET
+                    score = EXCLUDED.score,
+                    components = EXCLUDED.components,
+                    reasons = EXCLUDED.reasons,
+                    bar_count = EXCLUDED.bar_count,
+                    computed_at = now()
+                """,
+                (
+                    sym,
+                    as_of,
+                    version,
+                    float(score),
+                    Json(payload),
+                    safe_reasons,
+                    count,
+                ),
+            )
+
+    async def replace_forecast_points(self, points: list[ForecastPoint]) -> int:
+        """Replace one symbol/model/as_of forecast series (delete + insert)."""
+        if not points:
+            return 0
+        symbol = points[0].symbol
+        version = points[0].model_version
+        as_of = points[0].as_of
+        if not isinstance(symbol, str) or not symbol.strip():
+            return 0
+        if not isinstance(version, str) or not version.strip():
+            return 0
+        if not isinstance(as_of, date):
+            return 0
+        sym = symbol.strip().upper()
+        clean: list[ForecastPoint] = []
+        for p in points:
+            if p.symbol.strip().upper() != sym:
+                continue
+            if p.model_version != version or p.as_of != as_of:
+                continue
+            if (
+                isinstance(p.yhat, bool)
+                or not isinstance(p.yhat, int | float)
+                or not math.isfinite(p.yhat)
+            ):
+                continue
+            clean.append(p)
+        if not clean:
+            return 0
+        async with self._pool.connection() as conn, conn.transaction():
+            await conn.execute(
+                """
+                DELETE FROM forecast_points
+                WHERE symbol = %s AND model_version = %s AND as_of = %s
+                """,
+                (sym, version, as_of),
+            )
+            await conn.execute(
+                """
+                INSERT INTO forecast_points (
+                    symbol, model_version, horizon_i, as_of, ts, yhat
+                )
+                SELECT symbol, model_version, horizon_i, as_of, ts, yhat
+                FROM UNNEST(
+                    %s::text[],
+                    %s::text[],
+                    %s::smallint[],
+                    %s::date[],
+                    %s::timestamptz[],
+                    %s::double precision[]
+                ) AS t(symbol, model_version, horizon_i, as_of, ts, yhat)
+                """,
+                (
+                    [p.symbol for p in clean],
+                    [p.model_version for p in clean],
+                    [p.horizon_i for p in clean],
+                    [p.as_of for p in clean],
+                    [p.ts for p in clean],
+                    [float(p.yhat) for p in clean],
+                ),
+            )
+        return len(clean)
 
     async def persist_index_snapshots(
         self,

@@ -18,7 +18,10 @@ from chime.health import HealthState, brief_queue_health_hint, start_health_serv
 from chime.logging_setup import configure_logging, get_logger
 from chime.migrate import apply_migrations
 from chime.notify import SendResult, send_message
+from chime.path_backfill import run_path_backfill
 from chime.poller import Poller, run_poller_forever
+from chime.sector_backfill import run_sector_backfill
+from chime.signals import run_signal_score_job
 from chime.storage import Storage
 
 log = get_logger(__name__)
@@ -307,27 +310,54 @@ def main(argv: list[str] | None = None) -> None:
             "drain-pdfs",
             "drain-briefs",
             "drain-metrics",
+            "path-backfill",
+            "score-signals",
+            "eval-signals",
+            "sector-backfill",
         ],
         help=(
             "bot | poller | both | migrate | tick | "
-            "drain-pdfs | drain-briefs | drain-metrics"
+            "drain-pdfs | drain-briefs | drain-metrics | "
+            "path-backfill | score-signals | eval-signals | sector-backfill"
         ),
     )
-    parser.add_argument("--force", action="store_true", help="For tick: ignore market hours")
+    parser.add_argument(
+        "--force",
+        action="store_true",
+        help=(
+            "tick: ignore market hours; "
+            "path-backfill/sector-backfill: run even if flag off"
+        ),
+    )
     parser.add_argument(
         "--limit",
         type=int,
         default=20,
-        help="For drain-*: max rows to examine (default 20)",
+        help="For drain-* / path-backfill: max rows/symbols (default 20)",
     )
     parser.add_argument(
         "--all-symbols",
         action="store_true",
         help="For drain-pdfs/drain-metrics: include non-watchlist symbols",
     )
+    parser.add_argument(
+        "--period",
+        type=int,
+        default=None,
+        help="For path-backfill: CSE chart period 2–5 (default PATH_BACKFILL_PERIOD/5)",
+    )
+    parser.add_argument(
+        "--no-seed",
+        action="store_true",
+        help="For path-backfill: skip tradeSummary id seed",
+    )
     args = parser.parse_args(argv)
-    if args.force and args.command != "tick":
-        parser.error("--force is only valid for tick")
+    if args.force and args.command not in ("tick", "path-backfill", "sector-backfill"):
+        parser.error("--force is only valid for tick, path-backfill, or sector-backfill")
+    if args.period is not None and args.command != "path-backfill":
+        parser.error("--period is only valid for path-backfill")
+    if args.no_seed and args.command != "path-backfill":
+        parser.error("--no-seed is only valid for path-backfill")
 
     if args.command == "migrate":
         configure_logging()
@@ -381,6 +411,137 @@ def main(argv: list[str] | None = None) -> None:
                 await storage.close()
 
         asyncio.run(_drain())
+        return
+
+    if args.command == "path-backfill":
+        configure_logging()
+        settings = Settings.from_env(require_token=False)
+        limit = args.limit if isinstance(args.limit, int) and args.limit > 0 else None
+
+        async def _path_bf() -> None:
+            storage = Storage(settings.database_url)
+            await storage.open()
+            cse = CSEClient(
+                base_url=settings.cse_base_url,
+                timeout=settings.http_timeout_seconds,
+                fail_max=settings.circuit_fail_max,
+                reset_timeout=settings.circuit_reset_seconds,
+                min_interval_seconds=settings.cse_min_interval_seconds,
+            )
+            try:
+                result = await run_path_backfill(
+                    settings=settings,
+                    storage=storage,
+                    cse=cse,
+                    period=args.period,
+                    limit=limit,
+                    seed_ids=not args.no_seed,
+                    force=args.force,
+                )
+                print(
+                    "path-backfill: "
+                    f"targeted={result.symbols_targeted} "
+                    f"ok={result.symbols_ok} "
+                    f"skipped={result.symbols_skipped} "
+                    f"failed={result.symbols_failed} "
+                    f"bars={result.bars_upserted}"
+                )
+            finally:
+                await cse.aclose()
+                await storage.close()
+
+        asyncio.run(_path_bf())
+        return
+
+    if args.command == "sector-backfill":
+        configure_logging()
+        settings = Settings.from_env(require_token=False)
+        limit = args.limit if isinstance(args.limit, int) and args.limit > 0 else None
+
+        async def _sector_bf() -> None:
+            storage = Storage(settings.database_url)
+            await storage.open()
+            cse = CSEClient(
+                base_url=settings.cse_base_url,
+                timeout=settings.http_timeout_seconds,
+                fail_max=settings.circuit_fail_max,
+                reset_timeout=settings.circuit_reset_seconds,
+                min_interval_seconds=settings.cse_min_interval_seconds,
+            )
+            try:
+                result = await run_sector_backfill(
+                    settings=settings,
+                    storage=storage,
+                    cse=cse,
+                    limit=limit,
+                    force=args.force,
+                )
+                print(
+                    "sector-backfill: "
+                    f"targeted={result.symbols_targeted} "
+                    f"updated={result.symbols_updated} "
+                    f"skipped={result.symbols_skipped} "
+                    f"failed={result.symbols_failed}"
+                )
+            finally:
+                await cse.aclose()
+                await storage.close()
+
+        asyncio.run(_sector_bf())
+        return
+
+    if args.command == "score-signals":
+        configure_logging()
+        settings = Settings.from_env(require_token=False)
+        limit = args.limit if isinstance(args.limit, int) and args.limit > 0 else None
+
+        async def _score() -> None:
+            storage = Storage(settings.database_url)
+            await storage.open()
+            try:
+                result = await run_signal_score_job(storage=storage, limit=limit)
+                print(
+                    "score-signals: "
+                    f"targeted={result.symbols_targeted} "
+                    f"scored={result.symbols_scored} "
+                    f"skipped={result.symbols_skipped} "
+                    f"forecast_pts={result.forecasts_written} "
+                    f"model={result.model_version}"
+                )
+            finally:
+                await storage.close()
+
+        asyncio.run(_score())
+        return
+
+    if args.command == "eval-signals":
+        configure_logging()
+        settings = Settings.from_env(require_token=False)
+        limit = args.limit if isinstance(args.limit, int) and args.limit > 0 else 40
+
+        async def _eval() -> None:
+            from chime.signals.eval import evaluate_walk_forward
+
+            storage = Storage(settings.database_url)
+            await storage.open()
+            try:
+                symbols = await storage.list_symbols_with_daily_bars()
+                symbols = symbols[:limit]
+                series = {}
+                for symbol in symbols:
+                    series[symbol] = await storage.list_daily_bars(symbol)
+                report = evaluate_walk_forward(series, horizon=5, min_history=30, step=5)
+                print(
+                    "eval-signals: "
+                    f"symbols={report.symbols} origins={report.origins} "
+                    f"dir_hits={report.direction_hits}/{report.direction_total} "
+                    f"hit_rate={report.hit_rate!s} mae={report.mae!s} "
+                    f"horizon={report.horizon}"
+                )
+            finally:
+                await storage.close()
+
+        asyncio.run(_eval())
         return
 
     settings = Settings.from_env(require_token=True)

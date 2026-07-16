@@ -12,7 +12,7 @@ import math
 import re
 import time
 from collections.abc import Iterable
-from datetime import UTC, datetime
+from datetime import UTC, date, datetime
 from typing import Any, cast
 from urllib.parse import unquote, urlparse
 from zoneinfo import ZoneInfo
@@ -30,6 +30,7 @@ from tenacity import (
 from chime.circuit import CircuitBreaker, CircuitOpenError
 from chime.domain import (
     BigPrint,
+    DailyBar,
     Disclosure,
     IndexSnapshot,
     MarketNotice,
@@ -70,6 +71,25 @@ SNP_DATA_ENDPOINT = "snpData"
 SNP_DATA_PATH = "/snpData"
 DAYS_TRADE_ENDPOINT = "daysTrade"
 DAYS_TRADE_PATH = "/daysTrade"
+COMPANY_CHART_ENDPOINT = "companyChartDataByStock"
+COMPANY_CHART_PATH = "/companyChartDataByStock"
+COMPANY_PROFILE_ENDPOINT = "companyProfile"
+COMPANY_PROFILE_PATH = "/companyProfile"
+# Observed period map — docs/experiments/CSE_PATH_HISTORY_PROBE.md
+CHART_PERIOD_INTRADAY = 1
+CHART_PERIOD_1W = 2
+CHART_PERIOD_1M = 3
+CHART_PERIOD_2M = 4
+CHART_PERIOD_1Y = 5
+# Daily path backfill uses period=5 (~1 year). Intraday (1) is not daily_bars.
+CHART_DAILY_PERIODS = frozenset(
+    {
+        CHART_PERIOD_1W,
+        CHART_PERIOD_1M,
+        CHART_PERIOD_2M,
+        CHART_PERIOD_1Y,
+    }
+)
 BUY_IN_ENDPOINT = "getBuyInBoardAnnouncements"
 BUY_IN_PATH = "/getBuyInBoardAnnouncements"
 NON_COMPLIANCE_ENDPOINT = "getNonComplianceAnnouncements"
@@ -232,6 +252,8 @@ def resolve_pdf_url(file_path: str | None) -> str | None:
 class TradeSummaryRow(BaseModel):
     model_config = ConfigDict(extra="ignore")
 
+    # Same id space as companyInfoSummery.reqSymbolInfo.id (chart stockId).
+    id: int | None = None
     symbol: str
     name: str | None = None
     price: float
@@ -249,6 +271,7 @@ class TradeSummaryRow(BaseModel):
     lastTradedTime: int | None = None
 
     @field_validator(
+        "id",
         "price",
         "previousClose",
         "change",
@@ -561,6 +584,9 @@ def trade_row_to_snapshot(
         if row.lastTradedTime
         else fallback
     )
+    cse_id = row.id if isinstance(row.id, int) and not isinstance(row.id, bool) else None
+    if cse_id is not None and cse_id <= 0:
+        cse_id = None
     return PriceSnapshot(
         symbol=row.symbol.strip().upper(),
         price=row.price,
@@ -577,6 +603,7 @@ def trade_row_to_snapshot(
         market_cap=_finite_or_none(row.marketCap),
         name=row.name,
         ts=ts,
+        cse_stock_id=cse_id,
     )
 
 
@@ -840,6 +867,77 @@ class DayTradeResponse(BaseModel):
     model_config = ConfigDict(extra="ignore")
 
     trades: list[DayTradeRow] = Field(default_factory=list)
+
+
+class ChartPointRow(BaseModel):
+    """Point from ``POST /companyChartDataByStock`` ``chartData[]``."""
+
+    model_config = ConfigDict(extra="ignore", populate_by_name=True)
+
+    p: float | None = None
+    h: float | None = None
+    # CSE JSON key is ``l`` — alias avoids ruff E741 on attribute name ``l``.
+    low: float | None = Field(default=None, alias="l")
+    o: float | None = None
+    q: float | None = None
+    c: float | None = None
+    pc: float | None = None
+    t: int | None = None
+    id: int | None = None
+
+    @field_validator("p", "h", "low", "o", "q", "c", "pc", "t", "id", mode="before")
+    @classmethod
+    def _reject_bool_numeric(cls, value: Any) -> Any:
+        return _reject_bool_numeric_value(value)
+
+
+class CompanyChartResponse(BaseModel):
+    model_config = ConfigDict(extra="ignore")
+
+    id: int | None = None
+    chartData: list[ChartPointRow] = Field(default_factory=list)
+
+    @field_validator("id", mode="before")
+    @classmethod
+    def _reject_bool_numeric(cls, value: Any) -> Any:
+        return _reject_bool_numeric_value(value)
+
+
+def chart_trade_date(bar_ts: datetime) -> date:
+    """Asia/Colombo calendar date for a CSE chart timestamp."""
+    if bar_ts.tzinfo is None:
+        bar_ts = bar_ts.replace(tzinfo=UTC)
+    return bar_ts.astimezone(_COLOMBO).date()
+
+
+def chart_point_to_daily_bar(
+    row: ChartPointRow,
+    *,
+    symbol: str,
+    period: int,
+) -> DailyBar | None:
+    """Normalize a chart point into a daily bar. Skip intraday / bad rows."""
+    if period not in CHART_DAILY_PERIODS:
+        return None
+    if not isinstance(symbol, str) or not symbol.strip():
+        return None
+    price = _finite_or_none(row.p)
+    if price is None:
+        return None
+    bar_ts = _try_ms_to_dt(row.t)
+    if bar_ts is None:
+        return None
+    return DailyBar(
+        symbol=symbol.strip().upper(),
+        trade_date=chart_trade_date(bar_ts),
+        price=price,
+        high=_finite_or_none(row.h),
+        low=_finite_or_none(row.low),
+        open=_finite_or_none(row.o),
+        volume=_finite_or_none(row.q),
+        source_period=period,
+        bar_ts=bar_ts,
+    )
 
 
 class FlexibleNoticeRow(BaseModel):
@@ -1530,6 +1628,96 @@ class CSEClient:
             return out
 
         return cast(list[BigPrint], await self._guarded(DAYS_TRADE_ENDPOINT, _call))
+
+    async def fetch_company_chart(
+        self,
+        stock_id: int,
+        *,
+        symbol: str,
+        period: int = CHART_PERIOD_1Y,
+    ) -> list[DailyBar]:
+        """Fetch path bars for one stock (``POST /companyChartDataByStock``).
+
+        ``period`` must be a daily code (2–5) for ``daily_bars`` persistence.
+        Intraday ``period=1`` returns ``[]`` after normalize (not daily).
+        """
+        if isinstance(stock_id, bool) or not isinstance(stock_id, int) or stock_id <= 0:
+            return []
+        if isinstance(period, bool) or not isinstance(period, int):
+            return []
+        if not isinstance(symbol, str) or not symbol.strip():
+            return []
+        sym = symbol.strip().upper()
+
+        async def _call() -> list[DailyBar]:
+            raw = await self._request(
+                "POST",
+                COMPANY_CHART_PATH,
+                data={"stockId": str(stock_id), "period": str(period)},
+                log_context={"stock_id": stock_id, "symbol": sym, "period": period},
+            )
+            try:
+                parsed = CompanyChartResponse.model_validate(raw)
+            except ValidationError as exc:
+                log.error(
+                    "cse_schema_error",
+                    endpoint=COMPANY_CHART_ENDPOINT,
+                    stock_id=stock_id,
+                    symbol=sym,
+                    period=period,
+                    error=str(exc),
+                )
+                raise
+            # Last-wins per trade_date (hostile duplicate stamps).
+            by_date: dict[date, DailyBar] = {}
+            for row in parsed.chartData:
+                bar = chart_point_to_daily_bar(row, symbol=sym, period=period)
+                if bar is not None:
+                    by_date[bar.trade_date] = bar
+            return sorted(by_date.values(), key=lambda b: b.trade_date)
+
+        return cast(list[DailyBar], await self._guarded(COMPANY_CHART_ENDPOINT, _call))
+
+    async def fetch_company_sector(self, symbol: str) -> str | None:
+        """Return sector label from ``POST /companyProfile`` ``reqComSumInfo``.
+
+        Observed values: ``Banks``, ``Capital Goods``, ``Telecommunication Services``.
+        """
+        if not isinstance(symbol, str) or not symbol.strip():
+            return None
+        sym = symbol.strip().upper()
+
+        async def _call() -> str | None:
+            raw = await self._request(
+                "POST",
+                COMPANY_PROFILE_PATH,
+                data={"symbol": sym},
+                log_context={"symbol": sym},
+            )
+            if not isinstance(raw, dict):
+                log.error(
+                    "cse_schema_error",
+                    endpoint=COMPANY_PROFILE_ENDPOINT,
+                    symbol=sym,
+                    error="expected object",
+                )
+                raise ValueError(f"{COMPANY_PROFILE_ENDPOINT}: expected JSON object")
+            rows = raw.get("reqComSumInfo")
+            if not isinstance(rows, list) or not rows:
+                return None
+            first = rows[0]
+            if not isinstance(first, dict):
+                return None
+            sector = first.get("sector")
+            if not isinstance(sector, str) or not sector.strip():
+                return None
+            # Cap hostile long strings from CSE.
+            cleaned = sector.strip()
+            if len(cleaned) > 128:
+                cleaned = cleaned[:128].rstrip()
+            return cleaned
+
+        return cast(str | None, await self._guarded(COMPANY_PROFILE_ENDPOINT, _call))
 
     async def fetch_buy_in_announcements(self) -> list[MarketNotice]:
         return await self._fetch_notice_list(

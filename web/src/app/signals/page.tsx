@@ -1,0 +1,172 @@
+import Link from "next/link";
+
+import { AppNav } from "@/components/app-nav";
+import { EmptyState } from "@/components/empty-state";
+import { NfaFooter } from "@/components/nfa-footer";
+import { NfaInline } from "@/components/nfa-inline";
+import { PageHeader } from "@/components/page-header";
+import { serverApiGet } from "@/lib/api/server-fetch";
+import { normalizeSymbol } from "@/lib/api/symbol";
+import { toFiniteNumber } from "@/lib/api/finite-number";
+import {
+  MAX_SIGNAL_REASON_LENGTH,
+  MAX_SIGNAL_REASONS,
+} from "@/lib/api/signals";
+import {
+  MAX_STOCK_NAME_LENGTH,
+  sanitizeDisclosureText,
+} from "@/lib/api/disclosure-safe";
+import { requirePageSession } from "@/lib/auth/page-session";
+import { formatNumber } from "@/lib/format";
+
+export const dynamic = "force-dynamic";
+
+export const metadata = {
+  title: "Signal Board · Chime",
+  description:
+    "Research scores from CSE path data — ranked factors with reasons. Not advice.",
+};
+
+const MAX_PAGE_ITEMS = 100;
+
+type SignalItem = {
+  symbol: string;
+  name: string | null;
+  score: number | null;
+  as_of: string | null;
+  model_version: string;
+  reasons: string[];
+  bar_count: number | null;
+};
+
+function asSignalItems(body: unknown): SignalItem[] | null {
+  if (body == null || typeof body !== "object" || Array.isArray(body)) {
+    return null;
+  }
+  const items = (body as { items?: unknown }).items;
+  if (!Array.isArray(items)) return null;
+  const out: SignalItem[] = [];
+  for (const row of items) {
+    if (out.length >= MAX_PAGE_ITEMS) break;
+    if (row == null || typeof row !== "object" || Array.isArray(row)) continue;
+    const r = row as Record<string, unknown>;
+    const symbol = normalizeSymbol(r.symbol);
+    if (!symbol) continue;
+    const reasonsRaw = Array.isArray(r.reasons) ? r.reasons : [];
+    const reasons: string[] = [];
+    for (const reason of reasonsRaw) {
+      if (reasons.length >= MAX_SIGNAL_REASONS) break;
+      if (typeof reason !== "string") continue;
+      const cleaned = sanitizeDisclosureText(reason, MAX_SIGNAL_REASON_LENGTH);
+      if (cleaned) reasons.push(cleaned);
+    }
+    const name =
+      typeof r.name === "string"
+        ? sanitizeDisclosureText(r.name, MAX_STOCK_NAME_LENGTH) || null
+        : null;
+    out.push({
+      symbol,
+      name,
+      score: toFiniteNumber(r.score),
+      as_of: typeof r.as_of === "string" ? r.as_of.slice(0, 10) : null,
+      model_version:
+        typeof r.model_version === "string" && r.model_version.trim()
+          ? r.model_version.trim().slice(0, 64)
+          : "unknown",
+      reasons,
+      bar_count: (() => {
+        const n = toFiniteNumber(r.bar_count);
+        return n == null ? null : Math.trunc(n);
+      })(),
+    });
+  }
+  return out;
+}
+
+export default async function SignalsPage() {
+  await requirePageSession();
+  const res = await serverApiGet("/api/v1/signals?limit=50");
+  let items: SignalItem[] | null = null;
+  if (res?.ok) {
+    try {
+      items = asSignalItems(await res.json());
+    } catch {
+      items = null;
+    }
+  }
+
+  return (
+    <div className="min-h-screen bg-background">
+      <AppNav />
+      <main className="mx-auto max-w-6xl px-4 py-8">
+        <PageHeader
+          title="Signal Board"
+          description="Research scores from CSE daily path factors (momentum, volatility, liquidity). Higher score is not a buy — informational only."
+        />
+        <NfaInline className="mt-3" />
+
+        {items == null ? (
+          <EmptyState
+            title="Signal Board unavailable"
+            description="Could not load research scores. Check session and database."
+          />
+        ) : items.length === 0 ? (
+          <EmptyState
+            title="No scores yet"
+            description="Run path backfill then: python3 -m chime score-signals --limit 1000"
+          />
+        ) : (
+          <ol className="mt-8 divide-y divide-border rounded-lg border border-border">
+            {items.map((row, idx) => (
+              <li
+                key={row.symbol}
+                className="flex flex-col gap-2 px-4 py-3 sm:flex-row sm:items-start sm:justify-between"
+              >
+                <div className="min-w-0">
+                  <div className="flex flex-wrap items-baseline gap-2">
+                    <span className="text-xs text-muted-foreground tabular-nums">
+                      #{idx + 1}
+                    </span>
+                    <Link
+                      href={`/symbols/${encodeURIComponent(row.symbol)}`}
+                      className="font-medium text-foreground underline-offset-4 hover:underline"
+                    >
+                      {row.symbol}
+                    </Link>
+                    {row.name ? (
+                      <span className="truncate text-sm text-muted-foreground">
+                        {row.name}
+                      </span>
+                    ) : null}
+                  </div>
+                  {row.reasons.length > 0 ? (
+                    <ul className="mt-1 list-disc pl-5 text-sm text-muted-foreground">
+                      {row.reasons.map((reason) => (
+                        <li key={reason}>{reason}</li>
+                      ))}
+                    </ul>
+                  ) : null}
+                  <p className="mt-1 text-xs text-muted-foreground">
+                    {row.model_version}
+                    {row.as_of ? ` · as of ${row.as_of}` : ""}
+                    {row.bar_count != null ? ` · ${row.bar_count} bars` : ""}
+                  </p>
+                </div>
+                <div className="shrink-0 text-right">
+                  <p className="text-xs uppercase tracking-wide text-muted-foreground">
+                    Score
+                  </p>
+                  <p className="font-mono text-lg tabular-nums">
+                    {row.score == null ? "—" : formatNumber(row.score)}
+                  </p>
+                </div>
+              </li>
+            ))}
+          </ol>
+        )}
+
+        <NfaFooter />
+      </main>
+    </div>
+  );
+}

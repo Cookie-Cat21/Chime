@@ -13,6 +13,7 @@ import { Button } from "@/components/ui/button";
 const links = [
   { href: "/overview", label: "Overview" },
   { href: "/market", label: "Browse" },
+  { href: "/signals", label: "Signals" },
   { href: "/watchlist", label: "Watchlist" },
   { href: "/alerts", label: "Alerts" },
   { href: "/alerts/history", label: "History" },

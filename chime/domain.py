@@ -5,7 +5,7 @@ from __future__ import annotations
 import math
 import os
 import re
-from datetime import datetime
+from datetime import date, datetime
 from enum import StrEnum
 from typing import Any
 
@@ -151,6 +151,9 @@ class PriceSnapshot(BaseModel):
     ts: datetime
     # Optional DB id after persistence
     id: int | None = None
+    # CSE board id (tradeSummary.id / companyInfoSummery.reqSymbolInfo.id)
+    # for companyChartDataByStock path backfill — not the Postgres snapshot id.
+    cse_stock_id: int | None = None
 
     @field_validator("price", mode="before")
     @classmethod
@@ -174,6 +177,13 @@ class PriceSnapshot(BaseModel):
     @classmethod
     def _optional_numeric_must_not_be_bool(cls, value: Any) -> Any:
         return _none_if_bool_numeric(value)
+
+    @field_validator("cse_stock_id", mode="before")
+    @classmethod
+    def _cse_stock_id_must_not_be_bool(cls, value: Any) -> Any:
+        if isinstance(value, bool):
+            return None
+        return value
 
 
 class Disclosure(BaseModel):
@@ -246,6 +256,64 @@ class IndexSnapshot(BaseModel):
     @classmethod
     def _optional_numeric_must_not_be_bool(cls, value: Any) -> Any:
         return _none_if_bool_numeric(value)
+
+
+class DailyBar(BaseModel):
+    """One CSE daily path bar (``companyChartDataByStock`` period 2–5).
+
+    ``price`` is last/close (CSE field ``p``). ``open`` is often null upstream.
+    ``trade_date`` is the Asia/Colombo calendar date of ``bar_ts``.
+    """
+
+    model_config = ConfigDict(extra="ignore")
+
+    symbol: str
+    trade_date: date
+    price: float
+    high: float | None = None
+    low: float | None = None
+    open: float | None = None
+    volume: float | None = None
+    source_period: int
+    bar_ts: datetime
+
+    @field_validator("price", mode="before")
+    @classmethod
+    def _price_must_not_be_bool(cls, value: Any) -> Any:
+        return _reject_bool_numeric(value)
+
+    @field_validator("high", "low", "open", "volume", mode="before")
+    @classmethod
+    def _optional_numeric_must_not_be_bool(cls, value: Any) -> Any:
+        return _none_if_bool_numeric(value)
+
+    @field_validator("source_period", mode="before")
+    @classmethod
+    def _period_must_not_be_bool(cls, value: Any) -> Any:
+        return _reject_bool_numeric(value)
+
+
+class ForecastPoint(BaseModel):
+    """One model path estimate for sparkline overlay (not a price target)."""
+
+    model_config = ConfigDict(extra="ignore")
+
+    symbol: str
+    as_of: date
+    horizon_i: int
+    ts: datetime
+    yhat: float
+    model_version: str
+
+    @field_validator("yhat", mode="before")
+    @classmethod
+    def _yhat_must_not_be_bool(cls, value: Any) -> Any:
+        return _reject_bool_numeric(value)
+
+    @field_validator("horizon_i", mode="before")
+    @classmethod
+    def _horizon_must_not_be_bool(cls, value: Any) -> Any:
+        return _reject_bool_numeric(value)
 
 
 class AlertRule(BaseModel):
