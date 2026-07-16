@@ -19,6 +19,7 @@ from typing import Any
 from chime.domain import ForecastPoint
 from chime.logging_setup import get_logger
 from chime.ml import sklearn_available
+from chime.ml.confidence import confidence_band, score_to_confidence
 from chime.ml.dataset import Sample, build_samples, load_symbol_bars
 from chime.ml.features import FEATURE_NAMES, path_features
 from chime.ml.harden import _demean_by_day
@@ -143,6 +144,12 @@ async def run_hpe_forecast(
         last_ts = last.bar_ts
         if last_ts.tzinfo is None:
             last_ts = last_ts.replace(tzinfo=UTC)
+        conf = score_to_confidence(score)
+        band = confidence_band(conf, gate="hpe_p90")
+        reasons = [
+            "HPE gate fired (historical OOS precision ~90% when speaking)",
+            f"model |score|={abs(score):.3f}",
+        ]
         fps: list[ForecastPoint] = []
         for h in sorted(set(fired)):
             yhat = last_px * (1.0 + direction * mag * (h / max(fired)))
@@ -156,6 +163,10 @@ async def run_hpe_forecast(
                     ts=last_ts + timedelta(days=h),
                     yhat=yhat,
                     model_version=MODEL_VERSION,
+                    confidence=conf,
+                    confidence_band=band,
+                    gate="hpe_p90",
+                    reasons=reasons,
                 )
             )
         if fps:

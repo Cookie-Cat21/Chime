@@ -35,6 +35,9 @@ async def load_symbol_bars(
         symbols = symbols[:limit_symbols]
     out: dict[str, list[DailyBar]] = {}
     for symbol in symbols:
+        # Index synthetic row (aspi-backfill) is not an equity — skip in ML panels.
+        if symbol.strip().upper() == "ASPI":
+            continue
         bars = await storage.list_daily_bars(symbol)
         if bars:
             out[symbol] = sorted(bars, key=lambda b: b.trade_date)

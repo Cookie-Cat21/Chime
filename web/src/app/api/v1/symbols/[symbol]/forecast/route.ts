@@ -55,9 +55,13 @@ export async function GET(
       ts: Date | string;
       yhat: number;
       horizon_i: number;
+      confidence: number | null;
+      confidence_band: string | null;
+      gate: string | null;
+      reasons: unknown;
     }>(
       `
-      SELECT ts, yhat, horizon_i
+      SELECT ts, yhat, horizon_i, confidence, confidence_band, gate, reasons
       FROM forecast_points
       WHERE symbol = $1 AND model_version = $2 AND as_of = $3
       ORDER BY horizon_i ASC
@@ -66,16 +70,41 @@ export async function GET(
       [symbol, modelVersion, asOf, MAX_FORECAST_POINTS],
     );
 
-    const points: { ts: string | null; price: number | null; horizon_i: number }[] =
-      [];
+    const points: {
+      ts: string | null;
+      price: number | null;
+      horizon_i: number;
+      confidence: number | null;
+      confidence_band: string | null;
+    }[] = [];
+    let gate: string | null = null;
+    let confidenceBand: string | null = null;
+    let confidence: number | null = null;
+    const reasons: string[] = [];
     for (const row of rows.rows) {
       const price = toFiniteNumber(row.yhat);
       if (price == null) continue;
+      const conf = toFiniteNumber(row.confidence);
       points.push({
         ts: toIso(row.ts),
         price,
         horizon_i: row.horizon_i,
+        confidence: conf,
+        confidence_band:
+          typeof row.confidence_band === "string" ? row.confidence_band : null,
       });
+      if (gate == null && typeof row.gate === "string") gate = row.gate;
+      if (confidenceBand == null && typeof row.confidence_band === "string") {
+        confidenceBand = row.confidence_band;
+      }
+      if (confidence == null && conf != null) confidence = conf;
+      if (Array.isArray(row.reasons)) {
+        for (const r of row.reasons) {
+          if (typeof r === "string" && r.trim() && reasons.length < 6) {
+            reasons.push(r.trim());
+          }
+        }
+      }
     }
 
     let asOfOut: string | null = null;
@@ -87,8 +116,12 @@ export async function GET(
       points,
       model_version: typeof modelVersion === "string" ? modelVersion : null,
       as_of: asOfOut,
+      gate,
+      confidence,
+      confidence_band: confidenceBand,
+      reasons,
       disclaimer:
-        "Dashed forecast is a model estimate from recent path returns — not financial advice.",
+        "Dashed forecast is a model estimate — research only, not financial advice. Confidence is historical OOS calibration, not a guarantee.",
     });
   } catch (err) {
     console.error("GET /symbols/forecast failed", err);

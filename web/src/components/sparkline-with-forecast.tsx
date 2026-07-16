@@ -16,16 +16,30 @@ export function SparklineWithForecast({
   points,
   forecastPoints,
   className,
+  confidenceBand,
+  gate,
+  confidence,
 }: {
   points: Point[];
   forecastPoints?: Point[];
   className?: string;
+  confidenceBand?: string | null;
+  gate?: string | null;
+  confidence?: number | null;
 }) {
   const toggleId = useId();
   const [showForecast, setShowForecast] = useState(false);
   const series = finiteSparklinePoints(points);
   const forecast = finiteSparklinePoints(forecastPoints ?? []);
   const canToggle = forecast.length >= 1 && series.length >= 2;
+  const bandLabel =
+    confidenceBand === "high"
+      ? "High"
+      : confidenceBand === "medium"
+        ? "Medium"
+        : confidenceBand === "low"
+          ? "Low"
+          : null;
 
   if (series.length < 2) {
     return <Sparkline points={points} className={className} />;
@@ -99,21 +113,42 @@ export function SparklineWithForecast({
           {formatNumber(last)}
           {showForecast ? " · dashed = model estimate" : ""}
         </p>
-        {canToggle ? (
-          <label
-            htmlFor={toggleId}
-            className="flex cursor-pointer items-center gap-2 text-xs text-muted-foreground"
-          >
-            <input
-              id={toggleId}
-              type="checkbox"
-              className="size-3.5 rounded border-border"
-              checked={showForecast}
-              onChange={(e) => setShowForecast(e.target.checked)}
-            />
-            Show forecast
-          </label>
-        ) : null}
+        <div className="flex flex-wrap items-center gap-2">
+          {bandLabel ? (
+            <span
+              className="rounded-full border border-border/70 px-2 py-0.5 text-[10px] font-medium tracking-wide text-muted-foreground uppercase"
+              title={
+                gate === "hpe_p90"
+                  ? "High-Precision Emitter — historical OOS ~90% when speaking"
+                  : "Always-on research estimate — historical hit ~60%"
+              }
+            >
+              Confidence {bandLabel}
+              {typeof confidence === "number" && Number.isFinite(confidence)
+                ? ` · ${Math.round(confidence * 100)}%`
+                : ""}
+            </span>
+          ) : null}
+          {canToggle ? (
+            <label
+              htmlFor={toggleId}
+              className="flex cursor-pointer items-center gap-2 text-xs text-muted-foreground"
+            >
+              <input
+                id={toggleId}
+                type="checkbox"
+                className="size-3.5 rounded border-border"
+                checked={showForecast}
+                onChange={(e) => setShowForecast(e.target.checked)}
+              />
+              Show forecast
+            </label>
+          ) : (
+            <span className="text-xs text-muted-foreground">
+              No high-confidence forecast stored
+            </span>
+          )}
+        </div>
       </div>
     </div>
   );

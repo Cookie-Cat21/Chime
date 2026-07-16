@@ -324,17 +324,20 @@ def main(argv: list[str] | None = None) -> None:
             "ml-iterate",
             "ml-precision90",
             "ml-hpe",
+            "ml-forecast-unified",
             "ml-always-on",
             "disclosures-backfill",
             "financials-backfill",
+            "aspi-backfill",
         ],
         help=(
             "bot | poller | both | migrate | tick | "
             "drain-pdfs | drain-briefs | drain-metrics | "
             "path-backfill | score-signals | eval-signals | "
             "sector-backfill | notices-backfill | disclosures-backfill | "
-            "financials-backfill | ml-experiment | ml-forecast | ml-transfer | "
-            "ml-harden | ml-diagnose | ml-iterate | ml-precision90 | ml-hpe | "
+            "financials-backfill | aspi-backfill | ml-experiment | "
+            "ml-forecast | ml-transfer | ml-harden | ml-diagnose | "
+            "ml-iterate | ml-precision90 | ml-hpe | ml-forecast-unified | "
             "ml-always-on"
         ),
     )
@@ -405,6 +408,12 @@ def main(argv: list[str] | None = None) -> None:
         action="store_true",
         help="For ml-always-on: join extracted filing YoY deltas (requires drain-metrics)",
     )
+    parser.add_argument(
+        "--mode",
+        type=str,
+        default="hpe_with_fallback",
+        help="For ml-forecast-unified: hpe_only | hpe_with_fallback | always_on",
+    )
     args = parser.parse_args(argv)
     if args.force and args.command not in (
         "tick",
@@ -413,13 +422,16 @@ def main(argv: list[str] | None = None) -> None:
         "notices-backfill",
         "ml-forecast",
         "ml-hpe",
+        "ml-forecast-unified",
         "disclosures-backfill",
         "financials-backfill",
+        "aspi-backfill",
     ):
         parser.error(
             "--force is only valid for tick, path-backfill, "
             "sector-backfill, notices-backfill, disclosures-backfill, "
-            "financials-backfill, ml-forecast, or ml-hpe"
+            "financials-backfill, aspi-backfill, ml-forecast, ml-hpe, "
+            "or ml-forecast-unified"
         )
     if args.period is not None and args.command != "path-backfill":
         parser.error("--period is only valid for path-backfill")
@@ -1026,6 +1038,90 @@ def main(argv: list[str] | None = None) -> None:
                 await storage.close()
 
         asyncio.run(_hpe())
+        return
+
+    if args.command == "ml-forecast-unified":
+        configure_logging()
+        settings = Settings.from_env(require_token=False)
+        mode = (
+            args.mode
+            if isinstance(args.mode, str)
+            and args.mode in {"hpe_only", "hpe_with_fallback", "always_on"}
+            else "hpe_with_fallback"
+        )
+
+        async def _uni() -> None:
+            from chime.ml.forecast_serve import run_unified_forecast
+
+            storage = Storage(settings.database_url)
+            await storage.open()
+            cse = CSEClient(
+                base_url=settings.cse_base_url,
+                timeout=settings.http_timeout_seconds,
+                fail_max=settings.circuit_fail_max,
+                reset_timeout=settings.circuit_reset_seconds,
+                min_interval_seconds=settings.cse_min_interval_seconds,
+            )
+            try:
+                result = await run_unified_forecast(
+                    storage=storage, mode=mode, cse=cse
+                )
+                print(
+                    "ml-forecast-unified: "
+                    f"mode={result.mode} "
+                    f"hpe_emits={result.hpe_emits} "
+                    f"fallback_emits={result.fallback_emits} "
+                    f"points={result.points_written}"
+                )
+            finally:
+                await cse.aclose()
+                await storage.close()
+
+        asyncio.run(_uni())
+        return
+
+    if args.command == "aspi-backfill":
+        configure_logging()
+        settings = Settings.from_env(require_token=False)
+
+        async def _aspi() -> None:
+            from datetime import UTC, datetime
+
+            from chime.domain import DailyBar
+
+            storage = Storage(settings.database_url)
+            await storage.open()
+            cse = CSEClient(
+                base_url=settings.cse_base_url,
+                timeout=settings.http_timeout_seconds,
+                fail_max=settings.circuit_fail_max,
+                reset_timeout=settings.circuit_reset_seconds,
+                min_interval_seconds=settings.cse_min_interval_seconds,
+            )
+            try:
+                await storage.upsert_stock("ASPI", "All Share Price Index")
+                series = await cse.fetch_index_chart(period=5)
+                bars = [
+                    DailyBar(
+                        symbol="ASPI",
+                        trade_date=d,
+                        price=v,
+                        high=None,
+                        low=None,
+                        open=None,
+                        volume=None,
+                        source_period=5,
+                        bar_ts=datetime(d.year, d.month, d.day, 18, 30, tzinfo=UTC),
+                    )
+                    for d, v, _pc in series
+                ]
+                n = await storage.persist_daily_bars(bars) if bars else 0
+                print(f"aspi-backfill: points={len(series)} upserted={n}")
+            finally:
+                await cse.aclose()
+                await storage.close()
+
+        asyncio.run(_aspi())
         return
 
     if args.command == "disclosures-backfill":

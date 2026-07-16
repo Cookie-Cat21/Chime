@@ -1006,20 +1006,32 @@ class Storage:
                 """,
                 (sym, version, as_of),
             )
+            import json as _json
+
             await conn.execute(
                 """
                 INSERT INTO forecast_points (
-                    symbol, model_version, horizon_i, as_of, ts, yhat
+                    symbol, model_version, horizon_i, as_of, ts, yhat,
+                    confidence, confidence_band, gate, reasons
                 )
-                SELECT symbol, model_version, horizon_i, as_of, ts, yhat
+                SELECT
+                    symbol, model_version, horizon_i, as_of, ts, yhat,
+                    confidence, confidence_band, gate, reasons::jsonb
                 FROM UNNEST(
                     %s::text[],
                     %s::text[],
                     %s::smallint[],
                     %s::date[],
                     %s::timestamptz[],
-                    %s::double precision[]
-                ) AS t(symbol, model_version, horizon_i, as_of, ts, yhat)
+                    %s::double precision[],
+                    %s::double precision[],
+                    %s::text[],
+                    %s::text[],
+                    %s::text[]
+                ) AS t(
+                    symbol, model_version, horizon_i, as_of, ts, yhat,
+                    confidence, confidence_band, gate, reasons
+                )
                 """,
                 (
                     [p.symbol for p in clean],
@@ -1028,6 +1040,18 @@ class Storage:
                     [p.as_of for p in clean],
                     [p.ts for p in clean],
                     [float(p.yhat) for p in clean],
+                    [
+                        float(p.confidence)
+                        if p.confidence is not None
+                        and isinstance(p.confidence, int | float)
+                        and not isinstance(p.confidence, bool)
+                        and math.isfinite(float(p.confidence))
+                        else None
+                        for p in clean
+                    ],
+                    [p.confidence_band for p in clean],
+                    [p.gate for p in clean],
+                    [_json.dumps(list(p.reasons or [])) for p in clean],
                 ),
             )
         return len(clean)

@@ -590,6 +590,9 @@ export default async function SymbolDetailPage({
   const discsFailed = !discRes.ok;
 
   const forecastPoints: { ts: string | null; price: number | null }[] = [];
+  let forecastConfidence: number | null = null;
+  let forecastBand: string | null = null;
+  let forecastGate: string | null = null;
   if (forecastRes?.ok) {
     try {
       const body: unknown = await forecastRes.json();
@@ -599,7 +602,17 @@ export default async function SymbolDetailPage({
         !Array.isArray(body) &&
         Array.isArray((body as { points?: unknown }).points)
       ) {
-        for (const row of (body as { points: unknown[] }).points) {
+        const meta = body as {
+          confidence?: unknown;
+          confidence_band?: unknown;
+          gate?: unknown;
+          points: unknown[];
+        };
+        forecastConfidence = toFiniteNumber(meta.confidence);
+        forecastBand =
+          typeof meta.confidence_band === "string" ? meta.confidence_band : null;
+        forecastGate = typeof meta.gate === "string" ? meta.gate : null;
+        for (const row of meta.points) {
           if (forecastPoints.length >= 30) break;
           if (row == null || typeof row !== "object" || Array.isArray(row)) {
             continue;
@@ -707,6 +720,9 @@ export default async function SymbolDetailPage({
               <SparklineWithForecast
                 points={snaps.points}
                 forecastPoints={forecastPoints}
+                confidence={forecastConfidence}
+                confidenceBand={forecastBand}
+                gate={forecastGate}
               />
             )}
             <OptionalLwcNote

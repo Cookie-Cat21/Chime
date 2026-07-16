@@ -1,7 +1,8 @@
 # Always-on force-find ledger
 
 **Baseline (locked):** `baseline_cs_lmt_bag` mean symbol hit = **0.5930**  
-**Keep rule:** Δ ≥ **+0.005** under purged protocol.
+**Keep rule:** Δ ≥ **+0.005** under purged protocol.  
+**Always-on 70% target:** **not reached** — best keep stacks plateau **~0.599**.
 
 ## Cycles
 
@@ -20,6 +21,11 @@
 | PDF extract YoY only (214 comps / 72 syms) | 0.5934 | +0.0004 | **NO** |
 | fin dates + YoY | 0.5972 | +0.0042 | **NO** |
 | **fin dates + YoY + sector_rs** | **0.5989** | **+0.0059** | **YES** |
+| denser YoY (385 comps / 128 syms) + fin+sector | 0.5979 | +0.0049 | **NO** |
+| liquid top-33% + fin_rich | 0.5908 | −0.002 | **NO** |
+| YoY-covered universe only | 0.5818 | −0.011 | **NO** |
+| abs (no panel) + fin_rich | 0.5580 | −0.035 | **NO** |
+| fin_rich + ensemble | 0.5929 | −0.000 | **NO** |
 
 ### PDF metrics drain (this wave)
 
@@ -47,8 +53,10 @@
 
 - Announcement **counts** ≈ no lift.
 - ASPI daily regime ≈ noise at current horizon.
-- **Financial filing calendar (rich)** is the first **KEEP** (+0.57pp → ~0.599). Still high-50s, but directionally useful.
-- Next: drain those PDFs into `filing_metrics` YoY for a real fundamental panel.
+- **Financial filing calendar (rich)** was the first **KEEP** (~0.599).
+- **YoY from PDFs** helps only when combined (fin+yoy+sector_rs also KEEP ~0.599); YoY alone is too sparse/noisy so far.
+- Always-on still **high-50s** — not a breakout. More YoY coverage + cleaner extracts may add a bit more.
+- Lean on **HPE (~90% when speaking)** for high precision; keep force-finding always-on.
 
 Also: lean on **HPE (~90% when speaking)** while always-on crawls.
 

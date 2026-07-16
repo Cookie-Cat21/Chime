@@ -304,6 +304,11 @@ class ForecastPoint(BaseModel):
     ts: datetime
     yhat: float
     model_version: str
+    # Optional confidence metadata (migration 018).
+    confidence: float | None = None
+    confidence_band: str | None = None  # high | medium | low | none
+    gate: str | None = None
+    reasons: list[str] = Field(default_factory=list)
 
     @field_validator("yhat", mode="before")
     @classmethod
@@ -313,6 +318,13 @@ class ForecastPoint(BaseModel):
     @field_validator("horizon_i", mode="before")
     @classmethod
     def _horizon_must_not_be_bool(cls, value: Any) -> Any:
+        return _reject_bool_numeric(value)
+
+    @field_validator("confidence", mode="before")
+    @classmethod
+    def _confidence_must_not_be_bool(cls, value: Any) -> Any:
+        if value is None:
+            return None
         return _reject_bool_numeric(value)
 
 

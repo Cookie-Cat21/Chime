@@ -559,9 +559,17 @@ async def run_always_on(
         extras["sectors_mapped"] = len(sectors)
         samples = enrich_samples_with_sector_rs(samples, sectors)
     if use_aspi:
-        if cse is None:
-            raise ValueError("use_aspi requires cse client")
-        aspi = await load_aspi_series(cse)
+        aspi: list[tuple[date, float, float | None]] = []
+        # Prefer persisted ASPI daily_bars (aspi-backfill); else live chartData.
+        stored = await storage.list_daily_bars("ASPI")
+        if stored:
+            aspi = [(b.trade_date, b.price, None) for b in stored]
+            extras["aspi_source"] = "daily_bars"
+        elif cse is not None:
+            aspi = await load_aspi_series(cse)
+            extras["aspi_source"] = "chartData"
+        else:
+            raise ValueError("use_aspi requires cse client or ASPI daily_bars")
         extras["aspi_points"] = len(aspi)
         samples = enrich_samples_with_aspi(samples, aspi)
     if use_financials:
