@@ -75,17 +75,19 @@ Cherry-pick **patterns** from blocks below; do not scaffold a second app from th
 
 | Source | License | Bulk OK? | Chime action |
 |---|---|---|---|
-| **Tremor Blocks / Raw** | MIT | Clone yes; vendor selectively | Cherry-pick patterns above |
+| **Tremor Blocks / Raw** | MIT / Apache | Clone yes; vendor selectively | Cherry-pick patterns above; status-monitoring for `/health` brief queue |
 | **HyperUI** | MIT | Yes | Empty/list/badge HTML → adapt to React |
 | **daisyUI** | MIT core / paid templates | Core yes | **Do not install** beside shadcn (second design system) |
-| **21st.dev** | Per-item (often MIT) | **No dump-all** | Cherry-pick empty/auth/nav; verify each |
+| **21st.dev / Agent Elements** | Per-item / MIT registry | **No dump-all** | Cherry-pick Markdown / pending badges only — **not** full `AgentChat` (Phase 3) |
 | **Shadcnblocks** | Pro proprietary; free SPDX weak | Pro **no** | Free only if LICENSE clear; else skip |
 | **Cult UI** | Free MIT / Pro paid | Free yes | Skip Pro hero panels; light status only |
-| **Watermelon UI** | MIT claimed + “Premium” marketing | Confirm per block | Thin tables/login only |
+| **Watermelon UI** (`ui.watermelon.sh`) | MIT registry + Premium marketing | Confirm per block | Footer already adapted (`ChimeFooter`); thin AI cards only |
 | **React Bits** | MIT + **Commons Clause** | App use ≠ pure MIT | **Constitution fail — skip** |
-| **Apple Cards Carousel / Footers / FAQ / Animated Beam** | Usually marketing demos | N/A | **Reject** (landing chrome; dash isn’t a brochure) |
+| **Apple Cards Carousel / Footers / FAQ / Animated Beam** | Usually marketing demos | N/A | **Reject for dash** (landing may already use FAQ/footer patterns) |
 | **Better Design Tips** | Tips, not components | N/A | Skip as kit |
-| **Icons** | Prefer existing `lucide-react` | — | Already in `web/` |
+| **Icons** | Prefer existing `lucide-react` / Hugeicons | — | Already in `web/` |
+
+**Survey refresh:** 2026-07-16 — AI brief surfaces use shadcn `Badge` + `ExpandableBrief` status chrome; no AgentChat / chart walls.
 
 ---
 

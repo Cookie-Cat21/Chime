@@ -427,10 +427,7 @@ def _is_transient_provider_error(exc: BaseException) -> bool:
         return True
     if "HTTP 429" in msg:
         return True
-    for code in (500, 502, 503, 504):
-        if f"HTTP {code}" in msg:
-            return True
-    return False
+    return any(f"HTTP {code}" in msg for code in (500, 502, 503, 504))
 
 
 def _build_single_provider(

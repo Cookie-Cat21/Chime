@@ -164,6 +164,51 @@ def test_main_drain_briefs_dispatch(
     assert "drain-briefs: examined=2 updated=2" in out
 
 
+def test_main_drain_metrics_dispatch(
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    monkeypatch.setattr(main_mod, "configure_logging", lambda *a, **k: None)
+    settings = MagicMock(database_url="postgresql://chime:chime@localhost/chime")
+    monkeypatch.setattr(main_mod.Settings, "from_env", lambda **_: settings)
+    storage = AsyncMock()
+    storage.open = AsyncMock()
+    storage.close = AsyncMock()
+    monkeypatch.setattr(main_mod, "Storage", lambda *_a, **_k: storage)
+
+    async def _fake(**_kwargs: Any) -> DrainResult:
+        return DrainResult("drain-metrics", 4, 1, 3, 0)
+
+    monkeypatch.setattr(main_mod, "drain_metrics", _fake)
+    main_mod.main(["drain-metrics", "--limit", "4", "--all-symbols"])
+    assert "drain-metrics: examined=4 updated=1" in capsys.readouterr().out
+
+
+@pytest.mark.asyncio
+async def test_drain_pdfs_empty_queue() -> None:
+    storage = AsyncMock()
+    storage.list_disclosures_missing_pdf = AsyncMock(return_value=[])
+    cse = AsyncMock()
+    settings = MagicMock(pdf_enrich_sleep_seconds=0)
+    result = await drain_pdfs(storage=storage, cse=cse, settings=settings)
+    assert result.examined == 0
+    cse.fetch_legacy_announcements.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_drain_pdfs_skips_when_legacy_map_empty() -> None:
+    storage = AsyncMock()
+    storage.list_disclosures_missing_pdf = AsyncMock(
+        return_value=[_disc(id=2, external_id="99")]
+    )
+    cse = AsyncMock()
+    cse.fetch_legacy_announcements = AsyncMock(return_value=[])
+    settings = MagicMock(pdf_enrich_sleep_seconds=0)
+    with patch("chime.drain.legacy_pdf_urls_by_id", return_value={}):
+        result = await drain_pdfs(storage=storage, cse=cse, settings=settings)
+    assert result.skipped == 1
+    assert result.updated == 0
+
+
 def test_migration_014_drain_indexes_present() -> None:
     from pathlib import Path
 

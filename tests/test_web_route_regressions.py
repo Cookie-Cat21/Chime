@@ -531,9 +531,11 @@ def test_scenarios_dash_stub_page() -> None:
     )
     assert "no personas" in page_src
     assert "no queued runs" in page_src
+    assert "Phase 3 stub" in page_src
     assert "NfaInline" in page_src
     assert "NfaFooter" in page_src
     assert "EmptyState" in page_src
+    assert "AlertTitle" in page_src
     # No LLM / provider / DB wiring on the dash stub.
     assert "fetch(" not in page_src
     assert "getPool" not in page_src
@@ -546,7 +548,8 @@ def test_scenarios_dash_stub_page() -> None:
     assert '.trim() === "1"' in helper_src
     # Loose truthy env values must not opt in (only exact "1" after trim).
     assert "`true` / `yes` / `on`" in helper_src
-    assert 'href: "/scenarios", label: "Scenarios"' in nav_src
+    # Scenarios stays off primary nav until Phase 3 runs exist (deep-link OK).
+    assert 'href: "/scenarios", label: "Scenarios"' not in nav_src
 
     # No scenarios API surface — page is chrome-only.
     assert not (WEB / "src" / "app" / "api" / "v1" / "scenarios").exists()

@@ -8,8 +8,8 @@ import pytest
 
 from chime.briefs import BriefSettings, briefs_enabled
 from chime.briefs.provider import (
-    FailoverBriefProvider,
     BriefsDisabledError,
+    FailoverBriefProvider,
     _is_transient_provider_error,
     make_brief_provider,
 )
