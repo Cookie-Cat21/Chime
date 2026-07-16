@@ -9,13 +9,13 @@ import { CommandPalette } from "@/components/command-palette";
 import { NavSession } from "@/components/nav-session";
 import { Button } from "@/components/ui/button";
 
+/** Primary nav — Scenarios stays off primary until Phase 3 AI is live. */
 const links = [
   { href: "/overview", label: "Overview" },
   { href: "/market", label: "Browse" },
   { href: "/watchlist", label: "Watchlist" },
   { href: "/alerts", label: "Alerts" },
   { href: "/alerts/history", label: "History" },
-  { href: "/scenarios", label: "Scenarios" },
   { href: "/settings", label: "Settings" },
   { href: "/health", label: "Health" },
 ] as const;

@@ -34,14 +34,18 @@ def test_make_brief_provider_rejects_non_string_provider() -> None:
         "pdf_grace_seconds": 0,
         "cdn_backoff_seconds": 0,
         "skipped_promote_hours": 0,
+        "backup_providers": (),
+        "backup_api_keys": (),
+        "backup_models": (),
     }.items():
         object.__setattr__(cfg, key, value)
     provider = make_brief_provider(cfg)
     assert isinstance(provider, GeminiBriefProvider)
 
     src = (ROOT / "chime" / "briefs" / "provider.py").read_text(encoding="utf-8")
-    chunk = src.split("def make_brief_provider")[1]
-    assert "isinstance(cfg.provider, str)" in chunk
+    # Factory soft-defaults non-string provider via _build_single_provider.
+    assert "def _build_single_provider" in src
+    assert "isinstance(settings.provider, str)" in src
 
 
 def test_fetch_disclosures_bulk_symbol_isinstance_guards() -> None:

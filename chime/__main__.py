@@ -13,6 +13,7 @@ from telegram import Bot
 from chime.adapters.cse import CSEClient
 from chime.bot import build_application
 from chime.config import Settings
+from chime.drain import drain_briefs, drain_metrics, drain_pdfs
 from chime.health import HealthState, brief_queue_health_hint, start_health_server
 from chime.logging_setup import configure_logging, get_logger
 from chime.migrate import apply_migrations
@@ -297,10 +298,33 @@ def main(argv: list[str] | None = None) -> None:
     parser = argparse.ArgumentParser(prog="chime", description="CSE Telegram alerting")
     parser.add_argument(
         "command",
-        choices=["bot", "poller", "both", "migrate", "tick"],
-        help="bot | poller | both | migrate | tick (one forced poll)",
+        choices=[
+            "bot",
+            "poller",
+            "both",
+            "migrate",
+            "tick",
+            "drain-pdfs",
+            "drain-briefs",
+            "drain-metrics",
+        ],
+        help=(
+            "bot | poller | both | migrate | tick | "
+            "drain-pdfs | drain-briefs | drain-metrics"
+        ),
     )
     parser.add_argument("--force", action="store_true", help="For tick: ignore market hours")
+    parser.add_argument(
+        "--limit",
+        type=int,
+        default=20,
+        help="For drain-*: max rows to examine (default 20)",
+    )
+    parser.add_argument(
+        "--all-symbols",
+        action="store_true",
+        help="For drain-pdfs/drain-metrics: include non-watchlist symbols",
+    )
     args = parser.parse_args(argv)
     if args.force and args.command != "tick":
         parser.error("--force is only valid for tick")
@@ -310,6 +334,53 @@ def main(argv: list[str] | None = None) -> None:
         settings = Settings.from_env(require_token=False)
         applied = apply_migrations(settings.database_url)
         print("Applied:", ", ".join(applied) if applied else "(none)")
+        return
+
+    if args.command in ("drain-pdfs", "drain-briefs", "drain-metrics"):
+        configure_logging()
+        settings = Settings.from_env(require_token=False)
+        limit = args.limit if isinstance(args.limit, int) and args.limit > 0 else 20
+        watched_only = not args.all_symbols
+
+        async def _drain() -> None:
+            storage = Storage(settings.database_url)
+            await storage.open()
+            try:
+                if args.command == "drain-briefs":
+                    result = await drain_briefs(storage=storage, limit=limit)
+                elif args.command == "drain-pdfs":
+                    cse = CSEClient(
+                        base_url=settings.cse_base_url,
+                        timeout=settings.http_timeout_seconds,
+                        fail_max=settings.circuit_fail_max,
+                        reset_timeout=settings.circuit_reset_seconds,
+                        min_interval_seconds=settings.cse_min_interval_seconds,
+                    )
+                    try:
+                        result = await drain_pdfs(
+                            storage=storage,
+                            cse=cse,
+                            settings=settings,
+                            limit=limit,
+                            watched_only=watched_only,
+                        )
+                    finally:
+                        await cse.aclose()
+                else:
+                    result = await drain_metrics(
+                        storage=storage,
+                        limit=limit,
+                        watched_only=watched_only,
+                    )
+                print(
+                    f"{result.command}: examined={result.examined} "
+                    f"updated={result.updated} skipped={result.skipped} "
+                    f"errors={result.errors}"
+                )
+            finally:
+                await storage.close()
+
+        asyncio.run(_drain())
         return
 
     settings = Settings.from_env(require_token=True)

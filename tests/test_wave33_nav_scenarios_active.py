@@ -1,10 +1,8 @@
-"""Wave33: AppNav highlights /scenarios when active.
+"""Wave33: /scenarios page stays deep-linkable; Scenarios off primary nav.
 
-1. /scenarios page must pass ``active="/scenarios"`` into AppNav.
-2. AppNav must list Scenarios and resolve active via ``resolveActiveNavHref``
-   + ``usePathname`` (explicit prop or path) so Scenarios gets ``aria-current``.
-3. Longest-prefix resolution prefers ``/alerts/history`` over ``/alerts`` and
-   exact-matches ``/scenarios``.
+Phase 3 fence: keep the stub page + ``AppNav active="/scenarios"`` prop, but
+do not list Scenarios in the primary ``links`` array until LLM runs exist.
+Longest-prefix resolution still prefers ``/alerts/history`` over ``/alerts``.
 """
 
 from __future__ import annotations
@@ -22,10 +20,11 @@ def test_scenarios_page_passes_active_prop() -> None:
     assert "AppNav" in source
 
 
-def test_app_nav_resolves_scenarios_active() -> None:
+def test_app_nav_scenarios_not_in_primary_links() -> None:
     nav = WEB / "src" / "components" / "app-nav.tsx"
     source = nav.read_text(encoding="utf-8")
-    assert 'href: "/scenarios", label: "Scenarios"' in source
+    assert 'href: "/scenarios", label: "Scenarios"' not in source
+    assert "Phase 3" in source or "primary until Phase 3" in source
     assert "resolveActiveNavHref" in source
     assert "usePathname" in source
     assert "activeHref === link.href" in source

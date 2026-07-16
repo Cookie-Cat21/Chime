@@ -29,9 +29,13 @@ Default **off**. Stub in `chime/briefs/`; no LLM until explicitly enabled.
 AI_BRIEFS_ENABLED=0          # leave off in prod until Phase 2
 # Phase 2 live:
 # AI_BRIEFS_ENABLED=1
-# AI_API_KEY=…               # required; briefs_enabled() needs both
+# AI_API_KEY=…               # primary; backups alone also satisfy briefs_enabled()
 # AI_PROVIDER=gemini         # or: groq | openrouter (OpenAI-compatible chat)
 # AI_MODEL=gemini-2.0-flash  # groq: llama-3.3-70b-versatile; openrouter: openai/gpt-4o-mini
+# Optional failover (429 / 5xx / timeout only — not permanent 4xx / empty text):
+# AI_BACKUP_PROVIDERS=groq,openrouter
+# AI_BACKUP_API_KEYS=…,…
+# AI_BACKUP_MODELS=llama-3.3-70b-versatile,openai/gpt-4o-mini
 ```
 
 ### Telegram `/brief SYMBOL`
@@ -94,6 +98,23 @@ On HTTP 429 the drain fails soft and retries on a later tick — do not disable 
 ## Advisory locks (poll vs brief claim)
 
 Poll tick uses session `pg_try_advisory_lock(4_201_337)`; brief daily-cap claim uses transaction `pg_advisory_xact_lock(4_201_339)`. Wave 10 audit: **no deadlock** between them (distinct keys; brief drain after poll unlock; claim uses `SKIP LOCKED`). Do **not** unify the IDs — same key + `max_size=2` can pool-deadlock. Detail: [ADVISORY_LOCK_DEADLOCK.md](../factory/passes/ADVISORY_LOCK_DEADLOCK.md).
+
+## Scheduled drains (`drain-pdfs` / `drain-briefs` / `drain-metrics`)
+
+Backfill helpers for PDF enrich + filing metrics + AI briefs when the market-hours
+poller is idle. Same CSE JSON + CDN path as the poller — **not** competitor scrapes.
+
+```bash
+python -m chime migrate
+python -m chime drain-pdfs --limit 30          # watched symbols missing pdf_url
+python -m chime drain-metrics --limit 30       # needs FINANCIAL_METRICS_ENABLED=1
+python -m chime drain-briefs --limit 10        # needs AI_BRIEFS_ENABLED=1 + keys
+# --all-symbols  → include non-watchlist rows (pdfs/metrics only)
+```
+
+Optional GitHub Action: `.github/workflows/pdf-metrics-drain.yml` (hourly +
+`workflow_dispatch`). Requires `DATABASE_URL` secret; AI secrets only if
+`run_briefs=true` / `vars.DRAIN_BRIEFS=1`.
 
 ## PDF enrich sleep (`PDF_ENRICH_SLEEP_SECONDS`)
 

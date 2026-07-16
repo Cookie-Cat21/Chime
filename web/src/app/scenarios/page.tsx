@@ -2,6 +2,7 @@ import { AppNav } from "@/components/app-nav";
 import { EmptyState } from "@/components/empty-state";
 import { NfaFooter } from "@/components/nfa-footer";
 import { NfaInline } from "@/components/nfa-inline";
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { requirePageSession } from "@/lib/auth/page-session";
 import { scenariosEnabled } from "@/lib/scenarios";
 
@@ -39,6 +40,14 @@ export default async function ScenariosPage() {
         </p>
 
         <NfaInline className="mt-3" />
+
+        <Alert className="mt-6">
+          <AlertTitle>Phase 3 stub</AlertTitle>
+          <AlertDescription>
+            Not in primary nav yet. Deep-link only — no AgentChat, no personas,
+            no model calls from the dash.
+          </AlertDescription>
+        </Alert>
 
         {enabled ? (
           <EmptyState
