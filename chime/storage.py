@@ -1416,7 +1416,9 @@ class Storage:
             ).fetchone()
         if row is None:
             return None
-        r = _as_row(row)
+        return self._disclosure_from_row(_as_row(row))
+
+    def _disclosure_from_row(self, r: dict[str, Any]) -> Disclosure | None:
         try:
             return Disclosure(
                 id=int(r["id"]),
@@ -1432,6 +1434,82 @@ class Storage:
             )
         except Exception:
             return None
+
+    async def list_disclosures_missing_pdf(
+        self,
+        *,
+        limit: int = 20,
+        watched_only: bool = True,
+    ) -> list[Disclosure]:
+        """Disclosures with no ``pdf_url`` — for scheduled enrich drains."""
+        lim = max(1, min(int(limit), 500)) if not isinstance(limit, bool) else 20
+        watched_sql = (
+            """
+            AND d.symbol IN (SELECT DISTINCT symbol FROM watchlist_items)
+            """
+            if watched_only
+            else ""
+        )
+        async with self._pool.connection() as conn:
+            rows = await (
+                await conn.execute(
+                    f"""
+                    SELECT d.id, d.external_id, d.symbol, d.title, d.category, d.url,
+                           d.company_name, d.published_at, d.seen_at, d.pdf_url
+                    FROM disclosures d
+                    WHERE d.pdf_url IS NULL
+                    {watched_sql}
+                    ORDER BY d.id ASC
+                    LIMIT %s
+                    """,
+                    (lim,),
+                )
+            ).fetchall()
+        out: list[Disclosure] = []
+        for row in _as_rows(rows):
+            disc = self._disclosure_from_row(row)
+            if disc is not None:
+                out.append(disc)
+        return out
+
+    async def list_disclosures_pending_metrics(
+        self,
+        *,
+        limit: int = 20,
+        watched_only: bool = True,
+    ) -> list[Disclosure]:
+        """Financial-candidate disclosures with ``pdf_url`` but no ``filing_metrics``."""
+        lim = max(1, min(int(limit), 500)) if not isinstance(limit, bool) else 20
+        watched_sql = (
+            """
+            AND d.symbol IN (SELECT DISTINCT symbol FROM watchlist_items)
+            """
+            if watched_only
+            else ""
+        )
+        async with self._pool.connection() as conn:
+            rows = await (
+                await conn.execute(
+                    f"""
+                    SELECT d.id, d.external_id, d.symbol, d.title, d.category, d.url,
+                           d.company_name, d.published_at, d.seen_at, d.pdf_url
+                    FROM disclosures d
+                    LEFT JOIN filing_metrics fm ON fm.disclosure_id = d.id
+                    WHERE d.pdf_url IS NOT NULL
+                      AND fm.id IS NULL
+                    {watched_sql}
+                    ORDER BY d.id ASC
+                    LIMIT %s
+                    """,
+                    (lim,),
+                )
+            ).fetchall()
+        out: list[Disclosure] = []
+        for row in _as_rows(rows):
+            disc = self._disclosure_from_row(row)
+            if disc is not None:
+                out.append(disc)
+        return out
 
     async def upsert_filing_metrics(self, row: dict[str, Any]) -> dict[str, Any]:
         """Insert or update filing_metrics by disclosure_id."""

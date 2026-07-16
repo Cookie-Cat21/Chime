@@ -188,9 +188,13 @@ class BriefSettings:
                     backup_models=(),
                 )
             )
-        providers = self.backup_providers if isinstance(self.backup_providers, tuple) else ()
-        keys = self.backup_api_keys if isinstance(self.backup_api_keys, tuple) else ()
-        models = self.backup_models if isinstance(self.backup_models, tuple) else ()
+        # getattr — adversarial object.__new__ shells may omit newer fields.
+        providers_raw = getattr(self, "backup_providers", ())
+        keys_raw = getattr(self, "backup_api_keys", ())
+        models_raw = getattr(self, "backup_models", ())
+        providers = providers_raw if isinstance(providers_raw, tuple) else ()
+        keys = keys_raw if isinstance(keys_raw, tuple) else ()
+        models = models_raw if isinstance(models_raw, tuple) else ()
         for index, provider_raw in enumerate(providers):
             if not isinstance(provider_raw, str) or not provider_raw.strip():
                 continue
@@ -230,7 +234,8 @@ def briefs_enabled(settings: BriefSettings | None = None) -> bool:
         return False
     if isinstance(cfg.api_key, str) and cfg.api_key.strip():
         return True
-    keys = cfg.backup_api_keys if isinstance(cfg.backup_api_keys, tuple) else ()
+    keys_raw = getattr(cfg, "backup_api_keys", ())
+    keys = keys_raw if isinstance(keys_raw, tuple) else ()
     return any(isinstance(k, str) and k.strip() for k in keys)
 
 
