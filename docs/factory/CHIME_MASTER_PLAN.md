@@ -111,6 +111,7 @@ Order matters. Unlock one fence at a time with constitution amend.
 | Phase | Unlock | Still banned until later |
 |---|---|---|
 | **P1** | Light screener (sector + % move filters on Browse) | Full multi-sort quant board |
+| **P1b** | **Signal Board** — research scores + reasons + optional forecast overlay (NFA; never “invest tips”); CSE path ≤1y daily | Commercial data spine / buy-sell language |
 | **P2** | Positions table (qty + avg cost) **without** tax | Tax reports, broker sync |
 | **P3** | Simple P&L on positions | Options, margin, blotter |
 | **P4** | Native PWA / mobile shell | App Store trading app |

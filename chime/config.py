@@ -156,6 +156,13 @@ class Settings:
     # SECTORS_INGEST=1 — optional POST /allSectors → sectors table persist.
     # Default off (0); thin GET /api/v1/sectors reads Postgres only.
     sectors_ingest: bool = False
+    # PATH_BACKFILL_ENABLED=1 — allow scheduled/ops daily path ingest into
+    # daily_bars via companyChartDataByStock. Default 0. CLI may --force.
+    path_backfill_enabled: bool = False
+    # PATH_BACKFILL_PERIOD — CSE chart period (2–5). Default 5 ≈ 1 year daily.
+    path_backfill_period: int = 5
+    # PATH_BACKFILL_SLEEP_SECONDS — polite pause between per-symbol chart calls.
+    path_backfill_sleep_seconds: float = 0.35
 
     @classmethod
     def from_env(cls, *, require_token: bool = True) -> Settings:
@@ -177,6 +184,10 @@ class Settings:
         log_raw = _env_str("LOG_LEVEL", "INFO")
         bulk_raw = _env_str("DISCLOSURE_BULK_FEED", "0")
         sectors_raw = _env_str("SECTORS_INGEST", "0")
+        path_bf_raw = _env_str("PATH_BACKFILL_ENABLED", "0")
+        path_period = _int("PATH_BACKFILL_PERIOD", 5)
+        if path_period not in {2, 3, 4, 5}:
+            path_period = 5
         market_open = _hhmm("MARKET_OPEN", "09:30")
         market_close = _hhmm("MARKET_CLOSE", "14:30")
         if _minutes(market_close) < _minutes(market_open):
@@ -210,6 +221,11 @@ class Settings:
             disclosure_bulk_feed=bulk_raw.strip() == "1",
             snapshot_retention_days=max(0, _int("SNAPSHOT_RETENTION_DAYS", 0)),
             sectors_ingest=sectors_raw.strip() == "1",
+            path_backfill_enabled=path_bf_raw.strip() == "1",
+            path_backfill_period=path_period,
+            path_backfill_sleep_seconds=_nonneg_float(
+                "PATH_BACKFILL_SLEEP_SECONDS", 0.35
+            ),
         )
 
 

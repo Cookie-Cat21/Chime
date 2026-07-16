@@ -18,6 +18,7 @@ from chime.domain import (
     AlertRule,
     AlertType,
     BigPrint,
+    DailyBar,
     Disclosure,
     IndexSnapshot,
     MarketNotice,
@@ -103,7 +104,12 @@ class Storage:
             yield conn
 
     async def upsert_stock(
-        self, symbol: str, name: str | None = None, sector: str | None = None
+        self,
+        symbol: str,
+        name: str | None = None,
+        sector: str | None = None,
+        *,
+        cse_stock_id: int | None = None,
     ) -> None:
         # Fail closed — non-string symbol used to throw on .strip mid upsert.
         if not isinstance(symbol, str):
@@ -111,17 +117,30 @@ class Storage:
         symbol = symbol.strip().upper()
         if not symbol:
             return
+        # Fail closed — bool / non-positive must not poison cse_stock_id.
+        stock_id: int | None
+        if (
+            isinstance(cse_stock_id, bool)
+            or not isinstance(cse_stock_id, int)
+            or cse_stock_id <= 0
+        ):
+            stock_id = None
+        else:
+            stock_id = cse_stock_id
         async with self._pool.connection() as conn:
             await conn.execute(
                 """
-                INSERT INTO stocks (symbol, name, sector)
-                VALUES (%s, %s, %s)
+                INSERT INTO stocks (symbol, name, sector, cse_stock_id)
+                VALUES (%s, %s, %s, %s)
                 ON CONFLICT (symbol) DO UPDATE SET
                     name = COALESCE(EXCLUDED.name, stocks.name),
                     sector = COALESCE(EXCLUDED.sector, stocks.sector),
+                    cse_stock_id = COALESCE(
+                        EXCLUDED.cse_stock_id, stocks.cse_stock_id
+                    ),
                     updated_at = now()
                 """,
-                (symbol, name, sector),
+                (symbol, name, sector, stock_id),
             )
 
     async def list_stock_names(self) -> list[tuple[str, str]]:
@@ -196,6 +215,13 @@ class Storage:
         stock_symbols = [symbol for symbol, _ in normalized]
         stock_names = [snap.name for _, snap in normalized]
         stock_sectors = [None] * len(normalized)
+        stock_cse_ids: list[int | None] = []
+        for _, snap in normalized:
+            raw_id = snap.cse_stock_id
+            if isinstance(raw_id, bool) or not isinstance(raw_id, int) or raw_id <= 0:
+                stock_cse_ids.append(None)
+            else:
+                stock_cse_ids.append(raw_id)
         snap_symbols = list(stock_symbols)
         snap_prices = [snap.price for _, snap in normalized]
         snap_changes = [snap.change for _, snap in normalized]
@@ -214,16 +240,20 @@ class Storage:
         async with self._pool.connection() as conn, conn.transaction():
             await conn.execute(
                 """
-                INSERT INTO stocks (symbol, name, sector)
-                SELECT symbol, name, sector
-                FROM UNNEST(%s::text[], %s::text[], %s::text[])
-                    AS t(symbol, name, sector)
+                INSERT INTO stocks (symbol, name, sector, cse_stock_id)
+                SELECT symbol, name, sector, cse_stock_id
+                FROM UNNEST(
+                    %s::text[], %s::text[], %s::text[], %s::int[]
+                ) AS t(symbol, name, sector, cse_stock_id)
                 ON CONFLICT (symbol) DO UPDATE SET
                     name = COALESCE(EXCLUDED.name, stocks.name),
                     sector = COALESCE(EXCLUDED.sector, stocks.sector),
+                    cse_stock_id = COALESCE(
+                        EXCLUDED.cse_stock_id, stocks.cse_stock_id
+                    ),
                     updated_at = now()
                 """,
-                (stock_symbols, stock_names, stock_sectors),
+                (stock_symbols, stock_names, stock_sectors, stock_cse_ids),
             )
             rows = await (
                 await conn.execute(
@@ -436,6 +466,118 @@ class Storage:
                 ),
             )
         return rows
+
+    async def list_stocks_with_cse_ids(self) -> list[tuple[str, int]]:
+        """Return ``(symbol, cse_stock_id)`` for path backfill targets."""
+        async with self._pool.connection() as conn:
+            rows = await (
+                await conn.execute(
+                    """
+                    SELECT symbol, cse_stock_id
+                    FROM stocks
+                    WHERE cse_stock_id IS NOT NULL
+                    ORDER BY symbol ASC
+                    """
+                )
+            ).fetchall()
+        out: list[tuple[str, int]] = []
+        for row in _as_rows(rows):
+            raw_sym = row.get("symbol")
+            raw_id = row.get("cse_stock_id")
+            if not isinstance(raw_sym, str):
+                continue
+            symbol = raw_sym.strip().upper()
+            if not symbol:
+                continue
+            if isinstance(raw_id, bool) or not isinstance(raw_id, int) or raw_id <= 0:
+                continue
+            out.append((symbol, raw_id))
+        return out
+
+    async def persist_daily_bars(self, bars: list[DailyBar]) -> int:
+        """Upsert CSE daily path bars (``UNIQUE (symbol, trade_date)``).
+
+        Last-wins per ``(symbol, trade_date)``. Non-finite prices skipped.
+        Returns number of rows written (insert or update). Empty → 0.
+        """
+        if not bars:
+            return 0
+
+        by_key: dict[tuple[str, object], DailyBar] = {}
+        for bar in bars:
+            if not isinstance(bar.symbol, str):
+                continue
+            symbol = bar.symbol.strip().upper()
+            if not symbol:
+                continue
+            if not math.isfinite(bar.price):
+                continue
+            by_key[(symbol, bar.trade_date)] = bar.model_copy(update={"symbol": symbol})
+        if not by_key:
+            return 0
+
+        rows = list(by_key.values())
+        async with self._pool.connection() as conn:
+            # Ensure parent stocks exist (path backfill may race empty board).
+            await conn.execute(
+                """
+                INSERT INTO stocks (symbol)
+                SELECT DISTINCT symbol
+                FROM UNNEST(%s::text[]) AS t(symbol)
+                ON CONFLICT (symbol) DO NOTHING
+                """,
+                ([b.symbol for b in rows],),
+            )
+            result = await conn.execute(
+                """
+                INSERT INTO daily_bars (
+                    symbol, trade_date, price, high, low, open, volume,
+                    source_period, bar_ts
+                )
+                SELECT
+                    symbol, trade_date, price, high, low, open, volume,
+                    source_period, bar_ts
+                FROM UNNEST(
+                    %s::text[],
+                    %s::date[],
+                    %s::double precision[],
+                    %s::double precision[],
+                    %s::double precision[],
+                    %s::double precision[],
+                    %s::double precision[],
+                    %s::smallint[],
+                    %s::timestamptz[]
+                ) AS t(
+                    symbol, trade_date, price, high, low, open, volume,
+                    source_period, bar_ts
+                )
+                ON CONFLICT (symbol, trade_date) DO UPDATE SET
+                    price = EXCLUDED.price,
+                    high = EXCLUDED.high,
+                    low = EXCLUDED.low,
+                    open = EXCLUDED.open,
+                    volume = EXCLUDED.volume,
+                    source_period = EXCLUDED.source_period,
+                    bar_ts = EXCLUDED.bar_ts,
+                    ingested_at = now()
+                """,
+                (
+                    [b.symbol for b in rows],
+                    [b.trade_date for b in rows],
+                    [b.price for b in rows],
+                    [b.high for b in rows],
+                    [b.low for b in rows],
+                    [b.open for b in rows],
+                    [b.volume for b in rows],
+                    [b.source_period for b in rows],
+                    [b.bar_ts for b in rows],
+                ),
+            )
+        # psycopg Status: "INSERT 0 N" / "UPDATE N" — prefer rowcount when present.
+        rowcount = getattr(result, "rowcount", None)
+        if isinstance(rowcount, int) and not isinstance(rowcount, bool) and rowcount >= 0:
+            return rowcount
+        return len(rows)
 
     async def persist_index_snapshots(
         self,

@@ -27,6 +27,13 @@ Tailwind + shadcn/ui. See `docs/factory/DASH_IA.md`,
 `docs/factory/DASH_CAKE_CHERRY.md`, `docs/factory/CHIME_MASTER_PLAN.md`
 (maximum fence-legal roadmap), and `docs/factory/COMMIT_FACTORY.md`.
 
+**Signal Board (phased unlock — research scores, not tips):**
+Ranked **research scores** from CSE path / filings / sectors with explainable
+reasons and optional forecast overlays. Always NFA; never “best to invest” /
+buy-sell language. Path history: ~1y daily via `companyChartDataByStock`
+(`docs/experiments/CSE_PATH_HISTORY_PROBE.md`). Third-party macros deferred
+(`docs/THIRD_PARTY_DATA.md`).
+
 **Telegram (cherry on top):**
 `/watch`, `/alert`, `/myalerts`, and fire pushes. Same Postgres truth as the
 dash. If a feature doesn’t help “see the market in the dash” or “get pinged on
