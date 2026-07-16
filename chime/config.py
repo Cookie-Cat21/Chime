@@ -174,6 +174,8 @@ class Settings:
     # ML_HPE_ENABLED=1 — high-precision emitter (ml_hpe_p90_v1) writes gated
     # forecast_points only when locked OOS≥90% gates fire (default 0).
     ml_hpe_enabled: bool = False
+    # ML_LOOP_ENABLED=1 — allow ml-loop-nightly / ml-loop-retrain self-learning jobs.
+    ml_loop_enabled: bool = False
 
     @classmethod
     def from_env(cls, *, require_token: bool = True) -> Settings:
@@ -200,6 +202,7 @@ class Settings:
         notices_bf_raw = _env_str("NOTICES_BACKFILL_ENABLED", "0")
         ml_fc_raw = _env_str("ML_FORECAST_ENABLED", "0")
         ml_hpe_raw = _env_str("ML_HPE_ENABLED", "0")
+        ml_loop_raw = _env_str("ML_LOOP_ENABLED", "0")
         path_period = _int("PATH_BACKFILL_PERIOD", 5)
         if path_period not in {2, 3, 4, 5}:
             path_period = 5
@@ -248,6 +251,7 @@ class Settings:
             notices_backfill_enabled=notices_bf_raw.strip() == "1",
             ml_forecast_enabled=ml_fc_raw.strip() == "1",
             ml_hpe_enabled=ml_hpe_raw.strip() == "1",
+            ml_loop_enabled=ml_loop_raw.strip() == "1",
         )
 
 

@@ -330,6 +330,9 @@ def main(argv: list[str] | None = None) -> None:
             "disclosures-backfill",
             "financials-backfill",
             "aspi-backfill",
+            "ml-score-outcomes",
+            "ml-loop-nightly",
+            "ml-loop-retrain",
         ],
         help=(
             "bot | poller | both | migrate | tick | "
@@ -339,7 +342,8 @@ def main(argv: list[str] | None = None) -> None:
             "financials-backfill | aspi-backfill | ml-experiment | "
             "ml-forecast | ml-transfer | ml-harden | ml-diagnose | "
             "ml-iterate | ml-precision90 | ml-hpe | ml-forecast-unified | "
-            "ml-always-on"
+            "ml-always-on | ml-score-outcomes | ml-loop-nightly | "
+            "ml-loop-retrain"
         ),
     )
     parser.add_argument(
@@ -427,12 +431,14 @@ def main(argv: list[str] | None = None) -> None:
         "disclosures-backfill",
         "financials-backfill",
         "aspi-backfill",
+        "ml-loop-nightly",
+        "ml-loop-retrain",
     ):
         parser.error(
             "--force is only valid for tick, path-backfill, "
             "sector-backfill, notices-backfill, disclosures-backfill, "
             "financials-backfill, aspi-backfill, ml-forecast, ml-hpe, "
-            "or ml-forecast-unified"
+            "ml-forecast-unified, ml-loop-nightly, or ml-loop-retrain"
         )
     if args.period is not None and args.command != "path-backfill":
         parser.error("--period is only valid for path-backfill")
@@ -1150,6 +1156,93 @@ def main(argv: list[str] | None = None) -> None:
                 await storage.close()
 
         asyncio.run(_aspi())
+        return
+
+    if args.command == "ml-score-outcomes":
+        configure_logging()
+        settings = Settings.from_env(require_token=False)
+
+        async def _score() -> None:
+            from chime.ml.outcomes import score_due_outcomes
+
+            storage = Storage(settings.database_url)
+            await storage.open()
+            try:
+                result = await score_due_outcomes(storage)
+                print(
+                    "ml-score-outcomes: "
+                    f"examined={result.examined} scored={result.scored} "
+                    f"skipped={result.skipped}"
+                )
+            finally:
+                await storage.close()
+
+        asyncio.run(_score())
+        return
+
+    if args.command == "ml-loop-nightly":
+        configure_logging()
+        settings = Settings.from_env(require_token=False)
+        if not settings.ml_loop_enabled and not args.force:
+            print(
+                "ml-loop-nightly: disabled "
+                "(set ML_LOOP_ENABLED=1 or pass --force)"
+            )
+            return
+
+        async def _nightly() -> None:
+            from chime.ml.loop_nightly import run_loop_nightly
+
+            storage = Storage(settings.database_url)
+            await storage.open()
+            try:
+                result = await run_loop_nightly(storage)
+                print(
+                    "ml-loop-nightly: "
+                    f"emitted={result.emitted} scored={result.scored} "
+                    f"alerts={list(result.drift_alerts) or '-'} "
+                    f"scoreboard={result.scoreboard_path}"
+                )
+            finally:
+                await storage.close()
+
+        asyncio.run(_nightly())
+        return
+
+    if args.command == "ml-loop-retrain":
+        configure_logging()
+        settings = Settings.from_env(require_token=False)
+        if not settings.ml_loop_enabled and not args.force:
+            print(
+                "ml-loop-retrain: disabled "
+                "(set ML_LOOP_ENABLED=1 or pass --force)"
+            )
+            return
+
+        async def _retrain() -> None:
+            from chime.ml.loop_retrain import run_loop_retrain
+            from chime.ml.registry import get_champion
+
+            storage = Storage(settings.database_url)
+            await storage.open()
+            try:
+                champ = await get_champion(storage)
+                result = await run_loop_retrain(
+                    storage, force_promote_first=champ is None
+                )
+                print(
+                    "ml-loop-retrain: "
+                    f"challenger={result.challenger_id} "
+                    f"promoted={result.promoted} "
+                    f"challenger_hit={result.challenger_hit} "
+                    f"champion_hit={result.champion_hit}"
+                )
+                for r in result.reasons:
+                    print(" ", r)
+            finally:
+                await storage.close()
+
+        asyncio.run(_retrain())
         return
 
     if args.command == "disclosures-backfill":

@@ -180,6 +180,15 @@ async def run_unified_forecast(
                     fallback_emits += 1
                     points += await storage.replace_forecast_points(fps)
 
+    # Feed the self-learning ledger (shadow + gated emits).
+    try:
+        from chime.ml.outcomes import attach_regime_and_emit_from_forecast_points
+
+        n_out = await attach_regime_and_emit_from_forecast_points(storage)
+        log.info("forecast_outcomes_emitted", n=n_out)
+    except Exception as exc:
+        log.warning("forecast_outcomes_emit_failed", error=str(exc)[:200])
+
     log.info(
         "unified_forecast_done",
         mode=mode,
