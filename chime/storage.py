@@ -773,6 +773,29 @@ class Storage:
         # for comparison against symbol ret * 100 below in score job.
         return pct
 
+    async def count_notices_since(self, symbol: str, *, since: datetime) -> int:
+        """Count buy-in / non-compliance / halt notices for ``symbol`` since."""
+        if not isinstance(symbol, str) or not symbol.strip():
+            return 0
+        if not isinstance(since, datetime):
+            return 0
+        sym = symbol.strip().upper()
+        async with self._pool.connection() as conn:
+            row = await (
+                await conn.execute(
+                    """
+                    SELECT COUNT(*)::int AS n
+                    FROM market_notices
+                    WHERE symbol = %s AND published_at >= %s
+                    """,
+                    (sym, since),
+                )
+            ).fetchone()
+        if row is None:
+            return 0
+        counted = _pg_count(_as_row(row).get("n"))
+        return 0 if counted is None else counted
+
     async def count_disclosures_since(self, symbol: str, *, since: datetime) -> int:
         if not isinstance(symbol, str) or not symbol.strip():
             return 0

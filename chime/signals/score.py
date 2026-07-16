@@ -18,14 +18,15 @@ from chime.scenarios.guardrails import (
     assert_safe_scenario_output,
 )
 
-MODEL_VERSION = "path_v2"
+MODEL_VERSION = "path_v3"
+MODEL_VERSION_V2 = "path_v2"
 MODEL_VERSION_V1 = "path_v1"
 MODEL_VERSION_V0 = "path_v0"
 
 
 @dataclass(frozen=True, slots=True)
 class ExtraFactors:
-    """Optional non-path inputs for ``path_v2`` (all fail-closed / optional)."""
+    """Optional non-path inputs for ``path_v3`` (all fail-closed / optional)."""
 
     eps_yoy_pct: float | None = None
     rev_yoy_pct: float | None = None
@@ -36,6 +37,11 @@ class ExtraFactors:
     financial_disclosure_share: float | None = None
     # Latest ASPI change in percent points (e.g. 0.14 = +0.14%).
     aspi_change_pct: float | None = None
+    # F-051: recent buy-in / non-compliance / halt notices.
+    notice_count_30d: int | None = None
+    # F-071: cross-sectional 20d return percentile [0,1] and lag delta.
+    ret20_percentile: float | None = None
+    ret20_rank_stability: float | None = None  # 1 - |pct_now - pct_lag|
 
 
 @dataclass(frozen=True, slots=True)
@@ -212,9 +218,14 @@ def score_symbol_path(
     peer_ret = _finite_opt(extras.sector_peer_ret_20d)
     fin_share = _finite_opt(extras.financial_disclosure_share)
     aspi_pct = _finite_opt(extras.aspi_change_pct)
+    ret20_pctile = _finite_opt(extras.ret20_percentile)
+    rank_stab = _finite_opt(extras.ret20_rank_stability)
     disc_30 = extras.disclosure_count_30d
     if isinstance(disc_30, bool) or not isinstance(disc_30, int) or disc_30 < 0:
         disc_30 = None
+    notice_n = extras.notice_count_30d
+    if isinstance(notice_n, bool) or not isinstance(notice_n, int) or notice_n < 0:
+        notice_n = None
 
     # Filing YoY: percentages are already in % points from extract (e.g. 12.5).
     filing_term = 0.0
@@ -248,6 +259,40 @@ def score_symbol_path(
         aspi_gap = (ret_1 * 100.0) - aspi_pct
         aspi_rs_term = max(-8.0, min(8.0, aspi_gap * 2.0))
 
+    # F-051: compliance / buy-in / halt notices — risk penalty.
+    notice_penalty = 0.0
+    if notice_n is not None and notice_n > 0:
+        notice_penalty = min(20.0, float(notice_n) * 8.0)
+
+    # F-061: Colombo calendar — month-end sessions get a small liquidity caution.
+    calendar_term = 0.0
+    month_end = as_of.day >= 28
+    weekday = as_of.weekday()  # Mon=0 … Sun=6 (Asia/Colombo date already)
+    if month_end:
+        calendar_term -= 2.0
+    if weekday == 0:
+        calendar_term += 1.0  # mild Monday reopen activity tilt
+    elif weekday == 4:
+        calendar_term -= 1.0  # mild Friday caution
+
+    # F-071: stable high/low cross-sectional ranks get a small confirmation tilt.
+    rank_term = 0.0
+    if (
+        ret20_pctile is not None
+        and rank_stab is not None
+        and rank_stab >= 0.7
+    ):
+        # Stable top/bottom quintile → small signed confirmation (not advice).
+        if ret20_pctile >= 0.8:
+            rank_term = 4.0 * rank_stab
+        elif ret20_pctile <= 0.2:
+            rank_term = -4.0 * rank_stab
+
+    # F-081: thin history discount.
+    thin_penalty = 0.0
+    if len(prices) < 60:
+        thin_penalty = min(8.0, (60 - len(prices)) * 0.15)
+
     raw = (
         mom_term
         - vol_penalty
@@ -261,6 +306,10 @@ def score_symbol_path(
         + turnover_term
         + fin_disc_term
         + aspi_rs_term
+        - notice_penalty
+        + calendar_term
+        + rank_term
+        - thin_penalty
     )
     score = max(-100.0, min(100.0, raw))
 
@@ -296,6 +345,15 @@ def score_symbol_path(
         "aspi_change_pct": aspi_pct,
         "aspi_gap_1d": aspi_gap,
         "aspi_rs_term": aspi_rs_term,
+        "notice_count_30d": float(notice_n) if notice_n is not None else None,
+        "notice_penalty": notice_penalty,
+        "month_end": 1.0 if month_end else 0.0,
+        "weekday": float(weekday),
+        "calendar_term": calendar_term,
+        "ret20_percentile": ret20_pctile,
+        "ret20_rank_stability": rank_stab,
+        "rank_term": rank_term,
+        "thin_penalty": thin_penalty,
     }
 
     reasons: list[str] = []
@@ -362,6 +420,24 @@ def score_symbol_path(
         direction = "ahead of" if aspi_gap >= 0 else "behind"
         r = _safe_reason(
             f"Latest session {direction} ASPI by {abs(aspi_gap):.2f} pts"
+        )
+        if r:
+            reasons.append(r)
+    if notice_n is not None and notice_n > 0:
+        # Avoid "buy" substring — guardrails reject buy/sell advice language.
+        r = _safe_reason(
+            f"{notice_n} board/non-compliance/halt notice(s) in last 30 days"
+        )
+        if r:
+            reasons.append(r)
+    if month_end:
+        r = _safe_reason("Near calendar month-end session")
+        if r:
+            reasons.append(r)
+    if ret20_pctile is not None and rank_stab is not None and rank_stab >= 0.7:
+        r = _safe_reason(
+            f"20-session return rank stable "
+            f"(percentile {ret20_pctile * 100.0:.0f}%, stability {rank_stab:.2f})"
         )
         if r:
             reasons.append(r)

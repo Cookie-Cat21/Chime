@@ -8,6 +8,7 @@ from chime.domain import DailyBar
 from chime.scenarios.guardrails import contains_buy_sell_language
 from chime.signals.eval import evaluate_walk_forward
 from chime.signals.forecast import forecast_path
+from chime.signals.job import _percentile_ranks
 from chime.signals.score import MODEL_VERSION, ExtraFactors, score_symbol_path
 
 
@@ -130,6 +131,31 @@ def test_forecast_path_projects_forward() -> None:
 
 def test_forecast_path_too_short() -> None:
     assert forecast_path(_bars([10.0, 10.1, 10.2]), horizon=5) == []
+
+
+def test_notice_and_rank_factors() -> None:
+    prices = [10.0 + i * 0.2 for i in range(40)]
+    result = score_symbol_path(
+        _bars(prices),
+        extra=ExtraFactors(
+            notice_count_30d=2,
+            ret20_percentile=0.9,
+            ret20_rank_stability=0.85,
+        ),
+    )
+    assert result is not None
+    assert result.components["notice_penalty"] == 16.0
+    assert result.components["rank_term"] is not None
+    assert result.components["rank_term"] > 0
+    assert any("halt notice" in r.lower() or "non-compliance" in r.lower() for r in result.reasons)
+    assert any("rank stable" in r for r in result.reasons)
+
+
+def test_percentile_ranks_basic() -> None:
+    ranks = _percentile_ranks({"a": 1.0, "b": 2.0, "c": 3.0})
+    assert ranks["a"] == 0.0
+    assert ranks["c"] == 1.0
+    assert 0.0 < ranks["b"] < 1.0
 
 
 def test_walk_forward_eval_runs() -> None:

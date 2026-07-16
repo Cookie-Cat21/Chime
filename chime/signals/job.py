@@ -30,7 +30,7 @@ class SignalScoreResult:
 
 
 def _window_return_from_bars(bars: list[DailyBar], n: int = 20) -> float | None:
-    """20-session return from daily bars."""
+    """n-session return from daily bars."""
     ordered = sorted(bars, key=lambda b: b.trade_date)
     prices = [b.price for b in ordered if math.isfinite(b.price)]
     if len(prices) <= n:
@@ -39,6 +39,29 @@ def _window_return_from_bars(bars: list[DailyBar], n: int = 20) -> float | None:
     if start == 0 or not math.isfinite(start) or not math.isfinite(end):
         return None
     return (end / start) - 1.0
+
+
+def _percentile_ranks(values: dict[str, float]) -> dict[str, float]:
+    """Return percentile ranks in [0, 1] for each symbol (average ranks on ties)."""
+    if not values:
+        return {}
+    items = sorted(values.items(), key=lambda kv: kv[1])
+    n = len(items)
+    if n == 1:
+        return {items[0][0]: 0.5}
+    ranks: dict[str, float] = {}
+    i = 0
+    while i < n:
+        j = i
+        while j + 1 < n and items[j + 1][1] == items[i][1]:
+            j += 1
+        # average 0-based rank for ties
+        avg = (i + j) / 2.0
+        pct = avg / (n - 1)
+        for k in range(i, j + 1):
+            ranks[items[k][0]] = pct
+        i = j + 1
+    return ranks
 
 
 async def _sector_peer_ret_20d(
@@ -82,6 +105,24 @@ async def run_signal_score_job(
     ):
         symbols = symbols[:limit]
 
+    # Pass 1: load bars + 20d returns (current and lag-5 for rank stability).
+    bars_by_symbol: dict[str, list[DailyBar]] = {}
+    ret20_now: dict[str, float] = {}
+    ret20_lag: dict[str, float] = {}
+    for symbol in symbols:
+        bars = await storage.list_daily_bars(symbol)
+        bars_by_symbol[symbol] = bars
+        r_now = _window_return_from_bars(bars, 20)
+        if r_now is not None:
+            ret20_now[symbol] = r_now
+        if len(bars) > 25:
+            r_lag = _window_return_from_bars(bars[:-5], 20)
+            if r_lag is not None:
+                ret20_lag[symbol] = r_lag
+
+    pct_now = _percentile_ranks(ret20_now)
+    pct_lag = _percentile_ranks(ret20_lag)
+
     scored = 0
     skipped = 0
     forecasts = 0
@@ -90,12 +131,13 @@ async def run_signal_score_job(
     aspi_pct = await storage.latest_index_change_pct("ASPI")
 
     for symbol in symbols:
-        bars = await storage.list_daily_bars(symbol)
+        bars = bars_by_symbol.get(symbol, [])
         yoy = await storage.get_latest_filing_yoy(symbol)
         peer_ret = await _sector_peer_ret_20d(
             storage, symbol=symbol, cache=peer_cache
         )
         disc_n = await storage.count_disclosures_since(symbol, since=since)
+        notice_n = await storage.count_notices_since(symbol, since=since)
         cats = await storage.count_disclosure_categories_since(symbol, since=since)
         fin_share: float | None = None
         if cats and disc_n > 0:
@@ -115,6 +157,12 @@ async def run_signal_score_job(
                 ):
                     fin_n += n
             fin_share = fin_n / float(disc_n)
+
+        rank_stability: float | None = None
+        pctile = pct_now.get(symbol)
+        if pctile is not None and symbol in pct_lag:
+            rank_stability = 1.0 - abs(pctile - pct_lag[symbol])
+
         extra = ExtraFactors(
             eps_yoy_pct=yoy.get("eps_yoy_pct"),
             rev_yoy_pct=yoy.get("rev_yoy_pct"),
@@ -123,6 +171,9 @@ async def run_signal_score_job(
             disclosure_count_30d=disc_n if disc_n > 0 else None,
             financial_disclosure_share=fin_share,
             aspi_change_pct=aspi_pct,
+            notice_count_30d=notice_n if notice_n > 0 else None,
+            ret20_percentile=pctile,
+            ret20_rank_stability=rank_stability,
         )
         result = score_symbol_path(
             bars, extra=extra, model_version=model_version
