@@ -5,6 +5,7 @@ from __future__ import annotations
 from dataclasses import asdict, dataclass
 
 from chime.logging_setup import get_logger
+from chime.signals.forecast import forecast_path
 from chime.signals.score import MODEL_VERSION, score_symbol_path
 from chime.storage import Storage
 
@@ -16,6 +17,7 @@ class SignalScoreResult:
     symbols_targeted: int
     symbols_scored: int
     symbols_skipped: int
+    forecasts_written: int
     model_version: str
 
 
@@ -37,6 +39,7 @@ async def run_signal_score_job(
 
     scored = 0
     skipped = 0
+    forecasts = 0
     for symbol in symbols:
         bars = await storage.list_daily_bars(symbol)
         result = score_symbol_path(bars)
@@ -53,11 +56,15 @@ async def run_signal_score_job(
             bar_count=result.bar_count,
         )
         scored += 1
+        points = forecast_path(bars)
+        if points:
+            forecasts += await storage.replace_forecast_points(points)
 
     out = SignalScoreResult(
         symbols_targeted=len(symbols),
         symbols_scored=scored,
         symbols_skipped=skipped,
+        forecasts_written=forecasts,
         model_version=model_version,
     )
     log.info("signal_score_job_done", **asdict(out))

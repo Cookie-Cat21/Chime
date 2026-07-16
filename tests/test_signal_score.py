@@ -6,6 +6,7 @@ from datetime import UTC, date, datetime, timedelta
 
 from chime.domain import DailyBar
 from chime.scenarios.guardrails import contains_buy_sell_language
+from chime.signals.forecast import forecast_path
 from chime.signals.score import score_symbol_path
 
 
@@ -60,3 +61,15 @@ def test_reasons_never_invest_tips() -> None:
     assert "buy" not in blob
     assert "sell" not in blob
     assert "invest" not in blob
+
+
+def test_forecast_path_projects_forward() -> None:
+    prices = [10.0 + i * 0.1 for i in range(20)]
+    points = forecast_path(_bars(prices), horizon=5)
+    assert len(points) == 5
+    assert points[0].horizon_i == 1
+    assert points[-1].yhat > prices[-1]
+
+
+def test_forecast_path_too_short() -> None:
+    assert forecast_path(_bars([10.0, 10.1, 10.2]), horizon=5) == []

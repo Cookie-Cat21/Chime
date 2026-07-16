@@ -462,6 +462,7 @@ def main(argv: list[str] | None = None) -> None:
                     f"targeted={result.symbols_targeted} "
                     f"scored={result.symbols_scored} "
                     f"skipped={result.symbols_skipped} "
+                    f"forecast_pts={result.forecasts_written} "
                     f"model={result.model_version}"
                 )
             finally:

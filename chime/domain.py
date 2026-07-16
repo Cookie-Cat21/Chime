@@ -293,6 +293,29 @@ class DailyBar(BaseModel):
         return _reject_bool_numeric(value)
 
 
+class ForecastPoint(BaseModel):
+    """One model path estimate for sparkline overlay (not a price target)."""
+
+    model_config = ConfigDict(extra="ignore")
+
+    symbol: str
+    as_of: date
+    horizon_i: int
+    ts: datetime
+    yhat: float
+    model_version: str
+
+    @field_validator("yhat", mode="before")
+    @classmethod
+    def _yhat_must_not_be_bool(cls, value: Any) -> Any:
+        return _reject_bool_numeric(value)
+
+    @field_validator("horizon_i", mode="before")
+    @classmethod
+    def _horizon_must_not_be_bool(cls, value: Any) -> Any:
+        return _reject_bool_numeric(value)
+
+
 class AlertRule(BaseModel):
     """Active user alert rule loaded from storage for evaluation."""
 

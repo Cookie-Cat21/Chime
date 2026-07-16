@@ -20,7 +20,7 @@ import { NfaInline } from "@/components/nfa-inline";
 import { OptionalLwcNote } from "@/components/optional-lwc-note";
 import { PageHeader } from "@/components/page-header";
 import { PriceRefresh } from "@/components/price-refresh";
-import { Sparkline } from "@/components/sparkline";
+import { SparklineWithForecast } from "@/components/sparkline-with-forecast";
 import { finiteSparklinePoints } from "@/lib/sparkline";
 import { Button } from "@/components/ui/button";
 import {
@@ -408,8 +408,16 @@ export default async function SymbolDetailPage({
           [symbol, ...comparePeers].join(","),
         )}&limit=60`
       : null;
-  const [symRes, snapRes, discRes, metricsRes, briefRes, compareRes, watchRes] =
-    await Promise.all([
+  const [
+    symRes,
+    snapRes,
+    discRes,
+    metricsRes,
+    briefRes,
+    compareRes,
+    watchRes,
+    forecastRes,
+  ] = await Promise.all([
       serverApiGet(`/api/v1/symbols/${encoded}`),
       serverApiGet(`/api/v1/symbols/${encoded}/snapshots?limit=60`),
       serverApiGet(`/api/v1/symbols/${encoded}/disclosures?limit=20`),
@@ -417,6 +425,7 @@ export default async function SymbolDetailPage({
       serverApiGet(`/api/v1/symbols/${encoded}/brief`),
       compareQs ? serverApiGet(compareQs) : Promise.resolve(null),
       serverApiGet("/api/v1/watchlist"),
+      serverApiGet(`/api/v1/symbols/${encoded}/forecast`),
     ]);
 
   if (symRes.status === 404) {
@@ -580,6 +589,35 @@ export default async function SymbolDetailPage({
   const snapsFailed = !snapRes.ok;
   const discsFailed = !discRes.ok;
 
+  const forecastPoints: { ts: string | null; price: number | null }[] = [];
+  if (forecastRes?.ok) {
+    try {
+      const body: unknown = await forecastRes.json();
+      if (
+        body != null &&
+        typeof body === "object" &&
+        !Array.isArray(body) &&
+        Array.isArray((body as { points?: unknown }).points)
+      ) {
+        for (const row of (body as { points: unknown[] }).points) {
+          if (forecastPoints.length >= 30) break;
+          if (row == null || typeof row !== "object" || Array.isArray(row)) {
+            continue;
+          }
+          const r = row as Record<string, unknown>;
+          const price = toFiniteNumber(r.price);
+          if (price == null) continue;
+          forecastPoints.push({
+            ts: typeof r.ts === "string" ? r.ts : null,
+            price,
+          });
+        }
+      }
+    } catch {
+      // leave empty — sparkline stays realtime-only
+    }
+  }
+
   const sparkPoints = finiteSparklinePoints(snaps.points);
   const snapshotStale = Boolean(data.last?.ts && isStaleTs(data.last.ts));
   const disclosureCategories = Array.from(
@@ -666,7 +704,10 @@ export default async function SymbolDetailPage({
                 Need two stored ticks for a sparkline.
               </p>
             ) : (
-              <Sparkline points={snaps.points} />
+              <SparklineWithForecast
+                points={snaps.points}
+                forecastPoints={forecastPoints}
+              />
             )}
             <OptionalLwcNote
               enabled={process.env.NEXT_PUBLIC_CHIME_LWC === "1"}

@@ -21,6 +21,7 @@ from chime.domain import (
     BigPrint,
     DailyBar,
     Disclosure,
+    ForecastPoint,
     IndexSnapshot,
     MarketNotice,
     OrderBookSnapshot,
@@ -714,6 +715,69 @@ class Storage:
                     count,
                 ),
             )
+
+    async def replace_forecast_points(self, points: list[ForecastPoint]) -> int:
+        """Replace one symbol/model/as_of forecast series (delete + insert)."""
+        if not points:
+            return 0
+        symbol = points[0].symbol
+        version = points[0].model_version
+        as_of = points[0].as_of
+        if not isinstance(symbol, str) or not symbol.strip():
+            return 0
+        if not isinstance(version, str) or not version.strip():
+            return 0
+        if not isinstance(as_of, date):
+            return 0
+        sym = symbol.strip().upper()
+        clean: list[ForecastPoint] = []
+        for p in points:
+            if p.symbol.strip().upper() != sym:
+                continue
+            if p.model_version != version or p.as_of != as_of:
+                continue
+            if (
+                isinstance(p.yhat, bool)
+                or not isinstance(p.yhat, int | float)
+                or not math.isfinite(p.yhat)
+            ):
+                continue
+            clean.append(p)
+        if not clean:
+            return 0
+        async with self._pool.connection() as conn, conn.transaction():
+            await conn.execute(
+                """
+                DELETE FROM forecast_points
+                WHERE symbol = %s AND model_version = %s AND as_of = %s
+                """,
+                (sym, version, as_of),
+            )
+            await conn.execute(
+                """
+                INSERT INTO forecast_points (
+                    symbol, model_version, horizon_i, as_of, ts, yhat
+                )
+                SELECT symbol, model_version, horizon_i, as_of, ts, yhat
+                FROM UNNEST(
+                    %s::text[],
+                    %s::text[],
+                    %s::smallint[],
+                    %s::date[],
+                    %s::timestamptz[],
+                    %s::double precision[]
+                ) AS t(symbol, model_version, horizon_i, as_of, ts, yhat)
+                """,
+                (
+                    [p.symbol for p in clean],
+                    [p.model_version for p in clean],
+                    [p.horizon_i for p in clean],
+                    [p.as_of for p in clean],
+                    [p.ts for p in clean],
+                    [float(p.yhat) for p in clean],
+                ),
+            )
+        return len(clean)
 
     async def persist_index_snapshots(
         self,
