@@ -319,13 +319,14 @@ def main(argv: list[str] | None = None) -> None:
             "ml-experiment",
             "ml-forecast",
             "ml-transfer",
+            "ml-harden",
         ],
         help=(
             "bot | poller | both | migrate | tick | "
             "drain-pdfs | drain-briefs | drain-metrics | "
             "path-backfill | score-signals | eval-signals | "
             "sector-backfill | notices-backfill | ml-experiment | "
-            "ml-forecast | ml-transfer"
+            "ml-forecast | ml-transfer | ml-harden"
         ),
     )
     parser.add_argument(
@@ -362,7 +363,7 @@ def main(argv: list[str] | None = None) -> None:
         "--horizons",
         type=str,
         default="1,5",
-        help="For ml-experiment/ml-transfer: comma-separated horizons (default 1,5)",
+        help="For ml-experiment/ml-transfer/ml-harden: comma-separated horizons (default 1,5)",
     )
     parser.add_argument(
         "--panel",
@@ -782,6 +783,59 @@ def main(argv: list[str] | None = None) -> None:
                 await storage.close()
 
         asyncio.run(_xfer())
+        return
+
+    if args.command == "ml-harden":
+        configure_logging()
+        settings = Settings.from_env(require_token=False)
+        limit = (
+            None
+            if not isinstance(args.limit, int)
+            or isinstance(args.limit, bool)
+            or args.limit == 20
+            else args.limit
+        )
+        raw_horizons = args.horizons if isinstance(args.horizons, str) else "1,5"
+        horizons_h: list[int] = []
+        for part in raw_horizons.split(","):
+            part = part.strip()
+            if not part:
+                continue
+            try:
+                h = int(part)
+            except ValueError:
+                continue
+            if h >= 1:
+                horizons_h.append(h)
+        if not horizons_h:
+            horizons_h = [1, 5]
+
+        async def _harden() -> None:
+            from pathlib import Path
+
+            from chime.ml.harden import run_harden_experiment
+
+            storage = Storage(settings.database_url)
+            await storage.open()
+            try:
+                result = await run_harden_experiment(
+                    storage=storage,
+                    horizons=tuple(horizons_h),
+                    limit_symbols=limit if limit and limit > 0 else None,
+                    out_dir=Path("docs/experiments"),
+                )
+                print(
+                    "ml-harden: "
+                    f"decision={result.decision} "
+                    f"metrics={len(result.metrics)} "
+                    f"symbols={result.cse_symbols}"
+                )
+                for r in result.reasons:
+                    print(" ", r)
+            finally:
+                await storage.close()
+
+        asyncio.run(_harden())
         return
 
     settings = Settings.from_env(require_token=True)

@@ -44,25 +44,9 @@ class WalkForwardResult:
 
 
 def _spearman_ic(preds: list[float], actuals: list[float]) -> float | None:
-    if len(preds) < 3 or len(preds) != len(actuals):
-        return None
-    # Rank both series
-    def ranks(xs: list[float]) -> list[float]:
-        order = sorted(range(len(xs)), key=lambda i: xs[i])
-        r = [0.0] * len(xs)
-        for rank, i in enumerate(order):
-            r[i] = float(rank)
-        return r
+    from chime.ml.metrics import spearman
 
-    rp, ra = ranks(preds), ranks(actuals)
-    mean_p = sum(rp) / len(rp)
-    mean_a = sum(ra) / len(ra)
-    num = sum((p - mean_p) * (a - mean_a) for p, a in zip(rp, ra, strict=True))
-    den_p = math.sqrt(sum((p - mean_p) ** 2 for p in rp))
-    den_a = math.sqrt(sum((a - mean_a) ** 2 for a in ra))
-    if den_p == 0 or den_a == 0:
-        return None
-    return num / (den_p * den_a)
+    return spearman(preds, actuals)
 
 
 def _unique_sorted_dates(samples: list[Sample]) -> list[date]:
