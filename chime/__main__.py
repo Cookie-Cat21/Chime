@@ -310,6 +310,7 @@ def main(argv: list[str] | None = None) -> None:
             "tick",
             "drain-pdfs",
             "drain-briefs",
+            "drain-briefs-local",
             "drain-metrics",
             "path-backfill",
             "score-signals",
@@ -332,7 +333,7 @@ def main(argv: list[str] | None = None) -> None:
         ],
         help=(
             "bot | poller | both | migrate | tick | "
-            "drain-pdfs | drain-briefs | drain-metrics | "
+            "drain-pdfs | drain-briefs | drain-briefs-local | drain-metrics | "
             "path-backfill | score-signals | eval-signals | "
             "sector-backfill | notices-backfill | disclosures-backfill | "
             "financials-backfill | aspi-backfill | ml-experiment | "
@@ -490,6 +491,33 @@ def main(argv: list[str] | None = None) -> None:
                 await storage.close()
 
         asyncio.run(_drain())
+        return
+
+    if args.command == "drain-briefs-local":
+        configure_logging()
+        settings = Settings.from_env(require_token=False)
+        limit = args.limit if isinstance(args.limit, int) and args.limit > 0 else 50
+
+        async def _local_briefs() -> None:
+            from chime.briefs.local_fill import fill_pending_briefs_local
+
+            storage = Storage(settings.database_url)
+            await storage.open()
+            try:
+                result = await fill_pending_briefs_local(
+                    storage=storage,
+                    limit=limit,
+                    extract_ok_only=True,
+                )
+                print(
+                    "drain-briefs-local: "
+                    f"examined={result.examined} ready={result.ready} "
+                    f"skipped={result.skipped} errors={result.errors}"
+                )
+            finally:
+                await storage.close()
+
+        asyncio.run(_local_briefs())
         return
 
     if args.command == "path-backfill":
