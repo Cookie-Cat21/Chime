@@ -881,6 +881,45 @@ def main(argv: list[str] | None = None) -> None:
         asyncio.run(_diagnose())
         return
 
+    if args.command == "ml-iterate":
+        configure_logging()
+        settings = Settings.from_env(require_token=False)
+        limit = (
+            None
+            if not isinstance(args.limit, int)
+            or isinstance(args.limit, bool)
+            or args.limit == 20
+            else args.limit
+        )
+
+        async def _iterate() -> None:
+            from pathlib import Path
+
+            from chime.ml.iterate import run_iterate
+
+            storage = Storage(settings.database_url)
+            await storage.open()
+            try:
+                result = await run_iterate(
+                    storage=storage,
+                    limit_symbols=limit if limit and limit > 0 else None,
+                    out_dir=Path("docs/experiments"),
+                )
+                print(
+                    "ml-iterate: "
+                    f"target_met={result.target_met} "
+                    f"best={result.best_lever} "
+                    f"mean_symbol_hit={result.best_mean_symbol_hit} "
+                    f"baseline={result.baseline_mean_symbol_hit}"
+                )
+                for r in result.recommendations:
+                    print(" ", r)
+            finally:
+                await storage.close()
+
+        asyncio.run(_iterate())
+        return
+
     settings = Settings.from_env(require_token=True)
     configure_logging(settings.log_level)
 
