@@ -124,7 +124,16 @@ async def test_drain_metrics_noop_when_disabled() -> None:
 
 @pytest.mark.parametrize(
     "cmd",
-    ["bot", "poller", "both", "migrate", "drain-pdfs", "drain-briefs", "drain-metrics"],
+    [
+        "bot",
+        "poller",
+        "both",
+        "migrate",
+        "drain-pdfs",
+        "drain-briefs",
+        "drain-metrics",
+        "ingest-filings",
+    ],
 )
 def test_main_force_flag_rejected_for_non_tick_including_drains(
     monkeypatch: pytest.MonkeyPatch,

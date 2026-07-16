@@ -15,6 +15,7 @@ from chime.bot import build_application
 from chime.config import Settings
 from chime.drain import drain_briefs, drain_metrics, drain_pdfs
 from chime.health import HealthState, brief_queue_health_hint, start_health_server
+from chime.ingest_filings import ingest_symbols
 from chime.logging_setup import configure_logging, get_logger
 from chime.migrate import apply_migrations
 from chime.notify import SendResult, send_message
@@ -307,10 +308,11 @@ def main(argv: list[str] | None = None) -> None:
             "drain-pdfs",
             "drain-briefs",
             "drain-metrics",
+            "ingest-filings",
         ],
         help=(
             "bot | poller | both | migrate | tick | "
-            "drain-pdfs | drain-briefs | drain-metrics"
+            "drain-pdfs | drain-briefs | drain-metrics | ingest-filings"
         ),
     )
     parser.add_argument("--force", action="store_true", help="For tick: ignore market hours")
@@ -318,12 +320,28 @@ def main(argv: list[str] | None = None) -> None:
         "--limit",
         type=int,
         default=20,
-        help="For drain-*: max rows to examine (default 20)",
+        help="For drain-* / ingest-filings: max rows or per-symbol filings (default 20/8)",
     )
     parser.add_argument(
         "--all-symbols",
         action="store_true",
         help="For drain-pdfs/drain-metrics: include non-watchlist symbols",
+    )
+    parser.add_argument(
+        "--symbols",
+        type=str,
+        default="",
+        help="For ingest-filings: comma-separated CSE symbols (e.g. SEMB.X0000,COMB.N0000)",
+    )
+    parser.add_argument(
+        "--with-briefs",
+        action="store_true",
+        help="For ingest-filings: also generate AI briefs (uses AI_* keys; paced)",
+    )
+    parser.add_argument(
+        "--watchlist",
+        action="store_true",
+        help="For ingest-filings: ingest every distinct watchlist symbol",
     )
     args = parser.parse_args(argv)
     if args.force and args.command != "tick":
@@ -334,6 +352,57 @@ def main(argv: list[str] | None = None) -> None:
         settings = Settings.from_env(require_token=False)
         applied = apply_migrations(settings.database_url)
         print("Applied:", ", ".join(applied) if applied else "(none)")
+        return
+
+    if args.command == "ingest-filings":
+        configure_logging()
+        settings = Settings.from_env(require_token=False)
+        per = args.limit if isinstance(args.limit, int) and args.limit > 0 else 8
+        symbols: list[str] = []
+        if args.symbols.strip():
+            symbols.extend(s.strip().upper() for s in args.symbols.split(",") if s.strip())
+        if args.watchlist:
+
+            async def _wl() -> list[str]:
+                storage = Storage(settings.database_url)
+                await storage.open()
+                try:
+                    import psycopg
+
+                    with psycopg.connect(settings.database_url) as conn:
+                        rows = conn.execute(
+                            "SELECT DISTINCT symbol FROM watchlist_items ORDER BY 1"
+                        ).fetchall()
+                    return [str(r[0]) for r in rows]
+                finally:
+                    await storage.close()
+
+            symbols.extend(asyncio.run(_wl()))
+        # de-dupe preserve order
+        seen: set[str] = set()
+        ordered: list[str] = []
+        for s in symbols:
+            if s not in seen:
+                seen.add(s)
+                ordered.append(s)
+        if not ordered:
+            parser.error("ingest-filings requires --symbols and/or --watchlist")
+
+        async def _ingest() -> None:
+            results = await ingest_symbols(
+                ordered,
+                limit_per_symbol=per,
+                run_metrics=True,
+                run_briefs=bool(args.with_briefs),
+            )
+            for r in results:
+                print(
+                    f"{r.symbol}: announcements={r.announcements} upserted={r.upserted} "
+                    f"pdfs={r.pdfs_set} metrics_ok={r.metrics_ok} "
+                    f"briefs_ready={r.briefs_ready} errors={r.errors}"
+                )
+
+        asyncio.run(_ingest())
         return
 
     if args.command in ("drain-pdfs", "drain-briefs", "drain-metrics"):
