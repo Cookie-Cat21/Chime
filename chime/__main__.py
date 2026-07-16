@@ -326,14 +326,15 @@ def main(argv: list[str] | None = None) -> None:
             "ml-hpe",
             "ml-always-on",
             "disclosures-backfill",
+            "financials-backfill",
         ],
         help=(
             "bot | poller | both | migrate | tick | "
             "drain-pdfs | drain-briefs | drain-metrics | "
             "path-backfill | score-signals | eval-signals | "
             "sector-backfill | notices-backfill | disclosures-backfill | "
-            "ml-experiment | ml-forecast | ml-transfer | ml-harden | "
-            "ml-diagnose | ml-iterate | ml-precision90 | ml-hpe | "
+            "financials-backfill | ml-experiment | ml-forecast | ml-transfer | "
+            "ml-harden | ml-diagnose | ml-iterate | ml-precision90 | ml-hpe | "
             "ml-always-on"
         ),
     )
@@ -399,6 +400,11 @@ def main(argv: list[str] | None = None) -> None:
         action="store_true",
         help="For ml-always-on: join quarterly/annual filing-date features from POST /financials",
     )
+    parser.add_argument(
+        "--yoy",
+        action="store_true",
+        help="For ml-always-on: join extracted filing YoY deltas (requires drain-metrics)",
+    )
     args = parser.parse_args(argv)
     if args.force and args.command not in (
         "tick",
@@ -408,11 +414,12 @@ def main(argv: list[str] | None = None) -> None:
         "ml-forecast",
         "ml-hpe",
         "disclosures-backfill",
+        "financials-backfill",
     ):
         parser.error(
             "--force is only valid for tick, path-backfill, "
             "sector-backfill, notices-backfill, disclosures-backfill, "
-            "ml-forecast, or ml-hpe"
+            "financials-backfill, ml-forecast, or ml-hpe"
         )
     if args.period is not None and args.command != "path-backfill":
         parser.error("--period is only valid for path-backfill")
@@ -1060,6 +1067,45 @@ def main(argv: list[str] | None = None) -> None:
         asyncio.run(_disc_bf())
         return
 
+    if args.command == "financials-backfill":
+        configure_logging()
+        settings = Settings.from_env(require_token=False)
+        limit = args.limit if isinstance(args.limit, int) and args.limit > 0 else None
+
+        async def _fin_bf() -> None:
+            from chime.financials_backfill import run_financials_backfill
+
+            storage = Storage(settings.database_url)
+            await storage.open()
+            cse = CSEClient(
+                base_url=settings.cse_base_url,
+                timeout=settings.http_timeout_seconds,
+                fail_max=settings.circuit_fail_max,
+                reset_timeout=settings.circuit_reset_seconds,
+                min_interval_seconds=settings.cse_min_interval_seconds,
+            )
+            try:
+                result = await run_financials_backfill(
+                    settings=settings,
+                    storage=storage,
+                    cse=cse,
+                    limit=limit,
+                    force=args.force,
+                )
+                print(
+                    "financials-backfill: "
+                    f"targeted={result.symbols_targeted} "
+                    f"ok={result.symbols_ok} "
+                    f"failed={result.symbols_failed} "
+                    f"upserted={result.disclosures_upserted}"
+                )
+            finally:
+                await cse.aclose()
+                await storage.close()
+
+        asyncio.run(_fin_bf())
+        return
+
     if args.command == "ml-always-on":
         configure_logging()
         settings = Settings.from_env(require_token=False)
@@ -1074,6 +1120,7 @@ def main(argv: list[str] | None = None) -> None:
         use_sector_rs = bool(getattr(args, "sector_rs", False))
         use_aspi = bool(getattr(args, "aspi", False))
         use_financials = bool(getattr(args, "financials", False))
+        use_yoy = bool(getattr(args, "yoy", False))
 
         async def _ao() -> None:
             from pathlib import Path
@@ -1093,7 +1140,13 @@ def main(argv: list[str] | None = None) -> None:
                 )
             try:
                 baseline_mean = None
-                needs_delta = use_events or use_sector_rs or use_aspi or use_financials
+                needs_delta = (
+                    use_events
+                    or use_sector_rs
+                    or use_aspi
+                    or use_financials
+                    or use_yoy
+                )
                 if needs_delta:
                     base = await run_always_on(
                         storage=storage,
@@ -1102,6 +1155,7 @@ def main(argv: list[str] | None = None) -> None:
                         use_sector_rs=False,
                         use_aspi=False,
                         use_financials=False,
+                        use_yoy=False,
                         limit_symbols=limit if limit and limit > 0 else None,
                         out_dir=Path("docs/experiments"),
                     )
@@ -1115,6 +1169,8 @@ def main(argv: list[str] | None = None) -> None:
                     parts.append("aspi")
                 if use_financials:
                     parts.append("fin")
+                if use_yoy:
+                    parts.append("yoy")
                 if use_sector_rs:
                     parts.append("sector_rs")
                 if use_events:
@@ -1129,6 +1185,7 @@ def main(argv: list[str] | None = None) -> None:
                     use_sector_rs=use_sector_rs,
                     use_aspi=use_aspi,
                     use_financials=use_financials,
+                    use_yoy=use_yoy,
                     cse=cse,
                     baseline_mean=baseline_mean,
                     limit_symbols=limit if limit and limit > 0 else None,

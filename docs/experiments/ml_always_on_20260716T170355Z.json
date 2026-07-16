@@ -1,0 +1,22 @@
+{
+  "lever": "yoy_cs_lmt_bag",
+  "mean_symbol_hit": 0.593440017118012,
+  "pooled_hit": 0.5882788894589818,
+  "symbols_ge_070": 15,
+  "n_symbols": 264,
+  "n_rows": 17541,
+  "high_bucket_hit": 0.6897306765929494,
+  "delta_vs_baseline": 0.00043039257460741887,
+  "keep": false,
+  "notes": "path+CS+yoy",
+  "extras": {
+    "symbols": 273,
+    "disclosures": 0,
+    "notices": 0,
+    "sector_rs": false,
+    "aspi": false,
+    "financials": false,
+    "yoy": true,
+    "yoy_events": 214
+  }
+}

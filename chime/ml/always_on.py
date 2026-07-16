@@ -392,6 +392,102 @@ async def load_aspi_series(cse: Any) -> list[tuple[date, float, float | None]]:
     return await cse.fetch_index_chart(period=5)
 
 
+async def load_yoy_events(
+    storage: Storage,
+) -> list[tuple[str, date, float | None, float | None, float | None]]:
+    """(symbol, fiscal_period_end, eps_yoy, rev_yoy, profit_yoy) ascending."""
+    out: list[tuple[str, date, float | None, float | None, float | None]] = []
+    async with storage._pool.connection() as conn:
+        async with conn.cursor() as cur:
+            await cur.execute(
+                """
+                SELECT
+                    fm.symbol,
+                    fm.fiscal_period_end,
+                    fc.eps_delta_pct,
+                    fc.revenue_delta_pct,
+                    fc.profit_delta_pct
+                FROM filing_metrics fm
+                JOIN filing_comparisons fc
+                  ON fc.filing_metrics_id = fm.id
+                WHERE fm.extract_ok = TRUE
+                  AND fm.fiscal_period_end IS NOT NULL
+                  AND fc.match_quality IN ('exact_yoy', 'approx_yoy')
+                ORDER BY fm.symbol, fm.fiscal_period_end
+                """
+            )
+            for row in await cur.fetchall():
+                d = dict(row)
+                sym = str(d["symbol"]).strip().upper()
+                period = d["fiscal_period_end"]
+                if hasattr(period, "isoformat") and not isinstance(period, date):
+                    # date already
+                    pass
+                if not isinstance(period, date):
+                    continue
+
+                def _f(key: str) -> float | None:
+                    val = d.get(key)
+                    if isinstance(val, bool) or not isinstance(val, int | float):
+                        return None
+                    if not math.isfinite(float(val)):
+                        return None
+                    return float(val)
+
+                out.append(
+                    (
+                        sym,
+                        period,
+                        _f("eps_delta_pct"),
+                        _f("revenue_delta_pct"),
+                        _f("profit_delta_pct"),
+                    )
+                )
+    return out
+
+
+def enrich_samples_with_yoy(
+    samples: list[Sample],
+    yoy_events: list[tuple[str, date, float | None, float | None, float | None]],
+) -> list[Sample]:
+    """Append latest YoY eps/rev/profit as of sample date + days since period end."""
+    by_sym: dict[
+        str, list[tuple[date, float | None, float | None, float | None]]
+    ] = {}
+    for sym, period, eps, rev, profit in yoy_events:
+        by_sym.setdefault(sym, []).append((period, eps, rev, profit))
+
+    out: list[Sample] = []
+    for s in samples:
+        rows = by_sym.get(s.symbol, [])
+        eps = rev = profit = float("nan")
+        days = 400.0
+        # last row with period <= as_of
+        chosen = None
+        for period, e, r, p in rows:
+            if period <= s.as_of:
+                chosen = (period, e, r, p)
+            else:
+                break
+        if chosen is not None:
+            period, e, r, p = chosen
+            days = float(min(800, (s.as_of - period).days))
+            eps = float(e) if e is not None else float("nan")
+            rev = float(r) if r is not None else float("nan")
+            profit = float(p) if p is not None else float("nan")
+        out.append(
+            Sample(
+                symbol=s.symbol,
+                as_of=s.as_of,
+                x=tuple(s.x) + (eps, rev, profit, days),
+                y_ret=s.y_ret,
+                y_dir=s.y_dir,
+                horizon=s.horizon,
+            )
+        )
+    return out
+
+
 async def load_financial_filing_dates(
     cse: Any,
     symbols: list[str],
@@ -426,6 +522,7 @@ async def run_always_on(
     use_sector_rs: bool = False,
     use_aspi: bool = False,
     use_financials: bool = False,
+    use_yoy: bool = False,
     cse: Any | None = None,
     baseline_mean: float | None = None,
     limit_symbols: int | None = None,
@@ -453,6 +550,7 @@ async def run_always_on(
         "sector_rs": use_sector_rs,
         "aspi": use_aspi,
         "financials": use_financials,
+        "yoy": use_yoy,
     }
     if use_sector_rs:
         from chime.ml.diagnose import load_sector_map
@@ -467,13 +565,29 @@ async def run_always_on(
         extras["aspi_points"] = len(aspi)
         samples = enrich_samples_with_aspi(samples, aspi)
     if use_financials:
-        if cse is None:
-            raise ValueError("use_financials requires cse client")
-        filings = await load_financial_filing_dates(
-            cse, sorted(series.keys()), sleep_seconds=0.2
-        )
+        cache = Path("data/financial_filings_cache.json")
+        filings: list[tuple[str, date, str]]
+        if cache.is_file():
+            import json as _json
+
+            raw = _json.loads(cache.read_text(encoding="utf-8"))
+            filings = [
+                (str(a), date.fromisoformat(str(b)), str(c)) for a, b, c in raw
+            ]
+            extras["financial_filings_source"] = "cache"
+        else:
+            if cse is None:
+                raise ValueError("use_financials requires cse client or cache")
+            filings = await load_financial_filing_dates(
+                cse, sorted(series.keys()), sleep_seconds=0.2
+            )
+            extras["financial_filings_source"] = "api"
         extras["financial_filing_rows"] = len(filings)
         samples = enrich_samples_with_financial_filings(samples, filings)
+    if use_yoy:
+        yoy_events = await load_yoy_events(storage)
+        extras["yoy_events"] = len(yoy_events)
+        samples = enrich_samples_with_yoy(samples, yoy_events)
     if use_events:
         discs = await load_disclosure_events(storage)
         notices = await load_notice_events(storage)
@@ -507,6 +621,7 @@ async def run_always_on(
                     ("sector_rs", use_sector_rs),
                     ("aspi", use_aspi),
                     ("financials", use_financials),
+                    ("yoy", use_yoy),
                     ("events", use_events),
                 )
                 if on

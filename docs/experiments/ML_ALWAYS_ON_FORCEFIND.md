@@ -17,6 +17,16 @@
 | **Financial filing dates rich** (q90/q365/days/recent) | **0.5987** | **+0.0057** | **YES** |
 | fin_rich + ASPI | 0.5914 | −0.0016 | **NO** |
 | fin_rich + sector_rs | 0.5980 | +0.0050 | **YES** (marginal) |
+| PDF extract YoY only (214 comps / 72 syms) | 0.5934 | +0.0004 | **NO** |
+| fin dates + YoY | 0.5972 | +0.0042 | **NO** |
+| **fin dates + YoY + sector_rs** | **0.5989** | **+0.0059** | **YES** |
+
+### PDF metrics drain (this wave)
+
+- Seeded **2667** financial disclosures with CDN `pdf_url` via `financials-backfill`
+- Processed **900** metrics rows → **576 extract_ok**, **214 YoY comparisons**, **72** symbols with YoY
+- Installed runtime `pypdf`/`pdfplumber` (were missing in env)
+- CLI: `financials-backfill`, `ml-always-on --yoy`
 
 ### Probe note (from cse-api-test endpoints)
 
@@ -35,11 +45,12 @@
 
 ## Interpretation
 
-Announcement **counts** alone do not move always-on direction hit. Likely need:
+- Announcement **counts** ≈ no lift.
+- ASPI daily regime ≈ noise at current horizon.
+- **Financial filing calendar (rich)** is the first **KEEP** (+0.57pp → ~0.599). Still high-50s, but directionally useful.
+- Next: drain those PDFs into `filing_metrics` YoY for a real fundamental panel.
 
-1. **Filing metrics / YoY numerics** from PDFs (not just “had a disclosure”)
-2. **Daily ASPI/sector index history** for true market-regime features
-3. Or accept that always-on stays high-50s and lean on **HPE (~90% when speaking)**
+Also: lean on **HPE (~90% when speaking)** while always-on crawls.
 
 ## Commands
 

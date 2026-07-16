@@ -1,0 +1,24 @@
+{
+  "lever": "fin_yoy_cs_lmt_bag",
+  "mean_symbol_hit": 0.596777927125374,
+  "pooled_hit": 0.5913573912547745,
+  "symbols_ge_070": 20,
+  "n_symbols": 264,
+  "n_rows": 17541,
+  "high_bucket_hit": 0.6858532630725578,
+  "delta_vs_baseline": 0.0037683025819694738,
+  "keep": false,
+  "notes": "path+CS+financials+yoy",
+  "extras": {
+    "symbols": 273,
+    "disclosures": 0,
+    "notices": 0,
+    "sector_rs": false,
+    "aspi": false,
+    "financials": true,
+    "yoy": true,
+    "financial_filings_source": "cache",
+    "financial_filing_rows": 19150,
+    "yoy_events": 86
+  }
+}
