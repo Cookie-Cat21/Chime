@@ -1,0 +1,166 @@
+{
+  "baseline_mean_symbol_hit": 0.5689161269850198,
+  "best_lever": "panel_cs_large_move_train",
+  "best_mean_symbol_hit": 0.5917221884712285,
+  "target_met": false,
+  "levers": [
+    {
+      "lever": "baseline_panel_hgb",
+      "pooled_hit": 0.5637648936776695,
+      "mean_symbol_hit": 0.5689161269850198,
+      "symbols_ge_070": 14,
+      "symbols_ge_075": 8,
+      "n_symbols": 264,
+      "n_rows": 17541,
+      "high_bucket_hit": 0.7014829142488717,
+      "notes": "panel demean + M1"
+    },
+    {
+      "lever": "panel_cs_features",
+      "pooled_hit": 0.5753377800581495,
+      "mean_symbol_hit": 0.5802103521831814,
+      "symbols_ge_070": 12,
+      "symbols_ge_075": 5,
+      "n_symbols": 264,
+      "n_rows": 17541,
+      "high_bucket_hit": 0.729818780889621,
+      "notes": "panel + within-day ret/vol percentiles"
+    },
+    {
+      "lever": "panel_cs_extra",
+      "pooled_hit": 0.5756798358132376,
+      "mean_symbol_hit": 0.5806863941255948,
+      "symbols_ge_070": 13,
+      "symbols_ge_075": 5,
+      "n_symbols": 264,
+      "n_rows": 17541,
+      "high_bucket_hit": 0.7316798196166855,
+      "notes": "CS + |ret5|/vol\u00d7range/streak"
+    },
+    {
+      "lever": "absolute_cs_hgb",
+      "pooled_hit": 0.5794994584117211,
+      "mean_symbol_hit": 0.5842908570039252,
+      "symbols_ge_070": 11,
+      "symbols_ge_075": 5,
+      "n_symbols": 264,
+      "n_rows": 17541,
+      "high_bucket_hit": 0.6714927608587119,
+      "notes": "no panel demean + CS features"
+    },
+    {
+      "lever": "panel_cs_large_move_train",
+      "pooled_hit": 0.5859415084658799,
+      "mean_symbol_hit": 0.5917221884712285,
+      "symbols_ge_070": 18,
+      "symbols_ge_075": 7,
+      "n_symbols": 264,
+      "n_rows": 17541,
+      "high_bucket_hit": 0.6884225092250923,
+      "notes": "train on |y_ret|\u2265median only"
+    },
+    {
+      "lever": "panel_sector_models",
+      "pooled_hit": 0.5486574311612793,
+      "mean_symbol_hit": 0.55468534080026,
+      "symbols_ge_070": 9,
+      "symbols_ge_075": 3,
+      "n_symbols": 264,
+      "n_rows": 17541,
+      "high_bucket_hit": 0.6002508511019531,
+      "notes": "global + per-sector HGB when n_train\u226580"
+    },
+    {
+      "lever": "panel_vol_buckets",
+      "pooled_hit": 0.5537312581950858,
+      "mean_symbol_hit": 0.5600435684884525,
+      "symbols_ge_070": 9,
+      "symbols_ge_075": 6,
+      "n_symbols": 264,
+      "n_rows": 17541,
+      "high_bucket_hit": 0.6612679315131883,
+      "notes": "separate HGB per vol_20d tercile"
+    },
+    {
+      "lever": "panel_ensemble",
+      "pooled_hit": 0.5638219029701841,
+      "mean_symbol_hit": 0.569041442868073,
+      "symbols_ge_070": 12,
+      "symbols_ge_075": 6,
+      "n_symbols": 264,
+      "n_rows": 17541,
+      "high_bucket_hit": 0.751269035532995,
+      "notes": "0.6 HGB + 0.4 logistic"
+    },
+    {
+      "lever": "panel_cs_ensemble",
+      "pooled_hit": 0.5757938543982669,
+      "mean_symbol_hit": 0.5804950173845742,
+      "symbols_ge_070": 12,
+      "symbols_ge_075": 7,
+      "n_symbols": 264,
+      "n_rows": 17541,
+      "high_bucket_hit": 0.7447154471544716,
+      "notes": "CS features + blend"
+    },
+    {
+      "lever": "panel_absret_weighted",
+      "pooled_hit": 0.5647910609429337,
+      "mean_symbol_hit": 0.569973002514735,
+      "symbols_ge_070": 13,
+      "symbols_ge_075": 6,
+      "n_symbols": 264,
+      "n_rows": 17541,
+      "high_bucket_hit": 0.6836832061068703,
+      "notes": "sample weight \u221d |y_ret|"
+    },
+    {
+      "lever": "panel_deeper_hgb",
+      "pooled_hit": 0.5577219086711134,
+      "mean_symbol_hit": 0.5641104356084311,
+      "symbols_ge_070": 13,
+      "symbols_ge_075": 7,
+      "n_symbols": 264,
+      "n_rows": 17541,
+      "high_bucket_hit": 0.7001061571125266,
+      "notes": "max_depth=6 max_iter=200"
+    },
+    {
+      "lever": "panel_cs_deeper",
+      "pooled_hit": 0.5731714269425916,
+      "mean_symbol_hit": 0.578690515598193,
+      "symbols_ge_070": 9,
+      "symbols_ge_075": 7,
+      "n_symbols": 264,
+      "n_rows": 17541,
+      "high_bucket_hit": 0.7197129590544533,
+      "notes": "CS features + deeper HGB"
+    },
+    {
+      "lever": "panel_cs_extra_ensemble",
+      "pooled_hit": 0.5769910495410752,
+      "mean_symbol_hit": 0.5818869143773419,
+      "symbols_ge_070": 16,
+      "symbols_ge_075": 6,
+      "n_symbols": 264,
+      "n_rows": 17541,
+      "high_bucket_hit": 0.7556675062972292,
+      "notes": "CS+extra + blend"
+    },
+    {
+      "lever": "panel_cs_symbol_flip",
+      "pooled_hit": 0.5674704976911237,
+      "mean_symbol_hit": 0.5726811056150174,
+      "symbols_ge_070": 16,
+      "symbols_ge_075": 7,
+      "n_symbols": 264,
+      "n_rows": 17541,
+      "high_bucket_hit": 0.7145038167938931,
+      "notes": "flip sign when prior OOS hit <0.45 (n\u226525)"
+    }
+  ],
+  "recommendations": [
+    "Best so far `panel_cs_large_move_train` mean_symbol_hit=0.5917221884712285 \u2014 still below 0.70. Next: notices/filings features, meta-label, or longer history.",
+    "Lift vs baseline: +0.023"
+  ]
+}

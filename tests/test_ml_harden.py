@@ -13,7 +13,7 @@ def _sample(d: date, y_ret: float = 0.01) -> Sample:
     return Sample(
         symbol="A.N0000",
         as_of=d,
-        x=(0.0,) * 13,
+        x=(0.0,) * 15,
         y_ret=y_ret,
         y_dir=1.0 if y_ret > 0 else -1.0,
         horizon=5,
@@ -39,7 +39,7 @@ def test_demean_by_day_zero_mean() -> None:
         Sample(
             symbol=f"S{i}",
             as_of=d,
-            x=(0.0,) * 13,
+            x=(0.0,) * 15,
             y_ret=float(i),
             y_dir=1.0,
             horizon=1,

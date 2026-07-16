@@ -23,6 +23,8 @@ FEATURE_NAMES: tuple[str, ...] = (
     "long_gaps_40",
     "max_gap_days",
     "log_price",
+    "dist_20d_high",
+    "dist_20d_low",
 )
 
 
@@ -135,6 +137,25 @@ def path_features(bars: list[DailyBar]) -> FeatureRow | None:
     max_gap = float(max(gap_days) if gap_days else 0)
     log_price = math.log(prices[-1]) if prices[-1] > 0 else float("nan")
 
+    chunk_20 = ordered[-20:]
+    highs = [
+        b.high
+        for b in chunk_20
+        if b.high is not None and math.isfinite(b.high)
+    ]
+    lows = [
+        b.low for b in chunk_20 if b.low is not None and math.isfinite(b.low)
+    ]
+    last_px = prices[-1]
+    if highs and last_px > 0 and math.isfinite(last_px):
+        dist_20d_high = (max(highs) - last_px) / last_px
+    else:
+        dist_20d_high = float("nan")
+    if lows and last_px > 0 and math.isfinite(last_px):
+        dist_20d_low = (last_px - min(lows)) / last_px
+    else:
+        dist_20d_low = float("nan")
+
     values = (
         ret_1,
         ret_5,
@@ -149,6 +170,8 @@ def path_features(bars: list[DailyBar]) -> FeatureRow | None:
         long_gaps,
         max_gap,
         log_price,
+        dist_20d_high,
+        dist_20d_low,
     )
     return FeatureRow(
         symbol=ordered[-1].symbol.strip().upper(),

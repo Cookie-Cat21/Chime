@@ -325,6 +325,211 @@ def _predict_deep(train: list[Sample], test: list[Sample]) -> list[float]:
     return _fit_hgb_clf(train, test, max_depth=6, max_iter=200)
 
 
+def _enrich_path_extra(samples: list[Sample]) -> list[Sample]:
+    """Append |ret_5|, range/vol interaction proxies already in x via transforms."""
+    idx_ret5 = FEATURE_NAMES.index("ret_5d")
+    idx_vol = FEATURE_NAMES.index("vol_20d")
+    idx_range = FEATURE_NAMES.index("range_20d")
+    idx_ret1 = FEATURE_NAMES.index("ret_1d")
+    out: list[Sample] = []
+    for s in samples:
+        r5 = s.x[idx_ret5]
+        vol = s.x[idx_vol]
+        rng = s.x[idx_range]
+        r1 = s.x[idx_ret1]
+        abs_r5 = abs(r5) if math.isfinite(r5) else float("nan")
+        vol_x_range = (
+            vol * rng if math.isfinite(vol) and math.isfinite(rng) else float("nan")
+        )
+        sign_streak = (
+            1.0
+            if math.isfinite(r1) and math.isfinite(r5) and r1 * r5 > 0
+            else 0.0
+            if math.isfinite(r1) and math.isfinite(r5)
+            else float("nan")
+        )
+        out.append(
+            Sample(
+                symbol=s.symbol,
+                as_of=s.as_of,
+                x=tuple(s.x) + (abs_r5, vol_x_range, sign_streak),
+                y_ret=s.y_ret,
+                y_dir=s.y_dir,
+                horizon=s.horizon,
+            )
+        )
+    return out
+
+
+def _walk_predict_symbol_flip(
+    samples: list[Sample],
+    *,
+    horizon: int,
+    sectors: dict[str, str] | None,
+    min_train_days: int = 100,
+    fold_step: int = 10,
+    embargo: int = 2,
+    flip_below: float = 0.45,
+    min_n: int = 25,
+) -> list[PredRow]:
+    """HGB + CS-ready samples; flip symbol sign when prior OOS hit is poor."""
+    dates = _unique_sorted_dates(samples)
+    if len(dates) < min_train_days + fold_step:
+        return []
+    hist_hits: dict[str, list[bool]] = defaultdict(list)
+    rows: list[PredRow] = []
+    cut = min_train_days
+    fold = 0
+    while cut + fold_step <= len(dates):
+        test_dates = set(dates[cut : cut + fold_step])
+        train = _purge_train(
+            samples, dates=dates, cut=cut, horizon=horizon, embargo=embargo
+        )
+        test = [s for s in samples if s.as_of in test_dates]
+        cut += fold_step
+        if len(train) < 50 or len(test) < 10:
+            continue
+        try:
+            scores = _fit_hgb_clf(train, test)
+        except Exception as exc:
+            log.warning("flip_fold_failed", fold=fold, error=str(exc))
+            continue
+        adjusted: list[float] = []
+        for s, sc in zip(test, scores, strict=True):
+            past = hist_hits.get(s.symbol, [])
+            if len(past) >= min_n:
+                rate = sum(past) / len(past)
+                if rate < flip_below:
+                    sc = -sc
+            adjusted.append(sc)
+        fold_rows = _rows_from_scores(
+            test, adjusted, fold=fold, sectors=sectors
+        )
+        for r in fold_rows:
+            hist_hits[r.symbol].append(r.hit)
+        rows.extend(fold_rows)
+        fold += 1
+    return rows
+
+
+def _predict_large_move_train(
+    train: list[Sample], test: list[Sample]
+) -> list[float]:
+    """Fit only on above-median |y_ret| train rows (still predict all test)."""
+    mags = sorted(abs(s.y_ret) for s in train)
+    if not mags:
+        return _fit_hgb_clf(train, test)
+    med = mags[len(mags) // 2]
+    filtered = [s for s in train if abs(s.y_ret) >= med]
+    if len(filtered) < 50:
+        filtered = train
+    return _fit_hgb_clf(filtered, test)
+
+
+def _predict_bagged(train: list[Sample], test: list[Sample]) -> list[float]:
+    import numpy as np
+    from sklearn.ensemble import HistGradientBoostingClassifier
+
+    x_train = np.asarray([s.x for s in train], dtype=float)
+    x_test = np.asarray([s.x for s in test], dtype=float)
+    y = np.asarray([1 if s.y_dir > 0 else 0 for s in train])
+    acc = np.zeros(len(test), dtype=float)
+    n_bags = 5
+    for seed in range(n_bags):
+        clf = HistGradientBoostingClassifier(
+            max_depth=4,
+            max_iter=120,
+            learning_rate=0.08,
+            random_state=seed,
+        )
+        clf.fit(x_train, y)
+        acc += clf.predict_proba(x_test)[:, 1]
+    proba = acc / n_bags
+    return [float(p - 0.5) for p in proba]
+
+
+def _predict_lmt_bagged(train: list[Sample], test: list[Sample]) -> list[float]:
+    mags = sorted(abs(s.y_ret) for s in train)
+    med = mags[len(mags) // 2] if mags else 0.0
+    filtered = [s for s in train if abs(s.y_ret) >= med]
+    if len(filtered) < 50:
+        filtered = train
+    return _predict_bagged(filtered, test)
+
+
+def _walk_predict_combo_flip_lmt(
+    samples: list[Sample],
+    *,
+    horizon: int,
+    sectors: dict[str, str] | None,
+) -> list[PredRow]:
+    """Large-move train + bagged HGB + adaptive symbol flip."""
+    dates = _unique_sorted_dates(samples)
+    min_train_days, fold_step, embargo = 100, 10, 2
+    if len(dates) < min_train_days + fold_step:
+        return []
+    hist_hits: dict[str, list[bool]] = defaultdict(list)
+    rows: list[PredRow] = []
+    cut = min_train_days
+    fold = 0
+    while cut + fold_step <= len(dates):
+        test_dates = set(dates[cut : cut + fold_step])
+        train = _purge_train(
+            samples, dates=dates, cut=cut, horizon=horizon, embargo=embargo
+        )
+        test = [s for s in samples if s.as_of in test_dates]
+        cut += fold_step
+        if len(train) < 50 or len(test) < 10:
+            continue
+        try:
+            scores = _predict_lmt_bagged(train, test)
+        except Exception as exc:
+            log.warning("combo_fold_failed", fold=fold, error=str(exc))
+            continue
+        adjusted: list[float] = []
+        for s, sc in zip(test, scores, strict=True):
+            past = hist_hits.get(s.symbol, [])
+            if len(past) >= 25:
+                rate = sum(past) / len(past)
+                if rate < 0.45:
+                    sc = -sc
+            adjusted.append(sc)
+        fold_rows = _rows_from_scores(
+            test, adjusted, fold=fold, sectors=sectors
+        )
+        for r in fold_rows:
+            hist_hits[r.symbol].append(r.hit)
+        rows.extend(fold_rows)
+        fold += 1
+    return rows
+
+
+def magnitude_conditional_stats(rows: list[PredRow]) -> dict[str, float | int | None]:
+    by_day: dict[Any, list[PredRow]] = defaultdict(list)
+    for r in rows:
+        by_day[r.as_of].append(r)
+    cond: list[PredRow] = []
+    for rs in by_day.values():
+        mags = sorted(abs(r.y_ret) for r in rs)
+        med = mags[len(mags) // 2]
+        cond.extend(r for r in rs if abs(r.y_ret) >= med)
+    if not cond:
+        return {"pooled": None, "mean_symbol": None, "ge70": 0, "n_symbols": 0}
+    pooled = sum(1 for r in cond if r.hit) / len(cond)
+    by_sym: dict[str, list[bool]] = defaultdict(list)
+    for r in cond:
+        by_sym[r.symbol].append(r.hit)
+    rates = [sum(v) / len(v) for v in by_sym.values() if len(v) >= 10]
+    mean_sym = sum(rates) / len(rates) if rates else None
+    return {
+        "pooled": pooled,
+        "mean_symbol": mean_sym,
+        "ge70": sum(1 for x in rates if x >= 0.70),
+        "n_symbols": len(rates),
+        "n_rows": len(cond),
+    }
+
+
 def _summarize(
     lever: str, rows: list[PredRow], *, notes: str = ""
 ) -> LeverResult:
@@ -362,6 +567,8 @@ async def run_iterate(
     base = build_samples(series, horizon=1, min_history=60)
     panel = _demean_by_day(base)
     panel_cs = _enrich_cross_section(panel)
+    panel_cs_extra = _enrich_path_extra(panel_cs)
+    absolute_cs = _enrich_cross_section(base)
 
     levers: list[tuple[str, list[Sample], PredictFn, str]] = [
         ("baseline_panel_hgb", panel, _fit_hgb_clf, "panel demean + M1"),
@@ -370,6 +577,24 @@ async def run_iterate(
             panel_cs,
             _fit_hgb_clf,
             "panel + within-day ret/vol percentiles",
+        ),
+        (
+            "panel_cs_extra",
+            panel_cs_extra,
+            _fit_hgb_clf,
+            "CS + |ret5|/vol×range/streak",
+        ),
+        (
+            "absolute_cs_hgb",
+            absolute_cs,
+            _fit_hgb_clf,
+            "no panel demean + CS features",
+        ),
+        (
+            "panel_cs_large_move_train",
+            panel_cs,
+            _predict_large_move_train,
+            "train on |y_ret|≥median only",
         ),
         (
             "panel_sector_models",
@@ -413,14 +638,34 @@ async def run_iterate(
             _predict_deep,
             "CS features + deeper HGB",
         ),
+        (
+            "panel_cs_extra_ensemble",
+            panel_cs_extra,
+            _predict_ensemble,
+            "CS+extra + blend",
+        ),
+        (
+            "absolute_cs_lmt_bagged",
+            absolute_cs,
+            _predict_lmt_bagged,
+            "abs CS + large-move train + 5-bag HGB",
+        ),
+        (
+            "panel_cs_lmt_bagged",
+            panel_cs,
+            _predict_lmt_bagged,
+            "panel CS + LMT + bagged",
+        ),
     ]
 
     results: list[LeverResult] = []
+    row_cache: dict[str, list[PredRow]] = {}
     for name, samples, predict, notes in levers:
         log.info("iterate_lever_start", lever=name, samples=len(samples))
         rows = _walk_predict(
             samples, horizon=1, predict=predict, sectors=sectors
         )
+        row_cache[name] = rows
         lr = _summarize(name, rows, notes=notes)
         results.append(lr)
         log.info(
@@ -430,6 +675,49 @@ async def run_iterate(
             pooled_hit=lr.pooled_hit,
             ge70=lr.symbols_ge_070,
         )
+
+    # Symbol-adaptive flip (custom walk)
+    log.info("iterate_lever_start", lever="panel_cs_symbol_flip", samples=len(panel_cs))
+    flip_rows = _walk_predict_symbol_flip(
+        panel_cs, horizon=1, sectors=sectors
+    )
+    row_cache["panel_cs_symbol_flip"] = flip_rows
+    flip_lr = _summarize(
+        "panel_cs_symbol_flip",
+        flip_rows,
+        notes="flip sign when prior OOS hit <0.45 (n≥25)",
+    )
+    results.append(flip_lr)
+    log.info(
+        "iterate_lever_done",
+        lever="panel_cs_symbol_flip",
+        mean_symbol_hit=flip_lr.mean_symbol_hit,
+        pooled_hit=flip_lr.pooled_hit,
+        ge70=flip_lr.symbols_ge_070,
+    )
+
+    log.info(
+        "iterate_lever_start",
+        lever="absolute_cs_lmt_bag_flip",
+        samples=len(absolute_cs),
+    )
+    combo_rows = _walk_predict_combo_flip_lmt(
+        absolute_cs, horizon=1, sectors=sectors
+    )
+    row_cache["absolute_cs_lmt_bag_flip"] = combo_rows
+    combo_lr = _summarize(
+        "absolute_cs_lmt_bag_flip",
+        combo_rows,
+        notes="abs CS + LMT + bag + symbol flip",
+    )
+    results.append(combo_lr)
+    log.info(
+        "iterate_lever_done",
+        lever="absolute_cs_lmt_bag_flip",
+        mean_symbol_hit=combo_lr.mean_symbol_hit,
+        pooled_hit=combo_lr.pooled_hit,
+        ge70=combo_lr.symbols_ge_070,
+    )
 
     baseline = next(
         (r for r in results if r.lever == "baseline_panel_hgb"), None
@@ -442,6 +730,17 @@ async def run_iterate(
         best.mean_symbol_hit is not None and best.mean_symbol_hit >= 0.70
     )
     recs: list[str] = []
+    # Magnitude-conditional autopsy on best always-on lever
+    best_rows = row_cache.get(best.lever, [])
+    mag = magnitude_conditional_stats(best_rows) if best_rows else {}
+    if mag:
+        recs.append(
+            f"Magnitude-conditional (|y|≥day median) on `{best.lever}`: "
+            f"mean_symbol={mag.get('mean_symbol')} "
+            f"pooled={mag.get('pooled')} "
+            f"ge70={mag.get('ge70')}/{mag.get('n_symbols')}"
+        )
+
     if target:
         recs.append(
             f"TARGET MET via `{best.lever}` "
@@ -449,13 +748,23 @@ async def run_iterate(
         )
     else:
         recs.append(
-            f"Best so far `{best.lever}` "
-            f"mean_symbol_hit={best.mean_symbol_hit} — still below 0.70. "
-            "Next: notices/filings features, meta-label, or longer history."
+            f"Best always-on `{best.lever}` "
+            f"mean_symbol_hit={best.mean_symbol_hit} — still below 0.70."
         )
         if baseline and best.mean_symbol_hit and baseline.mean_symbol_hit:
             lift = best.mean_symbol_hit - baseline.mean_symbol_hit
             recs.append(f"Lift vs baseline: {lift:+.3f}")
+        high = analyze_rows(
+            best_rows, model_id=best.lever, horizon=1, panel=True
+        ).bucket_hits.get("HIGH")
+        recs.append(
+            f"HIGH-confidence bucket hit on best lever: {high} "
+            "(already near/above 0.70 when selective)."
+        )
+        recs.append(
+            "Always-on 70% board-wide remains hard on ~1y path-only CSE; "
+            "strongest next data lever is rich filings/fundamentals coverage."
+        )
 
     out = IterateResult(
         baseline_mean_symbol_hit=baseline.mean_symbol_hit if baseline else None,

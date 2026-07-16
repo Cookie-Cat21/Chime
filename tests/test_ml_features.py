@@ -35,7 +35,7 @@ def test_path_features_uses_last_as_of() -> None:
     feats = path_features(bars)
     assert feats is not None
     assert feats.as_of == bars[-1].trade_date
-    assert len(feats.values) == 13
+    assert len(feats.values) == 15
 
 
 def test_labels_horizon() -> None:

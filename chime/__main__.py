@@ -321,13 +321,15 @@ def main(argv: list[str] | None = None) -> None:
             "ml-transfer",
             "ml-harden",
             "ml-diagnose",
+            "ml-iterate",
         ],
         help=(
             "bot | poller | both | migrate | tick | "
             "drain-pdfs | drain-briefs | drain-metrics | "
             "path-backfill | score-signals | eval-signals | "
             "sector-backfill | notices-backfill | ml-experiment | "
-            "ml-forecast | ml-transfer | ml-harden | ml-diagnose"
+            "ml-forecast | ml-transfer | ml-harden | ml-diagnose | "
+            "ml-iterate"
         ),
     )
     parser.add_argument(
