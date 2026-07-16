@@ -17,8 +17,8 @@
 
 | Status | Count |
 |---|---:|
-| DONE | 18 |
-| OPEN | 72 |
+| DONE | 20 |
+| OPEN | 70 |
 | DEFER | 10 |
 | **Total** | **100** |
 
