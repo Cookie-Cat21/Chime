@@ -8,6 +8,7 @@ import {
   DisclosureCategoryHint,
   DisclosureTimeline,
 } from "@/components/kit/disclosure-timeline";
+import { DataQualityNotices } from "@/components/kit/data-quality-notices";
 import {
   FilingMetricsPanel,
   type FilingMetricComparison,
@@ -15,6 +16,11 @@ import {
   type LatestBrief,
 } from "@/components/kit/filing-metrics-panel";
 import { SymbolCompareChart } from "@/components/kit/symbol-compare-chart";
+import {
+  buildDataQualityNotices,
+  parseFilingQualitySummary,
+  type FilingQualitySummary,
+} from "@/lib/data-quality";
 import { NfaFooter } from "@/components/nfa-footer";
 import { NfaInline } from "@/components/nfa-inline";
 import { OptionalLwcNote } from "@/components/optional-lwc-note";
@@ -368,6 +374,43 @@ function latestBriefFromDisclosures(discs: DisclosuresPayload): LatestBrief | nu
   return { title: item.title, text: item.brief };
 }
 
+function emptyMetricsHintFromQuality(
+  quality: FilingQualitySummary | null,
+  loadFailed: boolean,
+): string | null {
+  if (loadFailed || !quality) return null;
+  if (quality.metrics_ok === 0 && quality.metrics_failed > 0) {
+    return `Extract tried ${quality.metrics_failed} filing PDF${quality.metrics_failed === 1 ? "" : "s"} but could not pull reliable numbers (scanned pages or unusual layouts). This is not proof the company has no results — verify against the source PDF.`;
+  }
+  if (quality.financial_filings === 0) {
+    return "No CSE financial-statement filings are stored for this symbol yet. Warrants, prefs, and some thinly listed names often have none — metrics stay empty until those PDFs exist.";
+  }
+  if (quality.with_pdf === 0 && quality.disclosures > 0) {
+    return "Disclosures are stored, but PDF links are still missing. Metrics appear after PDFs are enriched and parsed.";
+  }
+  if (quality.metrics_attempted === 0 && quality.with_pdf > 0) {
+    return "Financial PDFs are on file; metrics extraction is still pending on the drain schedule.";
+  }
+  return null;
+}
+
+function emptyBriefHintFromQuality(
+  quality: FilingQualitySummary | null,
+  hasReadyBrief: boolean,
+): string | null {
+  if (hasReadyBrief || !quality) return null;
+  if (quality.briefs_failed > 0 && quality.briefs_ready === 0) {
+    return "AI brief generation failed for recent filings (model limits or extract issues). The brief drain retries automatically. Not financial advice.";
+  }
+  if (quality.briefs_pending > 0) {
+    return "An AI brief is pending or processing. Free-tier quotas can lag — ready text shows up after the drain finishes. Not financial advice.";
+  }
+  if (quality.financial_filings === 0) {
+    return "No financial-statement filings to summarize yet for this symbol. Briefs need those PDFs first. Not financial advice.";
+  }
+  return null;
+}
+
 function parseCompareSearchParam(raw: unknown): string[] {
   const text = Array.isArray(raw) ? raw[0] : raw;
   if (typeof text !== "string" || !text.trim()) return [];
@@ -490,6 +533,7 @@ export default async function SymbolDetailPage({
   let filingMetrics: FilingMetricRow | null = null;
   let filingComparison: FilingMetricComparison | null = null;
   let latestBrief: LatestBrief | null = null;
+  let filingQuality: FilingQualitySummary | null = null;
   const metricsFailed = !metricsRes.ok;
   let isWatching = false;
   if (watchRes.ok) {
@@ -573,10 +617,12 @@ export default async function SymbolDetailPage({
       filingMetrics = parsed.metrics;
       filingComparison = parsed.comparison;
       latestBrief = parseLatestBriefPayload(metricsBody);
+      filingQuality = parseFilingQualitySummary(metricsBody);
     } catch {
       filingMetrics = null;
       filingComparison = null;
       latestBrief = null;
+      filingQuality = null;
     }
   }
   if (!latestBrief && briefRes.ok) {
@@ -593,6 +639,24 @@ export default async function SymbolDetailPage({
 
   const sparkPoints = finiteSparklinePoints(snaps.points);
   const snapshotStale = Boolean(data.last?.ts && isStaleTs(data.last.ts));
+  const qualityNotices = buildDataQualityNotices({
+    symbol: data.symbol,
+    hasLastPrice: Boolean(data.last),
+    snapshotStale,
+    sparkPointCount: sparkPoints.length,
+    quality: filingQuality,
+    metricsLoadFailed: metricsFailed,
+    hasReadyBrief: Boolean(latestBrief),
+    hasReadyMetrics: Boolean(filingMetrics?.extract_ok),
+  });
+  const emptyMetricsHint = emptyMetricsHintFromQuality(
+    filingQuality,
+    metricsFailed,
+  );
+  const emptyBriefHint = emptyBriefHintFromQuality(
+    filingQuality,
+    Boolean(latestBrief),
+  );
   const disclosureCategories = Array.from(
     new Set(
       discs.items
@@ -628,6 +692,8 @@ export default async function SymbolDetailPage({
           </Button>
         </div>
       </div>
+
+      <DataQualityNotices notices={qualityNotices} />
 
       <section
         className={`mt-6 rounded-lg border p-4 ${
@@ -791,6 +857,8 @@ export default async function SymbolDetailPage({
         comparison={filingComparison}
         latestBrief={latestBrief}
         loadFailed={metricsFailed}
+        emptyMetricsHint={emptyMetricsHint}
+        emptyBriefHint={emptyBriefHint}
       />
 
       <section
