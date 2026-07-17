@@ -54,10 +54,9 @@ export function CompanyGraphClient({
   const searchParams = useSearchParams();
   const [, startTransition] = useTransition();
 
+  // Only pre-select when URL has ?symbol= — otherwise show full map, nothing focused.
   const initialSelected =
-    nodes.find((n) => n.symbol === initialFocus)?.id ??
-    nodes.find((n) => n.node_kind === "listed")?.id ??
-    null;
+    nodes.find((n) => n.symbol === initialFocus)?.id ?? null;
 
   const [selectedId, setSelectedId] = useState<number | null>(initialSelected);
   const [query, setQuery] = useState(
@@ -93,6 +92,7 @@ export function CompanyGraphClient({
     else params.delete("hubs");
     const sel = nodes.find((n) => n.id === selectedId);
     if (sel?.symbol) params.set("symbol", sel.symbol);
+    else params.delete("symbol");
     const next = params.toString();
     const cur = searchParams.toString();
     if (next !== cur) {
@@ -160,16 +160,15 @@ export function CompanyGraphClient({
   }, [filteredEdges, visibleNodes]);
 
   const selected =
-    visibleNodes.find((n) => n.id === selectedId) ??
-    visibleNodes[0] ??
-    null;
-  const effectiveSelectedId = selected?.id ?? null;
+    selectedId != null
+      ? (visibleNodes.find((n) => n.id === selectedId) ?? null)
+      : null;
 
   const selectedEdges = useMemo(() => {
+    if (selectedId == null) return [];
     const raw = visibleEdges.filter(
       (e) =>
-        e.src_node_id === effectiveSelectedId ||
-        e.dst_node_id === effectiveSelectedId,
+        e.src_node_id === selectedId || e.dst_node_id === selectedId,
     );
     const rank: Record<string, number> = {
       subsidiary: 4,
@@ -182,14 +181,14 @@ export function CompanyGraphClient({
     for (const e of raw) {
       const a = Math.min(e.src_node_id, e.dst_node_id);
       const b = Math.max(e.src_node_id, e.dst_node_id);
-      const key = `${a}:${b}:${e.src_node_id === effectiveSelectedId ? "out" : "in"}`;
+      const key = `${a}:${b}:${e.src_node_id === selectedId ? "out" : "in"}`;
       const prev = best.get(key);
       if (!prev || (rank[e.relation] ?? 0) > (rank[prev.relation] ?? 0)) {
         best.set(key, e);
       }
     }
     return Array.from(best.values());
-  }, [visibleEdges, effectiveSelectedId]);
+  }, [visibleEdges, selectedId]);
 
   const suggestions = useMemo(() => {
     const q = query.trim().toUpperCase();
@@ -345,7 +344,7 @@ export function CompanyGraphClient({
         ))}
         {showHints ? (
           <span className="ml-auto text-[11px] text-muted-foreground/80">
-            Focus shows hub + neighbors · nodes repel · drag to rearrange
+            Full map · click a company to focus · click blank space to clear
           </span>
         ) : null}
       </div>
@@ -354,10 +353,11 @@ export function CompanyGraphClient({
         <CompanyGraphCanvas
           nodes={visibleNodes}
           edges={visibleEdges}
-          selectedId={effectiveSelectedId}
+          selectedId={selectedId}
           onSelect={(id) => {
             setSelectedId(id);
-            setShowHints(false);
+            if (id == null) setQuery("");
+            setShowHints(id == null);
           }}
         />
 
@@ -459,10 +459,17 @@ export function CompanyGraphClient({
               ) : null}
             </div>
           ) : (
-            <p className={cn("text-sm text-muted-foreground")}>
-              Click a company node or search for a symbol to see equity, market
-              cap, and linked entities.
-            </p>
+            <div className={cn("space-y-2 text-sm text-muted-foreground")}>
+              <p className="font-medium text-foreground">Nothing selected</p>
+              <p>
+                Showing the full ownership map. Click a company for equity,
+                market cap, and links — or click the blank canvas to clear a
+                focus.
+              </p>
+              <p className="text-[11px]">
+                {visibleNodes.length} companies · {visibleEdges.length} links
+              </p>
+            </div>
           )}
         </aside>
       </div>

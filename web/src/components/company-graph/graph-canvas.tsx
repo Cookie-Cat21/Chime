@@ -46,8 +46,6 @@ const RELATION_SHORT: Record<string, string> = {
 
 const CX = 480;
 const CY = 320;
-/** Overview mode caps node count so fitView isn't a tiny hairball. */
-const OVERVIEW_NODE_CAP = 36;
 
 type CompanyNodeData = {
   label: string;
@@ -151,14 +149,13 @@ function adjacency(edges: GraphEdge[]): Map<number, number[]> {
 
 /**
  * Focused view = hub + 1-hop (readable ownership star).
- * Overview = highest-degree hubs capped so the canvas isn't a 100-node speck.
+ * Overview (nothing selected) = full graph, no hub pinned.
  */
 function selectDisplayGraph(
   graphNodes: GraphNode[],
   edges: GraphEdge[],
   selectedId: number | null,
 ): { nodes: GraphNode[]; edges: GraphEdge[]; hubId: number | null } {
-  const deg = degreeMap(edges);
   const byId = new Map(graphNodes.map((n) => [n.id, n]));
 
   if (selectedId != null && byId.has(selectedId)) {
@@ -176,29 +173,8 @@ function selectDisplayGraph(
     return { nodes, edges: subEdges, hubId: selectedId };
   }
 
-  // Overview: keep densest hubs + their edges.
-  const ranked = [...graphNodes].sort((a, b) => {
-    const da = deg.get(a.id) ?? 0;
-    const db = deg.get(b.id) ?? 0;
-    if (db !== da) return db - da;
-    return (b.market_cap ?? 0) - (a.market_cap ?? 0);
-  });
-  const keep = new Set(ranked.slice(0, OVERVIEW_NODE_CAP).map((n) => n.id));
-  // Pull in neighbors of kept hubs so edges aren't orphans.
-  for (const e of edges) {
-    if (keep.has(e.src_node_id)) keep.add(e.dst_node_id);
-    if (keep.has(e.dst_node_id)) keep.add(e.src_node_id);
-  }
-  // Re-cap after neighbor expansion.
-  const capped = ranked.filter((n) => keep.has(n.id)).slice(0, OVERVIEW_NODE_CAP + 20);
-  const ids = new Set(capped.map((n) => n.id));
-  const nodes = capped;
-  const subEdges = edges.filter(
-    (e) => ids.has(e.src_node_id) && ids.has(e.dst_node_id),
-  );
-  const hubId =
-    ranked.find((n) => ids.has(n.id))?.id ?? nodes[0]?.id ?? null;
-  return { nodes, edges: subEdges, hubId };
+  // Nothing selected — show every company/link passed in.
+  return { nodes: graphNodes, edges, hubId: null };
 }
 
 /**
@@ -223,8 +199,11 @@ function layoutOwnership(
     .filter((x) => x.id !== hubId)
     .sort((a, b) => shortLabel(a).localeCompare(shortLabel(b)));
 
-  // Arc length ≥ ~88px between circle centers → readable labels.
-  const radius = Math.max(210, (ringNodes.length * 88) / (2 * Math.PI));
+  // Focused: wide ring around hub. Overview: larger cloud so all firms fit.
+  const radius = Math.max(
+    hubId != null ? 210 : 280,
+    (ringNodes.length * (hubId != null ? 88 : 64)) / (2 * Math.PI),
+  );
 
   const seeded: SimNode[] = [];
   if (hubNode) {
@@ -239,8 +218,11 @@ function layoutOwnership(
   }
 
   ringNodes.forEach((node, i) => {
-    const angle = (2 * Math.PI * i) / Math.max(ringNodes.length, 1) - Math.PI / 2;
-    const r = radius + (i % 3) * 12;
+    const angle =
+      (2 * Math.PI * i) / Math.max(ringNodes.length, 1) - Math.PI / 2;
+    // Overview: spiral bands so a full map isn't one overcrowded ring.
+    const band = hubId == null ? Math.floor(i / Math.max(12, Math.ceil(ringNodes.length / 4))) : i % 3;
+    const r = radius + band * (hubId != null ? 12 : 70) + (i % 5) * 6;
     const size = companySize(node);
     seeded.push({
       id: String(node.id),
@@ -252,22 +234,25 @@ function layoutOwnership(
     });
   });
 
-  const charge = -Math.min(700, Math.max(280, 200 + n * 8));
+  const charge = -Math.min(
+    hubId != null ? 700 : 1100,
+    Math.max(280, 200 + n * (hubId != null ? 8 : 5)),
+  );
   const sim = forceSimulation(seeded)
     .force(
       "charge",
-      forceManyBody().strength(charge).distanceMin(40).distanceMax(640),
+      forceManyBody().strength(charge).distanceMin(40).distanceMax(900),
     )
     .force(
       "collide",
       forceCollide<SimNode>()
-        .radius((d) => d.size / 2 + 18)
+        .radius((d) => d.size / 2 + (hubId != null ? 18 : 14))
         .strength(1)
         .iterations(3),
     )
     .stop();
 
-  for (let i = 0; i < 180; i++) sim.tick();
+  for (let i = 0; i < (hubId != null ? 180 : 220); i++) sim.tick();
 
   const byId = new Map(seeded.map((s) => [s.id, s]));
   const focusNeighbors =
@@ -392,7 +377,7 @@ function GraphInner({
     setNodes(laidOut);
     setEdges(flowEdges);
     const id = requestAnimationFrame(() => {
-      fitView({ padding: 0.35, duration: 220, maxZoom: 1.15 });
+      fitView({ padding: 0.28, duration: 220, maxZoom: 1.15 });
     });
     return () => cancelAnimationFrame(id);
   }, [laidOut, flowEdges, setNodes, setEdges, fitView]);
@@ -406,8 +391,8 @@ function GraphInner({
         onEdgesChange={onEdgesChange}
         nodeTypes={nodeTypes}
         fitView
-        fitViewOptions={{ padding: 0.35, maxZoom: 1.15 }}
-        minZoom={0.35}
+        fitViewOptions={{ padding: 0.28, maxZoom: 1.15 }}
+        minZoom={0.15}
         maxZoom={1.8}
         proOptions={{ hideAttribution: true }}
         nodesDraggable
