@@ -126,29 +126,31 @@ export function CandlestickChart({
   const n = bars.length;
   const totalSlots = Math.max(1, n + (fc.length > 0 ? fc.length : 0));
 
-  // pack: fixed pitch, intrinsic width, centered (hero).
-  // fitWidth fill: slots from container, capped, centered side pad (expand).
+  // pack (hero): fixed pitch, intrinsic centered width.
+  // fitWidth+fill (expand): always use the full frame width — short ranges
+  // like 1M get wider candles, not empty side gutters.
   const h = fitWidth && !pack ? frame.h : chartHeight ?? (fitWidth ? 280 : 520);
   const MIN_SLOT = 5;
-  const MAX_SLOT = 12;
   const PACK_SLOT = 11;
   const frameW = Math.max(padL + padR + 40, frame.w);
   const innerW = frameW - padL - padR;
   const slot = pack
     ? PACK_SLOT
     : fitWidth
-      ? Math.min(MAX_SLOT, Math.max(MIN_SLOT, innerW / totalSlots))
+      ? Math.max(MIN_SLOT, innerW / totalSlots)
       : 18;
   const usedPlot = totalSlots * slot;
   const contentW = padL + padR + usedPlot;
-  const sidePad =
-    fitWidth && !pack ? Math.max(0, (innerW - usedPlot) / 2) : 0;
-  const drawPadL = padL + sidePad;
-  const drawPadR = padR + sidePad;
+  const drawPadL = padL;
+  const drawPadR = padR;
+  // Wider slots → thicker bodies so 1M fills without looking like sparse ticks.
+  const bodyRatio = pack ? 0.82 : fitWidth ? 0.78 : 0.72;
   const bodyW = pack || fitWidth
-    ? Math.max(4, Math.min(slot * 0.82, slot - 1))
+    ? Math.max(4, Math.min(slot * bodyRatio, slot - 1))
     : 13;
-  const wickW = pack || fitWidth ? Math.max(1.25, Math.min(2.5, slot * 0.16)) : 2;
+  const wickW = pack || fitWidth
+    ? Math.max(1.25, Math.min(3, slot * 0.14))
+    : 2;
   const w = pack ? contentW : fitWidth ? frameW : contentW;
   const plotH = Math.max(40, h - padT - padB);
   const displayH = chartHeight ?? 280;
