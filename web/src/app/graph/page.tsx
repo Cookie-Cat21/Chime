@@ -59,7 +59,7 @@ export default async function GraphPage({
           action={
             <div className="flex flex-wrap gap-2">
               <Button asChild variant="secondary" size="sm">
-                <Link href="/graph/people">People map</Link>
+                <Link href="/people">People</Link>
               </Button>
               <Button asChild variant="outline" size="sm">
                 <Link href="/market">Browse market</Link>

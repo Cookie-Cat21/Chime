@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import {
   useEffect,
   useMemo,
@@ -236,6 +237,7 @@ function PeopleFlow({
   onSelect: (id: number | null) => void;
   searching: boolean;
 }) {
+  const router = useRouter();
   const { nodes, edges, layoutKey } = useMemo(() => {
     const ranked = [...people].sort(
       (a, b) => b.influence_score - a.influence_score,
@@ -406,6 +408,11 @@ function PeopleFlow({
             if (linked[0]) onSelect(linked[0].id);
           }
         }}
+        onNodeDoubleClick={(_, node) => {
+          if (!node.id.startsWith("p-")) return;
+          const id = Number(node.id.slice(2));
+          if (Number.isFinite(id)) router.push(`/people/${id}`);
+        }}
         onPaneClick={() => onSelect(null)}
       >
         <Background gap={18} size={1} color="var(--border)" />
@@ -429,19 +436,17 @@ function RankRow({
   selected: boolean;
   onSelect: () => void;
 }) {
+  const router = useRouter();
   const pct = maxScore > 0 ? (person.influence_score / maxScore) * 100 : 0;
   const topLabel = person.top_role
     ? ROLE_LABEL[person.top_role] ?? person.top_role
     : "—";
   return (
     <li>
-      <button
-        type="button"
+      <div
         data-person-id={person.id}
-        title={person.name}
-        onClick={onSelect}
         className={cn(
-          "group relative w-full rounded-md px-2 py-2 text-left transition-colors duration-150",
+          "group relative rounded-md transition-colors duration-150",
           selected ? "bg-muted" : "hover:bg-muted/60",
         )}
       >
@@ -452,7 +457,19 @@ function RankRow({
             selected ? "opacity-100" : "opacity-0 group-hover:opacity-40",
           )}
         />
-        <div className="grid grid-cols-[1.5rem_minmax(0,1fr)_auto] items-baseline gap-x-2 pl-1">
+        <button
+          type="button"
+          title={`${person.name} — click to inspect, Enter for dossier`}
+          onClick={onSelect}
+          onDoubleClick={() => router.push(`/people/${person.id}`)}
+          onKeyDown={(e) => {
+            if (e.key === "Enter") {
+              e.preventDefault();
+              router.push(`/people/${person.id}`);
+            }
+          }}
+          className="grid w-full grid-cols-[1.5rem_minmax(0,1fr)_auto] items-baseline gap-x-2 px-2 py-2 pl-3 text-left"
+        >
           <span className="font-mono text-[11px] tabular-nums text-muted-foreground">
             {rank}
           </span>
@@ -468,14 +485,23 @@ function RankRow({
           <span className="shrink-0 font-mono text-xs tabular-nums">
             {formatCompactNumber(person.influence_score, 1)}
           </span>
-        </div>
-        <div className="mt-1.5 ml-7 h-1 overflow-hidden rounded-sm bg-muted">
+        </button>
+        <div className="mx-2 mb-1.5 ml-9 h-1 overflow-hidden rounded-sm bg-muted">
           <div
             className="h-full rounded-sm bg-foreground/70 transition-[width] duration-300"
             style={{ width: `${Math.max(pct, 2)}%` }}
           />
         </div>
-      </button>
+        <div className="flex justify-end px-2 pb-1.5">
+          <Link
+            href={`/people/${person.id}`}
+            className="text-[10px] font-medium text-muted-foreground underline-offset-2 hover:text-foreground hover:underline"
+            onClick={(e) => e.stopPropagation()}
+          >
+            Open dossier →
+          </Link>
+        </div>
+      </div>
     </li>
   );
 }
@@ -533,6 +559,13 @@ function PersonInspector({ person }: { person: PersonNode }) {
               {formatCompactNumber(person.influence_score, 1)}
             </p>
           </div>
+        </div>
+        <div className="relative mt-2">
+          <Button asChild size="sm" className="w-full">
+            <Link href={`/people/${person.id}`}>
+              Open full dossier · network & years
+            </Link>
+          </Button>
         </div>
       </div>
 
@@ -694,8 +727,8 @@ export function PeopleGraphClient({ people }: { people: PersonNode[] }) {
               Influence ranking
             </p>
             <p className="mt-0.5 text-[11px] leading-snug text-muted-foreground">
-              Σ (market cap × role weight). Research proxy — not personal net
-              worth.
+              Σ (market cap × role weight). Enter or double-click opens dossier.
+              Research proxy — not personal net worth.
             </p>
           </div>
 

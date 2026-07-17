@@ -531,7 +531,7 @@ export default async function SymbolDetailPage({
             <Link href={`/graph?symbol=${encoded}`}>Ownership map</Link>
           </Button>
           <Button asChild variant="outline" size="sm">
-            <Link href="/graph/people">People map</Link>
+            <Link href="/people">People</Link>
           </Button>
           <Button asChild variant="ghost" size="sm">
             <Link href="/watchlist">← Watchlist</Link>
