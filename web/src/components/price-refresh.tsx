@@ -137,8 +137,9 @@ export function PriceRefresh({
     }
   }
 
+  // Age label uses Date.now() — suppress hydration mismatch vs SSR clock.
   return (
-    <span aria-live="polite">
+    <span aria-live="polite" suppressHydrationWarning>
       <LiveIndicator label={label} tone={tone} className="shrink-0" />
     </span>
   );

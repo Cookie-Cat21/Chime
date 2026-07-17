@@ -1,5 +1,7 @@
 "use client";
 
+import { useEffect, useRef, useState } from "react";
+
 import {
   aggregateBarsForDisplay,
   candleBodyOpen,
@@ -21,7 +23,8 @@ function barTooltip(b: DailyBarPoint, bodyOpen: number): string {
 
 /**
  * Readable SVG candlestick chart.
- * Uses a fixed slot width so dense series stay thick (not a barcode).
+ * ``fitWidth`` sizes slots from the container (ResizeObserver) so the plot
+ * fills width without scroll and without non-uniform stretch.
  * Dense inputs are aggregated. Missing open → vs prior close.
  */
 export function CandlestickChart({
@@ -30,6 +33,15 @@ export function CandlestickChart({
   forecastPrices,
   showForecast = false,
   fill = false,
+  /** Fit chart to container width (no horizontal scrollbar). */
+  fitWidth = false,
+  /**
+   * Pack candles at a fixed comfortable pitch and center the plot.
+   * Use for the hero strip so a short series doesn't stretch card-wide.
+   */
+  pack = false,
+  /** SVG render height in px when not filling a flex parent. */
+  chartHeight,
   footnote,
   maxCandles = 72,
 }: {
@@ -38,14 +50,46 @@ export function CandlestickChart({
   forecastPrices?: number[];
   showForecast?: boolean;
   fill?: boolean;
+  fitWidth?: boolean;
+  pack?: boolean;
+  chartHeight?: number;
   footnote?: string;
   maxCandles?: number;
 }) {
+  const frameRef = useRef<HTMLDivElement | null>(null);
+  const [frame, setFrame] = useState({ w: 720, h: chartHeight ?? 280 });
+
+  useEffect(() => {
+    if (!fitWidth) return;
+    const el = frameRef.current;
+    if (!el) return;
+    const apply = (width: number, height: number) => {
+      if (width < 2) return;
+      const nextH = fill
+        ? Math.max(160, Math.floor(height))
+        : (chartHeight ?? 280);
+      setFrame((prev) => {
+        const w = Math.floor(width);
+        const h = nextH;
+        if (prev.w === w && prev.h === h) return prev;
+        return { w, h };
+      });
+    };
+    apply(el.clientWidth, el.clientHeight);
+    const ro = new ResizeObserver((entries) => {
+      const cr = entries[0]?.contentRect;
+      if (!cr) return;
+      apply(cr.width, cr.height);
+    });
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, [fitWidth, fill, chartHeight]);
+
   const priceMax = Math.max(...rawBars.map((b) => b.close), 0);
-  // Full 1Y (maxCandles ≥ 200): keep every session. Shorter caps may
-  // still downsample; pennies get a slightly lower mid-cap only.
+  // Scroll mode may keep a dense 1Y series; fit-width always respects
+  // maxCandles so the plot can scale into the container without overflow.
   const adaptiveMax =
-    maxCandles >= 200
+    maxCandles >= 200 && !fitWidth
       ? maxCandles
       : priceMax > 0 && priceMax < 2
         ? Math.min(maxCandles, 40)
@@ -69,14 +113,11 @@ export function CandlestickChart({
   }
   const lineMode = priceMax < 3 && preFlat / bars.length >= 0.4;
 
-  const padL = 14;
-  const padR = 56;
-  const padT = 20;
-  const padB = 40;
-  // Wider pitch so a full year of daily candles stays readable when scrolled.
-  const slot = 18;
-  const bodyW = 13;
-  const wickW = 2;
+  const padL = fitWidth ? 8 : 14;
+  const padR = fitWidth ? 52 : 56;
+  // Tighter chrome so the OHLC band owns the frame (especially hero).
+  const padT = fitWidth ? 10 : 20;
+  const padB = fitWidth ? 28 : 40;
 
   const fc =
     showForecast && forecastPrices
@@ -84,11 +125,36 @@ export function CandlestickChart({
       : [];
 
   const n = bars.length;
-  const totalSlots = n + (fc.length > 0 ? fc.length : 0);
-  const plotW = totalSlots * slot;
-  const w = padL + padR + plotW;
-  const h = 520;
-  const plotH = h - padT - padB;
+  const totalSlots = Math.max(1, n + (fc.length > 0 ? fc.length : 0));
+
+  // pack (hero): fixed pitch, intrinsic centered width.
+  // fitWidth+fill (expand): always use the full frame width — short ranges
+  // like 1M get wider candles, not empty side gutters.
+  const h = fitWidth && !pack ? frame.h : chartHeight ?? (fitWidth ? 280 : 520);
+  const MIN_SLOT = 5;
+  const PACK_SLOT = 11;
+  const frameW = Math.max(padL + padR + 40, frame.w);
+  const innerW = frameW - padL - padR;
+  const slot = pack
+    ? PACK_SLOT
+    : fitWidth
+      ? Math.max(MIN_SLOT, innerW / totalSlots)
+      : 18;
+  const usedPlot = totalSlots * slot;
+  const contentW = padL + padR + usedPlot;
+  const drawPadL = padL;
+  const drawPadR = padR;
+  // Wider slots → thicker bodies so ranges fill without looking like sparse ticks.
+  const bodyRatio = pack ? 0.82 : fitWidth ? 0.84 : 0.72;
+  const bodyW = pack || fitWidth
+    ? Math.max(3.5, Math.min(slot * bodyRatio, slot - 0.75))
+    : 13;
+  const wickW = pack || fitWidth
+    ? Math.max(1.25, Math.min(2.75, slot * 0.16))
+    : 2;
+  const w = pack ? contentW : fitWidth ? frameW : contentW;
+  const plotH = Math.max(40, h - padT - padB);
+  const displayH = chartHeight ?? 280;
 
   let barMin = Infinity;
   let barMax = -Infinity;
@@ -114,8 +180,11 @@ export function CandlestickChart({
     barMax > barMin
       ? barMax - barMin
       : Math.max(Math.abs(barMax) * 0.02, 0.02);
-  let min = Math.max(0, barMin - barSpan * 0.12);
-  let max = barMax + barSpan * 0.12;
+  // Fit/pack charts: small pad so candles fill the plot; scroll mode keeps
+  // a bit more air for dense 1Y reads.
+  const yPad = fitWidth || pack ? 0.04 : 0.12;
+  let min = Math.max(0, barMin - barSpan * yPad);
+  let max = barMax + barSpan * yPad;
   const fcLo = barMin - barSpan * 0.35;
   const fcHi = barMax + barSpan * 0.35;
   for (const p of fc) {
@@ -151,41 +220,71 @@ export function CandlestickChart({
     <div
       className={cn(
         "flex w-full flex-col",
-        fill ? "h-full min-h-0" : "min-h-[320px]",
+        fill ? "h-full min-h-0" : fitWidth ? "min-h-0" : "min-h-[320px]",
         className,
       )}
     >
       <div
-        className={cn(
-          "relative w-full overflow-x-auto overflow-y-hidden rounded-xl border border-border/60 bg-muted/15",
-          fill ? "min-h-0 flex-1" : "",
-        )}
         ref={(el) => {
-          // Pin scroll to most recent candles after layout.
-          if (!el) return;
+          frameRef.current = el;
+          // Pin scroll to most recent candles (scroll mode only).
+          if (!el || fitWidth || pack) return;
           requestAnimationFrame(() => {
             el.scrollLeft = Math.max(0, el.scrollWidth - el.clientWidth);
           });
         }}
+        className={cn(
+          "relative overflow-hidden rounded-xl border border-border/50 bg-gradient-to-b from-muted/25 to-muted/10",
+          pack
+            ? "w-full max-w-full overflow-x-hidden"
+            : fitWidth
+              ? "w-full overflow-x-hidden"
+              : "w-full overflow-x-auto overflow-y-hidden",
+          fill && !pack ? "min-h-0 flex-1" : "",
+        )}
+        style={
+          pack
+            ? // Width-first + aspect-ratio: avoids meet() letterboxing that
+              // left empty bands above/below the candles in a fixed-height box.
+              {
+                width: "100%",
+                maxWidth: contentW,
+                aspectRatio: `${Math.max(1, w)} / ${Math.max(1, h)}`,
+                height: "auto",
+              }
+            : fitWidth && !fill
+              ? { height: displayH }
+              : undefined
+        }
       >
         <svg
           viewBox={`0 0 ${w} ${h}`}
-          preserveAspectRatio="xMinYMid meet"
-          style={{
-            width: w,
-            height: 460,
-            maxWidth: "none",
-            display: "block",
-          }}
-          className="max-w-none"
+          preserveAspectRatio={
+            pack ? "xMidYMid meet" : fitWidth ? "none" : "xMinYMid meet"
+          }
+          style={
+            pack || fitWidth
+              ? {
+                  width: "100%",
+                  height: "100%",
+                  display: "block",
+                }
+              : {
+                  width: w,
+                  height: 460,
+                  maxWidth: "none",
+                  display: "block",
+                }
+          }
+          className={pack || fitWidth ? "h-full w-full" : "max-w-none"}
           role="img"
           aria-label={aria}
         >
           {gridYs.map((gy, gi) => (
             <g key={gy}>
               <line
-                x1={padL}
-                x2={w - padR}
+                x1={drawPadL}
+                x2={w - drawPadR}
                 y1={gy}
                 y2={gy}
                 className="stroke-border/55"
@@ -215,7 +314,7 @@ export function CandlestickChart({
                 strokeLinecap="round"
                 d={bars
                   .map((b, i) => {
-                    const x = padL + slot * i + slot / 2;
+                    const x = drawPadL + slot * i + slot / 2;
                     const y = yFor(b.close);
                     return i === 0 ? `M ${x} ${y}` : `H ${x} V ${y}`;
                   })
@@ -223,7 +322,7 @@ export function CandlestickChart({
               />
               {bars.map((b, i) => {
                 const bodyOpen = candleBodyOpen(bars, i);
-                const cx = padL + slot * i + slot / 2;
+                const cx = drawPadL + slot * i + slot / 2;
                 const yC = yFor(b.close);
                 const up = b.close > bodyOpen;
                 const down = b.close < bodyOpen;
@@ -256,7 +355,7 @@ export function CandlestickChart({
           ) : (
             bars.map((b, i) => {
               const bodyOpen = candleBodyOpen(bars, i);
-              const cx = padL + slot * i + slot / 2;
+              const cx = drawPadL + slot * i + slot / 2;
               const yH = yFor(b.high);
               const yL = yFor(b.low);
               const yO = yFor(bodyOpen);
@@ -276,43 +375,14 @@ export function CandlestickChart({
                   ? "fill-rose-500 dark:fill-rose-400"
                   : "fill-zinc-500 dark:fill-zinc-400";
 
-              if (!up && !down) {
-                const tickH = 4;
-                const wickPad = 7;
-                return (
-                  <g key={`${b.trade_date}-${i}`}>
-                    <title>{barTooltip(b, bodyOpen)}</title>
-                    <rect
-                      x={cx - slot / 2}
-                      y={padT}
-                      width={slot}
-                      height={plotH}
-                      fill="transparent"
-                    />
-                    <line
-                      x1={cx}
-                      x2={cx}
-                      y1={yC - wickPad}
-                      y2={yC + wickPad}
-                      className={stroke}
-                      strokeWidth={wickW}
-                      strokeLinecap="round"
-                    />
-                    <rect
-                      x={cx - bodyW / 2}
-                      y={yC - tickH / 2}
-                      width={bodyW}
-                      height={tickH}
-                      rx={1}
-                      className={fillCls}
-                    />
-                  </g>
-                );
-              }
-
+              // Flat / doji (incl. CSE null-open when close ≈ prior close):
+              // real high–low wick + thin body — never a fake "+" cross.
               const naturalH = Math.abs(yC - yO);
-              const bodyH = Math.max(naturalH, 5);
-              const bodyTop = Math.min(yO, yC) - (bodyH - naturalH) / 2;
+              const bodyH = up || down ? Math.max(naturalH, 5) : Math.max(2, slot * 0.08);
+              const bodyTop =
+                up || down
+                  ? Math.min(yO, yC) - (bodyH - naturalH) / 2
+                  : yC - bodyH / 2;
 
               return (
                 <g key={`${b.trade_date}-${i}`}>
@@ -348,8 +418,8 @@ export function CandlestickChart({
           {/* Last-close reference line + axis tag (TradingView convention) */}
           <g aria-hidden>
             <line
-              x1={padL}
-              x2={w - padR}
+              x1={drawPadL}
+              x2={w - drawPadR}
               y1={yFor(last.close)}
               y2={yFor(last.close)}
               strokeDasharray="3 3"
@@ -363,7 +433,7 @@ export function CandlestickChart({
               }
             />
             <rect
-              x={w - padR + 2}
+              x={w - drawPadR + 2}
               y={yFor(last.close) - 10}
               width={padR - 6}
               height={20}
@@ -403,16 +473,16 @@ export function CandlestickChart({
               strokeLinejoin="round"
               strokeLinecap="round"
               points={[
-                `${padL + slot * (n - 1) + slot / 2},${yFor(last.close)}`,
+                `${drawPadL + slot * (n - 1) + slot / 2},${yFor(last.close)}`,
                 ...fc.map(
                   (p, i) =>
-                    `${padL + slot * (n + i) + slot / 2},${yFor(p)}`,
+                    `${drawPadL + slot * (n + i) + slot / 2},${yFor(p)}`,
                 ),
               ].join(" ")}
             />
           ) : null}
           <text
-            x={padL}
+            x={drawPadL}
             y={h - 14}
             className="fill-muted-foreground"
             fontSize={13}
@@ -420,7 +490,7 @@ export function CandlestickChart({
             {first.trade_date}
           </text>
           <text
-            x={w - padR}
+            x={w - drawPadR}
             y={h - 14}
             textAnchor="end"
             className="fill-muted-foreground"

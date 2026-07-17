@@ -263,12 +263,12 @@ class Storage:
                     INSERT INTO price_snapshots (
                         symbol, price, change, change_pct, previous_close,
                         volume, trade_count, turnover, crossing_volume,
-                        high, low, open, market_cap, ts
+                        high, low, open, market_cap, ts, source
                     )
                     SELECT
                         symbol, price, change, change_pct, previous_close,
                         volume, trade_count, turnover, crossing_volume,
-                        high, low, open, market_cap, ts
+                        high, low, open, market_cap, ts, 'poller'
                     FROM UNNEST(
                         %s::text[],
                         %s::double precision[],
@@ -289,6 +289,21 @@ class Storage:
                         volume, trade_count, turnover, crossing_volume,
                         high, low, open, market_cap, ts
                     )
+                    ON CONFLICT (symbol, ts) DO UPDATE SET
+                        price = EXCLUDED.price,
+                        change = EXCLUDED.change,
+                        change_pct = EXCLUDED.change_pct,
+                        previous_close = EXCLUDED.previous_close,
+                        volume = EXCLUDED.volume,
+                        trade_count = EXCLUDED.trade_count,
+                        turnover = EXCLUDED.turnover,
+                        crossing_volume = EXCLUDED.crossing_volume,
+                        high = EXCLUDED.high,
+                        low = EXCLUDED.low,
+                        open = EXCLUDED.open,
+                        market_cap = EXCLUDED.market_cap,
+                        source = 'poller',
+                        ingested_at = now()
                     RETURNING id
                     """,
                     (
@@ -580,6 +595,92 @@ class Storage:
         if isinstance(rowcount, int) and not isinstance(rowcount, bool) and rowcount >= 0:
             return rowcount
         return len(rows)
+
+    async def persist_intraday_snapshots(self, snaps: list[PriceSnapshot]) -> int:
+        """Insert CSE chart ticks as ``source='cse_intraday'``.
+
+        Alert ``previous_snapshot`` ignores these rows so dense chart backfill
+        cannot mute price-cross fires. Idempotent on ``UNIQUE (symbol, ts)``.
+        """
+        if not snaps:
+            return 0
+
+        by_key: dict[tuple[str, datetime], PriceSnapshot] = {}
+        for snap in snaps:
+            if not isinstance(snap.symbol, str):
+                continue
+            symbol = snap.symbol.strip().upper()
+            if not symbol:
+                continue
+            if not math.isfinite(snap.price) or snap.price <= 0:
+                continue
+            if not isinstance(snap.ts, datetime):
+                continue
+            by_key[(symbol, snap.ts)] = snap.model_copy(update={"symbol": symbol})
+        if not by_key:
+            return 0
+
+        rows = list(by_key.values())
+        symbols = [s.symbol for s in rows]
+        prices = [s.price for s in rows]
+        changes = [s.change for s in rows]
+        change_pcts = [s.change_pct for s in rows]
+        volumes = [s.volume for s in rows]
+        highs = [s.high for s in rows]
+        lows = [s.low for s in rows]
+        opens = [s.open for s in rows]
+        tss = [s.ts for s in rows]
+
+        async with self._pool.connection() as conn:
+            await conn.execute(
+                """
+                INSERT INTO stocks (symbol)
+                SELECT DISTINCT symbol
+                FROM UNNEST(%s::text[]) AS t(symbol)
+                ON CONFLICT (symbol) DO NOTHING
+                """,
+                (symbols,),
+            )
+            result = await conn.execute(
+                """
+                INSERT INTO price_snapshots (
+                    symbol, price, change, change_pct, volume, high, low, open,
+                    ts, source
+                )
+                SELECT
+                    v.symbol, v.price, v.change, v.change_pct, v.volume,
+                    v.high, v.low, v.open, v.ts, 'cse_intraday'
+                FROM UNNEST(
+                    %s::text[],
+                    %s::double precision[],
+                    %s::double precision[],
+                    %s::double precision[],
+                    %s::double precision[],
+                    %s::double precision[],
+                    %s::double precision[],
+                    %s::double precision[],
+                    %s::timestamptz[]
+                ) AS v(
+                    symbol, price, change, change_pct, volume, high, low, open, ts
+                )
+                ON CONFLICT (symbol, ts) DO NOTHING
+                """,
+                (
+                    symbols,
+                    prices,
+                    changes,
+                    change_pcts,
+                    volumes,
+                    highs,
+                    lows,
+                    opens,
+                    tss,
+                ),
+            )
+        rowcount = getattr(result, "rowcount", None)
+        if isinstance(rowcount, int) and not isinstance(rowcount, bool) and rowcount >= 0:
+            return rowcount
+        return 0
 
     async def list_symbols_with_daily_bars(self) -> list[str]:
         """Symbols that have at least one ``daily_bars`` row (sorted)."""
@@ -1362,7 +1463,9 @@ class Storage:
                 await conn.execute(
                     """
                     SELECT * FROM price_snapshots
-                    WHERE symbol = %s AND id < %s
+                    WHERE symbol = %s
+                      AND id < %s
+                      AND source = 'poller'
                     ORDER BY id DESC
                     LIMIT 1
                     """,
@@ -1427,6 +1530,7 @@ class Storage:
                         FROM price_snapshots ps
                         WHERE ps.symbol = %s
                           AND ps.id < %s
+                          AND ps.source = 'poller'
                           AND (ps.ts AT TIME ZONE 'Asia/Colombo')::date
                               < (now() AT TIME ZONE 'Asia/Colombo')::date
                         GROUP BY 1
@@ -2048,7 +2152,9 @@ class Storage:
                         error = NULL,
                         updated_at = now()
                     WHERE disclosure_id = %s
-                      AND status IN ('pending', 'processing', 'failed')
+                      AND status IN (
+                          'pending', 'processing', 'failed', 'skipped'
+                      )
                     RETURNING disclosure_id
                     """,
                     (cleaned, model, tokens_in, tokens_out, disclosure_id),

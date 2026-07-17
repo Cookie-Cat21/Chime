@@ -1011,6 +1011,45 @@ def chart_point_to_daily_bar(
     )
 
 
+def chart_point_to_intraday_snapshot(
+    row: ChartPointRow,
+    *,
+    symbol: str,
+    cse_stock_id: int | None = None,
+    name: str | None = None,
+) -> PriceSnapshot | None:
+    """Normalize a ``period=1`` chart point into a ``price_snapshots`` tick."""
+    if not isinstance(symbol, str) or not symbol.strip():
+        return None
+    price = _finite_or_none(row.p)
+    if price is None or price <= 0:
+        return None
+    bar_ts = _try_ms_to_dt(row.t)
+    if bar_ts is None:
+        return None
+    sid: int | None = None
+    if (
+        cse_stock_id is not None
+        and not isinstance(cse_stock_id, bool)
+        and isinstance(cse_stock_id, int)
+        and cse_stock_id > 0
+    ):
+        sid = cse_stock_id
+    return PriceSnapshot(
+        symbol=symbol.strip().upper(),
+        price=price,
+        change=_finite_or_none(row.c),
+        change_pct=_finite_or_none(row.pc),
+        volume=_finite_or_none(row.q),
+        high=_finite_or_none(row.h),
+        low=_finite_or_none(row.low),
+        open=_finite_or_none(row.o),
+        name=name,
+        ts=bar_ts,
+        cse_stock_id=sid,
+    )
+
+
 class FlexibleNoticeRow(BaseModel):
     """Loose row for buy-in / non-compliance / notifications feeds."""
 
@@ -1750,6 +1789,63 @@ class CSEClient:
             return sorted(by_date.values(), key=lambda b: b.trade_date)
 
         return cast(list[DailyBar], await self._guarded(COMPANY_CHART_ENDPOINT, _call))
+
+    async def fetch_company_intraday(
+        self,
+        stock_id: int,
+        *,
+        symbol: str,
+    ) -> list[PriceSnapshot]:
+        """Fetch today's trade ticks via ``companyChartDataByStock`` period=1.
+
+        Returns ascending ``PriceSnapshot`` rows suitable for ``price_snapshots``.
+        Empty when CSE has no session prints or the id is invalid.
+        """
+        if isinstance(stock_id, bool) or not isinstance(stock_id, int) or stock_id <= 0:
+            return []
+        if not isinstance(symbol, str) or not symbol.strip():
+            return []
+        sym = symbol.strip().upper()
+
+        async def _call() -> list[PriceSnapshot]:
+            raw = await self._request(
+                "POST",
+                COMPANY_CHART_PATH,
+                data={"stockId": str(stock_id), "period": str(CHART_PERIOD_INTRADAY)},
+                log_context={
+                    "stock_id": stock_id,
+                    "symbol": sym,
+                    "period": CHART_PERIOD_INTRADAY,
+                },
+            )
+            try:
+                parsed = CompanyChartResponse.model_validate(raw)
+            except ValidationError as exc:
+                log.error(
+                    "cse_schema_error",
+                    endpoint=COMPANY_CHART_ENDPOINT,
+                    stock_id=stock_id,
+                    symbol=sym,
+                    period=CHART_PERIOD_INTRADAY,
+                    error=str(exc),
+                )
+                raise
+            # Cap hostile / oversized chart payloads (CSE usually << this).
+            max_points = 2_000
+            chart_rows = parsed.chartData[:max_points]
+            # Last-wins per timestamp (hostile duplicate stamps).
+            by_ts: dict[datetime, PriceSnapshot] = {}
+            for row in chart_rows:
+                snap = chart_point_to_intraday_snapshot(
+                    row, symbol=sym, cse_stock_id=stock_id
+                )
+                if snap is not None:
+                    by_ts[snap.ts] = snap
+            return sorted(by_ts.values(), key=lambda s: s.ts)
+
+        return cast(
+            list[PriceSnapshot], await self._guarded(COMPANY_CHART_ENDPOINT, _call)
+        )
 
     async def fetch_index_chart(
         self,

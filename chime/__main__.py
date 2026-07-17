@@ -298,6 +298,15 @@ async def _run_bot(settings: Settings) -> None:
         server.shutdown()
 
 
+def _cli_limit(raw: object, *, default: int | None = None) -> int | None:
+    """Positive int limit from argparse, else ``default`` (often None = all)."""
+    if isinstance(raw, bool) or not isinstance(raw, int):
+        return default
+    if raw > 0:
+        return raw
+    return default
+
+
 def main(argv: list[str] | None = None) -> None:
     parser = argparse.ArgumentParser(prog="chime", description="CSE Telegram alerting")
     parser.add_argument(
@@ -313,6 +322,7 @@ def main(argv: list[str] | None = None) -> None:
             "drain-briefs-local",
             "drain-metrics",
             "path-backfill",
+            "intraday-backfill",
             "hybrid-backfill",
             "score-signals",
             "eval-signals",
@@ -343,7 +353,8 @@ def main(argv: list[str] | None = None) -> None:
         help=(
             "bot | poller | both | migrate | tick | "
             "drain-pdfs | drain-briefs | drain-briefs-local | drain-metrics | "
-            "path-backfill | hybrid-backfill | score-signals | eval-signals | "
+            "path-backfill | intraday-backfill | hybrid-backfill | "
+            "score-signals | eval-signals | "
             "sector-backfill | notices-backfill | disclosures-backfill | "
             "financials-backfill | aspi-backfill | market-summary-backfill | "
             "ml-experiment | "
@@ -359,15 +370,18 @@ def main(argv: list[str] | None = None) -> None:
         action="store_true",
         help=(
             "tick: ignore market hours; "
-            "path-backfill/hybrid-backfill/sector-backfill/notices-backfill: "
-            "run even if flag off"
+            "path-backfill/intraday-backfill/hybrid-backfill/"
+            "sector-backfill/notices-backfill: run even if flag off"
         ),
     )
     parser.add_argument(
         "--limit",
         type=int,
         default=20,
-        help="For drain-* / path-backfill / hybrid-backfill: max rows/symbols (default 20)",
+        help=(
+            "For drain-* / path-backfill / intraday-backfill / hybrid-backfill: "
+            "max rows/symbols (default 20)"
+        ),
     )
     parser.add_argument(
         "--all-symbols",
@@ -383,7 +397,7 @@ def main(argv: list[str] | None = None) -> None:
     parser.add_argument(
         "--no-seed",
         action="store_true",
-        help="For path-backfill: skip tradeSummary id seed",
+        help="For path-backfill / intraday-backfill: skip tradeSummary id seed",
     )
     parser.add_argument(
         "--horizons",
@@ -432,9 +446,11 @@ def main(argv: list[str] | None = None) -> None:
         ),
     )
     args = parser.parse_args(argv)
+    limit: int | None = None  # CLI per-command; rebound below
     if args.force and args.command not in (
         "tick",
         "path-backfill",
+        "intraday-backfill",
         "hybrid-backfill",
         "sector-backfill",
         "notices-backfill",
@@ -450,16 +466,16 @@ def main(argv: list[str] | None = None) -> None:
         "ml-ltr-ship",
     ):
         parser.error(
-            "--force is only valid for tick, path-backfill, hybrid-backfill, "
-            "sector-backfill, notices-backfill, disclosures-backfill, "
-            "financials-backfill, aspi-backfill, ml-forecast, ml-hpe, "
-            "ml-forecast-unified, ml-loop-nightly, ml-loop-retrain, "
-            "ml-loop-research, or ml-ltr-ship"
+            "--force is only valid for tick, path-backfill, intraday-backfill, "
+            "hybrid-backfill, sector-backfill, notices-backfill, "
+            "disclosures-backfill, financials-backfill, aspi-backfill, "
+            "ml-forecast, ml-hpe, ml-forecast-unified, ml-loop-nightly, "
+            "ml-loop-retrain, ml-loop-research, or ml-ltr-ship"
         )
     if args.period is not None and args.command != "path-backfill":
         parser.error("--period is only valid for path-backfill")
-    if args.no_seed and args.command != "path-backfill":
-        parser.error("--no-seed is only valid for path-backfill")
+    if args.no_seed and args.command not in ("path-backfill", "intraday-backfill"):
+        parser.error("--no-seed is only valid for path-backfill / intraday-backfill")
 
     if args.command == "migrate":
         configure_logging()
@@ -471,7 +487,7 @@ def main(argv: list[str] | None = None) -> None:
     if args.command in ("drain-pdfs", "drain-briefs", "drain-metrics"):
         configure_logging()
         settings = Settings.from_env(require_token=False)
-        limit = args.limit if isinstance(args.limit, int) and args.limit > 0 else 20
+        drain_limit: int = _cli_limit(args.limit, default=20) or 20
         watched_only = not args.all_symbols
 
         async def _drain() -> None:
@@ -479,7 +495,7 @@ def main(argv: list[str] | None = None) -> None:
             await storage.open()
             try:
                 if args.command == "drain-briefs":
-                    result = await drain_briefs(storage=storage, limit=limit)
+                    result = await drain_briefs(storage=storage, limit=drain_limit)
                 elif args.command == "drain-pdfs":
                     cse = CSEClient(
                         base_url=settings.cse_base_url,
@@ -493,7 +509,7 @@ def main(argv: list[str] | None = None) -> None:
                             storage=storage,
                             cse=cse,
                             settings=settings,
-                            limit=limit,
+                            limit=drain_limit,
                             watched_only=watched_only,
                         )
                     finally:
@@ -501,7 +517,7 @@ def main(argv: list[str] | None = None) -> None:
                 else:
                     result = await drain_metrics(
                         storage=storage,
-                        limit=limit,
+                        limit=drain_limit,
                         watched_only=watched_only,
                     )
                 print(
@@ -518,7 +534,12 @@ def main(argv: list[str] | None = None) -> None:
     if args.command == "drain-briefs-local":
         configure_logging()
         settings = Settings.from_env(require_token=False)
-        limit = args.limit if isinstance(args.limit, int) and args.limit > 0 else 50
+        # --limit 0 ⇒ board-wide batch (local fill cap); default 200.
+        local_limit: int
+        if isinstance(args.limit, int) and not isinstance(args.limit, bool):
+            local_limit = 2000 if args.limit <= 0 else args.limit
+        else:
+            local_limit = 200
 
         async def _local_briefs() -> None:
             from chime.briefs.local_fill import fill_pending_briefs_local
@@ -526,10 +547,14 @@ def main(argv: list[str] | None = None) -> None:
             storage = Storage(settings.database_url)
             await storage.open()
             try:
+                # First-run: fill skipped + title-only (no Groq). Metrics-only
+                # mode remains available later via extract_ok_only=True.
                 result = await fill_pending_briefs_local(
                     storage=storage,
-                    limit=limit,
-                    extract_ok_only=True,
+                    limit=local_limit,
+                    extract_ok_only=False,
+                    include_skipped=True,
+                    require_pdf=False,
                 )
                 print(
                     "drain-briefs-local: "
@@ -545,7 +570,7 @@ def main(argv: list[str] | None = None) -> None:
     if args.command == "path-backfill":
         configure_logging()
         settings = Settings.from_env(require_token=False)
-        limit = args.limit if isinstance(args.limit, int) and args.limit > 0 else None
+        limit = _cli_limit(args.limit)
 
         async def _path_bf() -> None:
             storage = Storage(settings.database_url)
@@ -582,10 +607,51 @@ def main(argv: list[str] | None = None) -> None:
         asyncio.run(_path_bf())
         return
 
+    if args.command == "intraday-backfill":
+        configure_logging()
+        settings = Settings.from_env(require_token=False)
+        limit = _cli_limit(args.limit)
+
+        async def _intraday_bf() -> None:
+            from chime.intraday_backfill import run_intraday_backfill
+
+            storage = Storage(settings.database_url)
+            await storage.open()
+            cse = CSEClient(
+                base_url=settings.cse_base_url,
+                timeout=settings.http_timeout_seconds,
+                fail_max=settings.circuit_fail_max,
+                reset_timeout=settings.circuit_reset_seconds,
+                min_interval_seconds=settings.cse_min_interval_seconds,
+            )
+            try:
+                result = await run_intraday_backfill(
+                    settings=settings,
+                    storage=storage,
+                    cse=cse,
+                    limit=limit,
+                    seed_ids=not args.no_seed,
+                    force=args.force,
+                )
+                print(
+                    "intraday-backfill: "
+                    f"targeted={result.symbols_targeted} "
+                    f"ok={result.symbols_ok} "
+                    f"skipped={result.symbols_skipped} "
+                    f"failed={result.symbols_failed} "
+                    f"ticks={result.ticks_inserted}"
+                )
+            finally:
+                await cse.aclose()
+                await storage.close()
+
+        asyncio.run(_intraday_bf())
+        return
+
     if args.command == "hybrid-backfill":
         configure_logging()
         settings = Settings.from_env(require_token=False)
-        limit = args.limit if isinstance(args.limit, int) and args.limit > 0 else None
+        limit = _cli_limit(args.limit)
 
         async def _hybrid_bf() -> None:
             from chime.hybrid_backfill import run_hybrid_backfill
@@ -618,7 +684,7 @@ def main(argv: list[str] | None = None) -> None:
     if args.command == "sector-backfill":
         configure_logging()
         settings = Settings.from_env(require_token=False)
-        limit = args.limit if isinstance(args.limit, int) and args.limit > 0 else None
+        limit = _cli_limit(args.limit)
 
         async def _sector_bf() -> None:
             storage = Storage(settings.database_url)
@@ -690,7 +756,7 @@ def main(argv: list[str] | None = None) -> None:
     if args.command == "score-signals":
         configure_logging()
         settings = Settings.from_env(require_token=False)
-        limit = args.limit if isinstance(args.limit, int) and args.limit > 0 else None
+        limit = _cli_limit(args.limit)
 
         async def _score() -> None:
             storage = Storage(settings.database_url)
@@ -719,7 +785,7 @@ def main(argv: list[str] | None = None) -> None:
     if args.command == "eval-signals":
         configure_logging()
         settings = Settings.from_env(require_token=False)
-        limit = args.limit if isinstance(args.limit, int) and args.limit > 0 else 40
+        limit = _cli_limit(args.limit, default=40) or 40
 
         async def _eval() -> None:
             from chime.signals.eval import evaluate_walk_forward
@@ -749,11 +815,7 @@ def main(argv: list[str] | None = None) -> None:
     if args.command == "ml-experiment":
         configure_logging()
         settings = Settings.from_env(require_token=False)
-        limit = (
-            args.limit
-            if isinstance(args.limit, int) and args.limit > 0
-            else None
-        )
+        limit = _cli_limit(args.limit)
         # Default argparse limit is 20 — treat 20 as "full board" unless user
         # passed an explicit smaller smoke size via env? Better: 0 means all.
         # For ml-experiment, --limit 0 or omitted-full: use None when limit==20
@@ -814,13 +876,7 @@ def main(argv: list[str] | None = None) -> None:
                 "(set ML_FORECAST_ENABLED=1 or pass --force)"
             )
             return
-        limit = (
-            None
-            if not isinstance(args.limit, int)
-            or isinstance(args.limit, bool)
-            or args.limit == 20
-            else args.limit
-        )
+        limit = _cli_limit(args.limit) if _cli_limit(args.limit) not in (None, 20) else None
 
         async def _ml_fc() -> None:
             from chime.ml.serve import write_ml_forecasts
@@ -849,15 +905,9 @@ def main(argv: list[str] | None = None) -> None:
     if args.command == "ml-transfer":
         configure_logging()
         settings = Settings.from_env(require_token=False)
-        limit = (
-            None
-            if not isinstance(args.limit, int)
-            or isinstance(args.limit, bool)
-            or args.limit == 20
-            else args.limit
-        )
+        limit = _cli_limit(args.limit) if _cli_limit(args.limit) not in (None, 20) else None
         raw_horizons = args.horizons if isinstance(args.horizons, str) else "1,5"
-        horizons: list[int] = []
+        horizons = []
         for part in raw_horizons.split(","):
             part = part.strip()
             if not part:
@@ -921,13 +971,7 @@ def main(argv: list[str] | None = None) -> None:
     if args.command == "ml-harden":
         configure_logging()
         settings = Settings.from_env(require_token=False)
-        limit = (
-            None
-            if not isinstance(args.limit, int)
-            or isinstance(args.limit, bool)
-            or args.limit == 20
-            else args.limit
-        )
+        limit = _cli_limit(args.limit) if _cli_limit(args.limit) not in (None, 20) else None
         raw_horizons = args.horizons if isinstance(args.horizons, str) else "1,5"
         horizons_h: list[int] = []
         for part in raw_horizons.split(","):
@@ -974,13 +1018,7 @@ def main(argv: list[str] | None = None) -> None:
     if args.command == "ml-ltr-dual":
         configure_logging()
         settings = Settings.from_env(require_token=False)
-        limit = (
-            None
-            if not isinstance(args.limit, int)
-            or isinstance(args.limit, bool)
-            or args.limit == 20
-            else args.limit
-        )
+        limit = _cli_limit(args.limit) if _cli_limit(args.limit) not in (None, 20) else None
 
         async def _ltr_dual() -> None:
             from pathlib import Path
@@ -1058,13 +1096,7 @@ def main(argv: list[str] | None = None) -> None:
     if args.command == "ml-diagnose":
         configure_logging()
         settings = Settings.from_env(require_token=False)
-        limit = (
-            None
-            if not isinstance(args.limit, int)
-            or isinstance(args.limit, bool)
-            or args.limit == 20
-            else args.limit
-        )
+        limit = _cli_limit(args.limit) if _cli_limit(args.limit) not in (None, 20) else None
 
         async def _diagnose() -> None:
             from pathlib import Path
@@ -1100,13 +1132,7 @@ def main(argv: list[str] | None = None) -> None:
     if args.command == "ml-iterate":
         configure_logging()
         settings = Settings.from_env(require_token=False)
-        limit = (
-            None
-            if not isinstance(args.limit, int)
-            or isinstance(args.limit, bool)
-            or args.limit == 20
-            else args.limit
-        )
+        limit = _cli_limit(args.limit) if _cli_limit(args.limit) not in (None, 20) else None
 
         async def _iterate() -> None:
             from pathlib import Path
@@ -1139,13 +1165,7 @@ def main(argv: list[str] | None = None) -> None:
     if args.command == "ml-precision90":
         configure_logging()
         settings = Settings.from_env(require_token=False)
-        limit = (
-            None
-            if not isinstance(args.limit, int)
-            or isinstance(args.limit, bool)
-            or args.limit == 20
-            else args.limit
-        )
+        limit = _cli_limit(args.limit) if _cli_limit(args.limit) not in (None, 20) else None
 
         async def _p90() -> None:
             from pathlib import Path
@@ -1517,7 +1537,7 @@ def main(argv: list[str] | None = None) -> None:
     if args.command == "disclosures-backfill":
         configure_logging()
         settings = Settings.from_env(require_token=False)
-        limit = args.limit if isinstance(args.limit, int) and args.limit > 0 else None
+        limit = _cli_limit(args.limit)
 
         async def _disc_bf() -> None:
             from chime.disclosures_backfill import run_disclosures_backfill
@@ -1556,7 +1576,7 @@ def main(argv: list[str] | None = None) -> None:
     if args.command == "financials-backfill":
         configure_logging()
         settings = Settings.from_env(require_token=False)
-        limit = args.limit if isinstance(args.limit, int) and args.limit > 0 else None
+        limit = _cli_limit(args.limit)
 
         async def _fin_bf() -> None:
             from chime.financials_backfill import run_financials_backfill
@@ -1595,13 +1615,7 @@ def main(argv: list[str] | None = None) -> None:
     if args.command == "ml-always-on":
         configure_logging()
         settings = Settings.from_env(require_token=False)
-        limit = (
-            None
-            if not isinstance(args.limit, int)
-            or isinstance(args.limit, bool)
-            or args.limit == 20
-            else args.limit
-        )
+        limit = _cli_limit(args.limit) if _cli_limit(args.limit) not in (None, 20) else None
         use_events = bool(args.events)
         use_sector_rs = bool(getattr(args, "sector_rs", False))
         use_aspi = bool(getattr(args, "aspi", False))

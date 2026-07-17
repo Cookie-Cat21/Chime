@@ -14,6 +14,7 @@ from chime.adapters.cse import (
     ChartPointRow,
     TradeSummaryRow,
     chart_point_to_daily_bar,
+    chart_point_to_intraday_snapshot,
     chart_trade_date,
     trade_row_to_snapshot,
 )
@@ -59,6 +60,37 @@ def test_chart_point_to_daily_bar_period5() -> None:
 def test_chart_point_skips_intraday_period() -> None:
     row = ChartPointRow(p=20.0, t=1_752_703_800_000)
     assert chart_point_to_daily_bar(row, symbol="JKH.N0000", period=CHART_PERIOD_INTRADAY) is None
+
+
+def test_chart_point_to_intraday_snapshot() -> None:
+    row = ChartPointRow.model_validate(
+        {
+            "p": 27.6,
+            "h": 27.8,
+            "l": 26.2,
+            "o": None,
+            "q": 15.0,
+            "c": 1.4,
+            "pc": 5.34,
+            "t": 1_784_278_690_833,
+        }
+    )
+    snap = chart_point_to_intraday_snapshot(
+        row, symbol="pins.n0000", cse_stock_id=3461
+    )
+    assert snap is not None
+    assert snap.symbol == "PINS.N0000"
+    assert snap.price == 27.6
+    assert snap.high == 27.8
+    assert snap.low == 26.2
+    assert snap.volume == 15.0
+    assert snap.cse_stock_id == 3461
+    assert snap.ts.tzinfo is not None
+
+
+def test_chart_point_intraday_skips_bad_price() -> None:
+    row = ChartPointRow(p=float("nan"), t=1_752_703_800_000)
+    assert chart_point_to_intraday_snapshot(row, symbol="JKH.N0000") is None
 
 
 def test_chart_point_skips_non_finite_price() -> None:
