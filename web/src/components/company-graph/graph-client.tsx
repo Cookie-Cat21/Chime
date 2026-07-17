@@ -62,6 +62,8 @@ export function CompanyGraphClient({
   const [query, setQuery] = useState(
     initialFocus ? shortSymbol(initialFocus) : "",
   );
+  // Suggestions stay open while typing; close after pick / Escape / blur.
+  const [suggestOpen, setSuggestOpen] = useState(false);
   // CSE has no ownership JSON API — edges are PDF-extracted. Low/group_mention
   // noise is dropped; we always show medium+ (no user confidence picker).
   const [holdingsOnly, setHoldingsOnly] = useState(
@@ -206,6 +208,7 @@ export function CompanyGraphClient({
   function focusNode(node: GraphNode) {
     setSelectedId(node.id);
     setQuery(shortSymbol(node.symbol) || node.name.slice(0, 12));
+    setSuggestOpen(false);
     setShowHints(false);
   }
 
@@ -273,22 +276,45 @@ export function CompanyGraphClient({
             <Input
               id="graph-symbol-search"
               value={query}
-              onChange={(e) => setQuery(e.target.value)}
+              onChange={(e) => {
+                setQuery(e.target.value);
+                setSuggestOpen(true);
+              }}
+              onFocus={() => {
+                if (query.trim().length > 0) setSuggestOpen(true);
+              }}
+              onBlur={() => {
+                // Defer so suggestion mousedown/click still fires.
+                window.setTimeout(() => setSuggestOpen(false), 120);
+              }}
               onKeyDown={(e) => {
+                if (e.key === "Escape") {
+                  e.preventDefault();
+                  setSuggestOpen(false);
+                  return;
+                }
                 if (e.key === "Enter") focusSearch();
               }}
               placeholder="Focus symbol (e.g. JKH)"
               className="w-full"
               aria-label="Focus symbol"
               aria-autocomplete="list"
+              aria-expanded={suggestOpen && suggestions.length > 0}
             />
-            {suggestions.length > 0 && query.trim().length > 0 ? (
-              <ul className="absolute z-20 mt-1 max-h-48 w-full overflow-auto rounded-md border border-border bg-background py-1 text-sm shadow-sm">
+            {suggestOpen && suggestions.length > 0 ? (
+              <ul
+                className="absolute z-20 mt-1 max-h-48 w-full overflow-auto rounded-md border border-border bg-background py-1 text-sm shadow-sm"
+                role="listbox"
+              >
                 {suggestions.map((n) => (
-                  <li key={n.id}>
+                  <li key={n.id} role="option">
                     <button
                       type="button"
                       className="flex w-full items-center justify-between gap-2 px-3 py-1.5 text-left hover:bg-muted"
+                      onMouseDown={(e) => {
+                        // Prevent input blur-before-click from eating the pick.
+                        e.preventDefault();
+                      }}
                       onClick={() => focusNode(n)}
                     >
                       <span className="font-mono text-foreground">
