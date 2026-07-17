@@ -28,6 +28,8 @@ briefs = [
 ml = [
     "scikit-learn>=1.5",
     "numpy>=2",
+    "xgboost>=2",
+    "lightgbm>=4",
 ]
 
 [project.scripts]

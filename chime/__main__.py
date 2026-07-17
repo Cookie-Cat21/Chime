@@ -327,6 +327,7 @@ def main(argv: list[str] | None = None) -> None:
             "ml-hpe",
             "ml-forecast-unified",
             "ml-always-on",
+            "ml-ltr-dual",
             "disclosures-backfill",
             "financials-backfill",
             "aspi-backfill",
@@ -346,7 +347,7 @@ def main(argv: list[str] | None = None) -> None:
             "ml-experiment | "
             "ml-forecast | ml-transfer | ml-harden | ml-diagnose | "
             "ml-iterate | ml-precision90 | ml-hpe | ml-forecast-unified | "
-            "ml-always-on | ml-score-outcomes | ml-backfill-outcomes | "
+            "ml-always-on | ml-ltr-dual | ml-score-outcomes | ml-backfill-outcomes | "
             "ml-loop-nightly | ml-loop-retrain | ml-loop-research"
         ),
     )
@@ -929,6 +930,44 @@ def main(argv: list[str] | None = None) -> None:
                 await storage.close()
 
         asyncio.run(_harden())
+        return
+
+    if args.command == "ml-ltr-dual":
+        configure_logging()
+        settings = Settings.from_env(require_token=False)
+        limit = (
+            None
+            if not isinstance(args.limit, int)
+            or isinstance(args.limit, bool)
+            or args.limit == 20
+            else args.limit
+        )
+
+        async def _ltr_dual() -> None:
+            from pathlib import Path
+
+            from chime.ml.ltr_dual import run_ltr_dual_experiment
+
+            storage = Storage(settings.database_url)
+            await storage.open()
+            try:
+                result = await run_ltr_dual_experiment(
+                    storage=storage,
+                    limit_symbols=limit if limit and limit > 0 else None,
+                    out_dir=Path("docs/experiments"),
+                )
+                print(
+                    "ml-ltr-dual: "
+                    f"decision={result.decision} "
+                    f"metrics={len(result.metrics)} "
+                    f"symbols={result.cse_symbols} bars={result.bars}"
+                )
+                for r in result.reasons:
+                    print(" ", r)
+            finally:
+                await storage.close()
+
+        asyncio.run(_ltr_dual())
         return
 
     if args.command == "ml-diagnose":
