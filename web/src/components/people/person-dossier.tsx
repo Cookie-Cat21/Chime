@@ -260,7 +260,11 @@ function EgoNetwork({ dossier }: { dossier: PersonDossier }) {
         }}
       >
         <Background gap={18} size={1} color="var(--border)" />
-        <Controls showInteractive={false} position="bottom-left" />
+        <Controls
+          showInteractive={false}
+          position="bottom-left"
+          className="!scale-110"
+        />
       </ReactFlow>
     </div>
   );
@@ -354,20 +358,20 @@ export function PersonDossierView({ dossier }: { dossier: PersonDossier }) {
           aria-hidden
           className="pointer-events-none h-16 border-b border-border/60 bg-[radial-gradient(420px_circle_at_10%_30%,color-mix(in_oklab,var(--muted)_90%,transparent),transparent_60%)]"
         />
-        <div className="-mt-8 px-5 pb-5 sm:px-6">
-          <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
-            <div className="flex min-w-0 items-end gap-3">
+        <div className="-mt-8 px-5 pb-6 sm:px-7 sm:pb-7">
+          <div className="flex flex-col gap-5 sm:flex-row sm:items-end sm:justify-between">
+            <div className="flex min-w-0 items-end gap-3.5">
               <div className="flex size-14 shrink-0 items-center justify-center rounded-xl border border-border bg-background font-mono text-sm font-semibold shadow-sm">
                 {initials(dossier.name)}
               </div>
-              <div className="min-w-0 pb-0.5">
+              <div className="min-w-0 space-y-1 pb-0.5">
                 <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">
                   Chime · Director dossier
                 </p>
                 <h1 className="truncate font-display text-2xl font-semibold tracking-tight sm:text-3xl">
                   {dossier.name}
                 </h1>
-                <p className="mt-1 text-sm text-muted-foreground">
+                <p className="text-sm text-muted-foreground">
                   {dossier.top_role
                     ? ROLE_LABEL[dossier.top_role]
                     : "Director"}{" "}
@@ -376,20 +380,20 @@ export function PersonDossierView({ dossier }: { dossier: PersonDossier }) {
                 </p>
               </div>
             </div>
-            <div className="shrink-0 rounded-lg border border-border bg-background px-4 py-3 sm:min-w-[10rem] sm:text-right">
+            <div className="shrink-0 rounded-lg border border-border bg-background px-4 py-3.5 sm:min-w-[10.5rem] sm:text-right">
               <p className="text-[10px] uppercase tracking-[0.12em] text-muted-foreground">
                 Linked influence
               </p>
-              <p className="font-mono text-2xl font-semibold tabular-nums leading-none">
+              <p className="mt-1 font-mono text-2xl font-semibold tabular-nums leading-none">
                 {formatCompactNumber(dossier.influence_score, 1)}
               </p>
-              <p className="mt-1 text-[11px] text-muted-foreground">
+              <p className="mt-1.5 text-[11px] text-muted-foreground">
                 LKR · not personal net worth
               </p>
             </div>
           </div>
 
-          <dl className="mt-4 grid grid-cols-3 gap-2 border-t border-border pt-4">
+          <dl className="mt-5 grid grid-cols-3 gap-2.5 border-t border-border pt-5">
             <KpiCell label="Companies" value={String(dossier.company_count)} />
             <KpiCell
               label="Co-directors"
@@ -448,10 +452,10 @@ export function PersonDossierView({ dossier }: { dossier: PersonDossier }) {
                 }}
                 onKeyDown={(e) => onTabKeyDown(e, i)}
                 className={cn(
-                  "relative px-3 py-2.5 text-sm transition-colors",
+                  "relative rounded-t-md px-3.5 py-2.5 text-sm transition-colors",
                   tab === t.id
-                    ? "font-medium text-foreground"
-                    : "text-muted-foreground hover:text-foreground",
+                    ? "bg-muted/45 font-semibold text-foreground"
+                    : "text-muted-foreground hover:bg-muted/25 hover:text-foreground",
                 )}
               >
                 {t.label}
@@ -524,10 +528,29 @@ export function PersonDossierView({ dossier }: { dossier: PersonDossier }) {
                       {ticker(seat.symbol)}
                     </Link>
                     <div className="min-w-0">
-                      <p className="truncate text-[13px]">
-                        {rolesSummary(seat.roles)}
-                      </p>
-                      <p className="truncate text-[11px] text-muted-foreground">
+                      <div className="flex flex-wrap items-center gap-1">
+                        {[...seat.roles]
+                          .sort(
+                            (a, b) =>
+                              (ROLE_WEIGHT[b] ?? 0) - (ROLE_WEIGHT[a] ?? 0),
+                          )
+                          .slice(0, 3)
+                          .map((r) => (
+                            <Badge
+                              key={r}
+                              variant="outline"
+                              className="px-1.5 py-0 text-[10px] font-normal"
+                            >
+                              {ROLE_LABEL[r] ?? r}
+                            </Badge>
+                          ))}
+                        {seat.roles.length > 3 ? (
+                          <span className="text-[10px] text-muted-foreground">
+                            +{seat.roles.length - 3}
+                          </span>
+                        ) : null}
+                      </div>
+                      <p className="mt-0.5 truncate text-[11px] text-muted-foreground">
                         {seat.company_name ?? "—"}
                       </p>
                       {/* Loop 5: bar-list share */}
@@ -618,13 +641,17 @@ export function PersonDossierView({ dossier }: { dossier: PersonDossier }) {
                     >
                       <Link
                         href={`/people/${p.id}`}
+                        title={p.shared_symbols.map(ticker).join(", ")}
                         className="grid grid-cols-[minmax(0,1fr)_3.5rem_5rem] items-center gap-x-3 px-4 py-2.5 transition-colors hover:bg-muted/40"
                       >
                         <span className="min-w-0">
                           <span className="block truncate text-[13px] font-medium">
                             {p.name}
                           </span>
-                          <span className="mt-0.5 block truncate text-[11px] text-muted-foreground">
+                          <span
+                            className="mt-0.5 block truncate text-[11px] text-muted-foreground"
+                            title={p.shared_symbols.map(ticker).join(", ")}
+                          >
                             {p.top_role
                               ? ROLE_LABEL[p.top_role]
                               : "Director"}{" "}
@@ -692,57 +719,47 @@ export function PersonDossierView({ dossier }: { dossier: PersonDossier }) {
                   {dossier.company_count === 1 ? "" : "s"}
                   {sector ? ` · densest in ${sector}` : ""}
                 </p>
-                <ul className="mt-2 flex flex-wrap gap-1.5">
-                  {dossier.seats.slice(0, 10).map((s) => (
-                    <li key={s.symbol}>
+                <ul className="mt-3 divide-y divide-border/60 rounded-md border border-border/70">
+                  {dossier.seats.map((s) => (
+                    <li
+                      key={`${s.symbol}-${s.roles.join("-")}`}
+                      className="flex items-center justify-between gap-3 px-3 py-2 text-[12px]"
+                    >
                       <Link
                         href={`/symbols/${encodeURIComponent(s.symbol)}`}
-                        className="inline-flex rounded border border-border px-1.5 py-0.5 font-mono text-[11px] hover:bg-muted"
+                        className="font-mono font-semibold underline-offset-2 hover:underline"
                       >
                         {ticker(s.symbol)}
                       </Link>
+                      <span className="min-w-0 truncate text-muted-foreground">
+                        {rolesSummary(s.roles)}
+                      </span>
+                      <span className="shrink-0 font-mono tabular-nums text-muted-foreground">
+                        {(s.influence_share * 100).toFixed(0)}%
+                      </span>
                     </li>
                   ))}
-                  {dossier.seats.length > 10 ? (
-                    <li className="text-[11px] text-muted-foreground">
-                      +{dossier.seats.length - 10}
-                    </li>
-                  ) : null}
                 </ul>
               </div>
             </li>
-            <li className="relative opacity-70">
+            <li className="relative">
               <span
                 aria-hidden
-                className="absolute -left-[1.3rem] top-1.5 size-2.5 rounded-full border border-border bg-muted"
+                className="absolute -left-[1.3rem] top-1.5 size-2.5 rounded-full border border-dashed border-muted-foreground/40 bg-background"
               />
-              <div className="rounded-lg border border-dashed border-border px-4 py-3">
-                <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-muted-foreground">
-                  Next syncs
-                </p>
-                <p className="mt-1 text-sm text-muted-foreground">
-                  Each{" "}
-                  <code className="font-mono text-[12px]">
+              <details className="rounded-lg border border-dashed border-border/80 px-4 py-2.5 open:pb-3">
+                <summary className="cursor-pointer text-[12px] font-medium text-muted-foreground">
+                  How history will grow
+                </summary>
+                <p className="mt-2 text-[12px] leading-relaxed text-muted-foreground">
+                  Nightly{" "}
+                  <code className="font-mono text-[11px]">
                     directors-backfill
                   </code>{" "}
-                  will append a dated seat snapshot so this trail grows forward.
+                  snapshots append dated seats. Optional annual-report extract
+                  can fill earlier years with evidence links.
                 </p>
-              </div>
-            </li>
-            <li className="relative opacity-55">
-              <span
-                aria-hidden
-                className="absolute -left-[1.3rem] top-1.5 size-2.5 rounded-full border border-border bg-muted"
-              />
-              <div className="rounded-lg border border-dashed border-border px-4 py-3">
-                <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-muted-foreground">
-                  Filing backfill (planned)
-                </p>
-                <p className="mt-1 text-sm text-muted-foreground">
-                  Annual-report board pages can reconstruct earlier years with
-                  evidence links — noisier than CSE profiles.
-                </p>
-              </div>
+              </details>
             </li>
           </ol>
         </section>

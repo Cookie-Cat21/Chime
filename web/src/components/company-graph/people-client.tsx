@@ -416,7 +416,11 @@ function PeopleFlow({
         onPaneClick={() => onSelect(null)}
       >
         <Background gap={18} size={1} color="var(--border)" />
-        <Controls showInteractive={false} position="bottom-left" />
+        <Controls
+          showInteractive={false}
+          position="bottom-left"
+          className="!scale-110"
+        />
         <FitViewOnChange nonce={layoutKey} />
       </ReactFlow>
     </div>
