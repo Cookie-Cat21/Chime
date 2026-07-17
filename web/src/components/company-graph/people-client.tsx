@@ -1,7 +1,13 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useMemo, useState } from "react";
+import {
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type MouseEvent as ReactMouseEvent,
+} from "react";
 
 import {
   Background,
@@ -19,7 +25,6 @@ import {
 import "@xyflow/react/dist/style.css";
 
 import { EmptyState } from "@/components/empty-state";
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import type { PersonNode, PersonRole } from "@/lib/api/people-graph";
 import { ROLE_WEIGHT } from "@/lib/api/people-graph";
@@ -43,6 +48,34 @@ const ROLE_LABEL: Record<string, string> = {
 
 const ROLE_SORT = (a: string, b: string) =>
   (ROLE_WEIGHT[b as PersonRole] ?? 0) - (ROLE_WEIGHT[a as PersonRole] ?? 0);
+
+const CANVAS_PEOPLE = 18;
+const CANVAS_COMPANIES = 22;
+
+function ticker(symbol: string): string {
+  return symbol.replace(/\.(N|X)0000$/i, "");
+}
+
+function shortName(name: string): string {
+  const parts = name.split(/\s+/).filter(Boolean);
+  if (parts.length <= 2) return name;
+  const last = parts[parts.length - 1];
+  const head = parts.slice(0, -1);
+  if (head.every((p) => p.length <= 2)) {
+    return `${head.slice(0, 3).join(" ")}${head.length > 3 ? "…" : ""} ${last}`;
+  }
+  return `${parts[0]} ${last}`;
+}
+
+function rolesSummary(roles: string[]): string {
+  const sorted = [...roles].sort(ROLE_SORT);
+  if (sorted.length === 0) return "—";
+  if (sorted.length === 1) return ROLE_LABEL[sorted[0]] ?? sorted[0];
+  if (sorted.length === 2) {
+    return `${ROLE_LABEL[sorted[0]] ?? sorted[0]}; ${ROLE_LABEL[sorted[1]] ?? sorted[1]}`;
+  }
+  return `${ROLE_LABEL[sorted[0]] ?? sorted[0]} +${sorted.length - 1}`;
+}
 
 function groupRolesByCompany(person: PersonNode) {
   const bySym = new Map<
@@ -71,16 +104,16 @@ function groupRolesByCompany(person: PersonNode) {
     }
   }
   return Array.from(bySym.values())
-    .map((row) => ({
-      ...row,
-      roles: [...row.roles].sort(ROLE_SORT),
-    }))
+    .map((row) => ({ ...row, roles: [...row.roles].sort(ROLE_SORT) }))
     .sort((a, b) => (b.market_cap ?? 0) - (a.market_cap ?? 0));
 }
 
-/** Initial canvas budget — denser graphs stay readable. */
-const CANVAS_PEOPLE = 18;
-const CANVAS_COMPANIES = 22;
+function initialsAvatar(name: string): string {
+  const parts = name.replace(/\./g, " ").split(/\s+/).filter(Boolean);
+  if (parts.length === 0) return "?";
+  if (parts.length === 1) return parts[0].slice(0, 2).toUpperCase();
+  return `${parts[0][0] ?? ""}${parts[parts.length - 1][0] ?? ""}`.toUpperCase();
+}
 
 type PData = {
   label: string;
@@ -99,9 +132,11 @@ function PersonPill({ data }: NodeProps<Node<PData>>) {
   return (
     <div
       className={cn(
-        "flex h-11 w-[148px] cursor-pointer flex-col justify-center rounded-md border border-border bg-card px-2.5 shadow-sm transition-opacity",
-        data.selected && "ring-2 ring-ring",
-        data.dimmed && "opacity-25",
+        "flex h-10 w-[152px] cursor-pointer flex-col justify-center rounded-md border bg-background px-2.5 transition-[transform,opacity,border-color,box-shadow] duration-150 hover:scale-[1.03] hover:border-foreground/30",
+        data.selected
+          ? "border-foreground/40 shadow-sm"
+          : "border-border",
+        data.dimmed && "opacity-20",
       )}
     >
       <Handle
@@ -112,7 +147,7 @@ function PersonPill({ data }: NodeProps<Node<PData>>) {
       <span className="truncate text-[11px] font-semibold leading-tight">
         {data.label}
       </span>
-      <span className="truncate font-mono text-[10px] text-muted-foreground">
+      <span className="truncate font-mono text-[10px] tabular-nums text-muted-foreground">
         {data.sub}
       </span>
     </div>
@@ -123,9 +158,9 @@ function CompanyPill({ data }: NodeProps<Node<CData>>) {
   return (
     <div
       className={cn(
-        "flex h-11 w-[108px] cursor-pointer flex-col justify-center rounded-md border border-border bg-muted/35 px-2.5 transition-opacity",
-        data.selected && "ring-2 ring-ring",
-        data.dimmed && "opacity-25",
+        "flex h-10 w-[100px] cursor-pointer flex-col justify-center rounded-md border bg-muted/30 px-2 transition-[transform,opacity,border-color] duration-150 hover:scale-[1.03]",
+        data.selected ? "border-foreground/40 bg-background" : "border-border",
+        data.dimmed && "opacity-20",
       )}
     >
       <Handle
@@ -134,7 +169,7 @@ function CompanyPill({ data }: NodeProps<Node<CData>>) {
         className="!size-1.5 !bg-border"
       />
       <span className="font-mono text-[11px] font-semibold">{data.label}</span>
-      <span className="font-mono text-[10px] text-muted-foreground">
+      <span className="font-mono text-[10px] tabular-nums text-muted-foreground">
         {data.sub}
       </span>
     </div>
@@ -143,23 +178,6 @@ function CompanyPill({ data }: NodeProps<Node<CData>>) {
 
 const nodeTypes = { person: PersonPill, company: CompanyPill };
 
-function shortName(name: string): string {
-  const parts = name.split(/\s+/).filter(Boolean);
-  if (parts.length <= 2) return name;
-  // Prefer "K. A. D. D. Perera" → keep first initials + surname
-  const last = parts[parts.length - 1];
-  const head = parts.slice(0, -1);
-  if (head.every((p) => p.length <= 2)) {
-    return `${head.slice(0, 3).join(" ")}${head.length > 3 ? "…" : ""} ${last}`;
-  }
-  return `${parts[0]} ${last}`;
-}
-
-function ticker(symbol: string): string {
-  return symbol.replace(/\.(N|X)0000$/i, "");
-}
-
-/** Barycenter ordering to cut bipartite edge crossings. */
 function orderBipartite(
   peopleIds: number[],
   companyIds: string[],
@@ -200,7 +218,7 @@ function FitViewOnChange({ nonce }: { nonce: string }) {
   const { fitView } = useReactFlow();
   useEffect(() => {
     const t = window.setTimeout(() => {
-      void fitView({ padding: 0.18, duration: 220 });
+      void fitView({ padding: 0.2, duration: 200 });
     }, 40);
     return () => window.clearTimeout(t);
   }, [fitView, nonce]);
@@ -219,7 +237,6 @@ function PeopleFlow({
   searching: boolean;
 }) {
   const { nodes, edges, layoutKey } = useMemo(() => {
-    // When searching, show matches; otherwise top influencers only.
     const ranked = [...people].sort(
       (a, b) => b.influence_score - a.influence_score,
     );
@@ -230,13 +247,10 @@ function PeopleFlow({
 
     const companyMeta = new Map<
       string,
-      { mcap: number | null; name: string | null; degree: number }
+      { mcap: number | null; degree: number }
     >();
-    const links: Array<{
-      personId: number;
-      symbol: string;
-      role: string;
-    }> = [];
+    const links: Array<{ personId: number; symbol: string; role: string }> =
+      [];
     for (const p of visiblePeople) {
       const seen = new Set<string>();
       for (const r of p.roles) {
@@ -246,13 +260,11 @@ function PeopleFlow({
         const prev = companyMeta.get(r.symbol);
         companyMeta.set(r.symbol, {
           mcap: Math.max(prev?.mcap ?? 0, r.market_cap ?? 0) || r.market_cap,
-          name: r.company_name ?? prev?.name ?? null,
           degree: (prev?.degree ?? 0) + 1,
         });
       }
     }
 
-    // Prefer companies that connect multiple visible people, then by mcap
     const companyIds = Array.from(companyMeta.entries())
       .sort((a, b) => {
         if (b[1].degree !== a[1].degree) return b[1].degree - a[1].degree;
@@ -262,7 +274,6 @@ function PeopleFlow({
       .map(([sym]) => sym);
     const companySet = new Set(companyIds);
     const visibleLinks = links.filter((l) => companySet.has(l.symbol));
-
     const ordered = orderBipartite(
       visiblePeople.map((p) => p.id),
       companyIds,
@@ -278,47 +289,39 @@ function PeopleFlow({
     }
     const focusActive = selectedId != null;
 
-    const personYGap = 56;
-    const companyYGap = 52;
-    const leftX = 24;
-    const rightX = 360;
-
     const flowNodes: Node[] = [];
     ordered.people.forEach((id, i) => {
       const p = byId.get(id);
       if (!p) return;
-      const dimmed = focusActive && id !== selectedId;
       flowNodes.push({
         id: `p-${id}`,
         type: "person",
-        position: { x: leftX, y: 16 + i * personYGap },
+        position: { x: 20, y: 12 + i * 52 },
         data: {
           label: shortName(p.name),
           sub: formatCompactNumber(p.influence_score, 1),
           selected: id === selectedId,
-          dimmed,
+          dimmed: focusActive && id !== selectedId,
         },
         zIndex: id === selectedId ? 4 : 1,
       });
     });
     ordered.companies.forEach((sym, i) => {
       const meta = companyMeta.get(sym);
-      const dimmed = focusActive && !selectedCompanies.has(sym);
       flowNodes.push({
         id: `c-${sym}`,
         type: "company",
-        position: { x: rightX, y: 16 + i * companyYGap },
+        position: { x: 340, y: 12 + i * 48 },
         data: {
           label: ticker(sym),
           sub: formatCompactNumber(meta?.mcap ?? null, 1),
           selected: selectedCompanies.has(sym),
-          dimmed,
+          dimmed: focusActive && !selectedCompanies.has(sym),
         },
         zIndex: selectedCompanies.has(sym) ? 3 : 1,
       });
     });
 
-    // One edge per person→company; label only when that person is selected
     const flowEdges: Edge[] = [];
     const edgeSeen = new Set<string>();
     for (const l of visibleLinks) {
@@ -327,7 +330,6 @@ function PeopleFlow({
       edgeSeen.add(key);
       const focused = selectedId != null && l.personId === selectedId;
       const faded = focusActive && !focused;
-      // Best role label for this seat (highest weight already in person.roles order)
       const person = byId.get(l.personId);
       const role =
         person?.roles.find((r) => r.symbol === l.symbol)?.role ?? l.role;
@@ -340,27 +342,20 @@ function PeopleFlow({
         animated: focused,
         style: {
           stroke: focused ? "var(--chart-1)" : "var(--border)",
-          strokeWidth: focused ? 2.2 : 1,
-          opacity: faded ? 0.08 : focused ? 0.95 : 0.35,
+          strokeWidth: focused ? 2 : 1,
+          opacity: faded ? 0.06 : focused ? 0.95 : 0.28,
         },
         markerEnd: focused
           ? {
               type: MarkerType.ArrowClosed,
-              width: 14,
-              height: 14,
+              width: 12,
+              height: 12,
               color: "var(--chart-1)",
             }
           : undefined,
-        labelStyle: {
-          fontSize: 10,
-          fill: "var(--foreground)",
-          fontWeight: 600,
-        },
-        labelBgStyle: {
-          fill: "var(--background)",
-          fillOpacity: 0.92,
-        },
-        labelBgPadding: [4, 6] as [number, number],
+        labelStyle: { fontSize: 10, fill: "var(--foreground)", fontWeight: 600 },
+        labelBgStyle: { fill: "var(--background)", fillOpacity: 0.95 },
+        labelBgPadding: [3, 5] as [number, number],
         zIndex: focused ? 5 : 0,
       });
     }
@@ -368,42 +363,42 @@ function PeopleFlow({
     return {
       nodes: flowNodes,
       edges: flowEdges,
-      layoutKey: `${ordered.people.join(",")}|${ordered.companies.join(",")}|${selectedId ?? "x"}|${searching}`,
+      layoutKey: `${ordered.people.join(",")}|${selectedId ?? "x"}|${searching}`,
     };
   }, [people, selectedId, searching]);
 
   if (people.length === 0) {
     return (
-      <div className="flex h-[min(70vh,560px)] items-center justify-center rounded-xl border border-border text-sm text-muted-foreground">
+      <div className="flex h-full min-h-[420px] items-center justify-center rounded-xl border border-dashed border-border text-sm text-muted-foreground">
         No people match this filter.
       </div>
     );
   }
 
   return (
-    <div className="relative h-[min(72vh,640px)] w-full overflow-hidden rounded-xl border border-border bg-background/60">
-      <div className="pointer-events-none absolute left-3 top-3 z-10 rounded-md border border-border/80 bg-background/90 px-2 py-1 text-[10px] text-muted-foreground backdrop-blur">
-        People → companies · click a person to highlight seats
-        {!searching ? ` · showing top ${Math.min(people.length, CANVAS_PEOPLE)}` : null}
-      </div>
+    <div className="relative h-full min-h-[420px] w-full overflow-hidden rounded-xl border border-border bg-background">
+      <p className="pointer-events-none absolute left-3 top-3 z-10 text-[10px] text-muted-foreground">
+        Click a person to inspect seats
+        {!searching
+          ? ` · top ${Math.min(people.length, CANVAS_PEOPLE)} on canvas`
+          : null}
+      </p>
       <ReactFlow
         nodes={nodes}
         edges={edges}
         nodeTypes={nodeTypes}
         fitView
-        fitViewOptions={{ padding: 0.18 }}
+        fitViewOptions={{ padding: 0.2 }}
         minZoom={0.35}
         maxZoom={1.6}
         proOptions={{ hideAttribution: true }}
         nodesDraggable
         nodesConnectable={false}
-        elementsSelectable
         onNodeClick={(_, node) => {
           if (node.id.startsWith("p-")) {
             const id = Number(node.id.slice(2));
             onSelect(Number.isFinite(id) ? id : null);
           } else if (node.id.startsWith("c-")) {
-            // Selecting a company: pick its strongest linked person if any
             const sym = node.id.slice(2);
             const linked = people
               .filter((p) => p.roles.some((r) => r.symbol === sym))
@@ -413,10 +408,183 @@ function PeopleFlow({
         }}
         onPaneClick={() => onSelect(null)}
       >
-        <Background gap={20} size={1} color="var(--border)" />
-        <Controls showInteractive={false} />
+        <Background gap={18} size={1} color="var(--border)" />
+        <Controls showInteractive={false} position="bottom-left" />
         <FitViewOnChange nonce={layoutKey} />
       </ReactFlow>
+    </div>
+  );
+}
+
+function RankRow({
+  person,
+  rank,
+  maxScore,
+  selected,
+  onSelect,
+}: {
+  person: PersonNode;
+  rank: number;
+  maxScore: number;
+  selected: boolean;
+  onSelect: () => void;
+}) {
+  const pct = maxScore > 0 ? (person.influence_score / maxScore) * 100 : 0;
+  const topLabel = person.top_role
+    ? ROLE_LABEL[person.top_role] ?? person.top_role
+    : "—";
+  return (
+    <li>
+      <button
+        type="button"
+        data-person-id={person.id}
+        title={person.name}
+        onClick={onSelect}
+        className={cn(
+          "group relative w-full rounded-md px-2 py-2 text-left transition-colors duration-150",
+          selected ? "bg-muted" : "hover:bg-muted/60",
+        )}
+      >
+        <span
+          aria-hidden
+          className={cn(
+            "absolute inset-y-1.5 left-0 w-0.5 rounded-full bg-foreground transition-opacity",
+            selected ? "opacity-100" : "opacity-0 group-hover:opacity-40",
+          )}
+        />
+        <div className="grid grid-cols-[1.5rem_minmax(0,1fr)_auto] items-baseline gap-x-2 pl-1">
+          <span className="font-mono text-[11px] tabular-nums text-muted-foreground">
+            {rank}
+          </span>
+          <span className="min-w-0">
+            <span className="block truncate text-[13px] font-medium leading-tight">
+              {person.name}
+            </span>
+            <span className="mt-0.5 block truncate text-[10px] text-muted-foreground">
+              {topLabel} · {person.company_count} co
+              {person.company_count === 1 ? "" : "s"}
+            </span>
+          </span>
+          <span className="shrink-0 font-mono text-xs tabular-nums">
+            {formatCompactNumber(person.influence_score, 1)}
+          </span>
+        </div>
+        <div className="mt-1.5 ml-7 h-1 overflow-hidden rounded-sm bg-muted">
+          <div
+            className="h-full rounded-sm bg-foreground/70 transition-[width] duration-300"
+            style={{ width: `${Math.max(pct, 2)}%` }}
+          />
+        </div>
+      </button>
+    </li>
+  );
+}
+
+function PersonInspector({ person }: { person: PersonNode }) {
+  const seats = groupRolesByCompany(person);
+  const panelRef = useRef<HTMLDivElement>(null);
+  const [spot, setSpot] = useState({ x: 40, y: 30 });
+
+  function onMove(e: ReactMouseEvent<HTMLDivElement>) {
+    const el = panelRef.current;
+    if (!el) return;
+    const rect = el.getBoundingClientRect();
+    setSpot({
+      x: ((e.clientX - rect.left) / Math.max(rect.width, 1)) * 100,
+      y: ((e.clientY - rect.top) / Math.max(rect.height, 1)) * 100,
+    });
+  }
+
+  return (
+    <div className="flex min-h-0 flex-1 flex-col border-t border-border bg-background animate-in fade-in-0 slide-in-from-bottom-1 duration-150">
+      <div
+        ref={panelRef}
+        onMouseMove={onMove}
+        className="relative overflow-hidden border-b border-border px-4 py-3"
+        style={{
+          backgroundImage: `radial-gradient(420px circle at ${spot.x}% ${spot.y}%, color-mix(in oklab, var(--muted) 80%, transparent), transparent 55%)`,
+        }}
+      >
+        <div className="relative flex items-start gap-3">
+          <div
+            aria-hidden
+            className="flex size-9 shrink-0 items-center justify-center rounded-md border border-border bg-background font-mono text-[11px] font-semibold"
+          >
+            {initialsAvatar(person.name)}
+          </div>
+          <div className="min-w-0 flex-1">
+            <h2
+              className="truncate font-display text-[15px] font-semibold leading-snug"
+              title={person.name}
+            >
+              {person.name}
+            </h2>
+            <p className="text-[11px] text-muted-foreground">
+              {person.top_role ? ROLE_LABEL[person.top_role] : "—"} ·{" "}
+              {person.company_count} compan
+              {person.company_count === 1 ? "y" : "ies"}
+            </p>
+          </div>
+          <div className="shrink-0 text-right">
+            <p className="text-[10px] uppercase tracking-[0.12em] text-muted-foreground">
+              Influence
+            </p>
+            <p className="font-mono text-lg font-semibold tabular-nums leading-none">
+              {formatCompactNumber(person.influence_score, 1)}
+            </p>
+          </div>
+        </div>
+      </div>
+
+      <div className="min-h-0 flex-1 overflow-y-auto">
+        <div className="sticky top-0 z-[1] grid grid-cols-[3.5rem_minmax(0,1fr)_3.5rem] gap-x-2 border-b border-border bg-background/95 px-4 py-1.5 text-[10px] font-semibold uppercase tracking-[0.12em] text-muted-foreground backdrop-blur">
+          <span>Ticker</span>
+          <span>Roles</span>
+          <span className="text-right">Mcap</span>
+        </div>
+        {seats.length === 0 ? (
+          <p className="px-4 py-6 text-center text-[12px] text-muted-foreground">
+            No linked companies in this filter.
+          </p>
+        ) : (
+          <ul className="divide-y divide-border/70">
+            {seats.map((row, i) => (
+              <li
+                key={row.symbol}
+                className="grid grid-cols-[3.5rem_minmax(0,1fr)_3.5rem] items-center gap-x-2 px-4 py-2 transition-opacity duration-200"
+                style={{
+                  animationDelay: `${Math.min(i, 8) * 35}ms`,
+                }}
+              >
+                <Link
+                  href={`/symbols/${encodeURIComponent(row.symbol)}`}
+                  className="font-mono text-[12px] font-semibold underline-offset-2 hover:underline"
+                  title={row.company_name ?? row.symbol}
+                >
+                  {ticker(row.symbol)}
+                </Link>
+                <span
+                  className="truncate text-[11px] text-muted-foreground"
+                  title={row.roles
+                    .map((r) => ROLE_LABEL[r] ?? r)
+                    .join("; ")}
+                >
+                  {rolesSummary(row.roles)}
+                </span>
+                <span className="text-right font-mono text-[11px] tabular-nums text-muted-foreground">
+                  {formatCompactNumber(row.market_cap, 1)}
+                </span>
+              </li>
+            ))}
+          </ul>
+        )}
+      </div>
+
+      <div className="border-t border-border p-3">
+        <Button asChild variant="outline" size="sm" className="w-full">
+          <Link href="/graph">Company ownership map</Link>
+        </Button>
+      </div>
     </div>
   );
 }
@@ -425,9 +593,9 @@ export function PeopleGraphClient({ people }: { people: PersonNode[] }) {
   const [selectedId, setSelectedId] = useState<number | null>(
     people[0]?.id ?? null,
   );
-  // Default leadership-only so the first paint is chairs/CEOs/MDs, not every NED
   const [leadershipOnly, setLeadershipOnly] = useState(true);
   const [query, setQuery] = useState("");
+  const listRef = useRef<HTMLOListElement>(null);
 
   const filtered = useMemo(() => {
     const lead = new Set([
@@ -451,13 +619,27 @@ export function PeopleGraphClient({ people }: { people: PersonNode[] }) {
     });
   }, [people, leadershipOnly, query]);
 
-  // Keep selection valid when filters change
+  const ranked = useMemo(
+    () =>
+      [...filtered].sort((a, b) => b.influence_score - a.influence_score),
+    [filtered],
+  );
+  const maxScore = ranked[0]?.influence_score ?? 1;
+
   useEffect(() => {
     if (selectedId != null && filtered.some((p) => p.id === selectedId)) return;
     setSelectedId(filtered[0]?.id ?? null);
   }, [filtered, selectedId]);
 
-  const selected = filtered.find((p) => p.id === selectedId) ?? null;
+  useEffect(() => {
+    if (selectedId == null || !listRef.current) return;
+    const el = listRef.current.querySelector(
+      `[data-person-id="${selectedId}"]`,
+    );
+    el?.scrollIntoView({ block: "nearest" });
+  }, [selectedId]);
+
+  const selected = ranked.find((p) => p.id === selectedId) ?? null;
   const searching = query.trim().length > 0;
 
   if (people.length === 0) {
@@ -470,164 +652,91 @@ export function PeopleGraphClient({ people }: { people: PersonNode[] }) {
   }
 
   return (
-    <div className="space-y-4">
-      <div className="flex flex-wrap items-center gap-3">
+    <div className="space-y-3">
+      <div className="flex flex-wrap items-center gap-2">
         <input
           type="search"
           value={query}
           onChange={(e) => setQuery(e.target.value)}
           placeholder="Search people or symbols…"
-          className="h-9 w-full max-w-xs rounded-md border border-border bg-background px-3 text-sm outline-none ring-offset-background placeholder:text-muted-foreground focus-visible:ring-2 focus-visible:ring-ring"
+          className="h-9 w-full max-w-[16rem] rounded-md border border-border bg-background px-3 text-sm outline-none placeholder:text-muted-foreground focus-visible:ring-2 focus-visible:ring-ring"
           aria-label="Search people or symbols"
         />
-        <label className="flex items-center gap-2 text-sm text-muted-foreground">
+        <label className="inline-flex h-9 cursor-pointer items-center gap-2 rounded-md border border-border bg-background px-3 text-[12px] text-muted-foreground">
           <input
             type="checkbox"
             checked={leadershipOnly}
             onChange={(e) => setLeadershipOnly(e.target.checked)}
-            className="size-4 rounded border-border"
+            className="size-3.5 rounded border-border"
           />
-          Leadership seats only
+          Leadership only
         </label>
-        <Badge variant="outline" className="tabular-nums">
+        <span className="font-mono text-[11px] tabular-nums text-muted-foreground">
           {filtered.length} people
-        </Badge>
-        <p className="text-xs text-muted-foreground">
-          Canvas shows top influencers; full list is in the ranking. Bubble
-          values are linked company market value × role — not personal net
-          worth.
-        </p>
+        </span>
       </div>
 
-      <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_340px]">
-        <ReactFlowProvider>
-          <PeopleFlow
-            people={filtered}
-            selectedId={selected?.id ?? null}
-            onSelect={setSelectedId}
-            searching={searching}
-          />
-        </ReactFlowProvider>
+      <div className="grid gap-3 lg:grid-cols-[minmax(0,1fr)_360px] lg:items-stretch">
+        <div className="min-h-[min(72vh,640px)]">
+          <ReactFlowProvider>
+            <PeopleFlow
+              people={ranked}
+              selectedId={selected?.id ?? null}
+              onSelect={setSelectedId}
+              searching={searching}
+            />
+          </ReactFlowProvider>
+        </div>
 
-        <aside className="flex min-h-[min(72vh,640px)] flex-col overflow-hidden rounded-xl border border-border bg-card/40">
+        <aside className="flex min-h-[min(72vh,640px)] flex-col overflow-hidden rounded-xl border border-border bg-background">
           <div className="border-b border-border px-4 py-3">
             <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">
               Influence ranking
             </p>
             <p className="mt-0.5 text-[11px] leading-snug text-muted-foreground">
-              Board seats × company market cap (LKR). Not personal net worth.
+              Σ (market cap × role weight). Research proxy — not personal net
+              worth.
             </p>
           </div>
 
-          <ol className="max-h-[42%] min-h-0 flex-1 space-y-0.5 overflow-y-auto px-2 py-2">
-            {filtered.slice(0, 80).map((p, i) => {
-              const topLabel = p.top_role
-                ? ROLE_LABEL[p.top_role] ?? p.top_role
-                : null;
-              return (
-                <li key={p.id}>
-                  <button
-                    type="button"
-                    title={p.name}
-                    className={cn(
-                      "grid w-full grid-cols-[1.5rem_minmax(0,1fr)_auto] items-center gap-x-2 rounded-md px-2 py-1.5 text-left transition-colors hover:bg-muted/80",
-                      selected?.id === p.id && "bg-muted",
-                    )}
-                    onClick={() => setSelectedId(p.id)}
-                  >
-                    <span className="font-mono text-[11px] tabular-nums text-muted-foreground">
-                      {i + 1}
-                    </span>
-                    <span className="min-w-0">
-                      <span className="block truncate text-[13px] font-medium leading-tight">
-                        {p.name}
-                      </span>
-                      <span className="block truncate text-[10px] text-muted-foreground">
-                        {topLabel ?? "—"} · {p.company_count} co
-                        {p.company_count === 1 ? "" : "s"}
-                      </span>
-                    </span>
-                    <span className="shrink-0 font-mono text-xs tabular-nums text-foreground">
-                      {formatCompactNumber(p.influence_score, 1)}
-                    </span>
-                  </button>
-                </li>
-              );
-            })}
-          </ol>
+          {ranked.length === 0 ? (
+            <div className="flex flex-1 flex-col items-center justify-center gap-2 px-4 py-10 text-center">
+              <p className="text-sm text-muted-foreground">No matches</p>
+              {query ? (
+                <button
+                  type="button"
+                  className="text-[12px] text-foreground underline-offset-2 hover:underline"
+                  onClick={() => setQuery("")}
+                >
+                  Clear search
+                </button>
+              ) : null}
+            </div>
+          ) : (
+            <ol
+              ref={listRef}
+              className="max-h-[46%] min-h-0 space-y-0.5 overflow-y-auto px-1.5 py-1.5"
+            >
+              {ranked.slice(0, 80).map((p, i) => (
+                <RankRow
+                  key={p.id}
+                  person={p}
+                  rank={i + 1}
+                  maxScore={maxScore}
+                  selected={selected?.id === p.id}
+                  onSelect={() => setSelectedId(p.id)}
+                />
+              ))}
+            </ol>
+          )}
 
           {selected ? (
-            <div className="flex min-h-0 flex-[1.15] flex-col border-t border-border bg-background/50">
-              <div className="space-y-2 px-4 py-3">
-                <div className="flex items-start justify-between gap-2">
-                  <div className="min-w-0">
-                    <h2
-                      className="truncate font-display text-[15px] font-semibold leading-snug"
-                      title={selected.name}
-                    >
-                      {selected.name}
-                    </h2>
-                    <p className="text-[11px] text-muted-foreground">
-                      {selected.top_role
-                        ? ROLE_LABEL[selected.top_role]
-                        : "—"}{" "}
-                      · {selected.company_count} compan
-                      {selected.company_count === 1 ? "y" : "ies"}
-                    </p>
-                  </div>
-                  <div className="shrink-0 text-right">
-                    <p className="text-[10px] uppercase tracking-wide text-muted-foreground">
-                      Influence
-                    </p>
-                    <p className="font-mono text-base font-semibold tabular-nums leading-none">
-                      {formatCompactNumber(selected.influence_score, 1)}
-                    </p>
-                  </div>
-                </div>
-              </div>
-
-              <div className="min-h-0 flex-1 overflow-y-auto px-2 pb-2">
-                <p className="px-2 pb-1.5 text-[10px] font-semibold uppercase tracking-[0.12em] text-muted-foreground">
-                  Seats
-                </p>
-                <ul className="space-y-1">
-                  {groupRolesByCompany(selected).map((row) => (
-                    <li
-                      key={row.symbol}
-                      className="grid grid-cols-[3.25rem_minmax(0,1fr)_auto] items-center gap-x-2 rounded-md px-2 py-1.5 hover:bg-muted/60"
-                    >
-                      <Link
-                        href={`/symbols/${encodeURIComponent(row.symbol)}`}
-                        className="font-mono text-[12px] font-semibold underline-offset-2 hover:underline"
-                        title={row.company_name ?? row.symbol}
-                      >
-                        {ticker(row.symbol)}
-                      </Link>
-                      <div className="flex min-w-0 flex-wrap gap-1">
-                        {row.roles.map((role) => (
-                          <span
-                            key={role}
-                            className="rounded border border-border/80 bg-background px-1.5 py-0.5 text-[10px] text-muted-foreground"
-                          >
-                            {ROLE_LABEL[role] ?? role}
-                          </span>
-                        ))}
-                      </div>
-                      <span className="shrink-0 font-mono text-[11px] tabular-nums text-muted-foreground">
-                        {formatCompactNumber(row.market_cap, 1)}
-                      </span>
-                    </li>
-                  ))}
-                </ul>
-              </div>
-
-              <div className="border-t border-border p-3">
-                <Button asChild variant="secondary" size="sm" className="w-full">
-                  <Link href="/graph">Company ownership map</Link>
-                </Button>
-              </div>
+            <PersonInspector person={selected} />
+          ) : (
+            <div className="flex flex-1 items-center justify-center border-t border-dashed border-border px-4 py-8 text-center text-[12px] text-muted-foreground">
+              Select a person to inspect seats
             </div>
-          ) : null}
+          )}
         </aside>
       </div>
     </div>

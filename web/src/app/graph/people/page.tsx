@@ -45,7 +45,7 @@ export default async function PeopleGraphPage() {
         <PageHeader
           eyebrow="Research"
           title="People map"
-          description="Board lists from official CSE company profiles (cse.lk). Bubble size reflects linked company market value × role — not anyone’s personal net worth."
+          description="Official CSE boards. Ranked by linked company market value × role — not personal net worth."
           action={
             <div className="flex flex-wrap gap-2">
               <Button asChild variant="outline" size="sm">
