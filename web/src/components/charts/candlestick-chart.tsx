@@ -1,5 +1,7 @@
 "use client";
 
+import { useEffect, useRef, useState } from "react";
+
 import {
   aggregateBarsForDisplay,
   candleBodyOpen,
@@ -21,7 +23,8 @@ function barTooltip(b: DailyBarPoint, bodyOpen: number): string {
 
 /**
  * Readable SVG candlestick chart.
- * Uses a fixed slot width so dense series stay thick (not a barcode).
+ * ``fitWidth`` sizes slots from the container (ResizeObserver) so the plot
+ * fills width without scroll and without non-uniform stretch.
  * Dense inputs are aggregated. Missing open → vs prior close.
  */
 export function CandlestickChart({
@@ -32,7 +35,7 @@ export function CandlestickChart({
   fill = false,
   /** Fit chart to container width (no horizontal scrollbar). Hero/symbol page. */
   fitWidth = false,
-  /** SVG render height in px (viewBox height scales with this for scroll mode). */
+  /** SVG render height in px when not filling a flex parent. */
   chartHeight,
   footnote,
   maxCandles = 72,
@@ -47,6 +50,35 @@ export function CandlestickChart({
   footnote?: string;
   maxCandles?: number;
 }) {
+  const frameRef = useRef<HTMLDivElement | null>(null);
+  const [frame, setFrame] = useState({ w: 720, h: chartHeight ?? 280 });
+
+  useEffect(() => {
+    if (!fitWidth) return;
+    const el = frameRef.current;
+    if (!el) return;
+    const apply = (width: number, height: number) => {
+      if (width < 2) return;
+      const nextH = fill
+        ? Math.max(160, Math.floor(height))
+        : (chartHeight ?? 280);
+      setFrame((prev) => {
+        const w = Math.floor(width);
+        const h = nextH;
+        if (prev.w === w && prev.h === h) return prev;
+        return { w, h };
+      });
+    };
+    apply(el.clientWidth, el.clientHeight);
+    const ro = new ResizeObserver((entries) => {
+      const cr = entries[0]?.contentRect;
+      if (!cr) return;
+      apply(cr.width, cr.height);
+    });
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, [fitWidth, fill, chartHeight]);
+
   const priceMax = Math.max(...rawBars.map((b) => b.close), 0);
   // Scroll mode may keep a dense 1Y series; fit-width always respects
   // maxCandles so the plot can scale into the container without overflow.
@@ -79,21 +111,6 @@ export function CandlestickChart({
   const padR = 56;
   const padT = fitWidth ? 18 : 20;
   const padB = fitWidth ? 36 : 40;
-  // Fit-width: keep pitch in a readable band so sparse 1M (~22 bars) isn't
-  // giant spaced sticks, and dense 1Y still fills the dialog.
-  const slot = fitWidth
-    ? bars.length > 160
-      ? 9
-      : bars.length > 100
-        ? 11
-        : bars.length > 50
-          ? 14
-          : bars.length > 30
-            ? 16
-            : 14
-    : 18;
-  const bodyW = Math.max(5, Math.round(slot * 0.68));
-  const wickW = fitWidth ? Math.max(1.5, Math.min(2.5, slot * 0.12)) : 2;
 
   const fc =
     showForecast && forecastPrices
@@ -101,12 +118,24 @@ export function CandlestickChart({
       : [];
 
   const n = bars.length;
-  const totalSlots = n + (fc.length > 0 ? fc.length : 0);
+  const totalSlots = Math.max(1, n + (fc.length > 0 ? fc.length : 0));
+
+  // Fit-width: viewBox == container pixels → no stretch. Slot from width.
+  // Scroll mode: fixed pitch (may overflow-x).
+  const h = fitWidth ? frame.h : 520;
+  const slot = fitWidth
+    ? Math.max(4, (Math.max(frame.w, padL + padR + 40) - padL - padR) / totalSlots)
+    : 18;
+  const bodyW = fitWidth
+    ? Math.max(3, Math.min(slot * 0.72, slot - 1.5))
+    : 13;
+  const wickW = fitWidth ? Math.max(1, Math.min(2.25, slot * 0.14)) : 2;
   const plotW = totalSlots * slot;
-  const w = padL + padR + plotW;
-  const h = chartHeight ?? (fitWidth ? (fill ? 560 : 300) : 520);
-  const plotH = h - padT - padB;
-  const displayH = chartHeight ?? (fitWidth ? (fill ? undefined : 280) : 460);
+  const w = fitWidth
+    ? Math.max(padL + padR + 40, frame.w)
+    : padL + padR + plotW;
+  const plotH = Math.max(40, h - padT - padB);
+  const displayH = chartHeight ?? 280;
 
   let barMin = Infinity;
   let barMax = -Infinity;
@@ -174,33 +203,31 @@ export function CandlestickChart({
       )}
     >
       <div
-        className={cn(
-          "relative w-full overflow-hidden rounded-xl border border-border/50 bg-gradient-to-b from-muted/25 to-muted/10",
-          // Never horizontal-scroll when fitting; scroll mode is opt-in only.
-          fitWidth ? "overflow-x-hidden" : "overflow-x-auto overflow-y-hidden",
-          fill ? "min-h-0 flex-1" : "",
-        )}
         ref={(el) => {
-          // Pin scroll to most recent candles after layout (scroll mode only).
+          frameRef.current = el;
+          // Pin scroll to most recent candles (scroll mode only).
           if (!el || fitWidth) return;
           requestAnimationFrame(() => {
             el.scrollLeft = Math.max(0, el.scrollWidth - el.clientWidth);
           });
         }}
+        className={cn(
+          "relative w-full overflow-hidden rounded-xl border border-border/50 bg-gradient-to-b from-muted/25 to-muted/10",
+          fitWidth ? "overflow-x-hidden" : "overflow-x-auto overflow-y-hidden",
+          fill ? "min-h-0 flex-1" : "",
+        )}
+        style={fitWidth && !fill ? { height: displayH } : undefined}
       >
         <svg
           viewBox={`0 0 ${w} ${h}`}
-          preserveAspectRatio={
-            fitWidth && fill ? "none" : fitWidth ? "xMidYMid meet" : "xMinYMid meet"
-          }
+          // Fit-width: viewBox matches measured frame pixels → none ≠ stretch.
+          preserveAspectRatio={fitWidth ? "none" : "xMinYMid meet"}
           style={
             fitWidth
-              ? fill
-                ? { width: "100%", height: "100%", display: "block" }
-                : { width: "100%", height: displayH, display: "block" }
+              ? { width: "100%", height: "100%", display: "block" }
               : {
                   width: w,
-                  height: displayH ?? 460,
+                  height: 460,
                   maxWidth: "none",
                   display: "block",
                 }
