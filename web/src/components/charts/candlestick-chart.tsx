@@ -144,13 +144,13 @@ export function CandlestickChart({
   const contentW = padL + padR + usedPlot;
   const drawPadL = padL;
   const drawPadR = padR;
-  // Wider slots → thicker bodies so 1M fills without looking like sparse ticks.
-  const bodyRatio = pack ? 0.82 : fitWidth ? 0.78 : 0.72;
+  // Wider slots → thicker bodies so ranges fill without looking like sparse ticks.
+  const bodyRatio = pack ? 0.82 : fitWidth ? 0.84 : 0.72;
   const bodyW = pack || fitWidth
-    ? Math.max(4, Math.min(slot * bodyRatio, slot - 1))
+    ? Math.max(3.5, Math.min(slot * bodyRatio, slot - 0.75))
     : 13;
   const wickW = pack || fitWidth
-    ? Math.max(1.25, Math.min(3, slot * 0.14))
+    ? Math.max(1.25, Math.min(2.75, slot * 0.16))
     : 2;
   const w = pack ? contentW : fitWidth ? frameW : contentW;
   const plotH = Math.max(40, h - padT - padB);

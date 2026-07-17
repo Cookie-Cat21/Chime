@@ -369,7 +369,7 @@ export function ExpandablePriceChart({
   return (
     <div className={className ?? "relative w-full"}>
       <div className="relative">
-        <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
+        <div className="mb-1.5 flex flex-wrap items-center justify-between gap-2">
           <p className="text-xs font-medium tracking-wide text-muted-foreground uppercase">
             Price chart
             {heroFrom && heroTo ? (
