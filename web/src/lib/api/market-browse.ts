@@ -57,14 +57,14 @@ function orderClause(sort: MarketBrowseSort): string {
   return "ps.change_pct DESC NULLS LAST, s.symbol ASC";
 }
 
-/**
- * Latest snapshot per stock (INNER JOIN). Optional `q` substring on symbol/name.
- * Optional `direction` sign filter for thin movers (not a screener).
- */
-export async function queryMarketBrowse(
-  pool: Pool,
-  opts: MarketBrowseQuery,
-): Promise<MarketBrowseRow[]> {
+type BrowseFilter = Pick<MarketBrowseQuery, "q" | "direction">;
+
+/** Shared FROM + WHERE for list + count (latest snapshot INNER JOIN). */
+function browseFromWhere(opts: BrowseFilter): {
+  fromSql: string;
+  whereSql: string;
+  params: unknown[];
+} {
   const params: unknown[] = [];
   const whereParts: string[] = [];
   // Fail closed — non-string q used to throw on .trim mid browse (parity
@@ -82,13 +82,50 @@ export async function queryMarketBrowse(
     whereParts.push("ps.change_pct < 0");
   }
 
+  const fromSql = `FROM stocks s
+     INNER JOIN LATERAL (
+       SELECT price, change, change_pct, ts
+       FROM price_snapshots
+       WHERE symbol = s.symbol
+       ORDER BY ts DESC, id DESC
+       LIMIT 1
+     ) ps ON TRUE`;
+  const whereSql =
+    whereParts.length > 0 ? `WHERE ${whereParts.join(" AND ")}` : "";
+  return { fromSql, whereSql, params };
+}
+
+/**
+ * Count stocks with a latest snapshot matching the same filters as browse.
+ */
+export async function countMarketBrowse(
+  pool: Pool,
+  opts: BrowseFilter,
+): Promise<number> {
+  const { fromSql, whereSql, params } = browseFromWhere(opts);
+  const result = await pool.query<{ n: string | number }>(
+    `SELECT COUNT(*)::int AS n ${fromSql} ${whereSql}`,
+    params,
+  );
+  const raw = result.rows[0]?.n;
+  const n = typeof raw === "number" ? raw : Number.parseInt(String(raw ?? "0"), 10);
+  return Number.isFinite(n) && n >= 0 ? n : 0;
+}
+
+/**
+ * Latest snapshot per stock (INNER JOIN). Optional `q` substring on symbol/name.
+ * Optional `direction` sign filter for thin movers (not a screener).
+ */
+export async function queryMarketBrowse(
+  pool: Pool,
+  opts: MarketBrowseQuery,
+): Promise<MarketBrowseRow[]> {
+  const { fromSql, whereSql, params } = browseFromWhere(opts);
+
   params.push(opts.limit);
   const limitIdx = params.length;
   params.push(opts.offset);
   const offsetIdx = params.length;
-
-  const where =
-    whereParts.length > 0 ? `WHERE ${whereParts.join(" AND ")}` : "";
 
   const result = await pool.query<{
     symbol: string;
@@ -107,15 +144,8 @@ export async function queryMarketBrowse(
        ps.change,
        ps.change_pct,
        ps.ts
-     FROM stocks s
-     INNER JOIN LATERAL (
-       SELECT price, change, change_pct, ts
-       FROM price_snapshots
-       WHERE symbol = s.symbol
-       ORDER BY ts DESC, id DESC
-       LIMIT 1
-     ) ps ON TRUE
-     ${where}
+     ${fromSql}
+     ${whereSql}
      ORDER BY ${orderClause(opts.sort)}
      LIMIT $${limitIdx} OFFSET $${offsetIdx}`,
     params,

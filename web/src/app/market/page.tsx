@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { redirect } from "next/navigation";
 
 import { AppNav } from "@/components/app-nav";
 import { EmptyState } from "@/components/empty-state";
@@ -18,10 +19,11 @@ import {
 } from "@/lib/api/disclosure-safe";
 import {
   MAX_MARKET_Q_LENGTH,
+  firstSearchParam,
   normalizeMarketQuery,
 } from "@/lib/api/market-query";
 import { toFiniteNumber } from "@/lib/api/finite-number";
-import { toSafePositiveInt } from "@/lib/api/safe-int";
+import { toNonNegativeSafeInt, toSafePositiveInt } from "@/lib/api/safe-int";
 import { serverApiGet } from "@/lib/api/server-fetch";
 import { normalizeSymbol } from "@/lib/api/symbol";
 import { toIso } from "@/lib/api/time";
@@ -42,6 +44,8 @@ export const metadata = {
   description: "CSE symbol browse from Chime snapshots — pick what to watch.",
 };
 
+/** Page size for the symbol table section. */
+const BROWSE_PAGE_SIZE = 50;
 /** Cap market/movers rows parse — parity with symbols API max limit. */
 const MAX_PAGE_MARKET_ITEMS = 200;
 /** Cap sectors parse — parity with sectors API ``MAX_SECTORS``. */
@@ -63,6 +67,19 @@ type SectorItem = {
   name: string;
   change_pct: number | null;
 };
+
+type BrowsePayload = {
+  items: MarketItem[];
+  total: number | null;
+};
+
+function browseHref(q: string, page: number): string {
+  const params = new URLSearchParams();
+  if (q) params.set("q", q);
+  if (page > 1) params.set("page", String(page));
+  const s = params.toString();
+  return s ? `/market?${s}` : "/market";
+}
 
 /** Fail closed on non-JSON / wrong shape so a bad movers body cannot 500 the page. */
 async function readJsonPayload<T>(
@@ -114,6 +131,21 @@ function asMarketItems(body: unknown): MarketItem[] | null {
     });
   }
   return out;
+}
+
+function asBrowsePayload(body: unknown): BrowsePayload | null {
+  const items = asMarketItems(body);
+  if (items == null) return null;
+  if (body == null || typeof body !== "object" || Array.isArray(body)) {
+    return null;
+  }
+  const totalRaw = (body as { total?: unknown }).total;
+  const total =
+    totalRaw == null ? null : toNonNegativeSafeInt(totalRaw, -1);
+  return {
+    items,
+    total: total != null && total >= 0 ? total : null,
+  };
 }
 
 function asSectorItems(body: unknown): SectorItem[] | null {
@@ -180,13 +212,21 @@ function MoversList({
 export default async function MarketPage({
   searchParams,
 }: {
-  searchParams: Promise<{ q?: string | string[] }>;
+  searchParams: Promise<{ q?: string | string[]; page?: string | string[] }>;
 }) {
   await requirePageSession();
   const sp = await searchParams;
   // Sanitize before any reflection (input defaultValue) or API round-trip.
   const q = normalizeMarketQuery(sp.q);
-  const qs = new URLSearchParams({ limit: "100", sort: "change_pct" });
+  const pageParsed = toSafePositiveInt(firstSearchParam(sp.page));
+  const page = pageParsed ?? 1;
+  const offset = (page - 1) * BROWSE_PAGE_SIZE;
+
+  const qs = new URLSearchParams({
+    limit: String(BROWSE_PAGE_SIZE),
+    offset: String(offset),
+    sort: "change_pct",
+  });
   if (q) qs.set("q", q);
 
   const [res, gainersRes, losersRes, sectorsRes] = await Promise.all([
@@ -201,10 +241,34 @@ export default async function MarketPage({
     q ? Promise.resolve(null) : serverApiGet("/api/v1/sectors"),
   ]);
 
-  const marketItems = await readJsonPayload(res, asMarketItems);
+  const browse = await readJsonPayload(res, asBrowsePayload);
   const gainerItems = await readJsonPayload(gainersRes, asMarketItems);
   const loserItems = await readJsonPayload(losersRes, asMarketItems);
   const sectorItems = await readJsonPayload(sectorsRes, asSectorItems);
+
+  const marketItems = browse?.items ?? null;
+  const total = browse?.total ?? null;
+  const totalPages =
+    total != null && total > 0
+      ? Math.max(1, Math.ceil(total / BROWSE_PAGE_SIZE))
+      : null;
+
+  // Out-of-range page → first page (preserve search).
+  if (totalPages != null && page > totalPages) {
+    redirect(browseHref(q, 1));
+  }
+
+  const rangeStart =
+    marketItems && marketItems.length > 0 ? offset + 1 : 0;
+  const rangeEnd =
+    marketItems && marketItems.length > 0
+      ? offset + marketItems.length
+      : 0;
+  const hasPrev = page > 1;
+  const hasNext =
+    totalPages != null
+      ? page < totalPages
+      : (marketItems?.length ?? 0) >= BROWSE_PAGE_SIZE;
 
   return (
     <div className="flex min-h-full flex-1 flex-col bg-background">
@@ -343,9 +407,7 @@ export default async function MarketPage({
             description="Chime couldn’t read snapshot data just now. Retry in a moment, or check Health if this keeps happening."
             action={
               <Button asChild variant="outline">
-                <Link href={q ? `/market?q=${encodeURIComponent(q)}` : "/market"}>
-                  Retry
-                </Link>
+                <Link href={browseHref(q, page)}>Retry</Link>
               </Button>
             }
           />
@@ -366,7 +428,92 @@ export default async function MarketPage({
             }
           />
         ) : (
-          <BrowseTable items={marketItems} />
+          <section aria-labelledby="all-symbols-heading">
+            <div className="mt-8 flex flex-wrap items-end justify-between gap-3">
+              <div>
+                <h2
+                  id="all-symbols-heading"
+                  className="font-display text-lg font-semibold tracking-tight"
+                >
+                  All symbols
+                </h2>
+                <p className="mt-1 text-sm text-muted-foreground" role="status">
+                  {total != null
+                    ? `Showing ${rangeStart}–${rangeEnd} of ${total}`
+                    : `Showing ${rangeStart}–${rangeEnd}`}
+                  {totalPages != null && totalPages > 1
+                    ? ` · Page ${page} of ${totalPages}`
+                    : null}
+                </p>
+              </div>
+              {hasPrev || hasNext ? (
+                <nav
+                  className="flex items-center gap-2"
+                  aria-label="Symbol list pages"
+                >
+                  {hasPrev ? (
+                    <Button asChild variant="outline" size="sm">
+                      <Link href={browseHref(q, page - 1)} rel="prev">
+                        Previous
+                      </Link>
+                    </Button>
+                  ) : (
+                    <Button variant="outline" size="sm" disabled>
+                      Previous
+                    </Button>
+                  )}
+                  {hasNext ? (
+                    <Button asChild variant="outline" size="sm">
+                      <Link href={browseHref(q, page + 1)} rel="next">
+                        Next
+                      </Link>
+                    </Button>
+                  ) : (
+                    <Button variant="outline" size="sm" disabled>
+                      Next
+                    </Button>
+                  )}
+                </nav>
+              ) : null}
+            </div>
+            <BrowseTable items={marketItems} />
+            {hasPrev || hasNext ? (
+              <nav
+                className="mt-4 flex items-center justify-between gap-2"
+                aria-label="Symbol list pages (footer)"
+              >
+                <p className="text-sm text-muted-foreground">
+                  {total != null
+                    ? `${rangeStart}–${rangeEnd} of ${total}`
+                    : `${rangeStart}–${rangeEnd}`}
+                </p>
+                <div className="flex items-center gap-2">
+                  {hasPrev ? (
+                    <Button asChild variant="outline" size="sm">
+                      <Link href={browseHref(q, page - 1)} rel="prev">
+                        Previous
+                      </Link>
+                    </Button>
+                  ) : (
+                    <Button variant="outline" size="sm" disabled>
+                      Previous
+                    </Button>
+                  )}
+                  {hasNext ? (
+                    <Button asChild variant="outline" size="sm">
+                      <Link href={browseHref(q, page + 1)} rel="next">
+                        Next
+                      </Link>
+                    </Button>
+                  ) : (
+                    <Button variant="outline" size="sm" disabled>
+                      Next
+                    </Button>
+                  )}
+                </div>
+              </nav>
+            ) : null}
+          </section>
         )}
       </main>
       <NfaFooter />

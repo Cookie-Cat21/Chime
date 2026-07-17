@@ -21,6 +21,7 @@ const SECRET = "web-symbols-route-unit-secret-not-for-prod";
 
 type SymbolsBody = {
   items?: unknown[];
+  total?: number;
   limit?: number;
   offset?: number;
   sort?: string;
@@ -51,6 +52,7 @@ function makeRequest(query = ""): NextRequest {
 function installDbPool(
   rows: Record<string, unknown>[] = [],
   mode: "ok" | "throw" = "ok",
+  totalCount?: number,
 ): CapturedQuery[] {
   process.env.DATABASE_URL = "postgres://unit.test/chime";
   const captured: CapturedQuery[] = [];
@@ -70,10 +72,25 @@ function installDbPool(
       );
       assert(sql.includes("price_snapshots"), "browse SQL must read price_snapshots");
       assert(!sql.toLowerCase().includes("cse.lk"), "SQL must not mention cse.lk");
+      if (/COUNT\s*\(/i.test(sql)) {
+        return { rows: [{ n: totalCount ?? rows.length }] };
+      }
       return { rows };
     },
   };
   return captured;
+}
+
+function browseQuery(captured: CapturedQuery[]): CapturedQuery {
+  const hit = captured.find((c) => /LIMIT\s+\$/i.test(c.sql));
+  assert(hit, "expected browse LIMIT query");
+  return hit;
+}
+
+function countQuery(captured: CapturedQuery[]): CapturedQuery {
+  const hit = captured.find((c) => /COUNT\s*\(/i.test(c.sql));
+  assert(hit, "expected COUNT query");
+  return hit;
 }
 
 async function readBody(res: Response): Promise<SymbolsBody> {
@@ -95,11 +112,14 @@ async function testDefaultLimitAndSort(): Promise<void> {
   assert(body.offset === 0, `default offset 0, got ${body.offset}`);
   assert(body.sort === "change_pct", `default sort change_pct, got ${body.sort}`);
   assert(body.q === null, `default q null, got ${body.q}`);
-  assert(captured.length === 1, "expected one SQL query");
-  assert(captured[0].params.includes(50), "params include default limit 50");
-  assert(captured[0].params.includes(0), "params include offset 0");
+  assert(typeof body.total === "number", "response includes total");
+  assert(captured.length === 2, "expected browse + count SQL queries");
+  const browse = browseQuery(captured);
+  countQuery(captured);
+  assert(browse.params.includes(50), "params include default limit 50");
+  assert(browse.params.includes(0), "params include offset 0");
   assert(
-    captured[0].sql.includes("ps.change_pct DESC NULLS LAST"),
+    browse.sql.includes("ps.change_pct DESC NULLS LAST"),
     "default ORDER BY change_pct DESC",
   );
 }
@@ -108,8 +128,9 @@ async function testLimitClampToMax200(): Promise<void> {
   const { res, body, captured } = await call("limit=9999");
   assert(res.status === 200, `limit clamp should 200, got ${res.status}`);
   assert(body.limit === 200, `limit clamped to 200, got ${body.limit}`);
-  assert(captured[0].params.includes(200), "SQL params use clamped 200");
-  assert(!captured[0].params.includes(9999), "raw oversize limit must not reach SQL");
+  const browse = browseQuery(captured);
+  assert(browse.params.includes(200), "SQL params use clamped 200");
+  assert(!browse.params.includes(9999), "raw oversize limit must not reach SQL");
 }
 
 async function testInvalidLimitFallsBackToDefault(): Promise<void> {
@@ -118,7 +139,10 @@ async function testInvalidLimitFallsBackToDefault(): Promise<void> {
     const { res, body, captured } = await call(query);
     assert(res.status === 200, `invalid limit ${raw} should 200, got ${res.status}`);
     assert(body.limit === 50, `invalid limit ${raw} → default 50, got ${body.limit}`);
-    assert(captured[0].params.includes(50), `params use default for limit=${raw}`);
+    assert(
+      browseQuery(captured).params.includes(50),
+      `params use default for limit=${raw}`,
+    );
   }
 }
 
@@ -127,9 +151,10 @@ async function testSortWhitelist(): Promise<void> {
     const { res, body, captured } = await call("sort=symbol");
     assert(res.status === 200, `sort=symbol should 200, got ${res.status}`);
     assert(body.sort === "symbol", `sort echo symbol, got ${body.sort}`);
-    assert(captured[0].sql.includes("s.symbol ASC"), "ORDER BY symbol ASC");
+    const browse = browseQuery(captured);
+    assert(browse.sql.includes("s.symbol ASC"), "ORDER BY symbol ASC");
     assert(
-      !captured[0].sql.includes("ps.change_pct DESC"),
+      !browse.sql.includes("ps.change_pct DESC"),
       "symbol sort must not use change_pct order",
     );
   }
@@ -141,7 +166,7 @@ async function testSortWhitelist(): Promise<void> {
       `unknown sort falls back to change_pct, got ${body.sort}`,
     );
     assert(
-      captured[0].sql.includes("ps.change_pct DESC NULLS LAST"),
+      browseQuery(captured).sql.includes("ps.change_pct DESC NULLS LAST"),
       "unknown sort uses change_pct ORDER BY",
     );
   }
@@ -154,7 +179,10 @@ async function testSortWhitelist(): Promise<void> {
     const { res, body, captured } = await call("sort=SYMBOL");
     assert(res.status === 200, `case-insensitive symbol sort should 200`);
     assert(body.sort === "symbol", `SYMBOL normalizes to symbol, got ${body.sort}`);
-    assert(captured[0].sql.includes("s.symbol ASC"), "SYMBOL → symbol ORDER BY");
+    assert(
+      browseQuery(captured).sql.includes("s.symbol ASC"),
+      "SYMBOL → symbol ORDER BY",
+    );
   }
 }
 
@@ -163,7 +191,11 @@ async function testEmptyBoardReturnsEmptyItems(): Promise<void> {
   assert(res.status === 200, `empty board should 200, got ${res.status}`);
   assert(Array.isArray(body.items) && body.items.length === 0, "empty items[]");
   assert(body.limit === 10, `limit echoed 10, got ${body.limit}`);
-  assert(captured[0].sql.includes("INNER JOIN LATERAL"), "empty board still INNER JOIN");
+  assert(body.total === 0, `empty board total 0, got ${body.total}`);
+  assert(
+    browseQuery(captured).sql.includes("INNER JOIN LATERAL"),
+    "empty board still INNER JOIN",
+  );
 }
 
 async function testSessionRequired(): Promise<void> {
@@ -223,13 +255,17 @@ async function testLikeMetacharEscape(): Promise<void> {
   const { res, body, captured } = await call(`q=${encodeURIComponent(raw)}`);
   assert(res.status === 200, `q LIKE escape should 200, got ${res.status}`);
   assert(body.q === raw, `sanitized q echoed, got ${JSON.stringify(body.q)}`);
-  const sql = captured[0].sql;
-  assert(sql.includes("ESCAPE '\\'"), "LIKE must use ESCAPE '\\'");
-  assert(!sql.includes(raw), "raw q must not be interpolated into SQL text");
+  const browse = browseQuery(captured);
+  assert(browse.sql.includes("ESCAPE '\\'"), "LIKE must use ESCAPE '\\'");
+  assert(!browse.sql.includes(raw), "raw q must not be interpolated into SQL text");
   const expected = `%${escapeLikePattern(raw.toUpperCase())}%`;
   assert(
-    captured[0].params[0] === expected,
-    `LIKE param must be escaped, got ${JSON.stringify(captured[0].params[0])}`,
+    browse.params[0] === expected,
+    `LIKE param must be escaped, got ${JSON.stringify(browse.params[0])}`,
+  );
+  assert(
+    countQuery(captured).params[0] === expected,
+    "COUNT query must use the same escaped LIKE param",
   );
 }
 
@@ -256,7 +292,7 @@ async function testQueryLengthCapAndOffsetClamp(): Promise<void> {
   );
   assert(body.offset === MAX_SYMBOLS_OFFSET, `offset clamped, got ${body.offset}`);
   assert(
-    captured[0].params.includes(MAX_SYMBOLS_OFFSET),
+    browseQuery(captured).params.includes(MAX_SYMBOLS_OFFSET),
     "SQL params use clamped offset",
   );
 }

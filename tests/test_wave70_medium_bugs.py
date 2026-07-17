@@ -100,9 +100,13 @@ def test_market_browse_q_typeof_guard() -> None:
     source = (WEB / "src" / "lib" / "api" / "market-browse.ts").read_text(
         encoding="utf-8"
     )
-    chunk = source.split("export async function queryMarketBrowse")[1]
+    # Guard lives in shared browseFromWhere (list + count).
+    chunk = source.split("function browseFromWhere")[1]
     assert 'typeof opts.q === "string"' in chunk
-    assert "opts.q?.trim()" not in chunk
+    assert "opts.q?.trim()" not in source
+    assert "browseFromWhere(opts)" in source.split(
+        "export async function queryMarketBrowse"
+    )[1]
 
 
 def test_require_page_session_cookie_typeof_guard() -> None:

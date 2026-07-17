@@ -438,7 +438,13 @@ def test_market_page_and_nav_browse_link() -> None:
     assert 'role="search"' in market_src
     assert "maxLength={MAX_MARKET_Q_LENGTH}" in market_src
     assert "dangerouslySetInnerHTML" not in market_src
-    assert 'aria-label="Market symbols"' in market_src
+    assert "BrowseTable" in market_src
+    assert "BROWSE_PAGE_SIZE" in market_src
+    assert "All symbols" in market_src
+    browse_table = (
+        WEB / "src" / "components" / "market" / "browse-table.tsx"
+    ).read_text(encoding="utf-8")
+    assert 'aria-label="Market symbols"' in browse_table
     assert "tradeSummary" not in market_src
     assert "make tick" in market_src
     assert "tick --force" not in market_src

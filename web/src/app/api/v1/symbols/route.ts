@@ -1,6 +1,9 @@
 import type { NextRequest } from "next/server";
 
-import { queryMarketBrowse } from "@/lib/api/market-browse";
+import {
+  countMarketBrowse,
+  queryMarketBrowse,
+} from "@/lib/api/market-browse";
 import {
   MAX_SYMBOLS_OFFSET,
   normalizeMarketQuery,
@@ -19,7 +22,8 @@ const MAX_LIMIT = 200;
  * GET /api/v1/symbols — thin market browse from Postgres (latest snapshots).
  * Query: limit (default 50, max 200), offset (max 10000), q (symbol/name
  * substring, max 64, LIKE-metachar escaped), sort=change_pct|symbol
- * (default change_pct). Session required; CSRF not required (safe GET).
+ * (default change_pct). Response includes ``total`` for pagination.
+ * Session required; CSRF not required (safe GET).
  * No cse.lk. Not a screener (no sector/volume filters).
  */
 export async function GET(request: NextRequest) {
@@ -48,15 +52,20 @@ export async function GET(request: NextRequest) {
 
   try {
     const pool = getPool();
-    const items = await queryMarketBrowse(pool, {
-      limit,
-      offset,
-      q: q || undefined,
-      sort,
-    });
+    const filter = { q: q || undefined };
+    const [items, total] = await Promise.all([
+      queryMarketBrowse(pool, {
+        limit,
+        offset,
+        ...filter,
+        sort,
+      }),
+      countMarketBrowse(pool, filter),
+    ]);
 
     return jsonOk({
       items,
+      total,
       limit,
       offset,
       sort,
