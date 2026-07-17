@@ -178,7 +178,7 @@ export function CandlestickChart({
       >
         <svg
           viewBox={`0 0 ${w} ${h}`}
-          preserveAspectRatio={fitWidth ? "none" : "xMinYMid meet"}
+          preserveAspectRatio={fitWidth ? "xMidYMid meet" : "xMinYMid meet"}
           style={
             fitWidth
               ? { width: "100%", height: displayH, display: "block" }
