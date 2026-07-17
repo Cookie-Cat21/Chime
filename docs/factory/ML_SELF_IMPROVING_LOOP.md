@@ -80,8 +80,11 @@ Workflow: [`.github/workflows/ml-self-learn.yml`](../../.github/workflows/ml-sel
 
 | Trigger | What runs |
 |---|---|
-| Cron `30 10 * * 1-5` | Score outcomes → Loop A nightly → LTR ship; Loop B retrain **Mondays only** |
-| `workflow_dispatch` | Same steps; toggles for retrain / LTR ship / unified forecast |
+| Cron `30 10 * * 1-5` | Score outcomes → Loop A nightly → **LTR ship** (product promote) |
+| `workflow_dispatch` | Same; optional Loop B retrain (`run_retrain`, default **off**) |
+
+Loop B hit-rate retrain will **not** demote an LTR/vol champion (registers
+challenger only). Use `ml-ltr-ship` for RankIC / volIC promotion.
 
 Requires repo secret **`DATABASE_URL`** (Neon). Optional repo var:
 

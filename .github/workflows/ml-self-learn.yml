@@ -11,9 +11,9 @@ on:
   workflow_dispatch:
     inputs:
       run_retrain:
-        description: Run Loop B weekly retrain (challenger promote gates)
+        description: Run Loop B hit-rate retrain (skipped over LTR champion; default off)
         required: false
-        default: "true"
+        default: "false"
         type: choice
         options: ["true", "false"]
       run_ltr_ship:
@@ -122,18 +122,15 @@ jobs:
           RUN_RETRAIN: ${{ github.event.inputs.run_retrain || '' }}
         run: |
           set -o pipefail
-          # Dispatch: honor input (default true). Schedule: Mondays only.
-          if [ "$EVENT_NAME" = "workflow_dispatch" ]; then
-            if [ "${RUN_RETRAIN:-true}" != "true" ]; then
-              echo "ml-loop-retrain: skip (run_retrain=$RUN_RETRAIN)"
-              exit 0
-            fi
-          else
-            DOW=$(TZ=Asia/Colombo date +%u)  # 1=Mon … 7=Sun
-            if [ "$DOW" != "1" ]; then
-              echo "ml-loop-retrain: skip (scheduled non-Monday, DOW=$DOW)"
-              exit 0
-            fi
+          # Product promote is LTR ship. Loop B is optional (dispatch only).
+          # Schedule never runs hit-rate retrain — avoids demoting LTR mid-job.
+          if [ "$EVENT_NAME" = "schedule" ]; then
+            echo "ml-loop-retrain: skip (schedule uses LTR ship only)"
+            exit 0
+          fi
+          if [ "${RUN_RETRAIN:-false}" != "true" ]; then
+            echo "ml-loop-retrain: skip (run_retrain=$RUN_RETRAIN)"
+            exit 0
           fi
           python -m chime ml-loop-retrain --force 2>&1 | tee /tmp/ml-loop-retrain.log
 

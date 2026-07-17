@@ -40,6 +40,12 @@ class RetrainResult:
     champion_hit: float | None
 
 
+def _is_ltr_vol_champion_algo(algo: str | None) -> bool:
+    """True when champion is the LTR+vol product path (not hit-rate Loop B)."""
+    a = (algo or "").lower()
+    return "ltr" in a or "vol" in a
+
+
 def _passes_promotion(
     *,
     challenger_hit: float | None,
@@ -167,6 +173,18 @@ async def run_loop_retrain(
     if force_promote_first and champ is None:
         ok = True
         reasons = ["first champion bootstrap"]
+
+    # Product path is LTR+vol (RankIC / volIC gates). Do not let this
+    # hit-rate-only Loop B challenger demote an LTR champion.
+    if ok and champ is not None and _is_ltr_vol_champion_algo(
+        str(champ.get("algo") or "")
+    ):
+        ok = False
+        reasons = [
+            *reasons,
+            f"skip promote over LTR/vol champion algo={champ.get('algo')!r} "
+            "(use ml-ltr-ship for RankIC/vol gates)",
+        ]
 
     promoted = False
     if ok:
