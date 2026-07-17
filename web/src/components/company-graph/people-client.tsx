@@ -21,6 +21,8 @@ import {
   Position,
   ReactFlow,
   ReactFlowProvider,
+  useEdgesState,
+  useNodesState,
   useReactFlow,
 } from "@xyflow/react";
 import "@xyflow/react/dist/style.css";
@@ -218,9 +220,10 @@ function orderBipartite(
 function FitViewOnChange({ nonce }: { nonce: string }) {
   const { fitView } = useReactFlow();
   useEffect(() => {
+    // Wait a frame so the fixed-height container has measured before fitting.
     const t = window.setTimeout(() => {
-      void fitView({ padding: 0.2, duration: 200 });
-    }, 40);
+      void fitView({ padding: 0.18, duration: 180, maxZoom: 1.35 });
+    }, 60);
     return () => window.clearTimeout(t);
   }, [fitView, nonce]);
   return null;
@@ -238,7 +241,7 @@ function PeopleFlow({
   searching: boolean;
 }) {
   const router = useRouter();
-  const { nodes, edges, layoutKey } = useMemo(() => {
+  const layout = useMemo(() => {
     const ranked = [...people].sort(
       (a, b) => b.influence_score - a.influence_score,
     );
@@ -369,16 +372,24 @@ function PeopleFlow({
     };
   }, [people, selectedId, searching]);
 
+  const [nodes, setNodes, onNodesChange] = useNodesState(layout.nodes);
+  const [edges, setEdges, onEdgesChange] = useEdgesState(layout.edges);
+
+  useEffect(() => {
+    setNodes(layout.nodes);
+    setEdges(layout.edges);
+  }, [layout.nodes, layout.edges, setNodes, setEdges]);
+
   if (people.length === 0) {
     return (
-      <div className="flex h-full min-h-[420px] items-center justify-center rounded-xl border border-dashed border-border text-sm text-muted-foreground">
+      <div className="flex h-full items-center justify-center rounded-xl border border-dashed border-border text-sm text-muted-foreground">
         No people match this filter.
       </div>
     );
   }
 
   return (
-    <div className="relative h-full min-h-[420px] w-full overflow-hidden rounded-xl border border-border bg-background">
+    <div className="relative h-full w-full overflow-hidden rounded-xl border border-border bg-background">
       <p className="pointer-events-none absolute left-3 top-3 z-10 text-[10px] text-muted-foreground">
         Click a person to inspect seats
         {!searching
@@ -388,9 +399,11 @@ function PeopleFlow({
       <ReactFlow
         nodes={nodes}
         edges={edges}
+        onNodesChange={onNodesChange}
+        onEdgesChange={onEdgesChange}
         nodeTypes={nodeTypes}
         fitView
-        fitViewOptions={{ padding: 0.2 }}
+        fitViewOptions={{ padding: 0.18, maxZoom: 1.35 }}
         minZoom={0.35}
         maxZoom={1.6}
         proOptions={{ hideAttribution: true }}
@@ -421,7 +434,7 @@ function PeopleFlow({
           position="bottom-left"
           className="!scale-110"
         />
-        <FitViewOnChange nonce={layoutKey} />
+        <FitViewOnChange nonce={layout.layoutKey} />
       </ReactFlow>
     </div>
   );
@@ -714,7 +727,9 @@ export function PeopleGraphClient({ people }: { people: PersonNode[] }) {
       </div>
 
       <div className="grid gap-3 lg:grid-cols-[minmax(0,1fr)_360px] lg:items-stretch">
-        <div className="min-h-[min(72vh,640px)]">
+        {/* Fixed height (not min-height): React Flow + fitView mis-measure a
+            min-height-only parent and translate the bipartite graph off-screen. */}
+        <div className="h-[min(72vh,640px)] min-h-[420px]">
           <ReactFlowProvider>
             <PeopleFlow
               people={ranked}
@@ -725,7 +740,7 @@ export function PeopleGraphClient({ people }: { people: PersonNode[] }) {
           </ReactFlowProvider>
         </div>
 
-        <aside className="flex min-h-[min(72vh,640px)] flex-col overflow-hidden rounded-xl border border-border bg-background">
+        <aside className="flex h-[min(72vh,640px)] min-h-[420px] flex-col overflow-hidden rounded-xl border border-border bg-background">
           <div className="border-b border-border px-4 py-3">
             <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">
               Influence ranking
