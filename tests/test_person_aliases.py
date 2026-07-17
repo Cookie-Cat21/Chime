@@ -1,18 +1,17 @@
-"""Well-known CSE director display aliases + merge keys."""
+"""CSE director merge keys — display stays initials, not common names."""
 
 from __future__ import annotations
 
-from chime.extractors.person_aliases import alias_merge_key, preferred_display_name
 from chime.extractors.cse_directors import parse_cse_director_row
+from chime.extractors.person_aliases import alias_merge_key, preferred_display_name
 
 
-def test_known_public_names() -> None:
-    assert preferred_display_name("M. Pandithage", "M PANDITHAGE") == "Mohan Pandithage"
-    assert preferred_display_name("K. Balendra", "K BALENDRA") == "Krishan Balendra"
-    assert preferred_display_name("J. G. A. Cooray", "J G A COORAY") == "Gihan Cooray"
+def test_display_keeps_initials() -> None:
+    assert preferred_display_name("M. Pandithage", "M PANDITHAGE") == "M. Pandithage"
+    assert preferred_display_name("K. Balendra", "K BALENDRA") == "K. Balendra"
     assert (
-        preferred_display_name("I. C. Nanayakkara", "I C NANAYAKKARA")
-        == "Ishara Nanayakkara"
+        preferred_display_name("K. A. D. D. Perera", "K A D D PERERA")
+        == "K. A. D. D. Perera"
     )
 
 
@@ -22,12 +21,11 @@ def test_pandithage_and_balendra_merge_keys() -> None:
     assert alias_merge_key("D S T JAYAWARDENA") == alias_merge_key(
         "DON S T JAYAWARDENA"
     )
-    # Do not merge Dhammika with K.A.D.B.
     assert alias_merge_key("K A D B PERERA") is None
-    assert alias_merge_key("K A D D PERERA") == "dhammika_perera"
+    assert alias_merge_key("K A D D PERERA") == "kadd_perera"
 
 
-def test_parse_applies_alias_without_changing_norm() -> None:
+def test_parse_keeps_initials_display() -> None:
     seat = parse_cse_director_row(
         {
             "directorId": 5824,
@@ -38,5 +36,18 @@ def test_parse_applies_alias_without_changing_norm() -> None:
         source_bucket="top_posts",
     )
     assert seat is not None
-    assert seat.display_name == "Mohan Pandithage"
+    assert seat.display_name == "M. Pandithage"
     assert seat.name_norm == "M PANDITHAGE"
+
+    dham = parse_cse_director_row(
+        {
+            "directorId": 16085,
+            "firstName": "K. A. D. D. (Non Executive Director)",
+            "lastName": "Perera",
+            "designationOther": "Co-Chairman",
+        },
+        source_bucket="top_posts",
+    )
+    assert dham is not None
+    assert dham.display_name == "K. A. D. D. Perera"
+    assert dham.name_norm == "K A D D PERERA"

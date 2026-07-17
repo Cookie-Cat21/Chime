@@ -6,6 +6,7 @@ import {
   sanitizeDisclosureText,
 } from "@/lib/api/disclosure-safe";
 import {
+  pickInitialsDisplay,
   preferredDisplayName,
   softPersonKey,
 } from "@/lib/api/person-aliases";
@@ -262,8 +263,8 @@ export async function queryPeopleGraph(
       merged.set(key, p);
       continue;
     }
-    // Prefer common public names (e.g. Dhammika) over initials-only CSE labels
-    const name = preferredDisplayName(p.name) || preferredDisplayName(prev.name);
+    // Prefer CSE initials-style labels when merging spelling variants
+    const name = pickInitialsDisplay(p.name, prev.name);
     const roleMap = new Map<string, PersonNode["roles"][number]>();
     for (const r of [...prev.roles, ...p.roles]) {
       const rk = `${r.symbol}:${r.role}`;
