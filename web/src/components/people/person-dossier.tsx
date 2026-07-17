@@ -4,7 +4,6 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import {
   useCallback,
-  useEffect,
   useId,
   useMemo,
   useState,
@@ -371,15 +370,18 @@ export function PersonDossierView({ dossier }: { dossier: PersonDossier }) {
       ).slice(0, 6),
     [dossier.seats],
   );
-  const tabs: Array<{ id: TabId; label: string; count?: number }> = [
-    { id: "seats", label: "Seats", count: dossier.seats.length },
-    { id: "network", label: "Network", count: dossier.network.length },
-    {
-      id: "timeline",
-      label: "Across years",
-      count: dossier.timeline.length || undefined,
-    },
-  ];
+  const tabs = useMemo(
+    (): Array<{ id: TabId; label: string; count?: number }> => [
+      { id: "seats", label: "Seats", count: dossier.seats.length },
+      { id: "network", label: "Network", count: dossier.network.length },
+      {
+        id: "timeline",
+        label: "Across years",
+        count: dossier.timeline.length || undefined,
+      },
+    ],
+    [dossier.network.length, dossier.seats.length, dossier.timeline.length],
+  );
 
   const selectTab = useCallback(
     (id: TabId) => {
@@ -408,14 +410,6 @@ export function PersonDossierView({ dossier }: { dossier: PersonDossier }) {
     },
     [baseId, selectTab, tabs],
   );
-
-  // Loop 9: prefer deep-link tab from hash when present
-  useEffect(() => {
-    const hash = window.location.hash.replace("#", "");
-    if (hash === "seats" || hash === "network" || hash === "timeline") {
-      setTab(hash);
-    }
-  }, []);
 
   return (
     <div className="space-y-5">

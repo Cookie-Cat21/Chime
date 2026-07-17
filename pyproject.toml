@@ -71,8 +71,8 @@ omit = [
 line-length = 100
 # Align with CI (actions/setup-python 3.12); runtime still allows >=3.11.
 target-version = "py312"
-# Research harnesses: long markdown/report strings; not part of runtime package.
-exclude = ["scripts/experiments"]
+# Research harnesses / vendored Ceyfi port snapshots — not runtime package code.
+exclude = ["scripts/experiments", "docs/factory/ceyfi-market-port"]
 
 [tool.ruff.lint]
 select = ["E", "F", "I", "UP", "B", "SIM"]
