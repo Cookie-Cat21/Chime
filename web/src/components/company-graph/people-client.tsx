@@ -728,20 +728,20 @@ export function PeopleGraphClient({ people }: { people: PersonNode[] }) {
   );
   const maxScore = ranked[0]?.influence_score ?? 1;
 
-  useEffect(() => {
-    if (selectedId != null && filtered.some((p) => p.id === selectedId)) return;
-    setSelectedId(filtered[0]?.id ?? null);
-  }, [filtered, selectedId]);
+  const activeId =
+    selectedId != null && filtered.some((p) => p.id === selectedId)
+      ? selectedId
+      : (filtered[0]?.id ?? null);
 
   useEffect(() => {
-    if (selectedId == null || !listRef.current) return;
+    if (activeId == null || !listRef.current) return;
     const el = listRef.current.querySelector(
-      `[data-person-id="${selectedId}"]`,
+      `[data-person-id="${activeId}"]`,
     );
     el?.scrollIntoView({ block: "nearest" });
-  }, [selectedId]);
+  }, [activeId]);
 
-  const selected = ranked.find((p) => p.id === selectedId) ?? null;
+  const selected = ranked.find((p) => p.id === activeId) ?? null;
   const searching = query.trim().length > 0;
 
   if (people.length === 0) {

@@ -6,7 +6,7 @@ import re
 from dataclasses import dataclass
 from difflib import get_close_matches
 
-from chime.adapters.cse import build_unique_company_name_map, normalize_company_name
+from chime.adapters.cse import normalize_company_name
 
 _LEGAL_SUFFIX = re.compile(
     r"\b(PLC|LIMITED|LTD\.?|COMPANY|CORPORATION|CORP\.?|INC\.?|HOLDINGS)\s*$",

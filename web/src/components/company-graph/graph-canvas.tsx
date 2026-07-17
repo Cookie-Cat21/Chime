@@ -123,15 +123,6 @@ function CompanyNode({ data }: NodeProps<Node<CompanyNodeData>>) {
 
 const nodeTypes = { company: CompanyNode };
 
-function degreeMap(edges: GraphEdge[]): Map<number, number> {
-  const deg = new Map<number, number>();
-  for (const e of edges) {
-    deg.set(e.src_node_id, (deg.get(e.src_node_id) ?? 0) + 1);
-    deg.set(e.dst_node_id, (deg.get(e.dst_node_id) ?? 0) + 1);
-  }
-  return deg;
-}
-
 function adjacency(edges: GraphEdge[]): Map<number, number[]> {
   const adj = new Map<number, number[]>();
   const add = (a: number, b: number) => {

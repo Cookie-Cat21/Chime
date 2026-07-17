@@ -501,12 +501,11 @@ def extract_people_from_bytes(
                 i + 2 < len(lines)
                 and len(nxt) < 48
                 and not _line_is_name(lines[i + 2])
-            ):
-                if _ROLE_LINE.match(lines[i + 2]) or re.search(
-                    r"(?i)director|chairman|executive|ceo|secretary",
-                    lines[i + 2],
-                ):
-                    role_blob = nxt + " " + lines[i + 2]
+            ) and (_ROLE_LINE.match(lines[i + 2]) or re.search(
+                r"(?i)director|chairman|executive|ceo|secretary",
+                lines[i + 2],
+            )):
+                role_blob = nxt + " " + lines[i + 2]
             if _ROLE_LINE.match(role_blob) or map_role(role_blob):
                 conf = "high" if _CAPS_NAME.match(line) else "medium"
                 add(nm.group(1), role_blob, page_no, f"{line} / {role_blob}", conf)

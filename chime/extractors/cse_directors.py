@@ -129,9 +129,11 @@ def roles_from_cse_text(*blobs: str | None) -> list[str]:
             continue
         t = re.sub(r"\s+", " ", blob).strip().lower()
         # Finance Director is common on CSE boards but not in PDF map_role.
-        if "finance director" in t or "group finance" in t:
-            if "cfo" not in out:
-                out.append("cfo")
+        if (
+            ("finance director" in t or "group finance" in t)
+            and "cfo" not in out
+        ):
+            out.append("cfo")
         # Fix false positive: "non-independent" contains substring "independent".
         t_for_map = t
         if "non-independent" in t or "non independent" in t:

@@ -307,7 +307,13 @@ export function CompanyGraphClient({
                 role="listbox"
               >
                 {suggestions.map((n) => (
-                  <li key={n.id} role="option">
+                  <li
+                    key={n.id}
+                    role="option"
+                    aria-selected={
+                      selectedId != null && n.id === selectedId
+                    }
+                  >
                     <button
                       type="button"
                       className="flex w-full items-center justify-between gap-2 px-3 py-1.5 text-left hover:bg-muted"

@@ -11,12 +11,12 @@ import os
 from datetime import UTC, datetime
 
 from chime.adapters.cse import CSEClient
+from chime.config import Settings
 from chime.domain import Disclosure
 from chime.drain import drain_graph, drain_people
 from chime.financials_backfill import _title_for
 from chime.graph import GraphSettings
 from chime.graph.directors_sync import run_directors_sync
-from chime.config import Settings
 from chime.storage import Storage
 
 # Fallback if DB has no market-cap snapshots yet

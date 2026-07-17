@@ -20,6 +20,7 @@ from chime.drain import (
     drain_pdfs,
     drain_people,
 )
+from chime.graph.directors_sync import run_directors_sync
 from chime.health import HealthState, brief_queue_health_hint, start_health_server
 from chime.logging_setup import configure_logging, get_logger
 from chime.migrate import apply_migrations
@@ -27,7 +28,6 @@ from chime.notices_backfill import run_notices_backfill
 from chime.notify import SendResult, send_message
 from chime.path_backfill import run_path_backfill
 from chime.poller import Poller, run_poller_forever
-from chime.graph.directors_sync import run_directors_sync
 from chime.sector_backfill import run_sector_backfill
 from chime.signals import run_signal_score_job
 from chime.storage import Storage
@@ -540,13 +540,13 @@ def main(argv: list[str] | None = None) -> None:
                 elif args.command == "drain-graph":
                     result = await drain_graph(
                         storage=storage,
-                        limit=limit,
+                        limit=drain_limit,
                         watched_only=watched_only,
                     )
                 elif args.command == "drain-people":
                     result = await drain_people(
                         storage=storage,
-                        limit=limit,
+                        limit=drain_limit,
                         watched_only=watched_only,
                     )
                 else:

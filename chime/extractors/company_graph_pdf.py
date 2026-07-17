@@ -125,7 +125,7 @@ def _parse_num(raw: str) -> float | None:
         val = float(s)
     except ValueError:
         return None
-    if not (val == val) or abs(val) > 1e15:  # NaN / absurd
+    if val != val or abs(val) > 1e15:  # NaN / absurd
         return None
     # Reject year-like stubs unless large enough to be equity in thousands
     if 1900 <= val <= 2100:
@@ -342,10 +342,13 @@ def _extract_edges(
             start = max(0, m.start() - 120)
             end = min(len(window), m.end() + 120)
             local = window[start:end]
-            if relation_cue is not None and not relation_cue.search(local):
-                # Allow group_mention without tight cue; skip others
-                if section != "mention":
-                    continue
+            # Allow group_mention without tight cue; skip others
+            if (
+                relation_cue is not None
+                and not relation_cue.search(local)
+                and section != "mention"
+            ):
+                continue
 
             seen.add(key)
             conf = base_conf
