@@ -30,6 +30,7 @@ Thumbs.db
 
 # local probe artifacts
 *.bin
+/artifacts/
 
 # Large offline transfer-learning panels (Yahoo/Kaggle downloads)
 /data/
