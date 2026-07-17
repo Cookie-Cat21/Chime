@@ -5,6 +5,7 @@ import { motion, useReducedMotion } from "motion/react";
 
 import { ChangeBadge } from "@/components/kit/change-badge";
 import { formatNumber, formatTs } from "@/lib/format";
+import { cn } from "@/lib/utils";
 
 export type BrowseRow = {
   symbol: string;
@@ -20,12 +21,23 @@ export type BrowseRow = {
  * Dense CSE browse table — FinancialTable DNA without US-index columns.
  * Postgres snapshot rows only. Research / NFA.
  */
-export function BrowseTable({ items }: { items: BrowseRow[] }) {
+export function BrowseTable({
+  items,
+  className,
+}: {
+  items: BrowseRow[];
+  className?: string;
+}) {
   const reduceMotion = useReducedMotion();
 
   return (
     <>
-      <div className="mt-8 hidden overflow-x-auto rounded-2xl border border-border/50 md:block">
+      <div
+        className={cn(
+          "mt-4 hidden overflow-x-auto rounded-2xl border border-border/50 md:block",
+          className,
+        )}
+      >
         <div className="min-w-[900px]">
           <div
             className="grid gap-x-2 border-b border-border/20 bg-muted/15 px-6 py-3 text-left text-xs font-medium tracking-wide text-muted-foreground/80 uppercase"
@@ -127,7 +139,7 @@ export function BrowseTable({ items }: { items: BrowseRow[] }) {
 
       {/* Mobile list */}
       <ul
-        className="mt-8 divide-y divide-border/60 md:hidden"
+        className="mt-4 divide-y divide-border/60 md:hidden"
         aria-label="Market symbols"
       >
         {items.map((item) => (
