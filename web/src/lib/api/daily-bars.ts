@@ -191,24 +191,26 @@ export function ticksToIntradayBars(
     });
   if (clean.length < 2) return [];
 
-  // Sparse poller history (common overnight / low-volume names): one candle
-  // per tick so ≥2 ticks always yield a chart instead of a single bucket.
-  // Denser series: ~2–3 ticks per candle.
-  const sparse = clean.length < 12;
-  const n = sparse
-    ? clean.length
-    : Math.max(4, Math.min(targetCandles, Math.floor(clean.length / 2)));
-  const chunk = sparse ? 1 : Math.max(2, Math.ceil(clean.length / n));
+  // Prefer ~2–3 ticks per candle. Single-tick candles used to paint every
+  // body gray (open===close); open is always the prior mark so direction
+  // reads against the previous print.
+  const n = Math.max(
+    4,
+    Math.min(targetCandles, Math.floor(clean.length / 2)),
+  );
+  const chunk = Math.max(2, Math.ceil(clean.length / n));
   const out: DailyBarPoint[] = [];
 
   for (let i = 0; i < clean.length; i += chunk) {
     const slice = clean.slice(i, i + chunk);
     if (slice.length === 0) continue;
     const prices = slice.map((t) => t.price);
-    const open = prices[0]!;
     const close = prices[prices.length - 1]!;
-    let high = Math.max(...prices);
-    let low = Math.min(...prices);
+    // Body open = last price before this bucket (mark-to-mark), else bucket start.
+    const prior = i > 0 ? clean[i - 1]!.price : prices[0]!;
+    const open = prior;
+    let high = Math.max(open, ...prices);
+    let low = Math.min(open, ...prices);
     // Ensure a visible wick even when flat (pure mark-to-mark ticks).
     if (high === low) {
       const pad = Math.max(high * 0.001, 0.01);
@@ -243,3 +245,6 @@ export function ticksToIntradayBars(
   }
   return out;
 }
+
+/** Minimum stored ticks before expand 1D prefers intraday over daily path. */
+export const MIN_TICKS_FOR_INTRADAY = 16;

@@ -315,7 +315,10 @@ export function ExpandablePriceChart({
   }, [open]);
 
   const tickSeries = finiteSparklinePoints(tickPoints);
-  const intradayReady = intradayBars.length >= 2;
+  // Thin session prints (common after a quiet day) make ugly 2–6 gray
+  // mark-to-mark blocks — prefer recent daily OHLC until we have enough ticks.
+  const intradayReady =
+    tickSeries.length >= MIN_TICKS_FOR_INTRADAY && intradayBars.length >= 4;
   const chartBars =
     range === "1D"
       ? intradayReady
