@@ -149,17 +149,13 @@ export function CandlestickChart({
             const yL = yFor(b.low);
             const yO = yFor(bodyOpen);
             const yC = yFor(b.close);
-            const up = b.close > bodyOpen;
-            const down = b.close < bodyOpen;
+            // Use a small epsilon in price space (helps CSE tick-size flats).
+            const eps = span * 1e-6;
+            const up = b.close > bodyOpen + eps;
+            const down = b.close < bodyOpen - eps;
             if (up) upN += 1;
             else if (down) downN += 1;
             else flatN += 1;
-
-            const naturalH = Math.abs(yC - yO);
-            const minBody = 6;
-            const bodyH = Math.max(naturalH, minBody);
-            const mid = (yO + yC) / 2;
-            const bodyTop = mid - bodyH / 2;
 
             const stroke = up
               ? "stroke-emerald-700 dark:stroke-emerald-400"
@@ -170,15 +166,45 @@ export function CandlestickChart({
               ? "fill-emerald-500 dark:fill-emerald-400"
               : down
                 ? "fill-rose-500 dark:fill-rose-400"
-                : "fill-zinc-400 dark:fill-zinc-500";
+                : "fill-zinc-500 dark:fill-zinc-400";
+
+            // Doji / flat: horizontal tick at close (don't inflate a fake body).
+            if (!up && !down) {
+              const tickH = 3.5;
+              return (
+                <g key={`${b.trade_date}-${i}`}>
+                  <line
+                    x1={cx}
+                    x2={cx}
+                    y1={yH}
+                    y2={yL}
+                    className={stroke}
+                    strokeWidth={wickW}
+                    strokeLinecap="round"
+                  />
+                  <rect
+                    x={cx - bodyW / 2}
+                    y={yC - tickH / 2}
+                    width={bodyW}
+                    height={tickH}
+                    rx={1}
+                    className={fillCls}
+                  />
+                </g>
+              );
+            }
+
+            const naturalH = Math.abs(yC - yO);
+            const bodyH = Math.max(naturalH, 5);
+            const bodyTop = Math.min(yO, yC) - (bodyH - naturalH) / 2;
 
             return (
               <g key={`${b.trade_date}-${i}`}>
                 <line
                   x1={cx}
                   x2={cx}
-                  y1={Math.min(yH, bodyTop)}
-                  y2={Math.max(yL, bodyTop + bodyH)}
+                  y1={yH}
+                  y2={yL}
                   className={stroke}
                   strokeWidth={wickW}
                   strokeLinecap="round"
@@ -189,8 +215,7 @@ export function CandlestickChart({
                   width={bodyW}
                   height={bodyH}
                   rx={1.25}
-                  className={`${fillCls}`}
-                  stroke="none"
+                  className={fillCls}
                 />
               </g>
             );
