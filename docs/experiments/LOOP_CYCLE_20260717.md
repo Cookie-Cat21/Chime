@@ -23,9 +23,18 @@ Research / self-improving loop notes. Not financial advice.
 | B-005 conf gate | **KEEP** — thr=0.55 → 0.727 @ 11% cov; serve mode `gated` (73 emits / 292 pts) |
 | B-010 shuffle | **PASS** — mean_hit=0.524 |
 
+## Later same day
+
+| id | result |
+|---|---|
+| B-006 roll120 | DEAD (+0.001) |
+| B-007 interactions | DEAD (+0.001) |
+| B-008 vol-scaled label | DEAD (mean −0.005) |
+| B-002 market summary | BLOCKED — API returns ~2 sessions only; nightly accrual started (B-011) |
+| B-012 gated_p90 | **KEEP** thr=0.84 → 90.5% @ n=42; serve `--mode gated_p90` (1 emit today) |
+
 ## Next
 
-- B-006 rolling 120d window
-- B-007 filing×range interaction
-- B-001/B-002 data acquisition (anti-plateau if more no-keeps)
-- Stress: wait for next CSE session to score live gated emits
+- Accrue B-011 market summary + B-001 order-book history
+- Score live gated/p90 emits after next CSE session
+- Re-test B-002 at ≥60 market_daily_summary days

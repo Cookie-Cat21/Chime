@@ -334,17 +334,20 @@ def main(argv: list[str] | None = None) -> None:
             "ml-backfill-outcomes",
             "ml-loop-nightly",
             "ml-loop-retrain",
+            "ml-loop-research",
+            "market-summary-backfill",
         ],
         help=(
             "bot | poller | both | migrate | tick | "
             "drain-pdfs | drain-briefs | drain-briefs-local | drain-metrics | "
             "path-backfill | score-signals | eval-signals | "
             "sector-backfill | notices-backfill | disclosures-backfill | "
-            "financials-backfill | aspi-backfill | ml-experiment | "
+            "financials-backfill | aspi-backfill | market-summary-backfill | "
+            "ml-experiment | "
             "ml-forecast | ml-transfer | ml-harden | ml-diagnose | "
             "ml-iterate | ml-precision90 | ml-hpe | ml-forecast-unified | "
             "ml-always-on | ml-score-outcomes | ml-backfill-outcomes | "
-            "ml-loop-nightly | ml-loop-retrain"
+            "ml-loop-nightly | ml-loop-retrain | ml-loop-research"
         ),
     )
     parser.add_argument(
@@ -420,7 +423,7 @@ def main(argv: list[str] | None = None) -> None:
         default="hpe_with_fallback",
         help=(
             "For ml-forecast-unified: hpe_only | hpe_with_fallback | "
-            "always_on | gated"
+            "always_on | gated | gated_p90"
         ),
     )
     args = parser.parse_args(argv)
@@ -437,12 +440,14 @@ def main(argv: list[str] | None = None) -> None:
         "aspi-backfill",
         "ml-loop-nightly",
         "ml-loop-retrain",
+        "ml-loop-research",
     ):
         parser.error(
             "--force is only valid for tick, path-backfill, "
             "sector-backfill, notices-backfill, disclosures-backfill, "
             "financials-backfill, aspi-backfill, ml-forecast, ml-hpe, "
-            "ml-forecast-unified, ml-loop-nightly, or ml-loop-retrain"
+            "ml-forecast-unified, ml-loop-nightly, ml-loop-retrain, "
+            "or ml-loop-research"
         )
     if args.period is not None and args.command != "path-backfill":
         parser.error("--period is only valid for path-backfill")
@@ -1085,7 +1090,13 @@ def main(argv: list[str] | None = None) -> None:
             args.mode
             if isinstance(args.mode, str)
             and args.mode
-            in {"hpe_only", "hpe_with_fallback", "always_on", "gated"}
+            in {
+                "hpe_only",
+                "hpe_with_fallback",
+                "always_on",
+                "gated",
+                "gated_p90",
+            }
             else "hpe_with_fallback"
         )
 
@@ -1221,7 +1232,21 @@ def main(argv: list[str] | None = None) -> None:
 
             storage = Storage(settings.database_url)
             await storage.open()
+            cse = CSEClient(
+                base_url=settings.cse_base_url,
+                timeout=settings.http_timeout_seconds,
+                fail_max=settings.circuit_fail_max,
+                reset_timeout=settings.circuit_reset_seconds,
+                min_interval_seconds=settings.cse_min_interval_seconds,
+            )
             try:
+                # B-011: accrue dailyMarketSummery (CSE only returns ~2 latest days)
+                try:
+                    mkt = await cse.fetch_daily_market_summary()
+                    n_mkt = await storage.upsert_market_daily_summary(mkt)
+                    print(f"ml-loop-nightly: market_summary_upserted={n_mkt}")
+                except Exception as exc:
+                    print(f"ml-loop-nightly: market_summary_failed={exc!s}"[:120])
                 result = await run_loop_nightly(storage)
                 print(
                     "ml-loop-nightly: "
@@ -1230,9 +1255,66 @@ def main(argv: list[str] | None = None) -> None:
                     f"scoreboard={result.scoreboard_path}"
                 )
             finally:
+                await cse.aclose()
                 await storage.close()
 
         asyncio.run(_nightly())
+        return
+
+    if args.command == "market-summary-backfill":
+        configure_logging()
+        settings = Settings.from_env(require_token=False)
+
+        async def _mkt() -> None:
+            storage = Storage(settings.database_url)
+            await storage.open()
+            cse = CSEClient(
+                base_url=settings.cse_base_url,
+                timeout=settings.http_timeout_seconds,
+                fail_max=settings.circuit_fail_max,
+                reset_timeout=settings.circuit_reset_seconds,
+                min_interval_seconds=settings.cse_min_interval_seconds,
+            )
+            try:
+                rows = await cse.fetch_daily_market_summary()
+                n = await storage.upsert_market_daily_summary(rows)
+                print(f"market-summary-backfill: fetched={len(rows)} upserted={n}")
+            finally:
+                await cse.aclose()
+                await storage.close()
+
+        asyncio.run(_mkt())
+        return
+
+    if args.command == "ml-loop-research":
+        configure_logging()
+        settings = Settings.from_env(require_token=False)
+        if not settings.ml_loop_enabled and not args.force:
+            print(
+                "ml-loop-research: disabled "
+                "(set ML_LOOP_ENABLED=1 or pass --force)"
+            )
+            return
+
+        async def _research() -> None:
+            from chime.ml.loop_research import run_loop_research
+
+            storage = Storage(settings.database_url)
+            await storage.open()
+            try:
+                results = await run_loop_research(storage)
+                for r in results:
+                    print(
+                        "ml-loop-research: "
+                        f"{r.experiment_id} {r.status} "
+                        f"mean={r.mean_symbol_hit} "
+                        f"gated={r.gated_hit_055} cov={r.gated_cov_055} "
+                        f"delta={r.delta_vs_baseline}"
+                    )
+            finally:
+                await storage.close()
+
+        asyncio.run(_research())
         return
 
     if args.command == "ml-loop-retrain":

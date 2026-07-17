@@ -239,7 +239,12 @@ def enrich_samples_with_sector_rs(
     return out
 
 
-def _walk_lmt_bagged(samples: list[Sample]) -> list[PredRow]:
+def _walk_lmt_bagged(
+    samples: list[Sample],
+    *,
+    train_window_days: int | None = None,
+) -> list[PredRow]:
+    """Purged walk-forward. If ``train_window_days`` set, use rolling train."""
     dates = _unique_sorted_dates(samples)
     min_train_days, fold_step, embargo = 100, 10, 2
     rows: list[PredRow] = []
@@ -250,6 +255,12 @@ def _walk_lmt_bagged(samples: list[Sample]) -> list[PredRow]:
         train = _purge_train(
             samples, dates=dates, cut=cut, horizon=1, embargo=embargo
         )
+        if train_window_days is not None and train_window_days > 0:
+            # Keep only the last N unique train session dates
+            train_dates = sorted({s.as_of for s in train})
+            if len(train_dates) > train_window_days:
+                keep = set(train_dates[-train_window_days:])
+                train = [s for s in train if s.as_of in keep]
         test = [s for s in samples if s.as_of in test_dates]
         cut += fold_step
         if len(train) < 50 or len(test) < 10:
@@ -262,6 +273,144 @@ def _walk_lmt_bagged(samples: list[Sample]) -> list[PredRow]:
         rows.extend(_rows_from_scores(test, scores, fold=fold, sectors=None))
         fold += 1
     return rows
+
+
+def enrich_samples_with_market_summary(
+    samples: list[Sample],
+    rows: list[dict[str, Any]],
+) -> list[Sample]:
+    """Append market turnover / foreign-flow regime features (B-002).
+
+    Features (as-of leakage-safe using same-day or prior session):
+    - log1p(market_turnover)
+    - foreign_net / turnover
+    - foreign_buy_share
+    - turnover_z_20 (vs trailing 20 sessions)
+    - foreign_net_z_20
+    """
+    by_date: dict[date, dict[str, Any]] = {}
+    for r in rows:
+        d = r.get("trade_date")
+        if isinstance(d, date):
+            by_date[d] = r
+    ordered = sorted(by_date)
+    if not ordered:
+        return samples
+
+    turnovers: list[float] = []
+    nets: list[float] = []
+    feat_by_date: dict[date, tuple[float, float, float, float, float]] = {}
+    for d in ordered:
+        r = by_date[d]
+        to = r.get("market_turnover")
+        fn = r.get("foreign_net")
+        fp = r.get("equity_foreign_purchase")
+        fs = r.get("equity_foreign_sales")
+        to_f = float(to) if isinstance(to, int | float) and math.isfinite(float(to)) else float("nan")
+        fn_f = float(fn) if isinstance(fn, int | float) and math.isfinite(float(fn)) else float("nan")
+        turnovers.append(to_f if math.isfinite(to_f) else float("nan"))
+        nets.append(fn_f if math.isfinite(fn_f) else float("nan"))
+
+        log_to = math.log1p(to_f) if math.isfinite(to_f) and to_f >= 0 else float("nan")
+        ratio = (
+            fn_f / to_f
+            if math.isfinite(fn_f) and math.isfinite(to_f) and to_f > 0
+            else float("nan")
+        )
+        buy_share = float("nan")
+        if (
+            isinstance(fp, int | float)
+            and isinstance(fs, int | float)
+            and math.isfinite(float(fp))
+            and math.isfinite(float(fs))
+        ):
+            denom = float(fp) + float(fs)
+            if denom > 0:
+                buy_share = float(fp) / denom
+
+        def _z(series: list[float]) -> float:
+            window = [x for x in series[-20:] if math.isfinite(x)]
+            if len(window) < 5:
+                return float("nan")
+            mu = sum(window) / len(window)
+            var = sum((x - mu) ** 2 for x in window) / len(window)
+            if var <= 0:
+                return 0.0
+            last = series[-1]
+            if not math.isfinite(last):
+                return float("nan")
+            return (last - mu) / math.sqrt(var)
+
+        feat_by_date[d] = (log_to, ratio, buy_share, _z(turnovers), _z(nets))
+
+    out: list[Sample] = []
+    for s in samples:
+        # use as_of session if present else prior
+        d = s.as_of if s.as_of in feat_by_date else None
+        if d is None:
+            prior = [x for x in ordered if x <= s.as_of]
+            d = prior[-1] if prior else None
+        extras = feat_by_date.get(d, (float("nan"),) * 5) if d else (float("nan"),) * 5
+        out.append(
+            Sample(
+                symbol=s.symbol,
+                as_of=s.as_of,
+                x=tuple(s.x) + extras,
+                y_ret=s.y_ret,
+                y_dir=s.y_dir,
+                horizon=s.horizon,
+            )
+        )
+    return out
+
+
+def enrich_samples_with_interactions(samples: list[Sample]) -> list[Sample]:
+    """Append filing_recent × range_20d and ret_5d × vol_20d (B-007).
+
+    Expects financial-filing enrichment already appended so the last feature
+    before extras is ``q_recent`` when rich filings are present; falls back to
+    using days_since proxies from the trailing extras when layout is unknown.
+    Always uses base ``FEATURE_NAMES`` indices for path features.
+    """
+    from chime.ml.features import FEATURE_NAMES
+
+    i_range = FEATURE_NAMES.index("range_20d")
+    i_ret5 = FEATURE_NAMES.index("ret_5d")
+    i_vol = FEATURE_NAMES.index("vol_20d")
+    out: list[Sample] = []
+    for s in samples:
+        x = list(s.x)
+        r20 = x[i_range] if i_range < len(x) else float("nan")
+        ret5 = x[i_ret5] if i_ret5 < len(x) else float("nan")
+        vol = x[i_vol] if i_vol < len(x) else float("nan")
+        # Heuristic: q_recent flag often sits near end of financial extras.
+        # Prefer explicit 0/1 flag in trailing features; else use 0.
+        q_recent = 0.0
+        for v in reversed(x[len(FEATURE_NAMES) :]):
+            if v in (0.0, 1.0):
+                q_recent = float(v)
+                break
+        inter_fr = (
+            q_recent * r20
+            if math.isfinite(r20)
+            else float("nan")
+        )
+        inter_rv = (
+            ret5 * vol
+            if math.isfinite(ret5) and math.isfinite(vol)
+            else float("nan")
+        )
+        out.append(
+            Sample(
+                symbol=s.symbol,
+                as_of=s.as_of,
+                x=tuple(x) + (inter_fr, inter_rv),
+                y_ret=s.y_ret,
+                y_dir=s.y_dir,
+                horizon=s.horizon,
+            )
+        )
+    return out
 
 
 def _window_ret(values: list[float], n: int) -> float:

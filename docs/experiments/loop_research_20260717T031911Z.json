@@ -1,0 +1,29 @@
+[
+  {
+    "experiment_id": "B-002",
+    "status": "OPEN",
+    "mean_symbol_hit": null,
+    "gated_hit_055": null,
+    "gated_cov_055": null,
+    "delta_vs_baseline": null,
+    "notes": "insufficient market_daily_summary rows (2)"
+  },
+  {
+    "experiment_id": "B-006",
+    "status": "DEAD",
+    "mean_symbol_hit": 0.5964428676173841,
+    "gated_hit_055": 0.72829417773238,
+    "gated_cov_055": 0.11162419474374323,
+    "delta_vs_baseline": 0.0010427015851055543,
+    "notes": "rolling 120d train; gated@0.55 hit=0.72829417773238 cov=0.11162419474374323"
+  },
+  {
+    "experiment_id": "B-007",
+    "status": "DEAD",
+    "mean_symbol_hit": 0.5964290278642937,
+    "gated_hit_055": 0.7219917012448133,
+    "gated_cov_055": 0.10991391596830283,
+    "delta_vs_baseline": 0.0010288618320152265,
+    "notes": "filing\u00d7range + ret\u00d7vol; gated@0.55 hit=0.7219917012448133 cov=0.10991391596830283"
+  }
+]

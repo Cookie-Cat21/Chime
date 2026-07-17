@@ -5,19 +5,24 @@ Initial seed from force-find ledger + factor expansion waves.
 
 | id | priority | status | hypothesis | protocol | kill if |
 |---|---:|---|---|---|---|
-| B-001 | 10 | OPEN | Persist order-book imbalance history → liquidity shock features | purged panel | RankIC lift &lt; 0.005 |
-| B-002 | 20 | OPEN | Daily market summary (turnover / foreign) as regime features | purged panel | no keep vs fin_rich |
-| B-003 | 30 | DEAD | Denser YoY (finish PDF drain) → always-on mean ≥ 0.62 | ml-always-on | &lt; +0.005 after full drain — hit 0.595 vs baseline 0.593 (no-keep) |
-| B-004 | 40 | KEEP-PARTIAL | Per-regime HPE gate thresholds (up/down/flat) | ml-precision90 | regimes alone ~equal; conf×regime lifts up_low to ~0.77 @ thr=0.6 |
-| B-005 | 50 | KEEP | Meta-label / conf gate: emit when conf≥0.55 | purged + gate | **KEEP** gated hit 0.7268 @ cov 0.11 — promoted champion `challenger_gated_c55_20260717` |
-| B-006 | 60 | OPEN | Rolling 120d train window vs expanding | Loop B challenger | worse fold robustness |
-| B-007 | 70 | OPEN | Interaction: filing_recent × range_20d | feature add | importance &lt; 1% × 3 cycles |
-| B-008 | 80 | OPEN | Target: next-day vol-scaled return | label change | RankIC not ≥ hit-only stack |
-| B-009 | 90 | DEAD | Announcement count features alone | — | already no-keep in ledger |
-| B-010 | 100 | KEEP | Protocol audit: shuffle labels → hit≈0.5 | audit | **PASS** mean_hit=0.524 across 8 folds |
+| B-001 | 10 | OPEN | Persist order-book imbalance history → liquidity shock features | purged panel | RankIC lift &lt; 0.005 — table exists; need multi-day history accrual |
+| B-002 | 20 | BLOCKED | Daily market summary (turnover / foreign) as regime features | purged panel | CSE `/dailyMarketSummery` returns **only ~2 sessions** — accumulate in poller going forward |
+| B-003 | 30 | DEAD | Denser YoY → always-on mean ≥ 0.62 | ml-always-on | +0.002 only |
+| B-004 | 40 | KEEP-PARTIAL | Per-regime HPE gate thresholds | ml-precision90 | conf×regime helps; regimes alone flat |
+| B-005 | 50 | KEEP | Meta-label / conf gate conf≥0.55 | purged + gate | **KEEP** 0.7268 @ 11% cov — champion `challenger_gated_c55_20260717` |
+| B-006 | 60 | DEAD | Rolling 120d train window | Loop C | +0.001 |
+| B-007 | 70 | DEAD | Interaction filing×range + ret×vol | Loop C | +0.001 |
+| B-008 | 80 | DEAD | Vol-scaled next-day return target | label change | mean −0.005; p90 0.82 |
+| B-009 | 90 | DEAD | Announcement count features alone | — | prior ledger |
+| B-010 | 100 | KEEP | Shuffle labels → hit≈0.5 | audit | **PASS** 0.524 |
+| B-011 | 15 | OPEN | Accrue `market_daily_summary` nightly until ≥60 days then re-run B-002 | poller + Loop C | — |
+| B-012 | 25 | KEEP | Ultra gate thr=0.84 → ≥90% precision | WF ledger | **KEEP** hit 0.9048 @ n=42 cov 0.24%; serve `--mode gated_p90` |
 
-**Anti-plateau:** after 3 consecutive no-keeps, next cycle must be data acquisition (B-001/B-002), target engineering (B-008), or protocol audit (B-010).
+**Anti-plateau:** data accrual (B-001/B-011) until market summary / order-book history deepens.
 
-**Current champion (serve):** `challenger_gated_c55_20260717` — gated always-on, thr from `data/ml_artifacts/gate_calibration.json` (≈0.45–0.55). Mode: `ml-forecast-unified --mode gated`.
+**Serve modes**
+- `gated` — calibrated thr (~0.45–0.55), ~72% selective
+- `gated_p90` — thr=0.84, ~90% selective, very sparse emits
+- `hpe_with_fallback` — HPE + always-on board fill
 
 Research only — not financial advice.

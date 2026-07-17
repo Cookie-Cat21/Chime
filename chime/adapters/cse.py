@@ -79,6 +79,8 @@ COMPANY_FINANCIALS_ENDPOINT = "financials"
 COMPANY_FINANCIALS_PATH = "/financials"
 FINANCIAL_ANNOUNCEMENT_ENDPOINT = "getFinancialAnnouncement"
 FINANCIAL_ANNOUNCEMENT_PATH = "/getFinancialAnnouncement"
+DAILY_MARKET_SUMMARY_ENDPOINT = "dailyMarketSummery"
+DAILY_MARKET_SUMMARY_PATH = "/dailyMarketSummery"
 COMPANY_PROFILE_ENDPOINT = "companyProfile"
 COMPANY_PROFILE_PATH = "/companyProfile"
 # Observed period map — docs/experiments/CSE_PATH_HISTORY_PROBE.md
@@ -106,6 +108,31 @@ ORDER_BOOK_ENDPOINT = "orderBook"
 ORDER_BOOK_PATH = "/orderBook"
 LEGACY_ANNOUNCEMENTS_ENDPOINT = "announcements"
 LEGACY_ANNOUNCEMENTS_PATH = "/announcements"
+
+
+def _flatten_daily_market_rows(raw: Any) -> list[dict[str, Any]]:
+    """CSE returns a nested list of single-element lists of objects."""
+    out: list[dict[str, Any]] = []
+    if not isinstance(raw, list):
+        return out
+    for item in raw:
+        if isinstance(item, dict):
+            out.append(item)
+            continue
+        if isinstance(item, list):
+            for sub in item:
+                if isinstance(sub, dict):
+                    out.append(sub)
+    return out
+
+
+def _ms_to_date(ms: Any) -> date | None:
+    if isinstance(ms, bool) or not isinstance(ms, int | float):
+        return None
+    try:
+        return datetime.fromtimestamp(float(ms) / 1000.0, tz=_COLOMBO).date()
+    except (OverflowError, OSError, ValueError):
+        return None
 
 
 def _reject_bool_numeric_value(value: Any) -> Any:
@@ -2035,6 +2062,56 @@ class CSEClient:
             return out
 
         return cast(list[MarketNotice], await self._guarded(endpoint, _call))
+
+    async def fetch_daily_market_summary(self) -> list[dict[str, Any]]:
+        """Market-wide daily turnover / foreign flow (``POST /dailyMarketSummery``)."""
+
+        async def _call() -> list[dict[str, Any]]:
+            raw = await self._request(
+                "POST",
+                DAILY_MARKET_SUMMARY_PATH,
+                json_body={},
+            )
+            rows = _flatten_daily_market_rows(raw)
+            out: list[dict[str, Any]] = []
+
+            def _num(row: dict[str, Any], key: str) -> float | None:
+                val = row.get(key)
+                if isinstance(val, bool) or not isinstance(val, int | float):
+                    return None
+                if not math.isfinite(float(val)):
+                    return None
+                return float(val)
+
+            for row in rows:
+                d = _ms_to_date(row.get("tradeDate"))
+                if d is None:
+                    continue
+                fp = _num(row, "equityForeignPurchase")
+                fs = _num(row, "equityForeignSales")
+                foreign_net = None
+                if fp is not None and fs is not None:
+                    foreign_net = fp - fs
+                out.append(
+                    {
+                        "trade_date": d,
+                        "market_turnover": _num(row, "marketTurnover"),
+                        "market_trades": _num(row, "marketTrades"),
+                        "equity_foreign_purchase": fp,
+                        "equity_foreign_sales": fs,
+                        "foreign_net": foreign_net,
+                        "volume_of_turnover": _num(row, "volumeOfTurnOverNumber"),
+                        "market_cap": _num(row, "marketCap"),
+                        "asi": _num(row, "asi"),
+                        "raw": row,
+                    }
+                )
+            return out
+
+        return cast(
+            list[dict[str, Any]],
+            await self._guarded(DAILY_MARKET_SUMMARY_ENDPOINT, _call),
+        )
 
     async def fetch_order_book(self, symbol: str) -> OrderBookSnapshot | None:
         """Fetch public order-book totals (``POST /orderBook`` form ``symbol=``)."""

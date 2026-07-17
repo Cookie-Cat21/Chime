@@ -29,10 +29,15 @@ log = get_logger(__name__)
 
 ALWAYS_ON_VERSION = "ml_always_on_fin_v1"
 GATED_VERSION = "ml_gated_c55_v1"
+GATED_P90_VERSION = "ml_gated_p90_v1"
 DEFAULT_GATE_THR = 0.55
+# WF ledger: thr=0.84 → hit≈0.905 @ n=42 (cov≈0.24%). Selective 90% path.
+P90_GATE_THR = 0.84
 
 
-def _load_gate_threshold() -> float:
+def _load_gate_threshold(*, p90: bool = False) -> float:
+    if p90:
+        return P90_GATE_THR
     from pathlib import Path
     import json
 
@@ -71,6 +76,8 @@ async def run_unified_forecast(
     - ``always_on``: always-on stack only
     - ``gated``: always-on but only emit when confidence ≥ calibrated threshold
       (B-005 KEEP — ~72% hit @ ~11% coverage at thr=0.55 on WF ledger)
+    - ``gated_p90``: ultra-selective gate (thr=0.84) targeting ≥90% precision
+      on WF ledger (very low coverage)
     """
     if not sklearn_available():
         return UnifiedForecastResult(0, 0, 0, mode)
@@ -78,7 +85,7 @@ async def run_unified_forecast(
     hpe_emits = 0
     points = 0
     hpe_symbols: set[str] = set()
-    gate_thr = _load_gate_threshold()
+    gate_thr = _load_gate_threshold(p90=(mode == "gated_p90"))
 
     if mode in {"hpe_only", "hpe_with_fallback"}:
         hpe = await run_hpe_forecast(storage=storage, force=True)
@@ -102,7 +109,7 @@ async def run_unified_forecast(
                 hpe_symbols.add(sym.strip().upper())
 
     fallback_emits = 0
-    if mode in {"hpe_with_fallback", "always_on", "gated"}:
+    if mode in {"hpe_with_fallback", "always_on", "gated", "gated_p90"}:
         from datetime import date
         from pathlib import Path
         import json
@@ -159,14 +166,21 @@ async def run_unified_forecast(
                 if mode == "hpe_with_fallback" and sample.symbol in hpe_symbols:
                     continue
                 conf = score_to_confidence(score)
-                if mode == "gated" and conf < gate_thr:
+                if mode in {"gated", "gated_p90"} and conf < gate_thr:
                     continue
-                gate_name = "gated_c55" if mode == "gated" else "always_on"
-                version = GATED_VERSION if mode == "gated" else ALWAYS_ON_VERSION
+                if mode == "gated_p90":
+                    gate_name = "gated_p90"
+                    version = GATED_P90_VERSION
+                elif mode == "gated":
+                    gate_name = "gated_c55"
+                    version = GATED_VERSION
+                else:
+                    gate_name = "always_on"
+                    version = ALWAYS_ON_VERSION
                 band = confidence_band(conf, gate=gate_name)
-                if band == "none" and mode != "gated":
+                if band == "none" and mode not in {"gated", "gated_p90"}:
                     continue
-                if mode == "gated":
+                if mode in {"gated", "gated_p90"}:
                     band = "high" if conf >= 0.65 else "medium"
                 bars = series.get(sample.symbol) or []
                 if not bars:
@@ -181,18 +195,23 @@ async def run_unified_forecast(
                 if last_ts.tzinfo is None:
                     last_ts = last_ts.replace(tzinfo=UTC)
                 fps = []
-                reasons = (
-                    [
+                if mode == "gated_p90":
+                    reasons = [
+                        f"Ultra confidence gate (thr≥{gate_thr:.2f}) — selective ~90% path",
+                        "WF ledger ~90.5% hit @ ~0.24% coverage (NFA)",
+                        f"|score|={abs(score):.3f}",
+                    ]
+                elif mode == "gated":
+                    reasons = [
                         f"Confidence-gated research estimate (thr≥{gate_thr:.2f})",
                         "WF ledger ~72% hit @ ~11% coverage (NFA)",
                         f"|score|={abs(score):.3f}",
                     ]
-                    if mode == "gated"
-                    else [
+                else:
+                    reasons = [
                         "Always-on research estimate (historical hit ~60%)",
                         f"|score|={abs(score):.3f}",
                     ]
-                )
                 for h in (1, 2, 3, 5):
                     yhat = last_px * (1.0 + direction * mag * (h / 5.0))
                     if not math.isfinite(yhat) or yhat <= 0:

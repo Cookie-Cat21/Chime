@@ -603,6 +603,71 @@ class Storage:
                 out.append(symbol)
         return out
 
+    async def upsert_market_daily_summary(self, rows: list[dict[str, Any]]) -> int:
+        """Upsert CSE dailyMarketSummery rows (keyed by trade_date)."""
+        if not rows:
+            return 0
+        by_date: dict[date, dict[str, Any]] = {}
+        for row in rows:
+            d = row.get("trade_date")
+            if not isinstance(d, date):
+                continue
+            by_date[d] = row
+        if not by_date:
+            return 0
+        payload = list(by_date.values())
+        async with self._pool.connection() as conn:
+            async with conn.cursor() as cur:
+                await cur.executemany(
+                    """
+                    INSERT INTO market_daily_summary (
+                        trade_date, market_turnover, market_trades,
+                        equity_foreign_purchase, equity_foreign_sales,
+                        foreign_net, volume_of_turnover, market_cap, asi, raw
+                    ) VALUES (
+                        %(trade_date)s, %(market_turnover)s, %(market_trades)s,
+                        %(equity_foreign_purchase)s, %(equity_foreign_sales)s,
+                        %(foreign_net)s, %(volume_of_turnover)s, %(market_cap)s,
+                        %(asi)s, %(raw)s
+                    )
+                    ON CONFLICT (trade_date) DO UPDATE SET
+                        market_turnover = EXCLUDED.market_turnover,
+                        market_trades = EXCLUDED.market_trades,
+                        equity_foreign_purchase = EXCLUDED.equity_foreign_purchase,
+                        equity_foreign_sales = EXCLUDED.equity_foreign_sales,
+                        foreign_net = EXCLUDED.foreign_net,
+                        volume_of_turnover = EXCLUDED.volume_of_turnover,
+                        market_cap = EXCLUDED.market_cap,
+                        asi = EXCLUDED.asi,
+                        raw = EXCLUDED.raw,
+                        ingested_at = now()
+                    """,
+                    [
+                        {
+                            **r,
+                            "raw": Json(r.get("raw") or {}),
+                        }
+                        for r in payload
+                    ],
+                )
+        return len(payload)
+
+    async def list_market_daily_summary(self) -> list[dict[str, Any]]:
+        """All market_daily_summary rows ascending by trade_date."""
+        async with self._pool.connection() as conn:
+            rows = await (
+                await conn.execute(
+                    """
+                    SELECT trade_date, market_turnover, market_trades,
+                           equity_foreign_purchase, equity_foreign_sales,
+                           foreign_net, volume_of_turnover, market_cap, asi
+                    FROM market_daily_summary
+                    ORDER BY trade_date ASC
+                    """
+                )
+            ).fetchall()
+        return [dict(r) for r in rows]
+
     async def list_symbols_missing_sector(self) -> list[str]:
         """Symbols with daily bars (or any stock) missing a sector label."""
         async with self._pool.connection() as conn:
