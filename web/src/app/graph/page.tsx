@@ -35,9 +35,9 @@ export default async function GraphPage({
 
   try {
     const pool = getPool();
-    // Full board for client filters; focus is selection-only
+    // Medium+ only — CSE has no ownership JSON; low/group_mention is noise.
     const graph = await queryCompanyGraph(pool, {
-      minConfidence: "low",
+      minConfidence: "medium",
       limit: 160,
       focusSymbol: null,
       includeIsolates: true,
@@ -55,7 +55,7 @@ export default async function GraphPage({
         <PageHeader
           eyebrow="Research"
           title="Ownership map"
-          description="Subsidiaries, associates, and equity from public CSE annual reports. Not a complete ownership register."
+          description="Subsidiaries and associates parsed from public CSE annual-report PDFs — CSE has no ownership API. Research map, not a complete register."
           action={
             <div className="flex flex-wrap gap-2">
               <Button asChild variant="secondary" size="sm">

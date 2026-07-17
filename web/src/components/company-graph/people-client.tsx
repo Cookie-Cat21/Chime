@@ -746,8 +746,8 @@ export function PeopleGraphClient({ people }: { people: PersonNode[] }) {
               Influence ranking
             </p>
             <p className="mt-0.5 text-[11px] leading-snug text-muted-foreground">
-              Σ (market cap × role weight). Enter or double-click opens dossier.
-              Research proxy — not personal net worth.
+              Σ (market cap × role weight). Enter / double-click opens dossier.
+              Boards from CSE companyProfile — refresh via directors-backfill.
             </p>
           </div>
 

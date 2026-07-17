@@ -314,7 +314,11 @@ export function PersonDossierView({ dossier }: { dossier: PersonDossier }) {
   const tabs: Array<{ id: TabId; label: string; count?: number }> = [
     { id: "seats", label: "Seats", count: dossier.seats.length },
     { id: "network", label: "Network", count: dossier.network.length },
-    { id: "timeline", label: "Across years" },
+    {
+      id: "timeline",
+      label: "Across years",
+      count: dossier.timeline.length || undefined,
+    },
   ];
 
   const selectTab = useCallback(
@@ -685,7 +689,7 @@ export function PersonDossierView({ dossier }: { dossier: PersonDossier }) {
         </section>
       ) : null}
 
-      {/* Loop 8: across-years honest timeline */}
+      {/* Across years: live seats + issuer filings / board events from DB */}
       {tab === "timeline" ? (
         <section
           role="tabpanel"
@@ -696,8 +700,8 @@ export function PersonDossierView({ dossier }: { dossier: PersonDossier }) {
           <div>
             <h2 className="font-display text-lg font-semibold">Across years</h2>
             <p className="text-[12px] text-muted-foreground">
-              CSE companyProfile is live-only. History accumulates from dated
-              syncs.
+              CSE boards are live-only. Below: today&apos;s seats, then filings
+              on those issuers (appointments when polled; annuals already in DB).
             </p>
           </div>
 
@@ -742,25 +746,80 @@ export function PersonDossierView({ dossier }: { dossier: PersonDossier }) {
                 </ul>
               </div>
             </li>
-            <li className="relative">
-              <span
-                aria-hidden
-                className="absolute -left-[1.3rem] top-1.5 size-2.5 rounded-full border border-dashed border-muted-foreground/40 bg-background"
-              />
-              <details className="rounded-lg border border-dashed border-border/80 px-4 py-2.5 open:pb-3">
-                <summary className="cursor-pointer text-[12px] font-medium text-muted-foreground">
-                  How history will grow
-                </summary>
-                <p className="mt-2 text-[12px] leading-relaxed text-muted-foreground">
-                  Nightly{" "}
-                  <code className="font-mono text-[11px]">
-                    directors-backfill
-                  </code>{" "}
-                  snapshots append dated seats. Optional annual-report extract
-                  can fill earlier years with evidence links.
-                </p>
-              </details>
-            </li>
+
+            {dossier.timeline.length === 0 ? (
+              <li className="relative">
+                <span
+                  aria-hidden
+                  className="absolute -left-[1.3rem] top-1.5 size-2.5 rounded-full border border-dashed border-muted-foreground/40 bg-background"
+                />
+                <div className="rounded-lg border border-dashed border-border/80 px-4 py-3">
+                  <p className="text-[12px] text-muted-foreground">
+                    No issuer filings on file for these seats yet. Poller stores
+                    annuals/appointment categories as they arrive.
+                  </p>
+                </div>
+              </li>
+            ) : (
+              dossier.timeline.map((ev) => {
+                const day = ev.at.slice(0, 10);
+                const href = ev.url
+                  ? ev.url
+                  : `/symbols/${encodeURIComponent(ev.symbol)}`;
+                const external = Boolean(ev.url);
+                return (
+                  <li key={`${ev.disclosure_id}-${ev.symbol}`} className="relative">
+                    <span
+                      aria-hidden
+                      className={cn(
+                        "absolute -left-[1.3rem] top-1.5 size-2.5 rounded-full border bg-background",
+                        ev.kind === "board_event"
+                          ? "border-foreground"
+                          : "border-border",
+                      )}
+                    />
+                    <div className="rounded-lg border border-border/80 bg-card/40 px-4 py-2.5">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <span className="font-mono text-[11px] tabular-nums text-muted-foreground">
+                          {day}
+                        </span>
+                        <Badge variant="outline" className="text-[10px]">
+                          {ev.kind === "board_event" ? "Board event" : "Filing"}
+                        </Badge>
+                        <Link
+                          href={`/symbols/${encodeURIComponent(ev.symbol)}`}
+                          className="font-mono text-[11px] font-semibold underline-offset-2 hover:underline"
+                        >
+                          {ticker(ev.symbol)}
+                        </Link>
+                      </div>
+                      {external ? (
+                        <a
+                          href={href}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="mt-1 block text-[13px] text-foreground underline-offset-2 hover:underline"
+                        >
+                          {ev.title}
+                        </a>
+                      ) : (
+                        <Link
+                          href={href}
+                          className="mt-1 block text-[13px] text-foreground underline-offset-2 hover:underline"
+                        >
+                          {ev.title}
+                        </Link>
+                      )}
+                      {ev.category ? (
+                        <p className="mt-0.5 text-[11px] text-muted-foreground">
+                          {ev.category}
+                        </p>
+                      ) : null}
+                    </div>
+                  </li>
+                );
+              })
+            )}
           </ol>
         </section>
       ) : null}

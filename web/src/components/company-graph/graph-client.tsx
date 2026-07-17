@@ -32,7 +32,6 @@ const RELATION_LABEL: Record<string, string> = {
   associate: "Associate",
   joint_venture: "Joint venture",
   related_party: "Related party",
-  group_mention: "Group mention",
 };
 
 function shortSymbol(symbol: string | null): string {
@@ -63,9 +62,8 @@ export function CompanyGraphClient({
   const [query, setQuery] = useState(
     initialFocus ? shortSymbol(initialFocus) : "",
   );
-  const [minConf, setMinConf] = useState<"medium" | "high" | "low">(
-    (searchParams.get("confidence") as "medium" | "high" | "low") || "medium",
-  );
+  // CSE has no ownership JSON API — edges are PDF-extracted. Low/group_mention
+  // noise is dropped; we always show medium+ (no user confidence picker).
   const [holdingsOnly, setHoldingsOnly] = useState(
     searchParams.get("hubs") === "1",
   );
@@ -86,11 +84,10 @@ export function CompanyGraphClient({
     return () => window.removeEventListener("keydown", onKey);
   }, []);
 
-  // Persist filters in URL
+  // Persist filters in URL (strip legacy ?confidence=)
   useEffect(() => {
     const params = new URLSearchParams(searchParams.toString());
-    if (minConf === "medium") params.delete("confidence");
-    else params.set("confidence", minConf);
+    params.delete("confidence");
     if (holdingsOnly) params.set("hubs", "1");
     else params.delete("hubs");
     const sel = nodes.find((n) => n.id === selectedId);
@@ -105,12 +102,12 @@ export function CompanyGraphClient({
       });
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps -- sync filters only
-  }, [minConf, holdingsOnly, selectedId]);
+  }, [holdingsOnly, selectedId]);
 
   const filteredEdges = useMemo(() => {
     const rank = { low: 1, medium: 2, high: 3 } as const;
-    return edges.filter((e) => rank[e.confidence] >= rank[minConf]);
-  }, [edges, minConf]);
+    return edges.filter((e) => rank[e.confidence] >= rank.medium);
+  }, [edges]);
 
   const activeNodeIds = useMemo(() => {
     const ids = new Set<number>();
@@ -286,23 +283,12 @@ export function CompanyGraphClient({
           />
           Holdings hubs
         </label>
-        <label className="flex items-center gap-2 text-sm text-muted-foreground">
-          Min confidence
-          <select
-            value={minConf}
-            onChange={(e) =>
-              setMinConf(e.target.value as "low" | "medium" | "high")
-            }
-            className="rounded-md border border-border bg-background px-2 py-1 text-foreground"
-          >
-            <option value="high">High</option>
-            <option value="medium">Medium</option>
-            <option value="low">Low</option>
-          </select>
-        </label>
         <Badge variant="outline" className="tabular-nums">
           {visibleNodes.length} companies · {visibleEdges.length} links
         </Badge>
+        <span className="hidden text-[11px] text-muted-foreground sm:inline">
+          Annual-report PDFs · not a CSE ownership register
+        </span>
       </div>
 
       <div className="flex flex-wrap gap-2 text-xs text-muted-foreground">

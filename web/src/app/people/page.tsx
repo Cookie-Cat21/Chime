@@ -42,7 +42,7 @@ export default async function PeoplePage() {
         <PageHeader
           eyebrow="Chime · Research"
           title="People"
-          description="Official CSE boards ranked by linked company market value × role. Open a dossier for seats, co-director network, and across-years trail. Not personal net worth."
+          description="Official CSE boards (companyProfile) ranked by linked market value × role. Open a dossier for seats, network, and issuer filings. Not personal net worth — and not auto-updated; run directors-backfill to refresh."
           action={
             <div className="flex flex-wrap gap-2">
               <Button asChild variant="outline" size="sm">

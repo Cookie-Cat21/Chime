@@ -34,6 +34,17 @@ export type DossierCoDirector = {
   influence_score: number;
 };
 
+/** Issuer filings / board events on seated companies (DB-only; no CSE call). */
+export type DossierTimelineEvent = {
+  at: string;
+  kind: "board_event" | "issuer_filing";
+  symbol: string;
+  title: string;
+  category: string | null;
+  url: string | null;
+  disclosure_id: number;
+};
+
 export type PersonDossier = {
   id: number;
   name: string;
@@ -43,8 +54,12 @@ export type PersonDossier = {
   company_count: number;
   seats: DossierSeat[];
   network: DossierCoDirector[];
+  timeline: DossierTimelineEvent[];
   disclaimer: string;
 };
+
+const BOARD_EVENT_CAT =
+  /(APPOINTMENT|RESIGNATION|RETIREMENT|DEMISE).*(DIRECTOR|CHAIR)|DEALINGS BY DIRECTORS|RELATED PARTY TRANSACTION/i;
 
 function asRole(raw: unknown): PersonRole | null {
   if (typeof raw !== "string") return null;
@@ -315,6 +330,60 @@ export async function queryPersonDossier(
     );
   }
 
+  const timeline: DossierTimelineEvent[] = [];
+  if (symbols.length > 0) {
+    const discRes = await pool.query(
+      `
+      SELECT id, symbol, title, category, url, published_at
+      FROM disclosures
+      WHERE symbol = ANY($1::text[])
+      ORDER BY published_at DESC
+      LIMIT 80
+      `,
+      [symbols],
+    );
+
+    for (const row of discRes.rows) {
+      const symbol = normalizeSymbol(row.symbol);
+      if (!symbol) continue;
+      const title = sanitizeDisclosureText(
+        String(row.title ?? ""),
+        MAX_STOCK_NAME_LENGTH,
+      );
+      if (!title) continue;
+      const category =
+        typeof row.category === "string"
+          ? sanitizeDisclosureText(row.category, 120)
+          : null;
+      const catOrTitle = `${category ?? ""} ${title}`;
+      const isBoard = BOARD_EVENT_CAT.test(catOrTitle);
+      // Cap issuer filings so board events (when present) stay visible.
+      if (
+        !isBoard &&
+        timeline.filter((t) => t.kind === "issuer_filing").length >= 12
+      ) {
+        continue;
+      }
+      const at =
+        row.published_at instanceof Date
+          ? row.published_at.toISOString()
+          : String(row.published_at ?? "");
+      if (!at) continue;
+      timeline.push({
+        at,
+        kind: isBoard ? "board_event" : "issuer_filing",
+        symbol,
+        title,
+        category,
+        url: typeof row.url === "string" && row.url ? row.url : null,
+        disclosure_id: Number(row.id),
+      });
+      if (timeline.length >= 24) break;
+    }
+
+    timeline.sort((a, b) => b.at.localeCompare(a.at));
+  }
+
   return {
     id: personId,
     name:
@@ -325,7 +394,8 @@ export async function queryPersonDossier(
     company_count: seats.length,
     seats,
     network: network.slice(0, 40),
+    timeline: timeline.slice(0, 20),
     disclaimer:
-      "Board seats from official CSE companyProfile. Influence = linked company market cap × role weight — not personal net worth. Not financial advice. Year-by-year history will grow from future sync snapshots.",
+      "Board seats from official CSE companyProfile. Influence = linked company market cap × role weight — not personal net worth. Not financial advice. Across-years lists issuer filings on seated companies; CSE has no historical board API.",
   };
 }
