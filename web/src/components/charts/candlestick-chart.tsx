@@ -48,6 +48,15 @@ export function CandlestickChart({
     );
   }
 
+  // Pre-count flats — penny CSE names (0.10 tick) are mostly dojis; candles
+  // look like noise, so we prefer a step close chart with move markers.
+  let preFlat = 0;
+  for (let i = 0; i < bars.length; i++) {
+    const o = candleBodyOpen(bars, i);
+    if (Math.abs(bars[i]!.close - o) < 1e-12) preFlat += 1;
+  }
+  const lineMode = priceMax < 3 && preFlat / bars.length >= 0.4;
+
   const padL = 14;
   const padR = 56;
   const padT = 20;
@@ -150,103 +159,126 @@ export function CandlestickChart({
               strokeWidth={1}
             />
           ))}
-          {bars.map((b, i) => {
-            const bodyOpen = candleBodyOpen(bars, i);
-            const cx = padL + slot * i + slot / 2;
-            const yH = yFor(b.high);
-            const yL = yFor(b.low);
-            const yO = yFor(bodyOpen);
-            const yC = yFor(b.close);
-            // Use a small epsilon in price space (helps CSE tick-size flats).
-            const eps = span * 1e-6;
-            const up = b.close > bodyOpen + eps;
-            const down = b.close < bodyOpen - eps;
-            if (up) upN += 1;
-            else if (down) downN += 1;
-            else flatN += 1;
+          {lineMode ? (
+            <>
+              <path
+                fill="none"
+                className="stroke-foreground/70"
+                strokeWidth={2.25}
+                strokeLinejoin="round"
+                strokeLinecap="round"
+                d={bars
+                  .map((b, i) => {
+                    const x = padL + slot * i + slot / 2;
+                    const y = yFor(b.close);
+                    return i === 0 ? `M ${x} ${y}` : `H ${x} V ${y}`;
+                  })
+                  .join(" ")}
+              />
+              {bars.map((b, i) => {
+                const bodyOpen = candleBodyOpen(bars, i);
+                const cx = padL + slot * i + slot / 2;
+                const yC = yFor(b.close);
+                const up = b.close > bodyOpen;
+                const down = b.close < bodyOpen;
+                if (up) upN += 1;
+                else if (down) downN += 1;
+                else flatN += 1;
+                if (!up && !down) return null;
+                return (
+                  <circle
+                    key={`${b.trade_date}-${i}`}
+                    cx={cx}
+                    cy={yC}
+                    r={3.5}
+                    className={
+                      up
+                        ? "fill-emerald-500 dark:fill-emerald-400"
+                        : "fill-rose-500 dark:fill-rose-400"
+                    }
+                  />
+                );
+              })}
+            </>
+          ) : (
+            bars.map((b, i) => {
+              const bodyOpen = candleBodyOpen(bars, i);
+              const cx = padL + slot * i + slot / 2;
+              const yH = yFor(b.high);
+              const yL = yFor(b.low);
+              const yO = yFor(bodyOpen);
+              const yC = yFor(b.close);
+              const eps = span * 1e-6;
+              const up = b.close > bodyOpen + eps;
+              const down = b.close < bodyOpen - eps;
+              if (up) upN += 1;
+              else if (down) downN += 1;
+              else flatN += 1;
 
-            const stroke = up
-              ? "stroke-emerald-700 dark:stroke-emerald-400"
-              : down
-                ? "stroke-rose-700 dark:stroke-rose-400"
-                : "stroke-zinc-500 dark:stroke-zinc-400";
-            const fillCls = up
-              ? "fill-emerald-500 dark:fill-emerald-400"
-              : down
-                ? "fill-rose-500 dark:fill-rose-400"
-                : "fill-zinc-500 dark:fill-zinc-400";
+              const stroke = up
+                ? "stroke-emerald-700 dark:stroke-emerald-400"
+                : down
+                  ? "stroke-rose-700 dark:stroke-rose-400"
+                  : "stroke-zinc-500 dark:stroke-zinc-400";
+              const fillCls = up
+                ? "fill-emerald-500 dark:fill-emerald-400"
+                : down
+                  ? "fill-rose-500 dark:fill-rose-400"
+                  : "fill-zinc-500 dark:fill-zinc-400";
 
-            // Doji / flat: short tick at close (CSE tick-size days have wide
-            // high/low that look like broken spikes if drawn full-length).
-            if (!up && !down) {
-              const tickH = 4;
-              const wickPad = 7;
+              if (!up && !down) {
+                const tickH = 4;
+                const wickPad = 7;
+                return (
+                  <g key={`${b.trade_date}-${i}`}>
+                    <line
+                      x1={cx}
+                      x2={cx}
+                      y1={yC - wickPad}
+                      y2={yC + wickPad}
+                      className={stroke}
+                      strokeWidth={wickW}
+                      strokeLinecap="round"
+                    />
+                    <rect
+                      x={cx - bodyW / 2}
+                      y={yC - tickH / 2}
+                      width={bodyW}
+                      height={tickH}
+                      rx={1}
+                      className={fillCls}
+                    />
+                  </g>
+                );
+              }
+
+              const naturalH = Math.abs(yC - yO);
+              const bodyH = Math.max(naturalH, 5);
+              const bodyTop = Math.min(yO, yC) - (bodyH - naturalH) / 2;
+
               return (
                 <g key={`${b.trade_date}-${i}`}>
                   <line
                     x1={cx}
                     x2={cx}
-                    y1={yC - wickPad}
-                    y2={yC + wickPad}
+                    y1={yH}
+                    y2={yL}
                     className={stroke}
                     strokeWidth={wickW}
                     strokeLinecap="round"
                   />
                   <rect
                     x={cx - bodyW / 2}
-                    y={yC - tickH / 2}
+                    y={bodyTop}
                     width={bodyW}
-                    height={tickH}
-                    rx={1}
+                    height={bodyH}
+                    rx={1.25}
                     className={fillCls}
                   />
                 </g>
               );
-            }
-
-            const naturalH = Math.abs(yC - yO);
-            const bodyH = Math.max(naturalH, 5);
-            const bodyTop = Math.min(yO, yC) - (bodyH - naturalH) / 2;
-
-            return (
-              <g key={`${b.trade_date}-${i}`}>
-                <line
-                  x1={cx}
-                  x2={cx}
-                  y1={yH}
-                  y2={yL}
-                  className={stroke}
-                  strokeWidth={wickW}
-                  strokeLinecap="round"
-                />
-                <rect
-                  x={cx - bodyW / 2}
-                  y={bodyTop}
-                  width={bodyW}
-                  height={bodyH}
-                  rx={1.25}
-                  className={fillCls}
-                />
-              </g>
-            );
-          })}
-          {/* Step close path only when enough real moves (skip penny doji noise) */}
-          {flatN / n < 0.45 ? (
-            <path
-              fill="none"
-              className="stroke-foreground/25"
-              strokeWidth={1.5}
-              strokeLinejoin="round"
-              strokeLinecap="round"
-              d={bars
-                .map((b, i) => {
-                  const x = padL + slot * i + slot / 2;
-                  const y = yFor(b.close);
-                  return i === 0 ? `M ${x} ${y}` : `H ${x} V ${y}`;
-                })
-                .join(" ")}
-            />
-          ) : null}
+            })
+          )}
           {fc.length > 0 ? (
             <polyline
               fill="none"
@@ -304,7 +336,7 @@ export function CandlestickChart({
       </div>
       <p className="mt-2.5 shrink-0 text-xs leading-relaxed text-muted-foreground">
         {footnote ??
-          `${rawBars.length} sessions${aggregated ? ` → ${n} candles` : ""} · close ${formatNumber(first.close)} → ${formatNumber(last.close)} · ${upN} up / ${downN} down${flatN ? ` / ${flatN} flat` : ""}${fc.length > 0 ? " · dashed = model forecast" : ""} · research only`}
+          `${rawBars.length} sessions${aggregated ? ` → ${n} ${lineMode ? "points" : "candles"}` : ""}${lineMode ? " · step path (tick-size name)" : ""} · close ${formatNumber(first.close)} → ${formatNumber(last.close)} · ${upN} up / ${downN} down${flatN ? ` / ${flatN} flat` : ""}${fc.length > 0 ? " · dashed = model forecast" : ""} · research only`}
       </p>
     </div>
   );
