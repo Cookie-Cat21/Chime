@@ -121,9 +121,19 @@ export function CandlestickChart({
   const aria = `Candles from ${first.trade_date} to ${last.trade_date}, close ${formatNumber(last.close)}`;
   const gridYs = [0, 0.25, 0.5, 0.75, 1].map((t) => padT + t * plotH);
 
+  // Pre-pass direction counts — mutating during the JSX map breaks React
+  // render purity (react-hooks/immutability). Same epsilon per mode.
   let upN = 0;
   let downN = 0;
   let flatN = 0;
+  const dirEps = lineMode ? 0 : span * 1e-6;
+  for (let i = 0; i < n; i++) {
+    const bodyOpen = candleBodyOpen(bars, i);
+    const close = bars[i]!.close;
+    if (close > bodyOpen + dirEps) upN += 1;
+    else if (close < bodyOpen - dirEps) downN += 1;
+    else flatN += 1;
+  }
   const aggregated = rawBars.length > bars.length;
 
   return (
@@ -193,9 +203,6 @@ export function CandlestickChart({
                 const yC = yFor(b.close);
                 const up = b.close > bodyOpen;
                 const down = b.close < bodyOpen;
-                if (up) upN += 1;
-                else if (down) downN += 1;
-                else flatN += 1;
                 if (!up && !down) return null;
                 return (
                   <circle
@@ -223,9 +230,6 @@ export function CandlestickChart({
               const eps = span * 1e-6;
               const up = b.close > bodyOpen + eps;
               const down = b.close < bodyOpen - eps;
-              if (up) upN += 1;
-              else if (down) downN += 1;
-              else flatN += 1;
 
               const stroke = up
                 ? "stroke-emerald-700 dark:stroke-emerald-400"
