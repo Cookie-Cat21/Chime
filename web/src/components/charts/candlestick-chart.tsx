@@ -120,20 +120,26 @@ export function CandlestickChart({
   const n = bars.length;
   const totalSlots = Math.max(1, n + (fc.length > 0 ? fc.length : 0));
 
-  // Fit-width: viewBox == container pixels → no stretch. Slot from width.
-  // Scroll mode: fixed pitch (may overflow-x).
+  // Fit-width: viewBox == container pixels. Cap slot so sparse ranges (1M)
+  // don't become giant sticks; leftover width is even side padding.
   const h = fitWidth ? frame.h : 520;
+  const MIN_SLOT = 5;
+  const MAX_SLOT = 13; // sweet-spot body ~9px at 0.72×
+  const frameW = Math.max(padL + padR + 40, frame.w);
+  const innerW = frameW - padL - padR;
+  const rawSlot = fitWidth ? innerW / totalSlots : 18;
   const slot = fitWidth
-    ? Math.max(4, (Math.max(frame.w, padL + padR + 40) - padL - padR) / totalSlots)
+    ? Math.min(MAX_SLOT, Math.max(MIN_SLOT, rawSlot))
     : 18;
+  const usedPlot = totalSlots * slot;
+  const sidePad = fitWidth ? Math.max(0, (innerW - usedPlot) / 2) : 0;
+  const drawPadL = padL + sidePad;
+  const drawPadR = padR + sidePad;
   const bodyW = fitWidth
-    ? Math.max(3, Math.min(slot * 0.72, slot - 1.5))
+    ? Math.max(3, Math.min(slot * 0.72, slot - 1.25))
     : 13;
   const wickW = fitWidth ? Math.max(1, Math.min(2.25, slot * 0.14)) : 2;
-  const plotW = totalSlots * slot;
-  const w = fitWidth
-    ? Math.max(padL + padR + 40, frame.w)
-    : padL + padR + plotW;
+  const w = fitWidth ? frameW : padL + padR + usedPlot;
   const plotH = Math.max(40, h - padT - padB);
   const displayH = chartHeight ?? 280;
 
@@ -239,8 +245,8 @@ export function CandlestickChart({
           {gridYs.map((gy, gi) => (
             <g key={gy}>
               <line
-                x1={padL}
-                x2={w - padR}
+                x1={drawPadL}
+                x2={w - drawPadR}
                 y1={gy}
                 y2={gy}
                 className="stroke-border/55"
@@ -270,7 +276,7 @@ export function CandlestickChart({
                 strokeLinecap="round"
                 d={bars
                   .map((b, i) => {
-                    const x = padL + slot * i + slot / 2;
+                    const x = drawPadL + slot * i + slot / 2;
                     const y = yFor(b.close);
                     return i === 0 ? `M ${x} ${y}` : `H ${x} V ${y}`;
                   })
@@ -278,7 +284,7 @@ export function CandlestickChart({
               />
               {bars.map((b, i) => {
                 const bodyOpen = candleBodyOpen(bars, i);
-                const cx = padL + slot * i + slot / 2;
+                const cx = drawPadL + slot * i + slot / 2;
                 const yC = yFor(b.close);
                 const up = b.close > bodyOpen;
                 const down = b.close < bodyOpen;
@@ -311,7 +317,7 @@ export function CandlestickChart({
           ) : (
             bars.map((b, i) => {
               const bodyOpen = candleBodyOpen(bars, i);
-              const cx = padL + slot * i + slot / 2;
+              const cx = drawPadL + slot * i + slot / 2;
               const yH = yFor(b.high);
               const yL = yFor(b.low);
               const yO = yFor(bodyOpen);
@@ -374,8 +380,8 @@ export function CandlestickChart({
           {/* Last-close reference line + axis tag (TradingView convention) */}
           <g aria-hidden>
             <line
-              x1={padL}
-              x2={w - padR}
+              x1={drawPadL}
+              x2={w - drawPadR}
               y1={yFor(last.close)}
               y2={yFor(last.close)}
               strokeDasharray="3 3"
@@ -389,7 +395,7 @@ export function CandlestickChart({
               }
             />
             <rect
-              x={w - padR + 2}
+              x={w - drawPadR + 2}
               y={yFor(last.close) - 10}
               width={padR - 6}
               height={20}
@@ -429,16 +435,16 @@ export function CandlestickChart({
               strokeLinejoin="round"
               strokeLinecap="round"
               points={[
-                `${padL + slot * (n - 1) + slot / 2},${yFor(last.close)}`,
+                `${drawPadL + slot * (n - 1) + slot / 2},${yFor(last.close)}`,
                 ...fc.map(
                   (p, i) =>
-                    `${padL + slot * (n + i) + slot / 2},${yFor(p)}`,
+                    `${drawPadL + slot * (n + i) + slot / 2},${yFor(p)}`,
                 ),
               ].join(" ")}
             />
           ) : null}
           <text
-            x={padL}
+            x={drawPadL}
             y={h - 14}
             className="fill-muted-foreground"
             fontSize={13}
@@ -446,7 +452,7 @@ export function CandlestickChart({
             {first.trade_date}
           </text>
           <text
-            x={w - padR}
+            x={w - drawPadR}
             y={h - 14}
             textAnchor="end"
             className="fill-muted-foreground"

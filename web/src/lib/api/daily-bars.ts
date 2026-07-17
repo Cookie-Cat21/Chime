@@ -84,22 +84,48 @@ export function candleBodyOpen(
 
 export type ChartRangeKey = "1D" | "1M" | "3M" | "6M" | "1Y";
 
-/** Sessions / ticks for range chips. 1D uses snapshot ticks, not daily bars. */
+/**
+ * How many raw sessions/ticks to load for a range chip.
+ * 1D = snapshot ticks; others = daily_bars tail length.
+ */
 export function sessionsForRange(range: ChartRangeKey): number {
   switch (range) {
     case "1D":
-      return 120; // recent realtime ticks
+      return 160; // enough ticks to bucket into ~48 intraday candles
     case "1M":
-      return 22;
+      return 32; // ~1.5 trading months — denser than bare 22
     case "3M":
-      return 66;
+      return 72;
     case "6M":
-      return 132;
+      return 140;
     case "1Y":
     default:
       return 260;
   }
 }
+
+/**
+ * Target candle count after aggregation for fit-width charts.
+ * Tuned for ~10–14px slot on a typical expand dialog (~1100–1400px).
+ */
+export function displayCandlesForRange(range: ChartRangeKey): number {
+  switch (range) {
+    case "1D":
+      return 48;
+    case "1M":
+      return 32;
+    case "3M":
+      return 64;
+    case "6M":
+      return 96;
+    case "1Y":
+    default:
+      return 120;
+  }
+}
+
+/** Hero strip under the quote — ~2 months of daily candles. */
+export const HERO_DISPLAY_CANDLES = 48;
 
 /**
  * Build intraday OHLC candles from tick prices for the 1D expand view.

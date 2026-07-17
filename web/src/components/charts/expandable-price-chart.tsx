@@ -16,6 +16,8 @@ import { Button } from "@/components/ui/button";
 import {
   type ChartRangeKey,
   type DailyBarPoint,
+  HERO_DISPLAY_CANDLES,
+  displayCandlesForRange,
   sessionsForRange,
   ticksToIntradayBars,
 } from "@/lib/api/daily-bars";
@@ -67,13 +69,12 @@ export function ExpandablePriceChart({
   const compactDaily = useMemo(() => {
     const src = bars ?? initialBars;
     if (!src || src.length < 2) return null;
-    // Hero: ~2 months of daily sessions — thick candles, no barcode scroll.
-    return src.slice(-sessionsForRange("1M") * 2);
+    return src.slice(-HERO_DISPLAY_CANDLES);
   }, [bars, initialBars]);
   const compactIntraday = useMemo(() => {
     const series = finiteSparklinePoints(points);
     if (series.length < 2) return null;
-    return ticksToIntradayBars(series, 32);
+    return ticksToIntradayBars(series, displayCandlesForRange("1D"));
   }, [points]);
   // Realtime ticks fetched client-side; falls back to SSR `points` until the
   // first refresh lands (derived, so prop updates never need a reset effect).
@@ -102,7 +103,7 @@ export function ExpandablePriceChart({
 
   const intradayBars = useMemo(() => {
     const series = finiteSparklinePoints(tickPoints);
-    return ticksToIntradayBars(series, 40);
+    return ticksToIntradayBars(series, displayCandlesForRange("1D"));
   }, [tickPoints]);
 
   const loadTicks = useCallback(async () => {
@@ -363,7 +364,7 @@ export function ExpandablePriceChart({
         {compactBars && compactBars.length >= 2 ? (
           <CandlestickChart
             bars={compactBars}
-            maxCandles={44}
+            maxCandles={HERO_DISPLAY_CANDLES}
             fitWidth
             chartHeight={280}
             footnote={
@@ -583,17 +584,7 @@ export function ExpandablePriceChart({
                   fitWidth
                   showForecast={showForecast}
                   forecastPrices={forecastPrices}
-                  maxCandles={
-                    range === "1D"
-                      ? 60
-                      : range === "1M"
-                        ? 40
-                        : range === "3M"
-                          ? 72
-                          : range === "6M"
-                            ? 110
-                            : 140 /* 1Y: aggregate to fit — no sideways scroll */
-                  }
+                  maxCandles={displayCandlesForRange(range)}
                   className="min-h-0 flex-1"
                   footnote={
                     range === "1D"
