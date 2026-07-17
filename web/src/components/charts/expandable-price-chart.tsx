@@ -106,6 +106,14 @@ export function ExpandablePriceChart({
     return ticksToIntradayBars(series, displayCandlesForRange("1D"));
   }, [tickPoints]);
 
+  // Most CSE symbols only have a few poller ticks — 1D falls back to recent
+  // daily path so the expand dialog isn't an empty "need more ticks" box.
+  const oneDayDailyFallback = useMemo(() => {
+    const src = bars ?? initialBars;
+    if (!src || src.length < 2) return null;
+    return src.slice(-40);
+  }, [bars, initialBars]);
+
   const loadTicks = useCallback(async () => {
     const pathOnly = `/api/v1/symbols/${encodeURIComponent(symbol)}/snapshots`;
     if (!isSafeClientApiPath(pathOnly)) {
@@ -240,6 +248,18 @@ export function ExpandablePriceChart({
         } catch {
           if (!cancelled) setError("Could not refresh realtime ticks.");
         }
+        // Keep daily bars warm for the sparse-tick fallback.
+        if (!cancelled && (bars == null || bars.length < 2)) {
+          if (initialBars && initialBars.length > 0) {
+            setBars(initialBars.slice(-40));
+          } else {
+            try {
+              await loadDaily("1M");
+            } catch {
+              /* footnote handles empty */
+            }
+          }
+        }
         return;
       }
       // Instant paint from SSR bars (tail for shorter ranges), then refresh.
@@ -292,9 +312,18 @@ export function ExpandablePriceChart({
     };
   }, [open]);
 
-  const modeLabel = range === "1D" ? "Intraday" : "Daily";
-  const chartBars = range === "1D" ? intradayBars : bars;
   const tickSeries = finiteSparklinePoints(tickPoints);
+  const intradayReady = intradayBars.length >= 2;
+  const chartBars =
+    range === "1D"
+      ? intradayReady
+        ? intradayBars
+        : oneDayDailyFallback
+      : bars;
+  const oneDayUsingDaily =
+    range === "1D" && !intradayReady && (chartBars?.length ?? 0) >= 2;
+  const modeLabel =
+    range === "1D" ? (intradayReady ? "Intraday" : "Daily") : "Daily";
 
   // Quote readout for the dialog header + window stats (Yahoo/Robinhood style:
   // last close, signed change over the *selected* range, window O/H/L/C).
@@ -440,7 +469,7 @@ export function ExpandablePriceChart({
                     </span>
                   </p>
                 ) : null}
-                {range === "1D" ? (
+                {range === "1D" && intradayReady ? (
                   <span className="inline-flex items-center gap-1.5 rounded-full bg-emerald-500/10 px-2.5 py-0.5 text-[11px] font-medium text-emerald-800 dark:text-emerald-200">
                     <span
                       className="size-1.5 animate-pulse rounded-full bg-emerald-500"
@@ -450,6 +479,11 @@ export function ExpandablePriceChart({
                     {lastRefresh
                       ? ` · ${new Date(lastRefresh).toLocaleTimeString()}`
                       : ""}
+                  </span>
+                ) : null}
+                {oneDayUsingDaily ? (
+                  <span className="inline-flex items-center rounded-full border border-border/70 px-2.5 py-0.5 text-[11px] font-medium text-muted-foreground">
+                    Few ticks · showing recent daily
                   </span>
                 ) : null}
               </div>
@@ -539,7 +573,7 @@ export function ExpandablePriceChart({
                   }
                 />
                 <span className="ml-auto font-sans text-[11px] text-muted-foreground">
-                  {range === "1D"
+                  {range === "1D" && !oneDayUsingDaily
                     ? "Intraday candles from live ticks — research only, not financial advice."
                     : "Green up / red down vs prior close — research only, not financial advice."}
                 </span>
@@ -574,7 +608,7 @@ export function ExpandablePriceChart({
                     role="status"
                   >
                     {range === "1D"
-                      ? "Need more stored ticks for intraday candles."
+                      ? "No intraday ticks or recent daily path yet. Run the poller / path-backfill, then refresh."
                       : "No daily path history yet. On the host, run path-backfill, then refresh."}
                   </p>
                 </div>
@@ -585,11 +619,17 @@ export function ExpandablePriceChart({
                   fitWidth
                   showForecast={showForecast}
                   forecastPrices={forecastPrices}
-                  maxCandles={displayCandlesForRange(range)}
+                  maxCandles={
+                    range === "1D" && oneDayUsingDaily
+                      ? 40
+                      : displayCandlesForRange(range)
+                  }
                   className="min-h-0 flex-1"
                   footnote={
                     range === "1D"
-                      ? `${tickSeries.length} live ticks → ${chartBars.length} intraday candles · research only`
+                      ? oneDayUsingDaily
+                        ? `Only ${tickSeries.length} stored tick${tickSeries.length === 1 ? "" : "s"} — showing last ${chartBars.length} daily sessions · research only`
+                        : `${tickSeries.length} live ticks → ${chartBars.length} intraday candles · research only`
                       : undefined
                   }
                 />
