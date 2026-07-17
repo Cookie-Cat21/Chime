@@ -36,6 +36,8 @@ A shorter copy also lives at repo-root [`THIRD_PARTY.md`](../THIRD_PARTY.md)
 | [class-variance-authority](https://github.com/joe-bell/cva) | Apache-2.0 | Variant helpers |
 | [clsx](https://github.com/lukeed/clsx) / [tailwind-merge](https://github.com/dcastil/tailwind-merge) | MIT | className utilities |
 | [lucide-react](https://github.com/lucide-icons/lucide) | ISC | Icons |
+| [d3-force](https://github.com/d3/d3-force) | ISC | Ownership map force-directed layout (repulsion / collide) |
+| [@xyflow/react](https://github.com/xyflow/xyflow) | MIT | Graph canvas (ownership + people) |
 
 ### Fonts
 

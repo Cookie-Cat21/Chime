@@ -345,7 +345,7 @@ export function CompanyGraphClient({
         ))}
         {showHints ? (
           <span className="ml-auto text-[11px] text-muted-foreground/80">
-            Scroll to zoom · drag to pan · click a node for details
+            Focus shows hub + neighbors · nodes repel · drag to rearrange
           </span>
         ) : null}
       </div>
