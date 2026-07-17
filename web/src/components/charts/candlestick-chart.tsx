@@ -30,7 +30,10 @@ export function CandlestickChart({
   footnote?: string;
   maxCandles?: number;
 }) {
-  const bars = aggregateBarsForDisplay(rawBars, maxCandles);
+  const priceMax = Math.max(...rawBars.map((b) => b.close), 0);
+  const adaptiveMax =
+    priceMax > 0 && priceMax < 2 ? Math.min(maxCandles, 40) : maxCandles;
+  const bars = aggregateBarsForDisplay(rawBars, adaptiveMax);
 
   if (bars.length < 2) {
     return (
@@ -220,15 +223,19 @@ export function CandlestickChart({
               </g>
             );
           })}
-          {/* Close path — keeps step-priced names (e.g. SEMB @ 0.30) readable */}
-          <polyline
+          {/* Step close path for tick-size names (SEMB etc.) */}
+          <path
             fill="none"
-            className="stroke-foreground/35"
-            strokeWidth={1.5}
+            className="stroke-foreground/30"
+            strokeWidth={1.75}
             strokeLinejoin="round"
             strokeLinecap="round"
-            points={bars
-              .map((b, i) => `${padL + slot * i + slot / 2},${yFor(b.close)}`)
+            d={bars
+              .map((b, i) => {
+                const x = padL + slot * i + slot / 2;
+                const y = yFor(b.close);
+                return i === 0 ? `M ${x} ${y}` : `H ${x} V ${y}`;
+              })
               .join(" ")}
           />
           {fc.length > 0 ? (
