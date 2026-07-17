@@ -60,7 +60,7 @@ function CompanyNode({ data }: NodeProps<Node<CompanyNodeData>>) {
   return (
     <div
       className={cn(
-        "flex flex-col items-center justify-center rounded-full border bg-card px-2 text-center shadow-sm",
+        "flex cursor-pointer flex-col items-center justify-center rounded-full border bg-card px-2 text-center shadow-sm transition-transform duration-150 hover:scale-105 hover:border-foreground/40",
         data.listed ? "border-border" : "border-dashed border-muted-foreground/40",
         data.selected && "ring-2 ring-ring",
       )}
@@ -164,7 +164,7 @@ function GraphInner({
   }, [graphNodes, graphEdges, selectedId, setNodes, setEdges]);
 
   return (
-    <div className="h-[min(70vh,560px)] w-full overflow-hidden rounded-xl border border-border bg-background/60">
+    <div className="h-[min(62vh,520px)] w-full overflow-hidden rounded-xl border border-border bg-background/60 sm:h-[min(70vh,560px)]">
       <ReactFlow
         nodes={nodes}
         edges={edges}

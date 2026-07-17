@@ -131,7 +131,14 @@ export async function queryCompanyGraph(
     [minRank, focus, limit * 3],
   );
 
-  const edges: GraphEdge[] = [];
+  const relationRank: Record<string, number> = {
+    subsidiary: 4,
+    associate: 3,
+    joint_venture: 3,
+    related_party: 2,
+    group_mention: 1,
+  };
+  const bestByPair = new Map<string, GraphEdge>();
   const nodeIds = new Set<number>();
   for (const row of edgeRows.rows) {
     const relation = normalizeRelation(row.relation);
@@ -140,9 +147,7 @@ export async function queryCompanyGraph(
     const srcId = Number(row.src_node_id);
     const dstId = Number(row.dst_node_id);
     if (!Number.isFinite(srcId) || !Number.isFinite(dstId)) continue;
-    nodeIds.add(srcId);
-    nodeIds.add(dstId);
-    edges.push({
+    const edge: GraphEdge = {
       id: Number(row.id),
       src_node_id: srcId,
       dst_node_id: dstId,
@@ -165,8 +170,21 @@ export async function queryCompanyGraph(
         typeof row.evidence_snippet === "string"
           ? sanitizeDisclosureText(row.evidence_snippet, 280)
           : null,
-    });
-    if (edges.length >= limit * 2) break;
+    };
+    // One undirected pair → keep strongest relation (subsidiary > associate > …)
+    const a = Math.min(srcId, dstId);
+    const b = Math.max(srcId, dstId);
+    const key = `${a}:${b}`;
+    const prev = bestByPair.get(key);
+    if (!prev || (relationRank[relation] ?? 0) > (relationRank[prev.relation] ?? 0)) {
+      bestByPair.set(key, edge);
+    }
+    if (bestByPair.size >= limit * 2) break;
+  }
+  const edges = Array.from(bestByPair.values());
+  for (const e of edges) {
+    nodeIds.add(e.src_node_id);
+    nodeIds.add(e.dst_node_id);
   }
 
   if (opts.includeIsolates && nodeIds.size < limit) {

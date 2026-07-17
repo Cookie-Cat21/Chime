@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { Suspense } from "react";
 
 import { AppNav } from "@/components/app-nav";
 import { CompanyGraphClient } from "@/components/company-graph/graph-client";
@@ -34,10 +35,11 @@ export default async function GraphPage({
 
   try {
     const pool = getPool();
+    // Full board for client filters; focus is selection-only
     const graph = await queryCompanyGraph(pool, {
       minConfidence: "low",
-      limit: 120,
-      focusSymbol: focus,
+      limit: 160,
+      focusSymbol: null,
       includeIsolates: true,
     });
     nodes = graph.nodes;
@@ -66,11 +68,17 @@ export default async function GraphPage({
             Graph data is temporarily unavailable.
           </p>
         ) : (
-          <CompanyGraphClient
-            nodes={nodes}
-            edges={edges}
-            initialFocus={focus}
-          />
+          <Suspense
+            fallback={
+              <p className="text-sm text-muted-foreground">Loading map…</p>
+            }
+          >
+            <CompanyGraphClient
+              nodes={nodes}
+              edges={edges}
+              initialFocus={focus}
+            />
+          </Suspense>
         )}
         <NfaFooter />
       </main>

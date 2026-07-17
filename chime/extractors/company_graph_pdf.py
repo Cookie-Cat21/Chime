@@ -247,7 +247,10 @@ def _extract_equity(pages: list[tuple[int, str]]) -> tuple[
         for m in _EQUITY_LABEL.finditer(text):
             label = re.sub(r"\s+", " ", m.group(1)).strip()
             num = _parse_num(m.group(2))
-            if num is None or abs(num) < 100:
+            # Reject tiny / %-like stubs that are not balance-sheet equity
+            if num is None or abs(num) < 1_000:
+                continue
+            if abs(num) <= 100:
                 continue
             candidates.append((num, label, page_no))
     if not candidates:
