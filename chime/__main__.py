@@ -1247,6 +1247,37 @@ def main(argv: list[str] | None = None) -> None:
                     print(f"ml-loop-nightly: market_summary_upserted={n_mkt}")
                 except Exception as exc:
                     print(f"ml-loop-nightly: market_summary_failed={exc!s}"[:120])
+                # B-001: accrue order-book snapshots (empty outside market hours)
+                try:
+                    async with storage._pool.connection() as conn:
+                        sym_rows = await (
+                            await conn.execute(
+                                """
+                                SELECT symbol FROM daily_bars
+                                WHERE trade_date = (
+                                    SELECT MAX(trade_date) FROM daily_bars
+                                )
+                                  AND volume IS NOT NULL
+                                ORDER BY volume DESC NULLS LAST
+                                LIMIT 25
+                                """
+                            )
+                        ).fetchall()
+                    ob_ok = 0
+                    for sr in sym_rows:
+                        sym = str(dict(sr).get("symbol") or "").strip().upper()
+                        if not sym:
+                            continue
+                        book = await cse.fetch_order_book(sym)
+                        if book is not None:
+                            await storage.persist_order_book(book)
+                            ob_ok += 1
+                    print(
+                        f"ml-loop-nightly: order_book_ok={ob_ok}/"
+                        f"{len(sym_rows)}"
+                    )
+                except Exception as exc:
+                    print(f"ml-loop-nightly: order_book_failed={exc!s}"[:120])
                 result = await run_loop_nightly(storage)
                 print(
                     "ml-loop-nightly: "
