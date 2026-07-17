@@ -2960,6 +2960,167 @@ class Storage:
             ).fetchone()
         return dict(_as_row(row)) if row is not None else None
 
+    async def list_disclosures_pending_people(
+        self,
+        *,
+        limit: int = 20,
+        watched_only: bool = True,
+        symbols: Sequence[str] | None = None,
+    ) -> list[Disclosure]:
+        lim = max(1, min(int(limit), 500)) if not isinstance(limit, bool) else 20
+        watched_sql = (
+            """
+            AND d.symbol IN (SELECT DISTINCT symbol FROM watchlist_items)
+            """
+            if watched_only and not symbols
+            else ""
+        )
+        symbol_sql = ""
+        params: list[Any] = []
+        if symbols:
+            cleaned = [
+                s.strip().upper()
+                for s in symbols
+                if isinstance(s, str) and s.strip()
+            ]
+            if cleaned:
+                symbol_sql = "AND d.symbol = ANY(%s)"
+                params.append(cleaned)
+        params.append(lim)
+        async with self._pool.connection() as conn:
+            rows = await (
+                await conn.execute(
+                    f"""
+                    SELECT d.id, d.external_id, d.symbol, d.title, d.category, d.url,
+                           d.company_name, d.published_at, d.seen_at, d.pdf_url
+                    FROM disclosures d
+                    LEFT JOIN filing_people_extracts g ON g.disclosure_id = d.id
+                    WHERE d.pdf_url IS NOT NULL
+                      AND g.id IS NULL
+                    {watched_sql}
+                    {symbol_sql}
+                    ORDER BY d.id ASC
+                    LIMIT %s
+                    """,
+                    tuple(params),
+                )
+            ).fetchall()
+        out: list[Disclosure] = []
+        for row in _as_rows(rows):
+            disc = self._disclosure_from_row(row)
+            if disc is not None:
+                out.append(disc)
+        return out
+
+    async def upsert_filing_people_extract(self, row: dict[str, Any]) -> dict[str, Any]:
+        import json as _json
+
+        notes = row.get("extract_notes") or {}
+        if not isinstance(notes, str):
+            notes = _json.dumps(notes)
+        async with self._pool.connection() as conn:
+            saved = await (
+                await conn.execute(
+                    """
+                    INSERT INTO filing_people_extracts (
+                        disclosure_id, symbol, people_ok, extract_ok,
+                        extract_notes, pdf_url
+                    ) VALUES (%s, %s, %s, %s, %s::jsonb, %s)
+                    ON CONFLICT (disclosure_id) DO UPDATE SET
+                        people_ok = EXCLUDED.people_ok,
+                        extract_ok = EXCLUDED.extract_ok,
+                        extract_notes = EXCLUDED.extract_notes,
+                        pdf_url = EXCLUDED.pdf_url,
+                        updated_at = now()
+                    RETURNING *
+                    """,
+                    (
+                        row["disclosure_id"],
+                        row["symbol"],
+                        bool(row.get("people_ok")),
+                        bool(row.get("extract_ok")),
+                        notes,
+                        row.get("pdf_url"),
+                    ),
+                )
+            ).fetchone()
+        assert saved is not None
+        return dict(_as_row(saved))
+
+    async def upsert_person(
+        self, *, display_name: str, name_norm: str
+    ) -> dict[str, Any]:
+        if not isinstance(name_norm, str) or not name_norm.strip():
+            raise ValueError("name_norm required")
+        async with self._pool.connection() as conn:
+            saved = await (
+                await conn.execute(
+                    """
+                    INSERT INTO people (display_name, name_norm)
+                    VALUES (%s, %s)
+                    ON CONFLICT (name_norm) DO UPDATE SET
+                        display_name = EXCLUDED.display_name,
+                        updated_at = now()
+                    RETURNING *
+                    """,
+                    (
+                        (display_name or name_norm).strip()[:120],
+                        name_norm.strip(),
+                    ),
+                )
+            ).fetchone()
+        assert saved is not None
+        return dict(_as_row(saved))
+
+    async def upsert_person_company_role(self, row: dict[str, Any]) -> dict[str, Any]:
+        import json as _json
+
+        notes = row.get("extract_notes") or {}
+        if not isinstance(notes, str):
+            notes = _json.dumps(notes)
+        async with self._pool.connection() as conn:
+            saved = await (
+                await conn.execute(
+                    """
+                    INSERT INTO person_company_roles (
+                        person_id, symbol, role, confidence,
+                        evidence_disclosure_id, evidence_page, evidence_snippet,
+                        extract_notes, active
+                    ) VALUES (
+                        %s, %s, %s, %s,
+                        %s, %s, %s,
+                        %s::jsonb, TRUE
+                    )
+                    ON CONFLICT (person_id, symbol, role) DO UPDATE SET
+                        confidence = CASE
+                            WHEN EXCLUDED.confidence = 'high' THEN 'high'
+                            WHEN person_company_roles.confidence = 'high' THEN 'high'
+                            WHEN EXCLUDED.confidence = 'medium' THEN 'medium'
+                            ELSE person_company_roles.confidence
+                        END,
+                        evidence_disclosure_id = EXCLUDED.evidence_disclosure_id,
+                        evidence_page = EXCLUDED.evidence_page,
+                        evidence_snippet = EXCLUDED.evidence_snippet,
+                        extract_notes = EXCLUDED.extract_notes,
+                        active = TRUE,
+                        updated_at = now()
+                    RETURNING *
+                    """,
+                    (
+                        row["person_id"],
+                        str(row["symbol"]).strip().upper(),
+                        row["role"],
+                        row.get("confidence") or "low",
+                        row.get("evidence_disclosure_id"),
+                        row.get("evidence_page"),
+                        row.get("evidence_snippet"),
+                        notes,
+                    ),
+                )
+            ).fetchone()
+        assert saved is not None
+        return dict(_as_row(saved))
+
     async def get_ready_filing_brief(
         self,
         *,

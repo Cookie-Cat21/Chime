@@ -57,9 +57,14 @@ export default async function GraphPage({
           title="Ownership map"
           description="Subsidiaries, associates, and equity from public CSE annual reports. Not a complete ownership register."
           action={
-            <Button asChild variant="outline" size="sm">
-              <Link href="/market">Browse market</Link>
-            </Button>
+            <div className="flex flex-wrap gap-2">
+              <Button asChild variant="secondary" size="sm">
+                <Link href="/graph/people">People map</Link>
+              </Button>
+              <Button asChild variant="outline" size="sm">
+                <Link href="/market">Browse market</Link>
+              </Button>
+            </div>
           }
         />
         <NfaInline />
