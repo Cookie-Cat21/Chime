@@ -1,4 +1,14 @@
-import { Activity, Database, Radio, Timer } from "lucide-react";
+import {
+  Activity,
+  Crosshair,
+  Database,
+  LineChart,
+  Radio,
+  Sparkles,
+  Timer,
+  Trophy,
+} from "lucide-react";
+import Link from "next/link";
 
 import { AppNav } from "@/components/app-nav";
 import { AlertBanner } from "@/components/kit/alert-banner";
@@ -237,6 +247,36 @@ function parseHealthPayload(body: unknown): HealthPayload | null {
 function pctLabel(raw: number | null | undefined): string {
   if (raw == null || !Number.isFinite(raw)) return "—";
   return `${(raw * 100).toFixed(1)}%`;
+}
+
+/** Short label for long registry ids; full id stays in title / subtitle. */
+function championShortId(modelId: string | null | undefined): string {
+  if (!modelId) return "—";
+  const trimmed = modelId.trim();
+  // challenger_gated_c55_20260717 → gated_c55
+  const m = trimmed.match(
+    /(?:challenger_|champion_)?(gated_p90|gated_c55|gated|hpe_p90|fin_sector)(?:_|$)/i,
+  );
+  if (m?.[1]) return m[1];
+  if (trimmed.length <= 28) return trimmed;
+  return `${trimmed.slice(0, 22)}…`;
+}
+
+function toneForHit(rate: number | null | undefined): "ok" | "warn" | "muted" {
+  if (rate == null || !Number.isFinite(rate)) return "muted";
+  if (rate >= 0.7) return "ok";
+  if (rate >= 0.55) return "warn";
+  return "muted";
+}
+
+function hitToneClass(tone: "ok" | "warn" | "muted"): string {
+  if (tone === "ok") {
+    return "border-emerald-500/35 bg-emerald-500/10 text-emerald-800 dark:text-emerald-200";
+  }
+  if (tone === "warn") {
+    return "border-amber-500/35 bg-amber-500/10 text-amber-900 dark:text-amber-100";
+  }
+  return "border-border/70 bg-muted/40 text-muted-foreground";
 }
 
 function parseMl(raw: unknown): MlHealthBlock | null {
@@ -576,63 +616,183 @@ export default async function HealthPage() {
                 className="mt-10 border-t border-border/60 pt-6"
                 aria-labelledby="ml-heading"
               >
-                <h2
-                  id="ml-heading"
-                  className="text-sm font-medium tracking-wide text-muted-foreground uppercase"
-                >
-                  Model / forecast
-                </h2>
-                <p className="mt-2 text-sm text-muted-foreground">
-                  {ml.disclaimer}
-                </p>
-                <div className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-                  <StatCard
-                    label="Champion"
-                    value={ml.champion?.model_id ?? "—"}
-                    hint={
-                      ml.champion
-                        ? `gated OOS ${pctLabel(ml.champion.oos_gated_hit)}`
-                        : "No champion registered"
-                    }
-                  />
+                <div className="flex flex-wrap items-end justify-between gap-3">
+                  <div className="min-w-0">
+                    <h2
+                      id="ml-heading"
+                      className="text-sm font-medium tracking-wide text-muted-foreground uppercase"
+                    >
+                      Model / forecast
+                    </h2>
+                    <p className="mt-2 max-w-2xl text-sm text-muted-foreground">
+                      {ml.disclaimer}
+                    </p>
+                  </div>
+                  <Link
+                    href="/signals"
+                    className="shrink-0 text-sm font-medium text-foreground underline-offset-4 hover:underline"
+                  >
+                    Open Signal Board →
+                  </Link>
+                </div>
+
+                {/* Champion banner — full id, no truncation in a 1/4 card */}
+                <article className="mt-5 rounded-xl border border-border bg-card p-5">
+                  <div className="flex flex-wrap items-start justify-between gap-4">
+                    <div className="flex min-w-0 items-start gap-3">
+                      <span className="grid size-10 shrink-0 place-items-center rounded-full bg-muted text-foreground">
+                        <Trophy className="size-5" aria-hidden />
+                      </span>
+                      <div className="min-w-0">
+                        <p className="text-xs font-semibold uppercase tracking-[0.12em] text-muted-foreground">
+                          Serving champion
+                        </p>
+                        {ml.champion ? (
+                          <>
+                            <p
+                              className="mt-1 text-xl font-semibold tracking-tight text-foreground"
+                              title={ml.champion.model_id}
+                            >
+                              {championShortId(ml.champion.model_id)}
+                            </p>
+                            <p className="mt-1 break-all font-mono text-xs text-muted-foreground">
+                              {ml.champion.model_id}
+                            </p>
+                          </>
+                        ) : (
+                          <p className="mt-1 text-xl font-semibold text-muted-foreground">
+                            None registered
+                          </p>
+                        )}
+                      </div>
+                    </div>
+                    <div className="flex flex-wrap gap-2">
+                      <span
+                        className={`inline-flex items-center rounded-full border px-2.5 py-1 text-xs font-medium ${hitToneClass(
+                          toneForHit(ml.champion?.oos_gated_hit),
+                        )}`}
+                      >
+                        Gated OOS {pctLabel(ml.champion?.oos_gated_hit)}
+                      </span>
+                      <span className="inline-flex items-center rounded-full border border-border/70 bg-muted/40 px-2.5 py-1 text-xs font-medium text-muted-foreground">
+                        Always-on {pctLabel(ml.champion?.oos_hit)}
+                      </span>
+                      <span className="inline-flex items-center rounded-full border border-border/70 bg-muted/40 px-2.5 py-1 text-xs font-medium text-muted-foreground">
+                        Coverage {pctLabel(ml.champion?.oos_coverage)}
+                      </span>
+                    </div>
+                  </div>
+                </article>
+
+                <div className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
                   <StatCard
                     label="Gated hit (20d)"
                     value={pctLabel(ml.scoreboard.gated_hit_20d)}
-                    hint={`Scored rows (60d): ${ml.scoreboard.n_scored_60d}`}
+                    hint={`${ml.scoreboard.n_scored_60d.toLocaleString()} scored rows (60d)`}
+                    icon={Crosshair}
+                    className={
+                      toneForHit(ml.scoreboard.gated_hit_20d) === "ok"
+                        ? "border-emerald-500/25"
+                        : undefined
+                    }
+                  />
+                  <StatCard
+                    label="Board hit 20d / 60d"
+                    value={`${pctLabel(ml.scoreboard.hit_20d)} / ${pctLabel(ml.scoreboard.hit_60d)}`}
+                    hint="All scored outcomes (not selective-only)"
+                    icon={LineChart}
                   />
                   <StatCard
                     label="Spoke symbols"
                     value={String(ml.accrual.spoke_symbols_latest)}
                     hint={
                       ml.accrual.forecast_points_latest_as_of
-                        ? `as of ${ml.accrual.forecast_points_latest_as_of}`
+                        ? `Selective emits · as of ${ml.accrual.forecast_points_latest_as_of}`
                         : "No forecast_points yet"
                     }
-                  />
-                  <StatCard
-                    label="Market summary days"
-                    value={String(ml.accrual.market_summary_days)}
-                    hint={`OB snapshots: ${ml.accrual.order_book_snapshots}`}
+                    icon={Sparkles}
                   />
                 </div>
-                <dl className="mt-4 grid grid-cols-1 gap-5 sm:grid-cols-2">
-                  <Row
-                    label="Hit 20d / 60d"
-                    value={`${pctLabel(ml.scoreboard.hit_20d)} / ${pctLabel(ml.scoreboard.hit_60d)}`}
-                  />
-                  <Row
-                    label="Champion always-on OOS"
-                    value={pctLabel(ml.champion?.oos_hit ?? null)}
-                  />
-                  <Row
-                    label="Latest order book"
-                    value={formatTs(ml.accrual.latest_order_book_at)}
-                  />
-                  <Row
-                    label="Champion coverage"
-                    value={pctLabel(ml.champion?.oos_coverage ?? null)}
-                  />
-                </dl>
+
+                {/* Accrual status — visual cues for unlock progress */}
+                <div className="mt-4 grid gap-3 sm:grid-cols-2">
+                  <article className="rounded-xl border border-border bg-card p-5">
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="min-w-0">
+                        <p className="text-xs font-semibold uppercase tracking-[0.12em] text-muted-foreground">
+                          Market summary history
+                        </p>
+                        <p className="mt-1 font-mono text-2xl font-semibold tabular-nums">
+                          {ml.accrual.market_summary_days}
+                          <span className="text-base font-normal text-muted-foreground">
+                            {" "}
+                            / 60 days
+                          </span>
+                        </p>
+                        <p className="mt-1 text-xs text-muted-foreground">
+                          {ml.accrual.market_summary_days >= 60
+                            ? "Ready to retest foreign-flow features (B-002)."
+                            : "Accruing nightly from CSE (~2 sessions/call)."}
+                        </p>
+                      </div>
+                      <span
+                        className={`inline-flex shrink-0 items-center rounded-full border px-2.5 py-1 text-xs font-medium ${
+                          ml.accrual.market_summary_days >= 60
+                            ? hitToneClass("ok")
+                            : ml.accrual.market_summary_days > 0
+                              ? hitToneClass("warn")
+                              : hitToneClass("muted")
+                        }`}
+                      >
+                        {ml.accrual.market_summary_days >= 60
+                          ? "Ready"
+                          : "Accruing"}
+                      </span>
+                    </div>
+                    <div
+                      className="mt-3 h-1.5 overflow-hidden rounded-full bg-muted"
+                      role="progressbar"
+                      aria-valuemin={0}
+                      aria-valuemax={60}
+                      aria-valuenow={Math.min(60, ml.accrual.market_summary_days)}
+                      aria-label="Market summary days toward 60"
+                    >
+                      <div
+                        className="h-full rounded-full bg-foreground/70"
+                        style={{
+                          width: `${Math.min(100, (ml.accrual.market_summary_days / 60) * 100)}%`,
+                        }}
+                      />
+                    </div>
+                  </article>
+
+                  <article className="rounded-xl border border-border bg-card p-5">
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="min-w-0">
+                        <p className="text-xs font-semibold uppercase tracking-[0.12em] text-muted-foreground">
+                          Order-book snapshots
+                        </p>
+                        <p className="mt-1 font-mono text-2xl font-semibold tabular-nums">
+                          {ml.accrual.order_book_snapshots}
+                        </p>
+                        <p className="mt-1 text-xs text-muted-foreground">
+                          {ml.accrual.latest_order_book_at
+                            ? `Latest ${formatTs(ml.accrual.latest_order_book_at)}`
+                            : "Empty outside market hours — nightly top-25 poll."}
+                        </p>
+                      </div>
+                      <span
+                        className={`inline-flex shrink-0 items-center rounded-full border px-2.5 py-1 text-xs font-medium ${
+                          ml.accrual.order_book_snapshots > 0
+                            ? hitToneClass("ok")
+                            : hitToneClass("muted")
+                        }`}
+                      >
+                        {ml.accrual.order_book_snapshots > 0 ? "Live" : "Idle"}
+                      </span>
+                    </div>
+                  </article>
+                </div>
               </section>
             ) : null}
 
