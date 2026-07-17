@@ -74,4 +74,30 @@ Silence is expected. Selective ≠ always right.
 Champion artifacts remain; dash forecasts still require `ML_FORECAST_ENABLED`
 for some older paths; unified CLI does not require that flag.
 
+## GitHub Actions (automatic)
+
+Workflow: [`.github/workflows/ml-self-learn.yml`](../../.github/workflows/ml-self-learn.yml)
+
+| Trigger | What runs |
+|---|---|
+| Cron `30 10 * * 1-5` | Score outcomes → Loop A nightly → LTR ship; Loop B retrain **Mondays only** |
+| `workflow_dispatch` | Same steps; toggles for retrain / LTR ship / unified forecast |
+
+Requires repo secret **`DATABASE_URL`** (Neon). Optional repo var:
+
+| Var | Default | Role |
+|---|---|---|
+| `ML_SELF_LEARN` | on | Set `0` to skip **scheduled** runs (manual dispatch still works) |
+| `ML_LTR_SERVE` | `1` in the job | Prefer LTR serve modes |
+
+Artifacts per run: scoreboard / registry / `ML_SELF_LEARN_LATEST.md` + JSON report
+(under Actions → run → Artifacts). Job summary mirrors the markdown report.
+
+```bash
+# Manual smoke from Actions UI, or:
+gh workflow run ml-self-learn.yml \
+  -f run_retrain=true -f run_ltr_ship=true
+gh run watch
+```
+
 Research only — not financial advice.
