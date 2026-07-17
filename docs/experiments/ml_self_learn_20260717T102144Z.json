@@ -1,0 +1,31 @@
+{
+  "run_at": "20260717T102144Z",
+  "event": "local_full_loop",
+  "sha": "2f878e09c7fbc9f3c7a2e772d1a7d9744fb34d5f",
+  "logs": {
+    "ml-score-outcomes": "{\"examined\": 0, \"scored\": 0, \"skipped\": 0, \"event\": \"score_outcomes_done\", \"level\": \"info\", \"timestamp\": \"2026-07-17T10:16:56.731736Z\"}\nml-score-outcomes: examined=0 scored=0 skipped=0\n",
+    "ml-loop-nightly": "HTTP Request: POST https://www.cse.lk/api/dailyMarketSummery \"HTTP/1.1 200 \"\nml-loop-nightly: market_summary_upserted=2\nHTTP Request: POST https://www.cse.lk/api/orderBook \"HTTP/1.1 200 \"\nHTTP Request: POST https://www.cse.lk/api/orderBook \"HTTP/1.1 200 \"\nHTTP Request: POST https://www.cse.lk/api/orderBook \"HTTP/1.1 200 \"\nHTTP Request: POST https://www.cse.lk/api/orderBook \"HTTP/1.1 200 \"\nHTTP Request: POST https://www.cse.lk/api/orderBook \"HTTP/1.1 200 \"\nHTTP Request: POST https://www.cse.lk/api/orderBook \"HTTP/1.1 200 \"\nHTTP Request: POST https://www.cse.lk/api/orderBook \"HTTP/1.1 200 \"\nHTTP Request: POST https://www.cse.lk/api/orderBook \"HTTP/1.1 200 \"\nHTTP Request: POST https://www.cse.lk/api/orderBook \"HTTP/1.1 200 \"\nHTTP Request: POST https://www.cse.lk/api/orderBook \"HTTP/1.1 200 \"\nHTTP Request: POST https://www.cse.lk/api/orderBook \"HTTP/1.1 200 \"\nHTTP Request: POST https://www.cse.lk/api/orderBook \"HTTP/1.1 200 \"\nHTTP Request: POST https://www.cse.lk/api/orderBook \"HTTP/1.1 200 \"\nHTTP Request: POST https://www.cse.lk/api/orderBook \"HTTP/1.1 200 \"\nHTTP Request: POST https://www.cse.lk/api/orderBook \"HTTP/1.1 200 \"\nHTTP Request: POST https://www.cse.lk/api/orderBook \"HTTP/1.1 200 \"\nHTTP Request: POST https://www.cse.lk/api/orderBook \"HTTP/1.1 200 \"\nHTTP Request: POST https://www.cse.lk/api/orderBook \"HTTP/1.1 200 \"\nHTTP Request: POST https://www.cse.lk/api/orderBook \"HTTP/1.1 200 \"\nHTTP Request: POST https://www.cse.lk/api/orderBook \"HTTP/1.1 200 \"\nHTTP Request: POST https://www.cse.lk/api/orderBook \"HTTP/1.1 200 \"\nHTTP Request: POST https://www.cse.lk/api/orderBook \"HTTP/1.1 200 \"\nHTTP Request: POST https://www.cse.lk/api/orderBook \"HTTP/1.1 200 \"\nHTTP Request: POST https://www.cse.lk/api/orderBook \"HTTP/1.1 200 \"\nHTTP Request: POST https://www.cse.lk/api/orderBook \"HTTP/1.1 200 \"\nml-loop-nightly: order_book_ok=25/25\n{\"examined\": 0, \"scored\": 0, \"skipped\": 0, \"event\": \"score_outcomes_done\", \"level\": \"info\", \"timestamp\": \"2026-07-17T10:17:14.795050Z\"}\n{\"n_symbols\": 106, \"sym_hit_thr\": 0.61, \"conf_thr\": 0.71, \"path\": \"data/ml_artifacts/reliable_symbols.json\", \"event\": \"symbol_allowlist_rebuilt\", \"level\": \"info\", \"timestamp\": \"2026-07-17T10:17:15.651774Z\"}\n{\"emitted\": 11347, \"scored\": 0, \"alerts\": [], \"event\": \"loop_nightly_done\", \"level\": \"info\", \"timestamp\": \"2026-07-17T10:17:16.155057Z\"}\nml-loop-nightly: emitted=11347 scored=0 alerts=- scoreboard=docs/experiments/LIVE_SCOREBOARD.md\n",
+    "ml-loop-retrain": "{\"model_id\": \"challenger_gated_c55_20260717T101925Z\", \"status\": \"challenger\", \"event\": \"model_registered\", \"level\": \"info\", \"timestamp\": \"2026-07-17T10:19:26.142384Z\"}\n{\"challenger_id\": \"challenger_gated_c55_20260717T101925Z\", \"ok\": true, \"event\": \"model_promoted\", \"level\": \"info\", \"timestamp\": \"2026-07-17T10:19:26.479486Z\"}\n{\"challenger_id\": \"challenger_gated_c55_20260717T101925Z\", \"promoted\": true, \"reasons\": [\"challenger hit 0.7268 >= champion 0.6212+0.005\"], \"event\": \"loop_retrain_done\", \"level\": \"info\", \"timestamp\": \"2026-07-17T10:19:26.675385Z\"}\nml-loop-retrain: challenger=challenger_gated_c55_20260717T101925Z promoted=True challenger_hit=0.7267561983471075 champion_hit=0.6211702245326844\n  challenger hit 0.7268 >= champion 0.6212+0.005\n",
+    "ml-ltr-ship": "{\"model_id\": \"challenger_ltr_gated_20260717T102034Z\", \"status\": \"challenger\", \"event\": \"model_registered\", \"level\": \"info\", \"timestamp\": \"2026-07-17T10:20:34.545304Z\"}\n{\"challenger_id\": \"challenger_ltr_gated_20260717T102034Z\", \"ok\": true, \"event\": \"model_promoted\", \"level\": \"info\", \"timestamp\": \"2026-07-17T10:20:34.913663Z\"}\n{\"n\": 11743, \"event\": \"ltr_forecast_outcomes_emitted\", \"level\": \"info\", \"timestamp\": \"2026-07-17T10:21:17.381043Z\"}\n{\"promoted\": true, \"challenger_id\": \"challenger_ltr_gated_20260717T102034Z\", \"emits\": 185, \"gated_hit\": 0.6057473640686376, \"rank_ic\": 0.2547257257478617, \"event\": \"ltr_ship_done\", \"level\": \"info\", \"timestamp\": \"2026-07-17T10:21:17.539561Z\"}\nml-ltr-ship: promoted=1 challenger=challenger_ltr_gated_20260717T102034Z emits=185 points=740\n  rank_ic=0.2547257257478617 gated_hit=0.6057473640686376 vol_ic=0.38308388706290314 ranker=xgb_pairwise\n  GO_LTR+VOL ship promote: RankIC=0.255 volIC=0.383 gated_hit=0.6057 (legacy champion gated=0.7268)\n"
+  },
+  "champion": {
+    "model_id": "challenger_ltr_gated_20260717T102034Z",
+    "algo": "xgb_pairwise+hgb_vol_gated_ltr",
+    "oos_rankic": 0.2547257257478617,
+    "oos_gated_hit": 0.6057473640686376
+  },
+  "forecast_points_by_gate": {
+    "null": 9555,
+    "always_on": 1088,
+    "gated_ltr": 800,
+    "gated_c55": 292,
+    "gated_p90": 24,
+    "hpe_p90": 4
+  },
+  "forecast_outcomes": {
+    "scored": 17541,
+    "total": 29284
+  },
+  "market_daily_summary_rows": 2,
+  "order_book_snapshots": 25
+}

@@ -1,12 +1,14 @@
 # Model registry
 
-**Updated (UTC):** 2026-07-17T10:17:16Z
+**Updated (UTC):** 2026-07-17T10:21:17Z
 
 | model_id | status | algo | oos_hit | oos_gated_hit | coverage | degraded |
 |---|---|---|---:|---:|---:|:---:|
+| challenger_ltr_gated_20260717T102034Z | champion | xgb_pairwise+hgb_vol_gated_ltr | 0.5761556518598772 | 0.6057473640686376 | 0.6550650054171181 | False |
+| challenger_gated_c55_20260717T101925Z | retired | hgb_clf_lmt_bag_gated_c55 | 0.5946918709381608 | 0.7267561983471075 | 0.11036999030842028 | False |
 | challenger_ltr_gated_20260717T092630Z | challenger | xgb_pairwise+hgb_vol_gated_ltr | None | None | None | False |
-| challenger_ltr_gated_20260717T092730Z | champion | xgb_pairwise+hgb_vol_gated_ltr | 0.5790869833436151 | 0.6211702245326844 | 0.5577421344848859 | False |
 | challenger_ltr_gated_20260717T092705Z | challenger | xgb_pairwise+hgb_vol_gated_ltr | None | None | None | False |
+| challenger_ltr_gated_20260717T092730Z | retired | xgb_pairwise+hgb_vol_gated_ltr | 0.5790869833436151 | 0.6211702245326844 | 0.5577421344848859 | False |
 | challenger_gated_p90_holdout_20260717 | challenger | hgb_clf_symrel_conf_gate | 0.5954 | 0.9 | 0.018176310209027567 | False |
 | challenger_gated_p90_20260717 | challenger | hgb_clf_lmt_bag_gated_p90 | 0.5954 | 0.9047619047619048 | 0.0023943902856165553 | False |
 | challenger_gated_c55_20260717 | retired | hgb_clf_lmt_bag_gated_c55 | 0.5954 | 0.7267561983471075 | 0.11036999030842028 | False |
