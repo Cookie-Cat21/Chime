@@ -1,0 +1,329 @@
+# ML self-improving loop — score outcomes, nightly adapt, optional retrain/LTR ship.
+# Requires repo secret: DATABASE_URL (Neon/Postgres). Optional: ML_LTR_SERVE=1 via vars.
+# Kill switch: set vars.ML_SELF_LEARN=0 to skip scheduled runs (dispatch still works).
+#
+# Does not scrape competitors — CSE JSON endpoints + Postgres only.
+# Research metrics only — not financial advice.
+
+name: ml-self-learn
+
+on:
+  workflow_dispatch:
+    inputs:
+      run_retrain:
+        description: Run Loop B weekly retrain (challenger promote gates)
+        required: false
+        default: "true"
+        type: choice
+        options: ["true", "false"]
+      run_ltr_ship:
+        description: Run LTR+vol ship (evaluate OOS, promote if gates, write forecasts)
+        required: false
+        default: "true"
+        type: choice
+        options: ["true", "false"]
+      run_forecast:
+        description: Also emit unified forecasts after nightly (if LTR ship off)
+        required: false
+        default: "false"
+        type: choice
+        options: ["true", "false"]
+      forecast_mode:
+        description: Unified forecast mode when run_forecast=true
+        required: false
+        default: "hpe_with_ltr_fallback"
+        type: choice
+        options:
+          - hpe_with_ltr_fallback
+          - gated_ltr
+          - hpe_with_fallback
+          - gated_p90
+          - gated
+          - always_on
+  schedule:
+    # Weekdays ~16:00 Asia/Colombo (10:30 UTC) — after CSE close (14:30 SLT).
+    - cron: "30 10 * * 1-5"
+
+concurrency:
+  group: ml-self-learn
+  cancel-in-progress: false
+
+jobs:
+  self-learn:
+    runs-on: ubuntu-latest
+    timeout-minutes: 180
+    # Scheduled runs honor kill switch; manual dispatch always allowed.
+    if: >-
+      github.event_name == 'workflow_dispatch' ||
+      vars.ML_SELF_LEARN != '0'
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: Install package + ML deps
+        run: pip install -e ".[dev,ml]"
+
+      - name: Require DATABASE_URL
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+        run: |
+          if [ -z "${DATABASE_URL}" ]; then
+            echo "::error::DATABASE_URL secret is not set"
+            exit 1
+          fi
+          # Never print DSN; host only for ops breadcrumbs.
+          python - <<'PY'
+          import os
+          from urllib.parse import urlparse
+          u = urlparse(os.environ["DATABASE_URL"])
+          print(f"database_host={u.hostname} db={u.path.lstrip('/')}")
+          PY
+
+      - name: Migrate
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+        run: python -m chime migrate
+
+      - name: Score due forecast outcomes
+        id: score
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+        run: |
+          set -o pipefail
+          python -m chime ml-score-outcomes 2>&1 | tee /tmp/ml-score-outcomes.log
+          echo "log<<EOF" >> "$GITHUB_OUTPUT"
+          tail -n 5 /tmp/ml-score-outcomes.log >> "$GITHUB_OUTPUT"
+          echo "EOF" >> "$GITHUB_OUTPUT"
+
+      - name: Loop A — nightly adapt
+        id: nightly
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          ML_LOOP_ENABLED: "1"
+          CSE_MIN_INTERVAL_SECONDS: "0.2"
+        run: |
+          set -o pipefail
+          python -m chime ml-loop-nightly --force 2>&1 | tee /tmp/ml-loop-nightly.log
+          echo "log<<EOF" >> "$GITHUB_OUTPUT"
+          tail -n 20 /tmp/ml-loop-nightly.log >> "$GITHUB_OUTPUT"
+          echo "EOF" >> "$GITHUB_OUTPUT"
+
+      - name: Loop B — retrain / promote
+        id: retrain
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          ML_LOOP_ENABLED: "1"
+          EVENT_NAME: ${{ github.event_name }}
+          # workflow_dispatch input; empty on schedule
+          RUN_RETRAIN: ${{ github.event.inputs.run_retrain || '' }}
+        run: |
+          set -o pipefail
+          # Dispatch: honor input (default true). Schedule: Mondays only.
+          if [ "$EVENT_NAME" = "workflow_dispatch" ]; then
+            if [ "${RUN_RETRAIN:-true}" != "true" ]; then
+              echo "ml-loop-retrain: skip (run_retrain=$RUN_RETRAIN)"
+              exit 0
+            fi
+          else
+            DOW=$(TZ=Asia/Colombo date +%u)  # 1=Mon … 7=Sun
+            if [ "$DOW" != "1" ]; then
+              echo "ml-loop-retrain: skip (scheduled non-Monday, DOW=$DOW)"
+              exit 0
+            fi
+          fi
+          python -m chime ml-loop-retrain --force 2>&1 | tee /tmp/ml-loop-retrain.log
+
+      - name: LTR+vol ship (evaluate + optional promote + forecasts)
+        id: ltr
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          ML_LTR_SERVE: ${{ vars.ML_LTR_SERVE || '1' }}
+          CSE_MIN_INTERVAL_SECONDS: "0.2"
+          EVENT_NAME: ${{ github.event_name }}
+          RUN_LTR_SHIP: ${{ github.event.inputs.run_ltr_ship || '' }}
+        run: |
+          set -o pipefail
+          # Schedule always ships; dispatch honors input (default true).
+          if [ "$EVENT_NAME" = "workflow_dispatch" ] && [ "${RUN_LTR_SHIP:-true}" != "true" ]; then
+            echo "ml-ltr-ship: skip (run_ltr_ship=$RUN_LTR_SHIP)"
+            exit 0
+          fi
+          python -m chime ml-ltr-ship 2>&1 | tee /tmp/ml-ltr-ship.log
+
+      - name: Unified forecast emit (optional)
+        id: forecast
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          ML_LTR_SERVE: ${{ vars.ML_LTR_SERVE || '1' }}
+          CSE_MIN_INTERVAL_SECONDS: "0.2"
+          EVENT_NAME: ${{ github.event_name }}
+          RUN_FORECAST: ${{ github.event.inputs.run_forecast || '' }}
+          RUN_LTR_SHIP: ${{ github.event.inputs.run_ltr_ship || '' }}
+          FORECAST_MODE: ${{ github.event.inputs.forecast_mode || 'hpe_with_ltr_fallback' }}
+        run: |
+          set -o pipefail
+          # Only when dispatch asks for forecast and LTR ship is off (LTR already emits).
+          if [ "$EVENT_NAME" != "workflow_dispatch" ]; then
+            echo "ml-forecast-unified: skip (schedule uses LTR ship)"
+            exit 0
+          fi
+          if [ "${RUN_FORECAST}" != "true" ]; then
+            echo "ml-forecast-unified: skip (run_forecast=$RUN_FORECAST)"
+            exit 0
+          fi
+          if [ "${RUN_LTR_SHIP:-true}" = "true" ]; then
+            echo "ml-forecast-unified: skip (LTR ship already writes forecasts)"
+            exit 0
+          fi
+          python -m chime ml-forecast-unified --mode "$FORECAST_MODE" 2>&1 \
+            | tee /tmp/ml-forecast-unified.log
+
+      - name: Collect logs into workspace
+        if: always()
+        run: |
+          mkdir -p artifacts/ml-self-learn
+          cp -f /tmp/ml-*.log artifacts/ml-self-learn/ 2>/dev/null || true
+          ls -la artifacts/ml-self-learn || true
+
+      - name: Write run report
+        if: always()
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+        run: |
+          mkdir -p docs/experiments data/ml_artifacts
+          python - <<'PY'
+          import json, os
+          from datetime import datetime, timezone
+          from pathlib import Path
+          import psycopg
+
+          ts = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
+          report: dict = {
+              "run_at": ts,
+              "event": os.environ.get("GITHUB_EVENT_NAME"),
+              "sha": os.environ.get("GITHUB_SHA"),
+              "ref": os.environ.get("GITHUB_REF"),
+              "logs": {},
+          }
+          for name in (
+              "ml-score-outcomes",
+              "ml-loop-nightly",
+              "ml-loop-retrain",
+              "ml-ltr-ship",
+              "ml-forecast-unified",
+          ):
+              p = Path(f"/tmp/{name}.log")
+              if p.is_file():
+                  report["logs"][name] = p.read_text(encoding="utf-8", errors="replace")[-4000:]
+
+          url = os.environ.get("DATABASE_URL") or ""
+          if url:
+              with psycopg.connect(url) as conn:
+                  with conn.cursor() as cur:
+                      cur.execute(
+                          """
+                          SELECT model_id, status, oos_rankic, oos_hit, oos_gated_hit,
+                                 oos_coverage, algo, promoted_at::text
+                          FROM model_registry
+                          WHERE status = 'champion'
+                          ORDER BY created_at DESC LIMIT 1
+                          """
+                      )
+                      row = cur.fetchone()
+                      if row:
+                          report["champion"] = {
+                              "model_id": row[0],
+                              "status": row[1],
+                              "oos_rankic": row[2],
+                              "oos_hit": row[3],
+                              "oos_gated_hit": row[4],
+                              "oos_coverage": row[5],
+                              "algo": row[6],
+                              "promoted_at": row[7],
+                          }
+                      cur.execute(
+                          """
+                          SELECT gate, COUNT(*) FROM forecast_points
+                          GROUP BY 1 ORDER BY 2 DESC
+                          """
+                      )
+                      report["forecast_points_by_gate"] = {
+                          (r[0] or "null"): r[1] for r in cur.fetchall()
+                      }
+                      cur.execute(
+                          """
+                          SELECT COUNT(*) FILTER (WHERE scored), COUNT(*)
+                          FROM forecast_outcomes
+                          """
+                      )
+                      scored, total = cur.fetchone()
+                      report["forecast_outcomes"] = {"scored": scored, "total": total}
+                      cur.execute("SELECT COUNT(*) FROM market_daily_summary")
+                      report["market_daily_summary_rows"] = cur.fetchone()[0]
+                      cur.execute("SELECT COUNT(*) FROM order_book_snapshots")
+                      report["order_book_snapshots"] = cur.fetchone()[0]
+
+          out = Path("docs/experiments") / f"ml_self_learn_{ts}.json"
+          out.write_text(json.dumps(report, indent=2) + "\n", encoding="utf-8")
+          md = Path("docs/experiments") / f"ml_self_learn_{ts}.md"
+          champ = report.get("champion") or {}
+          lines = [
+              f"# ML self-learn run ({ts})",
+              "",
+              f"- event: `{report.get('event')}`",
+              f"- sha: `{report.get('sha')}`",
+              f"- champion: `{champ.get('model_id')}` "
+              f"(gated={champ.get('oos_gated_hit')} rankic={champ.get('oos_rankic')})",
+              f"- forecast_points_by_gate: `{report.get('forecast_points_by_gate')}`",
+              f"- outcomes scored/total: "
+              f"`{(report.get('forecast_outcomes') or {}).get('scored')}` / "
+              f"`{(report.get('forecast_outcomes') or {}).get('total')}`",
+              f"- market_daily_summary_rows: `{report.get('market_daily_summary_rows')}`",
+              f"- order_book_snapshots: `{report.get('order_book_snapshots')}`",
+              "",
+              "## Logs (tail)",
+              "",
+          ]
+          for k, v in report.get("logs", {}).items():
+              lines.extend([f"### {k}", "", "```", v.rstrip(), "```", ""])
+          lines.extend(["Research only — not financial advice.", ""])
+          md.write_text("\n".join(lines), encoding="utf-8")
+          # Stable pointer for ops
+          Path("docs/experiments/ML_SELF_LEARN_LATEST.md").write_text(
+              md.read_text(encoding="utf-8"), encoding="utf-8"
+          )
+          print(f"wrote {out} and {md}")
+          PY
+
+      - name: Upload artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ml-self-learn-${{ github.run_id }}
+          path: |
+            docs/experiments/LIVE_SCOREBOARD.md
+            docs/experiments/MODEL_REGISTRY.md
+            docs/experiments/ML_SELF_LEARN_LATEST.md
+            docs/experiments/ml_self_learn_*.md
+            docs/experiments/ml_self_learn_*.json
+            data/ml_artifacts/
+            artifacts/ml-self-learn/
+          if-no-files-found: warn
+          retention-days: 30
+
+      - name: Job summary
+        if: always()
+        run: |
+          {
+            echo "## ML self-learn"
+            echo ""
+            if [ -f docs/experiments/ML_SELF_LEARN_LATEST.md ]; then
+              cat docs/experiments/ML_SELF_LEARN_LATEST.md
+            else
+              echo "_No report written (earlier step failed)._"
+            fi
+          } >> "$GITHUB_STEP_SUMMARY"
