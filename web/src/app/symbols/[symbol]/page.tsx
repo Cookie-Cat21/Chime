@@ -31,22 +31,10 @@ import {
   WatchButton,
 } from "@/components/watchlist-controls";
 import {
-  MAX_DISCLOSURE_CATEGORY_LENGTH,
-  MAX_DISCLOSURE_COMPANY_LENGTH,
-  MAX_DISCLOSURE_EXTERNAL_ID_LENGTH,
-  MAX_DISCLOSURE_TITLE_LENGTH,
-  MAX_STOCK_NAME_LENGTH,
-  MAX_STOCK_SECTOR_LENGTH,
-  normalizeBriefStatus,
-  safeAnnouncementUrl,
   safeFilingHref,
-  safePdfUrl,
-  sanitizeBriefText,
   sanitizeDisclosureCategory,
-  sanitizeDisclosureText,
 } from "@/lib/api/disclosure-safe";
 import { toFiniteNumber } from "@/lib/api/finite-number";
-import { toSafePositiveInt } from "@/lib/api/safe-int";
 import { serverApiGet } from "@/lib/api/server-fetch";
 import { normalizeSymbol, normalizeSymbolParam } from "@/lib/api/symbol";
 import { toIso } from "@/lib/api/time";
@@ -69,12 +57,6 @@ export const dynamic = "force-dynamic";
 const STALE_MS = 24 * 60 * 60 * 1000;
 /** Cap sparkline points parse — parity with snapshots API max / sparkline bound. */
 const MAX_PAGE_SNAPSHOT_POINTS = 200;
-/** Cap disclosures parse — parity with disclosures API max 100. */
-const MAX_PAGE_DISCLOSURES = 100;
-/** Short filing metric labels; never echo arbitrary long extraction text. */
-const MAX_METRIC_KIND_LENGTH = 32;
-const MAX_METRIC_ENTITY_LENGTH = 128;
-const MAX_METRIC_CURRENCY_LENGTH = 16;
 
 /** ECMAScript Date absolute millisecond bound (parity sparkline / toIso). */
 const MAX_DATE_MS = 8.64e15;
@@ -140,46 +122,6 @@ type DisclosuresPayload = {
   }[];
 };
 
-/** Fail-closed symbol JSON — never cast the body to SymbolPayload. */
-function parseSymbolPayload(body: unknown): SymbolPayload | null {
-  if (body == null || typeof body !== "object" || Array.isArray(body)) {
-    return null;
-  }
-  const r = body as Record<string, unknown>;
-  // Fail closed — only CSE SYMBOL_RE (no sanitize length-cap fallback).
-  const symbol = normalizeSymbol(r.symbol);
-  if (!symbol) return null;
-  let last: SymbolPayload["last"] = null;
-  if (r.last != null && typeof r.last === "object" && !Array.isArray(r.last)) {
-    const L = r.last as Record<string, unknown>;
-    const price = toFiniteNumber(L.price);
-    // Require a finite price — null-only last stubs confuse the quote strip.
-    if (price != null) {
-      last = {
-        price,
-        change: toFiniteNumber(L.change),
-        change_pct: toFiniteNumber(L.change_pct),
-        volume: toFiniteNumber(L.volume),
-        // Fail-closed ISO — no raw overlong / control-laden ts echo.
-        ts: toIso(L.ts),
-      };
-    }
-  }
-  return {
-    symbol,
-    name: sanitizeDisclosureText(
-      typeof r.name === "string" ? r.name : null,
-      MAX_STOCK_NAME_LENGTH,
-    ),
-    sector: sanitizeDisclosureText(
-      typeof r.sector === "string" ? r.sector : null,
-      MAX_STOCK_SECTOR_LENGTH,
-    ),
-    market_cap: toFiniteNumber(r.market_cap),
-    last,
-  };
-}
-
 /** Fail-closed snapshots JSON — missing/hostile ``points`` must not 500. */
 function parseSnapshotsPayload(body: unknown): SnapshotsPayload {
   if (body == null || typeof body !== "object" || Array.isArray(body)) {
@@ -201,170 +143,6 @@ function parseSnapshotsPayload(body: unknown): SnapshotsPayload {
     });
   }
   return { points };
-}
-
-/** Fail-closed disclosures JSON — SafeInteger ids + sanitized text/urls. */
-function parseDisclosuresPayload(body: unknown): DisclosuresPayload {
-  if (body == null || typeof body !== "object" || Array.isArray(body)) {
-    return { items: [] };
-  }
-  const itemsRaw = (body as { items?: unknown }).items;
-  if (!Array.isArray(itemsRaw)) return { items: [] };
-  const items: DisclosuresPayload["items"] = [];
-  for (const row of itemsRaw) {
-    if (items.length >= MAX_PAGE_DISCLOSURES) break;
-    if (row == null || typeof row !== "object" || Array.isArray(row)) continue;
-    const r = row as Record<string, unknown>;
-    const id = toSafePositiveInt(r.id);
-    if (id == null) continue;
-    const title =
-      sanitizeDisclosureText(
-        typeof r.title === "string" ? r.title : null,
-        MAX_DISCLOSURE_TITLE_LENGTH,
-      ) ?? "";
-    if (!title) continue;
-    const external_id =
-      sanitizeDisclosureText(
-        typeof r.external_id === "string" ? r.external_id : null,
-        MAX_DISCLOSURE_EXTERNAL_ID_LENGTH,
-      ) ?? "";
-    const brief_status = normalizeBriefStatus(
-      typeof r.brief_status === "string" ? r.brief_status : null,
-    );
-    const publishedRaw = r.published_at;
-    // Parse-time allowlist — never soft-accept raw javascript:/data: hrefs
-    // or brief text before render (defense in depth vs API shape drift).
-    const url =
-      typeof r.url === "string" ? safeAnnouncementUrl(r.url) : null;
-    const pdf_url =
-      typeof r.pdf_url === "string" ? safePdfUrl(r.pdf_url) : null;
-    const briefRaw = typeof r.brief === "string" ? r.brief : null;
-    items.push({
-      id,
-      external_id,
-      title,
-      category: sanitizeDisclosureText(
-        typeof r.category === "string" ? r.category : null,
-        MAX_DISCLOSURE_CATEGORY_LENGTH,
-      ),
-      url,
-      // Fail-closed ISO — no raw overlong / control-laden ts echo.
-      published_at: toIso(publishedRaw),
-      company_name: sanitizeDisclosureText(
-        typeof r.company_name === "string" ? r.company_name : null,
-        MAX_DISCLOSURE_COMPANY_LENGTH,
-      ),
-      pdf_url,
-      brief: sanitizeBriefText(briefRaw, brief_status),
-      brief_status,
-    });
-  }
-  return { items };
-}
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return value != null && typeof value === "object" && !Array.isArray(value);
-}
-
-function firstRecord(value: unknown): Record<string, unknown> | null {
-  if (isRecord(value)) return value;
-  if (!Array.isArray(value)) return null;
-  for (const item of value) {
-    if (isRecord(item)) return item;
-  }
-  return null;
-}
-
-function normalizeMetricText(raw: unknown, maxLen: number): string | null {
-  return sanitizeDisclosureText(typeof raw === "string" ? raw : null, maxLen);
-}
-
-function parseMetricRow(raw: unknown): FilingMetricRow | null {
-  if (!isRecord(raw)) return null;
-  const eps_basic = toFiniteNumber(raw.eps_basic);
-  const revenue = toFiniteNumber(raw.revenue);
-  const profit = toFiniteNumber(raw.profit ?? raw.profit_after_tax);
-  const hasMetric = eps_basic != null || revenue != null || profit != null;
-  if (!hasMetric && raw.extract_ok !== true) return null;
-
-  return {
-    kind: normalizeMetricText(raw.kind, MAX_METRIC_KIND_LENGTH),
-    entity: normalizeMetricText(raw.entity, MAX_METRIC_ENTITY_LENGTH),
-    currency: normalizeMetricText(raw.currency, MAX_METRIC_CURRENCY_LENGTH),
-    fiscal_period_end: toIso(raw.fiscal_period_end),
-    eps_basic,
-    revenue,
-    profit,
-    extract_ok: raw.extract_ok === true,
-  };
-}
-
-function parseMetricComparison(raw: unknown): FilingMetricComparison | null {
-  if (!isRecord(raw)) return null;
-  const matchRaw =
-    typeof raw.match_quality === "string" ? raw.match_quality : null;
-  const match_quality =
-    matchRaw === "exact_yoy" || matchRaw === "approx_yoy" ? matchRaw : null;
-  return {
-    match_quality,
-    eps_delta_pct: toFiniteNumber(raw.eps_delta_pct),
-    revenue_delta_pct: toFiniteNumber(raw.revenue_delta_pct),
-    profit_delta_pct: toFiniteNumber(raw.profit_delta_pct),
-  };
-}
-
-function parseMetricsPayload(body: unknown): {
-  metrics: FilingMetricRow | null;
-  comparison: FilingMetricComparison | null;
-} {
-  if (!isRecord(body)) return { metrics: null, comparison: null };
-  const latestRaw =
-    body.latest ??
-    body.metric ??
-    body.filing_metric ??
-    body.item ??
-    firstRecord(body.items) ??
-    firstRecord(body.metrics);
-  const latest = isRecord(latestRaw) ? latestRaw : null;
-  const metrics = parseMetricRow(latest ?? body);
-  const comparisonRaw =
-    (latest && latest.comparison) ??
-    body.comparison ??
-    body.latest_comparison ??
-    body.filing_comparison;
-  return {
-    metrics,
-    comparison: parseMetricComparison(comparisonRaw),
-  };
-}
-
-function parseLatestBriefPayload(body: unknown): LatestBrief | null {
-  if (!isRecord(body)) return null;
-  const candidateRaw =
-    (isRecord(body.brief) && body.brief) ||
-    (isRecord(body.latest_brief) && body.latest_brief) ||
-    (isRecord(body.item) && body.item) ||
-    body;
-  const candidate = isRecord(candidateRaw) ? candidateRaw : null;
-  if (!candidate) return null;
-
-  const statusRaw = candidate.status ?? candidate.brief_status;
-  const status =
-    typeof statusRaw === "string" ? normalizeBriefStatus(statusRaw) : null;
-  if (statusRaw != null && status !== "ready") return null;
-
-  const title = sanitizeDisclosureText(
-    typeof candidate.title === "string"
-      ? candidate.title
-      : typeof candidate.disclosure_title === "string"
-        ? candidate.disclosure_title
-        : null,
-    MAX_DISCLOSURE_TITLE_LENGTH,
-  );
-  const textRaw = candidate.text ?? candidate.brief;
-  const text = sanitizeBriefText(textRaw, "ready");
-  if (!title || !text) return null;
-  return { title, text };
 }
 
 function latestBriefFromDisclosures(discs: DisclosuresPayload): LatestBrief | null {
@@ -444,9 +222,6 @@ export default async function SymbolDetailPage({
 
   // Stock / disclosures / metrics: read Postgres directly (Vercel Deployment
   // Protection breaks cookie-bearing self-fetch → empty “No disclosures yet”).
-  let stockLoadFailed = false;
-  let metricsFailed = false;
-  let discsFailed = false;
   let data: SymbolPayload | null = null;
   let discs: DisclosuresPayload = { items: [] };
   let filingMetrics: FilingMetricRow | null = null;
@@ -457,30 +232,26 @@ export default async function SymbolDetailPage({
     await Promise.all([
       loadSymbolPageStock(symbol)
         .then((row) => ({ ok: true as const, row }))
-        .catch(() => {
-          stockLoadFailed = true;
-          return { ok: false as const, row: null };
-        }),
+        .catch(() => ({ ok: false as const, row: null })),
       loadSymbolPageDisclosures(symbol, 20)
         .then((items) => ({ ok: true as const, items }))
-        .catch(() => {
-          discsFailed = true;
-          return { ok: false as const, items: [] as Awaited<
-            ReturnType<typeof loadSymbolPageDisclosures>
-          > };
-        }),
+        .catch(() => ({
+          ok: false as const,
+          items: [] as Awaited<ReturnType<typeof loadSymbolPageDisclosures>>,
+        })),
       loadSymbolPageMetrics(symbol)
         .then((payload) => ({ ok: true as const, payload }))
-        .catch(() => {
-          metricsFailed = true;
-          return { ok: false as const, payload: null };
-        }),
+        .catch(() => ({ ok: false as const, payload: null })),
       serverApiGet(`/api/v1/symbols/${encoded}/snapshots?limit=60`),
       compareQs ? serverApiGet(compareQs) : Promise.resolve(null),
       serverApiGet("/api/v1/watchlist"),
       serverApiGet(`/api/v1/symbols/${encoded}/forecast`),
       serverApiGet(`/api/v1/symbols/${encoded}/daily-bars?limit=260`),
     ]);
+
+  const stockLoadFailed = !stockResult.ok;
+  const discsFailed = !discResult.ok;
+  const metricsFailed = !metricsResult.ok;
 
   if (!stockLoadFailed && stockResult.ok && stockResult.row == null) {
     notFound();

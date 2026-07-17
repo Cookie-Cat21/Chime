@@ -57,10 +57,13 @@ def forecast_path(
     if d5 is None and d20 is None:
         return []
     if d5 is not None and d20 is not None:
-        mean_ret = 0.6 * d5 + 0.4 * d20
+        mean_ret: float = 0.6 * d5 + 0.4 * d20
+    elif d5 is not None:
+        mean_ret = d5
+    elif d20 is not None:
+        mean_ret = d20
     else:
-        mean_ret = d5 if d5 is not None else d20
-    assert mean_ret is not None
+        return []
     if not math.isfinite(mean_ret):
         return []
     mean_ret = max(-0.04, min(0.04, mean_ret))
