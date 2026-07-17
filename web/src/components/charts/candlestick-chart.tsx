@@ -33,8 +33,13 @@ export function CandlestickChart({
   forecastPrices,
   showForecast = false,
   fill = false,
-  /** Fit chart to container width (no horizontal scrollbar). Hero/symbol page. */
+  /** Fit chart to container width (no horizontal scrollbar). */
   fitWidth = false,
+  /**
+   * Pack candles at a fixed comfortable pitch and center the plot.
+   * Use for the hero strip so a short series doesn't stretch card-wide.
+   */
+  pack = false,
   /** SVG render height in px when not filling a flex parent. */
   chartHeight,
   footnote,
@@ -46,6 +51,7 @@ export function CandlestickChart({
   showForecast?: boolean;
   fill?: boolean;
   fitWidth?: boolean;
+  pack?: boolean;
   chartHeight?: number;
   footnote?: string;
   maxCandles?: number;
@@ -120,26 +126,30 @@ export function CandlestickChart({
   const n = bars.length;
   const totalSlots = Math.max(1, n + (fc.length > 0 ? fc.length : 0));
 
-  // Fit-width: viewBox == container pixels. Cap slot so sparse ranges (1M)
-  // don't become giant sticks; leftover width is even side padding.
-  const h = fitWidth ? frame.h : 520;
+  // pack: fixed pitch, intrinsic width, centered (hero).
+  // fitWidth fill: slots from container, capped, centered side pad (expand).
+  const h = fitWidth && !pack ? frame.h : chartHeight ?? (fitWidth ? 280 : 520);
   const MIN_SLOT = 5;
-  const MAX_SLOT = 13; // sweet-spot body ~9px at 0.72×
+  const MAX_SLOT = 12;
+  const PACK_SLOT = 11;
   const frameW = Math.max(padL + padR + 40, frame.w);
   const innerW = frameW - padL - padR;
-  const rawSlot = fitWidth ? innerW / totalSlots : 18;
-  const slot = fitWidth
-    ? Math.min(MAX_SLOT, Math.max(MIN_SLOT, rawSlot))
-    : 18;
+  const slot = pack
+    ? PACK_SLOT
+    : fitWidth
+      ? Math.min(MAX_SLOT, Math.max(MIN_SLOT, innerW / totalSlots))
+      : 18;
   const usedPlot = totalSlots * slot;
-  const sidePad = fitWidth ? Math.max(0, (innerW - usedPlot) / 2) : 0;
+  const contentW = padL + padR + usedPlot;
+  const sidePad =
+    fitWidth && !pack ? Math.max(0, (innerW - usedPlot) / 2) : 0;
   const drawPadL = padL + sidePad;
   const drawPadR = padR + sidePad;
-  const bodyW = fitWidth
-    ? Math.max(3, Math.min(slot * 0.72, slot - 1.25))
+  const bodyW = pack || fitWidth
+    ? Math.max(4, Math.min(slot * 0.82, slot - 1))
     : 13;
-  const wickW = fitWidth ? Math.max(1, Math.min(2.25, slot * 0.14)) : 2;
-  const w = fitWidth ? frameW : padL + padR + usedPlot;
+  const wickW = pack || fitWidth ? Math.max(1.25, Math.min(2.5, slot * 0.16)) : 2;
+  const w = pack ? contentW : fitWidth ? frameW : contentW;
   const plotH = Math.max(40, h - padT - padB);
   const displayH = chartHeight ?? 280;
 
@@ -212,33 +222,50 @@ export function CandlestickChart({
         ref={(el) => {
           frameRef.current = el;
           // Pin scroll to most recent candles (scroll mode only).
-          if (!el || fitWidth) return;
+          if (!el || fitWidth || pack) return;
           requestAnimationFrame(() => {
             el.scrollLeft = Math.max(0, el.scrollWidth - el.clientWidth);
           });
         }}
         className={cn(
-          "relative w-full overflow-hidden rounded-xl border border-border/50 bg-gradient-to-b from-muted/25 to-muted/10",
-          fitWidth ? "overflow-x-hidden" : "overflow-x-auto overflow-y-hidden",
-          fill ? "min-h-0 flex-1" : "",
+          "relative overflow-hidden rounded-xl border border-border/50 bg-gradient-to-b from-muted/25 to-muted/10",
+          pack
+            ? "mx-auto w-full max-w-full overflow-x-hidden"
+            : fitWidth
+              ? "w-full overflow-x-hidden"
+              : "w-full overflow-x-auto overflow-y-hidden",
+          fill && !pack ? "min-h-0 flex-1" : "",
         )}
-        style={fitWidth && !fill ? { height: displayH } : undefined}
+        style={
+          pack
+            ? { height: displayH, maxWidth: contentW }
+            : fitWidth && !fill
+              ? { height: displayH }
+              : undefined
+        }
       >
         <svg
           viewBox={`0 0 ${w} ${h}`}
-          // Fit-width: viewBox matches measured frame pixels → none ≠ stretch.
-          preserveAspectRatio={fitWidth ? "none" : "xMinYMid meet"}
+          preserveAspectRatio={
+            pack ? "xMidYMid meet" : fitWidth ? "none" : "xMinYMid meet"
+          }
           style={
-            fitWidth
-              ? { width: "100%", height: "100%", display: "block" }
-              : {
-                  width: w,
-                  height: 460,
-                  maxWidth: "none",
+            pack
+              ? {
+                  width: "100%",
+                  height: "100%",
                   display: "block",
                 }
+              : fitWidth
+                ? { width: "100%", height: "100%", display: "block" }
+                : {
+                    width: w,
+                    height: 460,
+                    maxWidth: "none",
+                    display: "block",
+                  }
           }
-          className={fitWidth ? "h-full w-full" : "max-w-none"}
+          className={pack || fitWidth ? "h-full w-full" : "max-w-none"}
           role="img"
           aria-label={aria}
         >

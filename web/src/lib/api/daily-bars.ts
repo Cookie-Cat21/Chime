@@ -124,8 +124,8 @@ export function displayCandlesForRange(range: ChartRangeKey): number {
   }
 }
 
-/** Hero strip under the quote — ~2 months of daily candles. */
-export const HERO_DISPLAY_CANDLES = 48;
+/** Hero strip under the quote — ~3 months looks dense at pack slot. */
+export const HERO_DISPLAY_CANDLES = 64;
 
 /**
  * Build intraday OHLC candles from tick prices for the 1D expand view.
