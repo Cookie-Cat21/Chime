@@ -1,8 +1,10 @@
 import Link from "next/link";
 import { Suspense } from "react";
+import { Info } from "lucide-react";
 
 import { AppNav } from "@/components/app-nav";
 import { PeopleGraphClient } from "@/components/company-graph/people-client";
+import { AlertBanner } from "@/components/kit/alert-banner";
 import { NfaFooter } from "@/components/nfa-footer";
 import { NfaInline } from "@/components/nfa-inline";
 import { PageHeader } from "@/components/page-header";
@@ -55,6 +57,12 @@ export default async function PeoplePage() {
           }
         />
         <NfaInline />
+        <AlertBanner
+          tone="info"
+          icon={Info}
+          title="Boards are a snapshot — not auto-updated"
+          description="People ranks use the last directors-backfill from CSE companyProfile. Re-run backfill to refresh seats; linked volume/turnover come from the latest poller quotes on those issuers."
+        />
         {loadError ? (
           <p className="text-sm text-muted-foreground">
             People map is temporarily unavailable.

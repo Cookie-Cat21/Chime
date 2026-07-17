@@ -6,6 +6,7 @@ import { useEffect, useMemo, useState, useTransition } from "react";
 
 import { CompanyGraphCanvas } from "@/components/company-graph/graph-canvas";
 import { EmptyState } from "@/components/empty-state";
+import { KpiStrip } from "@/components/kit/kpi-strip";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -223,6 +224,15 @@ export function CompanyGraphClient({
     if (hit) focusNode(hit);
   }
 
+  const listedCount = useMemo(
+    () => visibleNodes.filter((n) => n.node_kind === "listed").length,
+    [visibleNodes],
+  );
+  const highConfLinks = useMemo(
+    () => visibleEdges.filter((e) => e.confidence === "high").length,
+    [visibleEdges],
+  );
+
   if (nodes.length === 0) {
     return (
       <EmptyState
@@ -234,6 +244,30 @@ export function CompanyGraphClient({
 
   return (
     <div className="space-y-4">
+      <KpiStrip
+        ariaLabel="Ownership map summary"
+        items={[
+          {
+            id: "companies",
+            label: "Companies",
+            value: String(visibleNodes.length),
+            hint: `${listedCount} listed on CSE`,
+          },
+          {
+            id: "links",
+            label: "Links",
+            value: String(visibleEdges.length),
+            hint: `${highConfLinks} high confidence`,
+          },
+          {
+            id: "source",
+            label: "Source",
+            value: "PDF",
+            hint: "Not a CSE ownership API",
+          },
+        ]}
+      />
+
       <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-center">
         <div className="relative flex min-w-0 flex-1 gap-2">
           <div className="relative min-w-0 flex-1 max-w-xs">
@@ -283,11 +317,8 @@ export function CompanyGraphClient({
           />
           Holdings hubs
         </label>
-        <Badge variant="outline" className="tabular-nums">
-          {visibleNodes.length} companies · {visibleEdges.length} links
-        </Badge>
         <span className="hidden text-[11px] text-muted-foreground sm:inline">
-          Annual-report PDFs · not a CSE ownership register
+          Annual-report PDFs · research map only
         </span>
       </div>
 

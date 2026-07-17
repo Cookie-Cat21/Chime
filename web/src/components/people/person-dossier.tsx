@@ -26,7 +26,11 @@ import {
 } from "@xyflow/react";
 import "@xyflow/react/dist/style.css";
 
+import { EmptyState } from "@/components/empty-state";
 import { ChangeBadge } from "@/components/kit/change-badge";
+import { EventTimeline, type EventTimelineItem } from "@/components/kit/event-timeline";
+import { RankBarList, type RankBarItem } from "@/components/kit/rank-bar-list";
+import { StatCard } from "@/components/kit/stat-card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import type { PersonDossier } from "@/lib/api/person-dossier";
@@ -35,18 +39,8 @@ import { formatCompactNumber } from "@/lib/format";
 import { cn } from "@/lib/utils";
 
 /**
- * Person dossier UI — 10 agentic loops (Tremor KPI / HyperUI table+timeline /
- * bar-list ranking; Chime tokens; no purple/glow kits):
- *  1 Identity hero + monogram
- *  2 Tremor-style KPI strip
- *  3 Sticky underline tabs + keyboard
- *  4 HyperUI seats ledger
- *  5 Per-seat influence bar-list
- *  6 Ego network (person → issuers → peers)
- *  7 Co-director bar-list
- *  8 Across-years honest timeline
- *  9 Motion / tab transitions
- * 10 Empty states, soft-merge callout, mobile density
+ * Person dossier — Ardeno Wave A (Tremor RankBarList / HyperUI EventTimeline /
+ * StatCard KPIs). Chime tokens; no purple/glow kits; not personal net worth.
  */
 
 const ROLE_LABEL: Record<string, string> = {
@@ -227,14 +221,11 @@ function EgoNetwork({ dossier }: { dossier: PersonDossier }) {
 
   if (dossier.seats.length === 0) {
     return (
-      <div className="flex h-[260px] flex-col items-center justify-center rounded-xl border border-dashed border-border px-4 text-center">
-        <p className="text-sm font-medium text-foreground">
-          No board seats to map
-        </p>
-        <p className="mt-1 max-w-sm text-[12px] text-muted-foreground">
-          Sync directors-backfill against CSE companyProfile to populate seats.
-        </p>
-      </div>
+      <EmptyState
+        className="mt-0"
+        title="No board seats to map"
+        description="Sync directors-backfill against CSE companyProfile to populate seats."
+      />
     );
   }
 
@@ -271,36 +262,104 @@ function EgoNetwork({ dossier }: { dossier: PersonDossier }) {
   );
 }
 
-function KpiCell({
-  label,
-  value,
-  title,
-}: {
-  label: string;
-  value: string;
-  title?: string;
-}) {
-  return (
-    <div className="rounded-md bg-muted/35 px-3 py-2">
-      <dt className="text-[10px] uppercase tracking-wide text-muted-foreground">
-        {label}
-      </dt>
-      <dd
-        className="truncate font-mono text-lg font-semibold tabular-nums"
-        title={title}
-      >
-        {value}
-      </dd>
-    </div>
-  );
-}
-
 export function PersonDossierView({ dossier }: { dossier: PersonDossier }) {
   const [tab, setTab] = useState<TabId>("seats");
   const [, startTransition] = useTransition();
   const baseId = useId();
   const sector = topSector(dossier);
-  const topPeers = dossier.network.slice(0, 14);
+  const peerBars: RankBarItem[] = useMemo(
+    () =>
+      dossier.network.slice(0, 14).map((p) => ({
+        id: String(p.id),
+        label: p.name,
+        value: p.shared_count,
+        valueLabel: String(p.shared_count),
+        metaRight: formatCompactNumber(p.influence_score, 1),
+        href: `/people/${p.id}`,
+        sublabel: `${p.top_role ? ROLE_LABEL[p.top_role] : "Director"} · ${p.shared_symbols
+          .slice(0, 5)
+          .map(ticker)
+          .join(", ")}${p.shared_symbols.length > 5 ? "…" : ""}`,
+        tone: "neutral",
+      })),
+    [dossier.network],
+  );
+  const seatBars: RankBarItem[] = useMemo(
+    () =>
+      dossier.seats.slice(0, 12).map((s) => ({
+        id: s.symbol,
+        label: ticker(s.symbol),
+        value: s.influence_share,
+        valueLabel: `${(s.influence_share * 100).toFixed(0)}%`,
+        href: `/symbols/${encodeURIComponent(s.symbol)}`,
+        sublabel: rolesSummary(s.roles),
+        tone: "neutral",
+      })),
+    [dossier.seats],
+  );
+  const timelineItems: EventTimelineItem[] = useMemo(() => {
+    const items: EventTimelineItem[] = [
+      {
+        id: "current",
+        at: "Current observation",
+        title: `${dossier.company_count} active seat${
+          dossier.company_count === 1 ? "" : "s"
+        }${sector ? ` · densest in ${sector}` : ""}`,
+        badge: "Live CSE",
+        emphasis: "live",
+        children: (
+          <ul className="mt-3 divide-y divide-border/60 rounded-md border border-border/70">
+            {dossier.seats.map((s) => (
+              <li
+                key={`${s.symbol}-${s.roles.join("-")}`}
+                className="flex items-center justify-between gap-3 px-3 py-2 text-[12px]"
+              >
+                <Link
+                  href={`/symbols/${encodeURIComponent(s.symbol)}`}
+                  className="font-mono font-semibold underline-offset-2 hover:underline"
+                >
+                  {ticker(s.symbol)}
+                </Link>
+                <span className="min-w-0 truncate text-muted-foreground">
+                  {rolesSummary(s.roles)}
+                </span>
+                <span className="shrink-0 font-mono tabular-nums text-muted-foreground">
+                  {(s.influence_share * 100).toFixed(0)}%
+                </span>
+              </li>
+            ))}
+          </ul>
+        ),
+      },
+    ];
+    if (dossier.timeline.length === 0) {
+      items.push({
+        id: "empty-filings",
+        title:
+          "No issuer filings on file for these seats yet. Poller stores annuals/appointment categories as they arrive.",
+        emphasis: "empty",
+      });
+      return items;
+    }
+    for (const ev of dossier.timeline) {
+      items.push({
+        id: `${ev.disclosure_id}-${ev.symbol}`,
+        at: ev.at.slice(0, 10),
+        title: ev.title,
+        href: ev.url
+          ? ev.url
+          : `/symbols/${encodeURIComponent(ev.symbol)}`,
+        external: Boolean(ev.url),
+        badge: ev.kind === "board_event" ? "Board event" : "Filing",
+        meta: ticker(ev.symbol),
+        emphasis: "default",
+        children: ev.category ? (
+          <p className="mt-0.5 text-[11px] text-muted-foreground">{ev.category}</p>
+        ) : undefined,
+      });
+    }
+    return items;
+  }, [dossier, sector]);
   const seatSectors = useMemo(
     () =>
       Array.from(
@@ -325,6 +384,9 @@ export function PersonDossierView({ dossier }: { dossier: PersonDossier }) {
   const selectTab = useCallback(
     (id: TabId) => {
       startTransition(() => setTab(id));
+      if (typeof window !== "undefined") {
+        window.history.replaceState(null, "", `#${id}`);
+      }
     },
     [startTransition],
   );
@@ -378,7 +440,7 @@ export function PersonDossierView({ dossier }: { dossier: PersonDossier }) {
                 </h1>
                 <p className="text-sm text-muted-foreground">
                   {dossier.top_role
-                    ? ROLE_LABEL[dossier.top_role]
+                    ? (ROLE_LABEL[dossier.top_role] ?? dossier.top_role)
                     : "Director"}{" "}
                   · CSE initials as listed
                   {sector ? ` · ${sector}` : ""}
@@ -398,23 +460,32 @@ export function PersonDossierView({ dossier }: { dossier: PersonDossier }) {
             </div>
           </div>
 
-          <dl className="mt-5 grid grid-cols-2 gap-2.5 border-t border-border pt-5 sm:grid-cols-4">
-            <KpiCell label="Companies" value={String(dossier.company_count)} />
-            <KpiCell
+          <div className="mt-5 grid grid-cols-2 gap-2.5 border-t border-border pt-5 sm:grid-cols-4">
+            <StatCard
+              label="Companies"
+              value={String(dossier.company_count)}
+              hint="Active CSE board seats"
+              className="p-3 sm:p-4"
+            />
+            <StatCard
               label="Linked volume"
               value={formatCompactNumber(dossier.linked_volume, 1)}
-              title="Sum of latest share volume on seated issuers"
+              hint="Issuer share volume (not personal)"
+              className="p-3 sm:p-4"
             />
-            <KpiCell
+            <StatCard
               label="Linked turnover"
               value={formatCompactNumber(dossier.linked_turnover, 1)}
-              title="Sum of latest turnover (LKR) on seated issuers"
+              hint="Issuer turnover LKR"
+              className="p-3 sm:p-4"
             />
-            <KpiCell
+            <StatCard
               label="Co-directors"
               value={String(dossier.network.length)}
+              hint="Shared board seats"
+              className="p-3 sm:p-4"
             />
-          </dl>
+          </div>
 
           {seatSectors.length > 0 ? (
             <ul className="mt-3 flex flex-wrap gap-1.5">
@@ -429,11 +500,11 @@ export function PersonDossierView({ dossier }: { dossier: PersonDossier }) {
             </ul>
           ) : null}
 
-          {/* Loop 10: soft-merge callout */}
           {dossier.merged_ids.length > 1 ? (
             <p className="mt-3 rounded-md border border-border/70 bg-muted/25 px-3 py-2 text-[12px] text-muted-foreground">
               Soft-merged {dossier.merged_ids.length} CSE name variants (initial
-              spelling). Display stays the primary CSE string.
+              spelling only). Display stays the primary CSE string — not a
+              common-name dossier.
             </p>
           ) : null}
         </div>
@@ -456,10 +527,7 @@ export function PersonDossierView({ dossier }: { dossier: PersonDossier }) {
                 aria-controls={`${baseId}-panel-${t.id}`}
                 id={`${baseId}-tab-${t.id}`}
                 tabIndex={tab === t.id ? 0 : -1}
-                onClick={() => {
-                  selectTab(t.id);
-                  window.history.replaceState(null, "", `#${t.id}`);
-                }}
+                onClick={() => selectTab(t.id)}
                 onKeyDown={(e) => onTabKeyDown(e, i)}
                 className={cn(
                   "relative rounded-t-md px-3.5 py-2.5 text-sm transition-colors",
@@ -508,7 +576,7 @@ export function PersonDossierView({ dossier }: { dossier: PersonDossier }) {
           </div>
 
           <div className="overflow-hidden rounded-xl border border-border">
-            <div className="hidden grid-cols-[4.5rem_minmax(0,1.3fr)_4.5rem_4rem_4.5rem_4.5rem_4rem] gap-x-2 border-b border-border bg-muted/30 px-4 py-2 text-[10px] font-semibold uppercase tracking-[0.12em] text-muted-foreground xl:grid">
+            <div className="hidden grid-cols-[4.5rem_minmax(0,1.3fr)_4.5rem_5rem_4.5rem_4.5rem_4rem] gap-x-2 border-b border-border bg-muted/30 px-4 py-2 text-[10px] font-semibold uppercase tracking-[0.12em] text-muted-foreground xl:grid">
               <span>Ticker</span>
               <span>Roles</span>
               <span className="text-right">Price</span>
@@ -518,13 +586,11 @@ export function PersonDossierView({ dossier }: { dossier: PersonDossier }) {
               <span className="text-right">Turn</span>
             </div>
             {dossier.seats.length === 0 ? (
-              <div className="px-4 py-10 text-center">
-                <p className="text-sm font-medium">No active seats</p>
-                <p className="mt-1 text-[12px] text-muted-foreground">
-                  This person has no active CSE board roles in the current
-                  snapshot.
-                </p>
-              </div>
+              <EmptyState
+                className="mt-0 rounded-none border-0"
+                title="No active seats"
+                description="This person has no active CSE board roles in the current snapshot."
+              />
             ) : (
               <ul className="divide-y divide-border/70">
                 {dossier.seats.map((seat, i) => (
@@ -617,10 +683,22 @@ export function PersonDossierView({ dossier }: { dossier: PersonDossier }) {
               </ul>
             )}
           </div>
+
+          {seatBars.length > 1 ? (
+            <div className="rounded-xl border border-border px-3 py-3 sm:px-4">
+              <h3 className="text-[11px] font-semibold uppercase tracking-[0.12em] text-muted-foreground">
+                Influence share by seat
+              </h3>
+              <RankBarList
+                className="mt-2"
+                items={seatBars}
+                empty="No seat weights yet."
+              />
+            </div>
+          ) : null}
         </section>
       ) : null}
 
-      {/* Loop 6–7: network graph + peer bar-list */}
       {tab === "network" ? (
         <section
           role="tabpanel"
@@ -641,78 +719,28 @@ export function PersonDossierView({ dossier }: { dossier: PersonDossier }) {
             <EgoNetwork dossier={dossier} />
           </ReactFlowProvider>
 
-          <div className="overflow-hidden rounded-xl border border-border">
-            <div className="grid grid-cols-[minmax(0,1fr)_3.5rem_5rem] gap-x-3 border-b border-border bg-muted/30 px-4 py-2 text-[10px] font-semibold uppercase tracking-[0.12em] text-muted-foreground">
-              <span>Co-director</span>
-              <span className="text-right">Shared</span>
-              <span className="text-right">Influence</span>
+          <div className="overflow-hidden rounded-xl border border-border px-2 py-2 sm:px-3">
+            <div className="flex items-baseline justify-between gap-2 px-2 pb-2 pt-1">
+              <h3 className="text-[11px] font-semibold uppercase tracking-[0.12em] text-muted-foreground">
+                Co-directors by shared seats
+              </h3>
+              <span className="text-[10px] text-muted-foreground">
+                Shared · linked influence
+              </span>
             </div>
-            {topPeers.length === 0 ? (
-              <div className="px-4 py-10 text-center">
-                <p className="text-sm font-medium">No co-directors yet</p>
-                <p className="mt-1 text-[12px] text-muted-foreground">
-                  Sync more issuers with directors-backfill to densify the
-                  network.
-                </p>
-              </div>
+            {peerBars.length === 0 ? (
+              <EmptyState
+                className="mt-0 rounded-none border-0"
+                title="No co-directors yet"
+                description="Sync more issuers with directors-backfill to densify the network."
+              />
             ) : (
-              <ul className="divide-y divide-border/70">
-                {topPeers.map((p, i) => {
-                  const maxShared = topPeers[0]?.shared_count || 1;
-                  const pct = (p.shared_count / maxShared) * 100;
-                  return (
-                    <li
-                      key={p.id}
-                      style={{ animationDelay: `${Math.min(i, 10) * 30}ms` }}
-                      className="motion-safe:animate-in motion-safe:fade-in-0 motion-safe:fill-mode-both motion-safe:duration-300"
-                    >
-                      <Link
-                        href={`/people/${p.id}`}
-                        title={p.shared_symbols.map(ticker).join(", ")}
-                        className="grid grid-cols-[minmax(0,1fr)_3.5rem_5rem] items-center gap-x-3 px-4 py-2.5 transition-colors hover:bg-muted/40"
-                      >
-                        <span className="min-w-0">
-                          <span className="block truncate text-[13px] font-medium">
-                            {p.name}
-                          </span>
-                          <span
-                            className="mt-0.5 block truncate text-[11px] text-muted-foreground"
-                            title={p.shared_symbols.map(ticker).join(", ")}
-                          >
-                            {p.top_role
-                              ? ROLE_LABEL[p.top_role]
-                              : "Director"}{" "}
-                            ·{" "}
-                            {p.shared_symbols
-                              .slice(0, 5)
-                              .map(ticker)
-                              .join(", ")}
-                            {p.shared_symbols.length > 5 ? "…" : ""}
-                          </span>
-                          <span className="mt-1 block h-1 max-w-[12rem] overflow-hidden rounded-sm bg-muted">
-                            <span
-                              className="block h-full rounded-sm bg-foreground/60"
-                              style={{ width: `${Math.max(pct, 8)}%` }}
-                            />
-                          </span>
-                        </span>
-                        <span className="text-right font-mono text-[12px] tabular-nums">
-                          {p.shared_count}
-                        </span>
-                        <span className="text-right font-mono text-[12px] tabular-nums text-muted-foreground">
-                          {formatCompactNumber(p.influence_score, 1)}
-                        </span>
-                      </Link>
-                    </li>
-                  );
-                })}
-              </ul>
+              <RankBarList items={peerBars} empty="No co-directors yet." />
             )}
           </div>
         </section>
       ) : null}
 
-      {/* Across years: live seats + issuer filings / board events from DB */}
       {tab === "timeline" ? (
         <section
           role="tabpanel"
@@ -723,127 +751,13 @@ export function PersonDossierView({ dossier }: { dossier: PersonDossier }) {
           <div>
             <h2 className="font-display text-lg font-semibold">Across years</h2>
             <p className="text-[12px] text-muted-foreground">
-              CSE boards are live-only. Below: today&apos;s seats, then filings
-              on those issuers (appointments when polled; annuals already in DB).
+              CSE boards are live-only — not a career history. Below:
+              today&apos;s seats, then filings on those issuers (appointments
+              when polled; annuals already in DB).
             </p>
           </div>
 
-          <ol className="relative space-y-3 border-l border-border pl-4">
-            <li className="relative">
-              <span
-                aria-hidden
-                className="absolute -left-[1.3rem] top-1.5 size-2.5 rounded-full border-2 border-foreground bg-background"
-              />
-              <div className="rounded-lg border border-border bg-background px-4 py-3">
-                <div className="flex flex-wrap items-center justify-between gap-2">
-                  <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-muted-foreground">
-                    Current observation
-                  </p>
-                  <Badge variant="outline">Live CSE</Badge>
-                </div>
-                <p className="mt-1 text-sm">
-                  {dossier.company_count} active seat
-                  {dossier.company_count === 1 ? "" : "s"}
-                  {sector ? ` · densest in ${sector}` : ""}
-                </p>
-                <ul className="mt-3 divide-y divide-border/60 rounded-md border border-border/70">
-                  {dossier.seats.map((s) => (
-                    <li
-                      key={`${s.symbol}-${s.roles.join("-")}`}
-                      className="flex items-center justify-between gap-3 px-3 py-2 text-[12px]"
-                    >
-                      <Link
-                        href={`/symbols/${encodeURIComponent(s.symbol)}`}
-                        className="font-mono font-semibold underline-offset-2 hover:underline"
-                      >
-                        {ticker(s.symbol)}
-                      </Link>
-                      <span className="min-w-0 truncate text-muted-foreground">
-                        {rolesSummary(s.roles)}
-                      </span>
-                      <span className="shrink-0 font-mono tabular-nums text-muted-foreground">
-                        {(s.influence_share * 100).toFixed(0)}%
-                      </span>
-                    </li>
-                  ))}
-                </ul>
-              </div>
-            </li>
-
-            {dossier.timeline.length === 0 ? (
-              <li className="relative">
-                <span
-                  aria-hidden
-                  className="absolute -left-[1.3rem] top-1.5 size-2.5 rounded-full border border-dashed border-muted-foreground/40 bg-background"
-                />
-                <div className="rounded-lg border border-dashed border-border/80 px-4 py-3">
-                  <p className="text-[12px] text-muted-foreground">
-                    No issuer filings on file for these seats yet. Poller stores
-                    annuals/appointment categories as they arrive.
-                  </p>
-                </div>
-              </li>
-            ) : (
-              dossier.timeline.map((ev) => {
-                const day = ev.at.slice(0, 10);
-                const href = ev.url
-                  ? ev.url
-                  : `/symbols/${encodeURIComponent(ev.symbol)}`;
-                const external = Boolean(ev.url);
-                return (
-                  <li key={`${ev.disclosure_id}-${ev.symbol}`} className="relative">
-                    <span
-                      aria-hidden
-                      className={cn(
-                        "absolute -left-[1.3rem] top-1.5 size-2.5 rounded-full border bg-background",
-                        ev.kind === "board_event"
-                          ? "border-foreground"
-                          : "border-border",
-                      )}
-                    />
-                    <div className="rounded-lg border border-border/80 bg-card/40 px-4 py-2.5">
-                      <div className="flex flex-wrap items-center gap-2">
-                        <span className="font-mono text-[11px] tabular-nums text-muted-foreground">
-                          {day}
-                        </span>
-                        <Badge variant="outline" className="text-[10px]">
-                          {ev.kind === "board_event" ? "Board event" : "Filing"}
-                        </Badge>
-                        <Link
-                          href={`/symbols/${encodeURIComponent(ev.symbol)}`}
-                          className="font-mono text-[11px] font-semibold underline-offset-2 hover:underline"
-                        >
-                          {ticker(ev.symbol)}
-                        </Link>
-                      </div>
-                      {external ? (
-                        <a
-                          href={href}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="mt-1 block text-[13px] text-foreground underline-offset-2 hover:underline"
-                        >
-                          {ev.title}
-                        </a>
-                      ) : (
-                        <Link
-                          href={href}
-                          className="mt-1 block text-[13px] text-foreground underline-offset-2 hover:underline"
-                        >
-                          {ev.title}
-                        </Link>
-                      )}
-                      {ev.category ? (
-                        <p className="mt-0.5 text-[11px] text-muted-foreground">
-                          {ev.category}
-                        </p>
-                      ) : null}
-                    </div>
-                  </li>
-                );
-              })
-            )}
-          </ol>
+          <EventTimeline items={timelineItems} />
         </section>
       ) : null}
 

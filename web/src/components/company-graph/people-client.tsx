@@ -28,6 +28,7 @@ import {
 import "@xyflow/react/dist/style.css";
 
 import { EmptyState } from "@/components/empty-state";
+import { FilterChip } from "@/components/kit/rank-bar-list";
 import { Button } from "@/components/ui/button";
 import type { PersonNode, PersonRole } from "@/lib/api/people-graph";
 import { ROLE_WEIGHT } from "@/lib/api/people-graph";
@@ -153,7 +154,7 @@ function PersonPill({ data }: NodeProps<Node<PData>>) {
   return (
     <div
       className={cn(
-        "flex h-10 w-[152px] cursor-pointer flex-col justify-center rounded-md border bg-background px-2.5 transition-[transform,opacity,border-color,box-shadow] duration-150 hover:scale-[1.03] hover:border-foreground/30",
+        "flex h-10 w-[152px] cursor-pointer flex-col justify-center rounded-md border bg-background px-2.5 transition-[transform,opacity,border-color,box-shadow] duration-150 motion-safe:hover:scale-[1.03] hover:border-foreground/30",
         data.selected
           ? "border-foreground/40 shadow-sm"
           : "border-border",
@@ -179,7 +180,7 @@ function CompanyPill({ data }: NodeProps<Node<CData>>) {
   return (
     <div
       className={cn(
-        "flex h-10 w-[100px] cursor-pointer flex-col justify-center rounded-md border bg-muted/30 px-2 transition-[transform,opacity,border-color] duration-150 hover:scale-[1.03]",
+        "flex h-10 w-[100px] cursor-pointer flex-col justify-center rounded-md border bg-muted/30 px-2 transition-[transform,opacity,border-color] duration-150 motion-safe:hover:scale-[1.03]",
         data.selected ? "border-foreground/40 bg-background" : "border-border",
         data.dimmed && "opacity-20",
       )}
@@ -763,17 +764,23 @@ export function PeopleGraphClient({ people }: { people: PersonNode[] }) {
           className="h-9 w-full max-w-[16rem] rounded-md border border-border bg-background px-3 text-sm outline-none placeholder:text-muted-foreground focus-visible:ring-2 focus-visible:ring-ring"
           aria-label="Search people or symbols"
         />
-        <label className="inline-flex h-9 cursor-pointer items-center gap-2 rounded-md border border-border bg-background px-3 text-[12px] text-muted-foreground">
-          <input
-            type="checkbox"
-            checked={leadershipOnly}
-            onChange={(e) => setLeadershipOnly(e.target.checked)}
-            className="size-3.5 rounded border-border"
-          />
-          Leadership only
-        </label>
+        <FilterChip
+          active={!leadershipOnly}
+          onClick={() => setLeadershipOnly(false)}
+        >
+          All roles
+        </FilterChip>
+        <FilterChip
+          active={leadershipOnly}
+          onClick={() => setLeadershipOnly(true)}
+        >
+          Leadership
+        </FilterChip>
         <span className="font-mono text-[11px] tabular-nums text-muted-foreground">
           {filtered.length} people
+        </span>
+        <span className="hidden text-[11px] text-muted-foreground sm:inline">
+          Not personal net worth
         </span>
       </div>
 

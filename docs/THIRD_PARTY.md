@@ -64,4 +64,19 @@ dev-only.
 | Mid CTA left/right | [HyperUI CTAs](https://www.hyperui.dev/components/marketing/ctas) | MIT | 2026-07-15 | `MidCta` — ink band, dual actions |
 | Telegram proof panel | Daisy chat pattern (in-tree) | Pattern | 2026-07-15 | `TelegramProof` — not a device-frame hero |
 
+### Dash kit patterns (adapted in-tree — no new npm deps)
+
+| Pattern | Source | License | Date | Notes |
+|---|---|---|---|---|
+| Rank bar list | [Tremor Bar List](https://tremor.so/docs/ui/bar-list) | Apache-2.0 pattern | 2026-07-17 | `RankBarList` — influence / shared seats; Chime tokens |
+| Filter chips | HyperUI filter density | MIT pattern | 2026-07-17 | `FilterChip` — All / Leadership on `/people` |
+| Event timeline | [HyperUI timelines](https://www.hyperui.dev/) | MIT pattern | 2026-07-17 | `EventTimeline` — dossier Across years |
+| KPI strip | HyperUI stats / IndexStrip density | MIT pattern | 2026-07-17 | `KpiStrip` — ownership map summary |
+| Stat cards | HyperUI stats | MIT pattern | 2026-07-15 | `StatCard` — overview / health / dossier |
+| Alert banner | Tremor / Watermelon thin alert | Pattern | 2026-07-15 | `AlertBanner` — ops + people snapshot honesty |
+| Movers bar list | Tremor bar-list | Apache-2.0 pattern | 2026-07-15 | `MoversBarList` — market % movers only |
+| Disclosure timeline | HyperUI timeline | MIT pattern | 2026-07-15 | `DisclosureTimeline` — symbol filings |
+
+**Rejected (do not add):** React Bits (Commons Clause), DaisyUI npm plugin, 21st Financial Dashboard packs, Cult Pro/shaders, Apple Cards Carousel on signed-in dash. See `docs/factory/ARDENO_UI_MASTER_PLAN.md`.
+
 For usage notes and related bookmarks, see [RESOURCES.md](RESOURCES.md).
