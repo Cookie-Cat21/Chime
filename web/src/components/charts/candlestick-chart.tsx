@@ -31,8 +31,13 @@ export function CandlestickChart({
   maxCandles?: number;
 }) {
   const priceMax = Math.max(...rawBars.map((b) => b.close), 0);
+  // Sub-LKR2 names trade on ~0.10 ticks — fewer aggregates = less doji noise.
   const adaptiveMax =
-    priceMax > 0 && priceMax < 2 ? Math.min(maxCandles, 40) : maxCandles;
+    priceMax > 0 && priceMax < 2
+      ? Math.min(maxCandles, 26)
+      : priceMax < 5
+        ? Math.min(maxCandles, 48)
+        : maxCandles;
   const bars = aggregateBarsForDisplay(rawBars, adaptiveMax);
 
   if (bars.length < 2) {
@@ -171,16 +176,18 @@ export function CandlestickChart({
                 ? "fill-rose-500 dark:fill-rose-400"
                 : "fill-zinc-500 dark:fill-zinc-400";
 
-            // Doji / flat: horizontal tick at close (don't inflate a fake body).
+            // Doji / flat: short tick at close (CSE tick-size days have wide
+            // high/low that look like broken spikes if drawn full-length).
             if (!up && !down) {
-              const tickH = 3.5;
+              const tickH = 4;
+              const wickPad = 7;
               return (
                 <g key={`${b.trade_date}-${i}`}>
                   <line
                     x1={cx}
                     x2={cx}
-                    y1={yH}
-                    y2={yL}
+                    y1={yC - wickPad}
+                    y2={yC + wickPad}
                     className={stroke}
                     strokeWidth={wickW}
                     strokeLinecap="round"
