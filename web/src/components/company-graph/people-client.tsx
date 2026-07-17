@@ -21,24 +21,62 @@ import "@xyflow/react/dist/style.css";
 import { EmptyState } from "@/components/empty-state";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import type { PersonNode } from "@/lib/api/people-graph";
+import type { PersonNode, PersonRole } from "@/lib/api/people-graph";
+import { ROLE_WEIGHT } from "@/lib/api/people-graph";
 import { formatCompactNumber } from "@/lib/format";
 import { cn } from "@/lib/utils";
 
 const ROLE_LABEL: Record<string, string> = {
-  chairman: "Chairman",
-  deputy_chairman: "Co/Deputy chair",
+  chairman: "Chair",
+  deputy_chairman: "Deputy",
   ceo: "CEO",
   managing_director: "MD",
-  executive_director: "Exec director",
-  non_executive_director: "Non-exec",
-  independent_director: "Independent",
-  senior_independent_director: "Senior indep.",
+  executive_director: "Exec",
+  non_executive_director: "NED",
+  independent_director: "Indep",
+  senior_independent_director: "Sr indep",
   cfo: "CFO",
-  company_secretary: "Secretary",
-  director: "Director",
-  key_management: "Key mgmt",
+  company_secretary: "Sec",
+  director: "Dir",
+  key_management: "Key",
 };
+
+const ROLE_SORT = (a: string, b: string) =>
+  (ROLE_WEIGHT[b as PersonRole] ?? 0) - (ROLE_WEIGHT[a as PersonRole] ?? 0);
+
+function groupRolesByCompany(person: PersonNode) {
+  const bySym = new Map<
+    string,
+    {
+      symbol: string;
+      company_name: string | null;
+      market_cap: number | null;
+      roles: string[];
+    }
+  >();
+  for (const r of person.roles) {
+    const prev = bySym.get(r.symbol);
+    if (!prev) {
+      bySym.set(r.symbol, {
+        symbol: r.symbol,
+        company_name: r.company_name,
+        market_cap: r.market_cap,
+        roles: [r.role],
+      });
+      continue;
+    }
+    if (!prev.roles.includes(r.role)) prev.roles.push(r.role);
+    if ((r.market_cap ?? 0) > (prev.market_cap ?? 0)) {
+      prev.market_cap = r.market_cap;
+    }
+  }
+  return Array.from(bySym.values())
+    .map((row) => ({
+      ...row,
+      roles: [...row.roles].sort(ROLE_SORT),
+    }))
+    .sort((a, b) => (b.market_cap ?? 0) - (a.market_cap ?? 0));
+}
 
 /** Initial canvas budget — denser graphs stay readable. */
 const CANVAS_PEOPLE = 18;
@@ -461,7 +499,7 @@ export function PeopleGraphClient({ people }: { people: PersonNode[] }) {
         </p>
       </div>
 
-      <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_300px]">
+      <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_340px]">
         <ReactFlowProvider>
           <PeopleFlow
             people={filtered}
@@ -471,83 +509,123 @@ export function PeopleGraphClient({ people }: { people: PersonNode[] }) {
           />
         </ReactFlowProvider>
 
-        <aside className="space-y-3 rounded-xl border border-border bg-card/40 p-4">
-          <div>
-            <p className="text-xs font-semibold uppercase tracking-[0.12em] text-muted-foreground">
+        <aside className="flex min-h-[min(72vh,640px)] flex-col overflow-hidden rounded-xl border border-border bg-card/40">
+          <div className="border-b border-border px-4 py-3">
+            <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">
               Influence ranking
             </p>
-            <p className="text-[11px] text-muted-foreground">
-              Research proxy from board seats × company market cap (LKR).
+            <p className="mt-0.5 text-[11px] leading-snug text-muted-foreground">
+              Board seats × company market cap (LKR). Not personal net worth.
             </p>
           </div>
-          <ol className="max-h-72 space-y-1 overflow-y-auto text-sm">
-            {filtered.slice(0, 80).map((p, i) => (
-              <li key={p.id}>
-                <button
-                  type="button"
-                  className={cn(
-                    "flex w-full items-center justify-between gap-2 rounded-md px-2 py-1 text-left hover:bg-muted",
-                    selected?.id === p.id && "bg-muted",
-                  )}
-                  onClick={() => setSelectedId(p.id)}
-                >
-                  <span className="truncate">
-                    <span className="mr-1.5 text-muted-foreground">{i + 1}.</span>
-                    {p.name}
-                  </span>
-                  <span className="shrink-0 font-mono text-xs tabular-nums">
-                    {formatCompactNumber(p.influence_score, 1)}
-                  </span>
-                </button>
-              </li>
-            ))}
+
+          <ol className="max-h-[42%] min-h-0 flex-1 space-y-0.5 overflow-y-auto px-2 py-2">
+            {filtered.slice(0, 80).map((p, i) => {
+              const topLabel = p.top_role
+                ? ROLE_LABEL[p.top_role] ?? p.top_role
+                : null;
+              return (
+                <li key={p.id}>
+                  <button
+                    type="button"
+                    title={p.name}
+                    className={cn(
+                      "grid w-full grid-cols-[1.5rem_minmax(0,1fr)_auto] items-center gap-x-2 rounded-md px-2 py-1.5 text-left transition-colors hover:bg-muted/80",
+                      selected?.id === p.id && "bg-muted",
+                    )}
+                    onClick={() => setSelectedId(p.id)}
+                  >
+                    <span className="font-mono text-[11px] tabular-nums text-muted-foreground">
+                      {i + 1}
+                    </span>
+                    <span className="min-w-0">
+                      <span className="block truncate text-[13px] font-medium leading-tight">
+                        {p.name}
+                      </span>
+                      <span className="block truncate text-[10px] text-muted-foreground">
+                        {topLabel ?? "—"} · {p.company_count} co
+                        {p.company_count === 1 ? "" : "s"}
+                      </span>
+                    </span>
+                    <span className="shrink-0 font-mono text-xs tabular-nums text-foreground">
+                      {formatCompactNumber(p.influence_score, 1)}
+                    </span>
+                  </button>
+                </li>
+              );
+            })}
           </ol>
 
           {selected ? (
-            <div className="space-y-2 border-t border-border pt-3">
-              <h2 className="font-display text-base font-semibold">
-                {selected.name}
-              </h2>
-              <p className="text-xs text-muted-foreground">
-                Top role:{" "}
-                {selected.top_role
-                  ? ROLE_LABEL[selected.top_role]
-                  : "—"}{" "}
-                · {selected.company_count} compan
-                {selected.company_count === 1 ? "y" : "ies"}
-              </p>
-              <dl className="rounded-lg border border-border/70 px-3 py-2 text-sm">
-                <dt className="text-xs text-muted-foreground">
-                  Linked market influence (LKR)
-                </dt>
-                <dd className="font-mono text-lg tabular-nums">
-                  {formatCompactNumber(selected.influence_score, 1)}
-                </dd>
-              </dl>
-              <ul className="max-h-44 space-y-1.5 overflow-y-auto text-sm">
-                {selected.roles.map((r) => (
-                  <li
-                    key={`${r.symbol}-${r.role}`}
-                    className="flex flex-wrap items-center gap-1.5"
-                  >
-                    <Badge variant="outline" className="text-[10px]">
-                      {ROLE_LABEL[r.role] ?? r.role}
-                    </Badge>
-                    <Link
-                      href={`/symbols/${encodeURIComponent(r.symbol)}`}
-                      className="font-mono text-foreground underline-offset-2 hover:underline"
+            <div className="flex min-h-0 flex-[1.15] flex-col border-t border-border bg-background/50">
+              <div className="space-y-2 px-4 py-3">
+                <div className="flex items-start justify-between gap-2">
+                  <div className="min-w-0">
+                    <h2
+                      className="truncate font-display text-[15px] font-semibold leading-snug"
+                      title={selected.name}
                     >
-                      {ticker(r.symbol)}
-                    </Link>
-                    <span className="text-xs text-muted-foreground">
-                      mcap {formatCompactNumber(r.market_cap, 1)}
-                    </span>
-                  </li>
-                ))}
-              </ul>
-              <Button asChild variant="secondary" size="sm" className="w-full">
-                <Link href="/graph">Company ownership map</Link>
-              </Button>
+                      {selected.name}
+                    </h2>
+                    <p className="text-[11px] text-muted-foreground">
+                      {selected.top_role
+                        ? ROLE_LABEL[selected.top_role]
+                        : "—"}{" "}
+                      · {selected.company_count} compan
+                      {selected.company_count === 1 ? "y" : "ies"}
+                    </p>
+                  </div>
+                  <div className="shrink-0 text-right">
+                    <p className="text-[10px] uppercase tracking-wide text-muted-foreground">
+                      Influence
+                    </p>
+                    <p className="font-mono text-base font-semibold tabular-nums leading-none">
+                      {formatCompactNumber(selected.influence_score, 1)}
+                    </p>
+                  </div>
+                </div>
+              </div>
+
+              <div className="min-h-0 flex-1 overflow-y-auto px-2 pb-2">
+                <p className="px-2 pb-1.5 text-[10px] font-semibold uppercase tracking-[0.12em] text-muted-foreground">
+                  Seats
+                </p>
+                <ul className="space-y-1">
+                  {groupRolesByCompany(selected).map((row) => (
+                    <li
+                      key={row.symbol}
+                      className="grid grid-cols-[3.25rem_minmax(0,1fr)_auto] items-center gap-x-2 rounded-md px-2 py-1.5 hover:bg-muted/60"
+                    >
+                      <Link
+                        href={`/symbols/${encodeURIComponent(row.symbol)}`}
+                        className="font-mono text-[12px] font-semibold underline-offset-2 hover:underline"
+                        title={row.company_name ?? row.symbol}
+                      >
+                        {ticker(row.symbol)}
+                      </Link>
+                      <div className="flex min-w-0 flex-wrap gap-1">
+                        {row.roles.map((role) => (
+                          <span
+                            key={role}
+                            className="rounded border border-border/80 bg-background px-1.5 py-0.5 text-[10px] text-muted-foreground"
+                          >
+                            {ROLE_LABEL[role] ?? role}
+                          </span>
+                        ))}
+                      </div>
+                      <span className="shrink-0 font-mono text-[11px] tabular-nums text-muted-foreground">
+                        {formatCompactNumber(row.market_cap, 1)}
+                      </span>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+
+              <div className="border-t border-border p-3">
+                <Button asChild variant="secondary" size="sm" className="w-full">
+                  <Link href="/graph">Company ownership map</Link>
+                </Button>
+              </div>
             </div>
           ) : null}
         </aside>
