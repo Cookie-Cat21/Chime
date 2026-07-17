@@ -220,6 +220,17 @@ export function CandlestickChart({
               </g>
             );
           })}
+          {/* Close path — keeps step-priced names (e.g. SEMB @ 0.30) readable */}
+          <polyline
+            fill="none"
+            className="stroke-foreground/35"
+            strokeWidth={1.5}
+            strokeLinejoin="round"
+            strokeLinecap="round"
+            points={bars
+              .map((b, i) => `${padL + slot * i + slot / 2},${yFor(b.close)}`)
+              .join(" ")}
+          />
           {fc.length > 0 ? (
             <polyline
               fill="none"
