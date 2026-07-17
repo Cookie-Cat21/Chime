@@ -1,10 +1,11 @@
 "use client";
 
-import type { DailyBarPoint } from "@/lib/api/daily-bars";
+import { candleBodyOpen, type DailyBarPoint } from "@/lib/api/daily-bars";
 import { formatNumber } from "@/lib/format";
 
 /**
  * Lightweight SVG daily candlestick chart (green up / red down).
+ * When CSE omits open, body/color use previous close so down days show red.
  * Research display only — not a trading terminal.
  */
 export function CandlestickChart({
@@ -49,8 +50,11 @@ export function CandlestickChart({
   const last = bars[n - 1]!;
   const aria = `Daily candles from ${first.trade_date} to ${last.trade_date}, close ${formatNumber(last.close)}`;
 
-  // Grid lines at 25/50/75%
   const gridYs = [0.25, 0.5, 0.75].map((t) => padT + t * plotH);
+
+  let upN = 0;
+  let downN = 0;
+  let flatN = 0;
 
   return (
     <div className={className}>
@@ -80,20 +84,29 @@ export function CandlestickChart({
           />
         ))}
         {bars.map((b, i) => {
+          const bodyOpen = candleBodyOpen(bars, i);
           const cx = padL + slot * i + slot / 2;
           const yH = yFor(b.high);
           const yL = yFor(b.low);
-          const yO = yFor(b.open);
+          const yO = yFor(bodyOpen);
           const yC = yFor(b.close);
-          const up = b.close >= b.open;
+          const up = b.close > bodyOpen;
+          const down = b.close < bodyOpen;
+          if (up) upN += 1;
+          else if (down) downN += 1;
+          else flatN += 1;
           const bodyTop = Math.min(yO, yC);
           const bodyH = Math.max(1, Math.abs(yC - yO));
           const stroke = up
             ? "stroke-emerald-600 dark:stroke-emerald-400"
-            : "stroke-rose-600 dark:stroke-rose-400";
+            : down
+              ? "stroke-rose-600 dark:stroke-rose-400"
+              : "stroke-muted-foreground";
           const fill = up
             ? "fill-emerald-500/90 dark:fill-emerald-400/90"
-            : "fill-rose-500/90 dark:fill-rose-400/90";
+            : down
+              ? "fill-rose-500/90 dark:fill-rose-400/90"
+              : "fill-muted-foreground/50";
           return (
             <g key={b.trade_date}>
               <line
@@ -153,7 +166,9 @@ export function CandlestickChart({
       </svg>
       <p className="mt-2 text-xs text-muted-foreground">
         {n} sessions · close {formatNumber(first.close)} →{" "}
-        {formatNumber(last.close)} · green up / red down · research only
+        {formatNumber(last.close)} · {upN} up / {downN} down
+        {flatN ? ` / ${flatN} flat` : ""} · vs prior close when open missing ·
+        research only
       </p>
     </div>
   );

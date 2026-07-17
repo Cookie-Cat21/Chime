@@ -10,7 +10,8 @@ export const DEFAULT_DAILY_BARS_LIMIT = 260;
 
 export type DailyBarPoint = {
   trade_date: string;
-  open: number;
+  /** Null when CSE omitted open — chart colors vs previous close. */
+  open: number | null;
   high: number;
   low: number;
   close: number;
@@ -19,7 +20,8 @@ export type DailyBarPoint = {
 
 /**
  * Normalize a DB row into a chartable candle.
- * When open/high/low are missing, synthesize a flat candle from close.
+ * Keep ``open`` null when missing (CSE often omits it). High/low fall back
+ * to close so wicks still render.
  */
 export function normalizeDailyBar(row: {
   trade_date: unknown;
@@ -41,15 +43,17 @@ export function normalizeDailyBar(row: {
   const close = toFiniteNumber(row.close ?? row.price);
   if (close == null || close <= 0) return null;
 
-  let open = toFiniteNumber(row.open);
+  const openRaw = toFiniteNumber(row.open);
+  const open =
+    openRaw != null && openRaw > 0 ? openRaw : null;
   let high = toFiniteNumber(row.high);
   let low = toFiniteNumber(row.low);
-  if (open == null || open <= 0) open = close;
-  if (high == null || high <= 0) high = Math.max(open, close);
-  if (low == null || low <= 0) low = Math.min(open, close);
-  // Enforce OHLC invariants after null fill.
-  high = Math.max(high, open, close);
-  low = Math.min(low, open, close);
+  if (high == null || high <= 0) high = close;
+  if (low == null || low <= 0) low = close;
+  // Enforce HL vs close (and open when present).
+  const openForBound = open ?? close;
+  high = Math.max(high, openForBound, close);
+  low = Math.min(low, openForBound, close);
 
   return {
     trade_date: tradeDate,
@@ -59,6 +63,23 @@ export function normalizeDailyBar(row: {
     close,
     volume: toFiniteNumber(row.volume),
   };
+}
+
+/**
+ * Body open for painting: real open, else previous close (CSE often nulls open).
+ */
+export function candleBodyOpen(
+  bars: DailyBarPoint[],
+  index: number,
+): number {
+  const b = bars[index];
+  if (!b) return 0;
+  if (b.open != null && b.open > 0) return b.open;
+  if (index > 0) {
+    const prev = bars[index - 1]?.close;
+    if (prev != null && prev > 0) return prev;
+  }
+  return b.close;
 }
 
 /** Sessions for range chips (approx trading days). */

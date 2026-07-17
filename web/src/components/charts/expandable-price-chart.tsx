@@ -93,23 +93,27 @@ export function ExpandablePriceChart({
           const b = row as Record<string, unknown>;
           const tradeDate =
             typeof b.trade_date === "string" ? b.trade_date.slice(0, 10) : null;
-          const o = Number(b.open);
+          const close = Number(b.close);
           const high = Number(b.high);
           const low = Number(b.low);
-          const close = Number(b.close);
+          const oRaw = b.open;
+          const o =
+            oRaw == null || oRaw === ""
+              ? null
+              : Number(oRaw);
           if (
             !tradeDate ||
-            !Number.isFinite(o) ||
+            !Number.isFinite(close) ||
             !Number.isFinite(high) ||
             !Number.isFinite(low) ||
-            !Number.isFinite(close)
+            (o != null && !Number.isFinite(o))
           ) {
             continue;
           }
           const vol = Number(b.volume);
           out.push({
             trade_date: tradeDate,
-            open: o,
+            open: o != null && o > 0 ? o : null,
             high,
             low,
             close,
@@ -200,8 +204,8 @@ export function ExpandablePriceChart({
                   {symbol} · Daily
                 </h2>
                 <p className="mt-0.5 text-xs text-muted-foreground">
-                  Green up / red down candlesticks from path history — research
-                  only, not financial advice.
+                  Green up / red down vs prior close (CSE often omits open) —
+                  research only, not financial advice.
                 </p>
               </div>
               <Button
