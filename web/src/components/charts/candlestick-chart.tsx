@@ -79,19 +79,21 @@ export function CandlestickChart({
   const padR = 56;
   const padT = fitWidth ? 18 : 20;
   const padB = fitWidth ? 36 : 40;
-  // Fit-width: pitch sized for the bar count so the viewBox is ~dialog-wide
-  // before scaling (avoids tiny barcode candles after meet-scale).
+  // Fit-width: keep pitch in a readable band so sparse 1M (~22 bars) isn't
+  // giant spaced sticks, and dense 1Y still fills the dialog.
   const slot = fitWidth
     ? bars.length > 160
-      ? 10
+      ? 9
       : bars.length > 100
-        ? 12
-        : bars.length > 60
-          ? 16
-          : 22
+        ? 11
+        : bars.length > 50
+          ? 14
+          : bars.length > 30
+            ? 16
+            : 14
     : 18;
-  const bodyW = Math.max(5, Math.round(slot * 0.7));
-  const wickW = fitWidth ? Math.max(1.5, slot * 0.12) : 2;
+  const bodyW = Math.max(5, Math.round(slot * 0.68));
+  const wickW = fitWidth ? Math.max(1.5, Math.min(2.5, slot * 0.12)) : 2;
 
   const fc =
     showForecast && forecastPrices
@@ -302,43 +304,14 @@ export function CandlestickChart({
                   ? "fill-rose-500 dark:fill-rose-400"
                   : "fill-zinc-500 dark:fill-zinc-400";
 
-              if (!up && !down) {
-                const tickH = 4;
-                const wickPad = 7;
-                return (
-                  <g key={`${b.trade_date}-${i}`}>
-                    <title>{barTooltip(b, bodyOpen)}</title>
-                    <rect
-                      x={cx - slot / 2}
-                      y={padT}
-                      width={slot}
-                      height={plotH}
-                      fill="transparent"
-                    />
-                    <line
-                      x1={cx}
-                      x2={cx}
-                      y1={yC - wickPad}
-                      y2={yC + wickPad}
-                      className={stroke}
-                      strokeWidth={wickW}
-                      strokeLinecap="round"
-                    />
-                    <rect
-                      x={cx - bodyW / 2}
-                      y={yC - tickH / 2}
-                      width={bodyW}
-                      height={tickH}
-                      rx={1}
-                      className={fillCls}
-                    />
-                  </g>
-                );
-              }
-
+              // Flat / doji (incl. CSE null-open when close ≈ prior close):
+              // real high–low wick + thin body — never a fake "+" cross.
               const naturalH = Math.abs(yC - yO);
-              const bodyH = Math.max(naturalH, 5);
-              const bodyTop = Math.min(yO, yC) - (bodyH - naturalH) / 2;
+              const bodyH = up || down ? Math.max(naturalH, 5) : Math.max(2, slot * 0.08);
+              const bodyTop =
+                up || down
+                  ? Math.min(yO, yC) - (bodyH - naturalH) / 2
+                  : yC - bodyH / 2;
 
               return (
                 <g key={`${b.trade_date}-${i}`}>
