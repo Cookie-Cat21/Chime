@@ -65,6 +65,7 @@ export function SparklineWithForecast({
   confidence?: number | null;
 }) {
   const toggleId = useId();
+  const gradientId = useId();
   const series = finiteSparklinePoints(points);
   const forecast = finiteSparklinePoints(forecastPoints ?? []);
   const canToggle = forecast.length >= 1 && series.length >= 2;
@@ -130,6 +131,27 @@ export function SparklineWithForecast({
         role="img"
         aria-label={aria}
       >
+        <defs>
+          <linearGradient id={gradientId} x1="0" y1="0" x2="0" y2="1">
+            <stop
+              offset="0%"
+              stopColor={up ? "oklch(0.45 0.08 185)" : "oklch(0.5 0.1 25)"}
+              stopOpacity="0.2"
+            />
+            <stop
+              offset="100%"
+              stopColor={up ? "oklch(0.45 0.08 185)" : "oklch(0.5 0.1 25)"}
+              stopOpacity="0"
+            />
+          </linearGradient>
+        </defs>
+        {/* Soft area fill under the realtime series (Visx/Robinhood style). */}
+        <polygon
+          fill={`url(#${gradientId})`}
+          points={`${realCoords.join(" ")} ${realCoords[
+            realCoords.length - 1
+          ]!.split(",")[0]},${h - pad} ${realCoords[0]!.split(",")[0]},${h - pad}`}
+        />
         <polyline
           fill="none"
           stroke={up ? "oklch(0.45 0.08 185)" : "oklch(0.5 0.1 25)"}

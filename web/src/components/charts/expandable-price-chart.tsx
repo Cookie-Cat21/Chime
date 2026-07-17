@@ -511,15 +511,25 @@ export function ExpandablePriceChart({
                   <span className="sr-only">Loading chart…</span>
                 </div>
               ) : error ? (
-                <p className="text-sm text-muted-foreground" role="status">
-                  {error}
-                </p>
+                <div className="flex min-h-0 flex-1 items-center justify-center rounded-xl border border-dashed border-border/60">
+                  <p
+                    className="max-w-sm text-center text-sm text-muted-foreground"
+                    role="status"
+                  >
+                    {error}
+                  </p>
+                </div>
               ) : chartBars == null || chartBars.length < 2 ? (
-                <p className="text-sm text-muted-foreground" role="status">
-                  {range === "1D"
-                    ? "Need more stored ticks for intraday candles."
-                    : "No daily path history yet. On the host, run path-backfill, then refresh."}
-                </p>
+                <div className="flex min-h-0 flex-1 items-center justify-center rounded-xl border border-dashed border-border/60">
+                  <p
+                    className="max-w-sm text-center text-sm text-muted-foreground"
+                    role="status"
+                  >
+                    {range === "1D"
+                      ? "Need more stored ticks for intraday candles."
+                      : "No daily path history yet. On the host, run path-backfill, then refresh."}
+                  </p>
+                </div>
               ) : (
                 <CandlestickChart
                   bars={chartBars}
