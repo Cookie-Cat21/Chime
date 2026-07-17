@@ -1,7 +1,14 @@
 "use client";
 
 import { Maximize2, X } from "lucide-react";
-import { useCallback, useEffect, useId, useMemo, useState } from "react";
+import {
+  useCallback,
+  useEffect,
+  useId,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 
 import { CandlestickChart } from "@/components/charts/candlestick-chart";
 import { SparklineWithForecast } from "@/components/sparkline-with-forecast";
@@ -250,13 +257,25 @@ export function ExpandablePriceChart({
     return () => window.clearInterval(id);
   }, [open, range, loadTicks]);
 
+  // Modal behaviour: Escape closes, page behind stays put, focus moves into
+  // the dialog on open and returns to the expand trigger on close.
+  const dialogRef = useRef<HTMLDivElement | null>(null);
+  const triggerRef = useRef<HTMLButtonElement | null>(null);
   useEffect(() => {
     if (!open) return;
     const onKey = (e: KeyboardEvent) => {
       if (e.key === "Escape") setOpen(false);
     };
     window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
+    const prevOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    const trigger = triggerRef.current;
+    dialogRef.current?.focus();
+    return () => {
+      window.removeEventListener("keydown", onKey);
+      document.body.style.overflow = prevOverflow;
+      trigger?.focus();
+    };
   }, [open]);
 
   const modeLabel = range === "1D" ? "Intraday" : "Daily";
@@ -297,6 +316,7 @@ export function ExpandablePriceChart({
       <div className="relative">
         <button
           type="button"
+          ref={triggerRef}
           data-testid="expand-chart"
           className="absolute top-0 right-0 z-10 inline-flex h-8 items-center gap-1.5 rounded-full border border-border/70 bg-background/85 px-3 text-xs font-medium text-muted-foreground shadow-sm backdrop-blur transition-colors hover:border-border hover:text-foreground"
           onClick={() => setOpen(true)}
@@ -331,7 +351,9 @@ export function ExpandablePriceChart({
             aria-modal="true"
             aria-labelledby={titleId}
             data-testid="expand-chart-dialog"
-            className="flex h-[min(94vh,960px)] w-full max-w-[min(96vw,1400px)] flex-col overflow-hidden rounded-2xl border border-border bg-background shadow-2xl"
+            ref={dialogRef}
+            tabIndex={-1}
+            className="flex h-[min(94vh,960px)] w-full max-w-[min(96vw,1400px)] flex-col overflow-hidden rounded-2xl border border-border bg-background shadow-2xl outline-none"
           >
             {/* Header — symbol + quote readout, close */}
             <div className="flex shrink-0 items-start justify-between gap-3 border-b border-border/60 px-5 py-3.5">
@@ -479,9 +501,15 @@ export function ExpandablePriceChart({
             {/* Chart area — centered aspect box so candles aren't stretched */}
             <div className="flex min-h-0 flex-1 flex-col px-5 pt-3 pb-4">
               {loading ? (
-                <p className="text-sm text-muted-foreground" role="status">
-                  Loading chart…
-                </p>
+                <div
+                  className="flex min-h-0 flex-1 flex-col gap-2.5"
+                  role="status"
+                  aria-label="Loading chart"
+                >
+                  <div className="min-h-0 flex-1 animate-pulse rounded-xl border border-border/60 bg-muted/40" />
+                  <div className="h-3 w-56 animate-pulse rounded bg-muted/60" />
+                  <span className="sr-only">Loading chart…</span>
+                </div>
               ) : error ? (
                 <p className="text-sm text-muted-foreground" role="status">
                   {error}

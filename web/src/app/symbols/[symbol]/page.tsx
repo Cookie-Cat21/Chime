@@ -3,7 +3,6 @@ import { notFound } from "next/navigation";
 
 import { AppNav } from "@/components/app-nav";
 import { EmptyState } from "@/components/empty-state";
-import { ChangeBadge } from "@/components/kit/change-badge";
 import {
   DisclosureCategoryHint,
   DisclosureTimeline,
@@ -803,20 +802,18 @@ export default async function SymbolDetailPage({
         {data.last ? (
           <dl
             className={`grid grid-cols-2 gap-px border-t border-border/60 bg-border/40 ${
-              data.market_cap != null ? "sm:grid-cols-4" : "sm:grid-cols-3"
+              data.market_cap != null ? "sm:grid-cols-3" : ""
             }`}
           >
             <Stat
-              label="Change"
-              value={formatNumber(data.last.change)}
+              label="Prev close"
+              value={
+                data.last.change == null
+                  ? "—"
+                  : formatNumber(data.last.price - data.last.change)
+              }
               mono
             />
-            <div className="bg-background px-4 py-3">
-              <dt className="text-xs text-muted-foreground">Change %</dt>
-              <dd className="mt-1">
-                <ChangeBadge changePct={data.last.change_pct} />
-              </dd>
-            </div>
             <Stat
               label="Volume"
               value={
@@ -831,6 +828,7 @@ export default async function SymbolDetailPage({
                 label="Market cap"
                 value={formatCompactNumber(data.market_cap)}
                 mono
+                className="col-span-2 sm:col-span-1"
               />
             ) : null}
           </dl>
@@ -1020,10 +1018,10 @@ function Stat({
   mono?: boolean;
 }) {
   return (
-    <div className="min-w-0 bg-background px-4 py-3">
+    <div className={`min-w-0 bg-background px-4 py-3 ${className ?? ""}`}>
       <dt className="text-xs text-muted-foreground">{label}</dt>
       <dd
-        className={`mt-0.5 truncate text-lg font-medium tabular-nums ${mono ? "font-mono" : ""} ${className ?? ""}`}
+        className={`mt-0.5 truncate text-lg font-medium tabular-nums ${mono ? "font-mono" : ""}`}
       >
         {value}
       </dd>
