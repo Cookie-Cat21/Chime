@@ -19,7 +19,6 @@ import {
   type CompareScaleMode,
   type CompareSeries,
 } from "@/lib/compare-chart";
-import { formatNumber } from "@/lib/format";
 import { finiteSparklinePoints } from "@/lib/sparkline";
 import { cn } from "@/lib/utils";
 
@@ -139,11 +138,13 @@ function buildSvgPolylines(
     if (!series.some((s) => s.pointsAttr.split(" ").length >= 2)) return null;
   }
 
+  // Deterministic labels — avoid toLocaleString (Node ICU ≠ browser → hydration).
   const yTicks = [0, 0.5, 1].map((t) => {
     const value = max - t * span;
+    const digits = span >= 20 ? 0 : 1;
     return {
       y: plot.top + t * plotH,
-      label: formatNumber(value, span >= 20 ? 0 : 1),
+      label: Number.isFinite(value) ? value.toFixed(digits) : "—",
     };
   });
 
@@ -173,7 +174,6 @@ export function SymbolCompareChart({
   const scaleGroupId = useId();
   const modeGroupId = useId();
   const peerId = useId();
-  const titleId = useId();
 
   const baseSeries = useMemo<CompareSeries>(() => {
     return {
@@ -521,12 +521,10 @@ export function SymbolCompareChart({
               viewBox={`0 0 ${svg.width} ${svg.height}`}
               className="h-56 w-full"
               role="img"
-              aria-labelledby={titleId}
+              aria-label={`Price compare for ${selectedSymbols.join(", ")} (${
+                mode === "indexed" ? "indexed to 100" : "LKR"
+              })`}
             >
-              <title id={titleId}>
-                Price compare for {selectedSymbols.join(", ")} (
-                {mode === "indexed" ? "indexed to 100" : "LKR"})
-              </title>
               {svg.yTicks.map((tick) => (
                 <g key={`y-${tick.y}`}>
                   <line
