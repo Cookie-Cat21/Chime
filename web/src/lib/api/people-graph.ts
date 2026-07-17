@@ -5,6 +5,10 @@ import {
   MAX_STOCK_NAME_LENGTH,
   sanitizeDisclosureText,
 } from "@/lib/api/disclosure-safe";
+import {
+  preferredDisplayName,
+  softPersonKey,
+} from "@/lib/api/person-aliases";
 import { normalizeSymbol } from "@/lib/api/symbol";
 
 export const PERSON_ROLES = [
@@ -91,7 +95,7 @@ export async function queryPeopleGraph(
     leadershipOnly?: boolean;
   } = {},
 ): Promise<{ people: PersonNode[]; edges: PersonCompanyEdge[] }> {
-  const limit = Math.min(Math.max(opts.limit ?? 120, 1), 200);
+  const limit = Math.min(Math.max(opts.limit ?? 200, 1), 500);
   const minRank =
     opts.minConfidence === "high" ? 3 : opts.minConfidence === "low" ? 1 : 2;
   // Default false = include full boards (independent / NED / etc.)
@@ -291,37 +295,17 @@ export async function queryPeopleGraph(
 
   const out = Array.from(merged.values());
   out.sort((a, b) => b.influence_score - a.influence_score);
-  return { people: out.slice(0, limit), edges };
-}
-
-/** Collapse obvious duplicate board-name spellings for ranking only. */
-function softPersonKey(name: string): string {
-  const compact = name
-    .replace(/\./g, " ")
-    .replace(/\s+/g, " ")
-    .trim()
-    .toUpperCase();
-  // CSE lists him as K.A.D.D. Perera; filings/media use Dhammika Perera.
-  // Do NOT merge K.A.D.B. Perera (different Vallibel-group director).
-  if (
-    compact === "DHAMMIKA PERERA" ||
-    compact === "K A D D PERERA" ||
-    compact.startsWith("K A D D PERERA ")
-  ) {
-    return "ALIAS:DHAMMIKA_PERERA";
+  // Rebuild edges from merged people so soft-merged seats stay linked
+  const mergedEdges: PersonCompanyEdge[] = [];
+  for (const p of out.slice(0, limit)) {
+    for (const r of p.roles) {
+      mergedEdges.push({
+        person_id: p.id,
+        symbol: r.symbol,
+        role: r.role,
+        confidence: r.confidence,
+      });
+    }
   }
-  const parts = compact.split(/\s+/).filter(Boolean);
-  if (parts.length === 0) return compact;
-  const last = parts[parts.length - 1];
-  const initials = parts
-    .slice(0, -1)
-    .map((p) => p[0] ?? "")
-    .join("");
-  return `${initials}:${last}`;
-}
-
-function preferredDisplayName(name: string): string {
-  const key = softPersonKey(name);
-  if (key === "ALIAS:DHAMMIKA_PERERA") return "Dhammika Perera";
-  return name;
+  return { people: out.slice(0, limit), edges: mergedEdges };
 }

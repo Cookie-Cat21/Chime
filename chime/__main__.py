@@ -400,7 +400,8 @@ def main(argv: list[str] | None = None) -> None:
         action="store_true",
         help=(
             "For drain-pdfs/drain-metrics/drain-graph/drain-people: "
-            "include non-watchlist symbols"
+            "include non-watchlist symbols. "
+            "For directors-backfill: sync all *.N0000 stocks (not only top mcap)."
         ),
     )
     parser.add_argument(
@@ -756,6 +757,12 @@ def main(argv: list[str] | None = None) -> None:
         configure_logging()
         settings = Settings.from_env(require_token=False)
         limit = args.limit if isinstance(args.limit, int) and args.limit > 0 else 80
+        if args.all_symbols:
+            limit = (
+                args.limit
+                if isinstance(args.limit, int) and args.limit > 0
+                else 500
+            )
 
         async def _directors_bf() -> None:
             storage = Storage(settings.database_url)
@@ -774,7 +781,7 @@ def main(argv: list[str] | None = None) -> None:
                     cse=cse,
                     limit=limit,
                     force=args.force,
-                    top_by_mcap=True,
+                    top_by_mcap=not args.all_symbols,
                 )
                 print(
                     "directors-backfill: "

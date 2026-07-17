@@ -77,14 +77,13 @@ def test_merge_jkh_board_shape() -> None:
         ],
     )
     by_name = {s.display_name: s for s in seats}
-    assert "K. Balendra" in by_name
-    assert "chairman" in by_name["K. Balendra"].roles
-    assert "ceo" in by_name["K. Balendra"].roles or "executive_director" in by_name[
-        "K. Balendra"
+    assert "Krishan Balendra" in by_name
+    assert "chairman" in by_name["Krishan Balendra"].roles
+    assert "ceo" in by_name["Krishan Balendra"].roles or "executive_director" in by_name[
+        "Krishan Balendra"
     ].roles
-    assert "J. G. A. Cooray" in by_name or "J.G.A. Cooray" in by_name
-    cooray = by_name.get("J. G. A. Cooray") or by_name.get("J.G.A. Cooray")
-    assert cooray is not None
+    assert "Gihan Cooray" in by_name
+    cooray = by_name["Gihan Cooray"]
     assert "deputy_chairman" in cooray.roles
     assert "cfo" in cooray.roles
     cabraal = by_name["A. Cabraal"]
@@ -130,8 +129,8 @@ def test_merge_hayleys_pandithage() -> None:
         directors=[],
     )
     by_name = {s.display_name: s for s in seats}
-    assert by_name["M. Pandithage"].roles == ("chairman", "ceo") or set(
-        by_name["M. Pandithage"].roles
+    assert by_name["Mohan Pandithage"].roles == ("chairman", "ceo") or set(
+        by_name["Mohan Pandithage"].roles
     ) >= {"chairman", "ceo"}
     perera = by_name["Dhammika Perera"]
     assert perera.name_norm == "K A D D PERERA"

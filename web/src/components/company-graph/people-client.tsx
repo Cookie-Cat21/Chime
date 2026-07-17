@@ -95,7 +95,7 @@ function PeopleFlow({
   selectedId: number | null;
   onSelect: (id: number | null) => void;
 }) {
-  const top = people.slice(0, 36);
+  const top = people.slice(0, 80);
   const companies = new Map<string, { mcap: number | null; name: string | null }>();
   for (const p of top) {
     for (const r of p.roles) {
@@ -110,7 +110,7 @@ function PeopleFlow({
   }
 
   const maxInf = Math.max(...top.map((p) => p.influence_score), 1);
-  const companyList = Array.from(companies.entries()).slice(0, 40);
+  const companyList = Array.from(companies.entries()).slice(0, 60);
 
   const nodes: Node[] = [];
   const personCols = 3;
@@ -204,9 +204,9 @@ export function PeopleGraphClient({ people }: { people: PersonNode[] }) {
     people[0]?.id ?? null,
   );
   const [leadershipOnly, setLeadershipOnly] = useState(false);
+  const [query, setQuery] = useState("");
 
   const filtered = useMemo(() => {
-    if (!leadershipOnly) return people;
     const lead = new Set([
       "chairman",
       "ceo",
@@ -215,8 +215,18 @@ export function PeopleGraphClient({ people }: { people: PersonNode[] }) {
       "executive_director",
       "cfo",
     ]);
-    return people.filter((p) => p.roles.some((r) => lead.has(r.role)));
-  }, [people, leadershipOnly]);
+    const q = query.trim().toLowerCase();
+    return people.filter((p) => {
+      if (leadershipOnly && !p.roles.some((r) => lead.has(r.role))) return false;
+      if (!q) return true;
+      if (p.name.toLowerCase().includes(q)) return true;
+      return p.roles.some(
+        (r) =>
+          r.symbol.toLowerCase().includes(q) ||
+          (r.company_name?.toLowerCase().includes(q) ?? false),
+      );
+    });
+  }, [people, leadershipOnly, query]);
 
   const selected = filtered.find((p) => p.id === selectedId) ?? filtered[0] ?? null;
 
@@ -232,6 +242,14 @@ export function PeopleGraphClient({ people }: { people: PersonNode[] }) {
   return (
     <div className="space-y-4">
       <div className="flex flex-wrap items-center gap-3">
+        <input
+          type="search"
+          value={query}
+          onChange={(e) => setQuery(e.target.value)}
+          placeholder="Search people or symbols…"
+          className="h-9 w-full max-w-xs rounded-md border border-border bg-background px-3 text-sm outline-none ring-offset-background placeholder:text-muted-foreground focus-visible:ring-2 focus-visible:ring-ring"
+          aria-label="Search people or symbols"
+        />
         <label className="flex items-center gap-2 text-sm text-muted-foreground">
           <input
             type="checkbox"
@@ -268,8 +286,8 @@ export function PeopleGraphClient({ people }: { people: PersonNode[] }) {
               Research proxy from board seats × company market cap (LKR).
             </p>
           </div>
-          <ol className="max-h-56 space-y-1 overflow-y-auto text-sm">
-            {filtered.slice(0, 30).map((p, i) => (
+          <ol className="max-h-72 space-y-1 overflow-y-auto text-sm">
+            {filtered.slice(0, 80).map((p, i) => (
               <li key={p.id}>
                 <button
                   type="button"

@@ -8,8 +8,8 @@ import { getPool } from "@/lib/db";
 
 export const runtime = "nodejs";
 
-const DEFAULT_LIMIT = 120;
-const MAX_LIMIT = 200;
+const DEFAULT_LIMIT = 250;
+const MAX_LIMIT = 500;
 
 /**
  * GET /api/v1/graph/people — directors/CEOs linked to companies.
@@ -42,7 +42,7 @@ export async function GET(request: NextRequest) {
       limit,
       min_confidence: minConfidence,
       disclaimer:
-        "People and roles are extracted from public CSE annual reports. Influence score uses linked company market value × role weight — it is NOT personal net worth and not financial advice.",
+        "People and roles come from official CSE companyProfile boards. Influence score uses linked company market value × role weight — it is NOT personal net worth and not financial advice.",
     });
   } catch (err) {
     console.error("GET /graph/people failed", err);

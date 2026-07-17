@@ -15,6 +15,7 @@ from dataclasses import dataclass
 from typing import Any
 
 from chime.extractors.people_pdf import _roles_from_blob, normalize_person_name
+from chime.extractors.person_aliases import preferred_display_name
 
 # Role words that sometimes appear *outside* parentheses in firstName
 # (e.g. "T. Finance Director (Executive Director)").
@@ -35,12 +36,6 @@ _HONORIFIC = re.compile(r"^(?:dr|mr|mrs|ms|prof)\.?\s+", re.I)
 _INITIALS = re.compile(
     r"^(?P<init>(?:[A-Za-z]\.?\s*){1,6})\s*$"
 )
-
-# CSE lists some well-known directors only by initials. Prefer the common
-# public name for display; name_norm stays initials-based for identity.
-_DISPLAY_ALIASES: dict[str, str] = {
-    "K A D D PERERA": "Dhammika Perera",
-}
 
 
 @dataclass(frozen=True, slots=True)
@@ -120,12 +115,6 @@ def parse_cse_person_name(
     if len(letters) < 2:
         return None, role_blobs
     return display, role_blobs
-
-
-def preferred_display_name(display_name: str, name_norm: str) -> str:
-    """Map CSE initials to a familiar public name when known."""
-    alias = _DISPLAY_ALIASES.get(name_norm.strip().upper() if name_norm else "")
-    return alias or display_name
 
 
 def roles_from_cse_text(*blobs: str | None) -> list[str]:

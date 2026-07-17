@@ -27,7 +27,7 @@ export default async function PeopleGraphPage() {
   try {
     const pool = getPool();
     const graph = await queryPeopleGraph(pool, {
-      limit: 180,
+      limit: 400,
       // CSE companyProfile seats are stored as high confidence
       minConfidence: "high",
       // Full board seats (not only chair/CEO) so the map is dense
