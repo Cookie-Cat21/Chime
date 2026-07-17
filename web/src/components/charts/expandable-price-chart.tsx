@@ -116,12 +116,13 @@ export function ExpandablePriceChart({
         price,
       });
     }
+    // Snapshots API already returns ascending; re-sort defensively by time.
     const sorted =
       out.length >= 2
         ? [...out].sort((a, b) => {
-            const ta = a.ts ? Date.parse(a.ts) : NaN;
-            const tb = b.ts ? Date.parse(b.ts) : NaN;
-            if (Number.isFinite(ta) && Number.isFinite(tb)) return ta - tb;
+            const ta = a.ts ? Date.parse(a.ts) : Number.POSITIVE_INFINITY;
+            const tb = b.ts ? Date.parse(b.ts) : Number.POSITIVE_INFINITY;
+            if (ta !== tb) return ta - tb;
             return 0;
           })
         : points;
@@ -222,13 +223,15 @@ export function ExpandablePriceChart({
         }
         return;
       }
-      if (range === "1Y" && initialBars && initialBars.length > 0) {
-        setBars(initialBars);
+      // Instant paint from SSR bars (tail for shorter ranges), then refresh.
+      if (initialBars && initialBars.length > 0) {
+        const limit = sessionsForRange(range);
+        setBars(initialBars.slice(-limit));
         setLoading(false);
         setLastRefresh(new Date().toISOString());
-        return;
+      } else {
+        setLoading(true);
       }
-      setLoading(true);
       try {
         await loadDaily(range);
       } finally {
@@ -397,10 +400,11 @@ export function ExpandablePriceChart({
                   fill
                   showForecast={showForecast}
                   forecastPrices={forecastPrices}
+                  maxCandles={range === "1D" ? 48 : 72}
                   className="min-h-0 flex-1"
                   footnote={
                     range === "1D"
-                      ? `${chartBars.length} intraday bars from ${tickSeries.length} ticks · ${formatNumber(tickSeries[0]?.price ?? 0)} → ${formatNumber(tickSeries[tickSeries.length - 1]?.price ?? 0)}${showForecast && forecastPrices.length > 0 ? " · dashed = model forecast" : ""} · research only`
+                      ? `${tickSeries.length} live ticks → ${chartBars.length} intraday candles · research only`
                       : undefined
                   }
                 />

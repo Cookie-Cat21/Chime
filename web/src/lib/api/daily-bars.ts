@@ -105,6 +105,47 @@ export function sessionsForRange(range: ChartRangeKey): number {
  * Build intraday OHLC candles from tick prices for the 1D expand view.
  * Buckets by equal count when timestamps are sparse/missing.
  */
+/**
+ * Downsample dense daily series into fewer OHLC candles for readable charts.
+ * CSE 1Y ≈ 240 sessions — rendering all as 2px sticks looks like a barcode.
+ */
+export function aggregateBarsForDisplay(
+  bars: DailyBarPoint[],
+  maxCandles = 72,
+): DailyBarPoint[] {
+  if (bars.length <= maxCandles) return bars;
+  const chunk = Math.ceil(bars.length / maxCandles);
+  const out: DailyBarPoint[] = [];
+  for (let i = 0; i < bars.length; i += chunk) {
+    const slice = bars.slice(i, i + chunk);
+    if (slice.length === 0) continue;
+    const first = slice[0]!;
+    const last = slice[slice.length - 1]!;
+    const open = first.open ?? first.close;
+    let high = -Infinity;
+    let low = Infinity;
+    let vol: number | null = null;
+    for (const b of slice) {
+      if (b.high > high) high = b.high;
+      if (b.low < low) low = b.low;
+      if (b.volume != null) vol = (vol ?? 0) + b.volume;
+    }
+    if (!Number.isFinite(high) || !Number.isFinite(low)) {
+      high = Math.max(open, last.close);
+      low = Math.min(open, last.close);
+    }
+    out.push({
+      trade_date: last.trade_date,
+      open,
+      high,
+      low,
+      close: last.close,
+      volume: vol,
+    });
+  }
+  return out;
+}
+
 export function ticksToIntradayBars(
   ticks: { ts: string | null; price: number }[],
   targetCandles = 40,
