@@ -581,6 +581,97 @@ class Storage:
             return rowcount
         return len(rows)
 
+    async def persist_intraday_snapshots(self, snaps: list[PriceSnapshot]) -> int:
+        """Insert CSE intraday chart ticks into ``price_snapshots``.
+
+        Unlike ``persist_market_snapshots`` (one row per symbol per board),
+        this keeps many timestamps per symbol. Skips rows whose
+        ``(symbol, ts)`` already exists so re-runs are idempotent.
+        Returns number of newly inserted rows.
+        """
+        if not snaps:
+            return 0
+
+        by_key: dict[tuple[str, datetime], PriceSnapshot] = {}
+        for snap in snaps:
+            if not isinstance(snap.symbol, str):
+                continue
+            symbol = snap.symbol.strip().upper()
+            if not symbol:
+                continue
+            if not math.isfinite(snap.price) or snap.price <= 0:
+                continue
+            if not isinstance(snap.ts, datetime):
+                continue
+            by_key[(symbol, snap.ts)] = snap.model_copy(update={"symbol": symbol})
+        if not by_key:
+            return 0
+
+        rows = list(by_key.values())
+        symbols = [s.symbol for s in rows]
+        prices = [s.price for s in rows]
+        changes = [s.change for s in rows]
+        change_pcts = [s.change_pct for s in rows]
+        volumes = [s.volume for s in rows]
+        highs = [s.high for s in rows]
+        lows = [s.low for s in rows]
+        opens = [s.open for s in rows]
+        tss = [s.ts for s in rows]
+
+        async with self._pool.connection() as conn:
+            await conn.execute(
+                """
+                INSERT INTO stocks (symbol)
+                SELECT DISTINCT symbol
+                FROM UNNEST(%s::text[]) AS t(symbol)
+                ON CONFLICT (symbol) DO NOTHING
+                """,
+                (symbols,),
+            )
+            result = await conn.execute(
+                """
+                INSERT INTO price_snapshots (
+                    symbol, price, change, change_pct, volume, high, low, open, ts
+                )
+                SELECT
+                    v.symbol, v.price, v.change, v.change_pct, v.volume,
+                    v.high, v.low, v.open, v.ts
+                FROM UNNEST(
+                    %s::text[],
+                    %s::double precision[],
+                    %s::double precision[],
+                    %s::double precision[],
+                    %s::double precision[],
+                    %s::double precision[],
+                    %s::double precision[],
+                    %s::double precision[],
+                    %s::timestamptz[]
+                ) AS v(
+                    symbol, price, change, change_pct, volume, high, low, open, ts
+                )
+                WHERE NOT EXISTS (
+                    SELECT 1
+                    FROM price_snapshots ps
+                    WHERE ps.symbol = v.symbol AND ps.ts = v.ts
+                )
+                """,
+                (
+                    symbols,
+                    prices,
+                    changes,
+                    change_pcts,
+                    volumes,
+                    highs,
+                    lows,
+                    opens,
+                    tss,
+                ),
+            )
+        rowcount = getattr(result, "rowcount", None)
+        if isinstance(rowcount, int) and not isinstance(rowcount, bool) and rowcount >= 0:
+            return rowcount
+        return 0
+
     async def list_symbols_with_daily_bars(self) -> list[str]:
         """Symbols that have at least one ``daily_bars`` row (sorted)."""
         async with self._pool.connection() as conn:

@@ -191,12 +191,14 @@ export function ticksToIntradayBars(
     });
   if (clean.length < 2) return [];
 
-  // Prefer ~2–3 ticks per candle so bodies have room to move.
-  const n = Math.max(
-    4,
-    Math.min(targetCandles, Math.floor(clean.length / 2)),
-  );
-  const chunk = Math.max(2, Math.ceil(clean.length / n));
+  // Sparse poller history (common overnight / low-volume names): one candle
+  // per tick so ≥2 ticks always yield a chart instead of a single bucket.
+  // Denser series: ~2–3 ticks per candle.
+  const sparse = clean.length < 12;
+  const n = sparse
+    ? clean.length
+    : Math.max(4, Math.min(targetCandles, Math.floor(clean.length / 2)));
+  const chunk = sparse ? 1 : Math.max(2, Math.ceil(clean.length / n));
   const out: DailyBarPoint[] = [];
 
   for (let i = 0; i < clean.length; i += chunk) {

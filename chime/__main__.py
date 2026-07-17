@@ -313,6 +313,7 @@ def main(argv: list[str] | None = None) -> None:
             "drain-briefs-local",
             "drain-metrics",
             "path-backfill",
+            "intraday-backfill",
             "hybrid-backfill",
             "score-signals",
             "eval-signals",
@@ -343,7 +344,8 @@ def main(argv: list[str] | None = None) -> None:
         help=(
             "bot | poller | both | migrate | tick | "
             "drain-pdfs | drain-briefs | drain-briefs-local | drain-metrics | "
-            "path-backfill | hybrid-backfill | score-signals | eval-signals | "
+            "path-backfill | intraday-backfill | hybrid-backfill | "
+            "score-signals | eval-signals | "
             "sector-backfill | notices-backfill | disclosures-backfill | "
             "financials-backfill | aspi-backfill | market-summary-backfill | "
             "ml-experiment | "
@@ -359,15 +361,18 @@ def main(argv: list[str] | None = None) -> None:
         action="store_true",
         help=(
             "tick: ignore market hours; "
-            "path-backfill/hybrid-backfill/sector-backfill/notices-backfill: "
-            "run even if flag off"
+            "path-backfill/intraday-backfill/hybrid-backfill/"
+            "sector-backfill/notices-backfill: run even if flag off"
         ),
     )
     parser.add_argument(
         "--limit",
         type=int,
         default=20,
-        help="For drain-* / path-backfill / hybrid-backfill: max rows/symbols (default 20)",
+        help=(
+            "For drain-* / path-backfill / intraday-backfill / hybrid-backfill: "
+            "max rows/symbols (default 20)"
+        ),
     )
     parser.add_argument(
         "--all-symbols",
@@ -383,7 +388,7 @@ def main(argv: list[str] | None = None) -> None:
     parser.add_argument(
         "--no-seed",
         action="store_true",
-        help="For path-backfill: skip tradeSummary id seed",
+        help="For path-backfill / intraday-backfill: skip tradeSummary id seed",
     )
     parser.add_argument(
         "--horizons",
@@ -435,6 +440,7 @@ def main(argv: list[str] | None = None) -> None:
     if args.force and args.command not in (
         "tick",
         "path-backfill",
+        "intraday-backfill",
         "hybrid-backfill",
         "sector-backfill",
         "notices-backfill",
@@ -450,16 +456,16 @@ def main(argv: list[str] | None = None) -> None:
         "ml-ltr-ship",
     ):
         parser.error(
-            "--force is only valid for tick, path-backfill, hybrid-backfill, "
-            "sector-backfill, notices-backfill, disclosures-backfill, "
-            "financials-backfill, aspi-backfill, ml-forecast, ml-hpe, "
-            "ml-forecast-unified, ml-loop-nightly, ml-loop-retrain, "
-            "ml-loop-research, or ml-ltr-ship"
+            "--force is only valid for tick, path-backfill, intraday-backfill, "
+            "hybrid-backfill, sector-backfill, notices-backfill, "
+            "disclosures-backfill, financials-backfill, aspi-backfill, "
+            "ml-forecast, ml-hpe, ml-forecast-unified, ml-loop-nightly, "
+            "ml-loop-retrain, ml-loop-research, or ml-ltr-ship"
         )
     if args.period is not None and args.command != "path-backfill":
         parser.error("--period is only valid for path-backfill")
-    if args.no_seed and args.command != "path-backfill":
-        parser.error("--no-seed is only valid for path-backfill")
+    if args.no_seed and args.command not in ("path-backfill", "intraday-backfill"):
+        parser.error("--no-seed is only valid for path-backfill / intraday-backfill")
 
     if args.command == "migrate":
         configure_logging()
@@ -588,6 +594,47 @@ def main(argv: list[str] | None = None) -> None:
                 await storage.close()
 
         asyncio.run(_path_bf())
+        return
+
+    if args.command == "intraday-backfill":
+        configure_logging()
+        settings = Settings.from_env(require_token=False)
+        limit = args.limit if isinstance(args.limit, int) and args.limit > 0 else None
+
+        async def _intraday_bf() -> None:
+            from chime.intraday_backfill import run_intraday_backfill
+
+            storage = Storage(settings.database_url)
+            await storage.open()
+            cse = CSEClient(
+                base_url=settings.cse_base_url,
+                timeout=settings.http_timeout_seconds,
+                fail_max=settings.circuit_fail_max,
+                reset_timeout=settings.circuit_reset_seconds,
+                min_interval_seconds=settings.cse_min_interval_seconds,
+            )
+            try:
+                result = await run_intraday_backfill(
+                    settings=settings,
+                    storage=storage,
+                    cse=cse,
+                    limit=limit,
+                    seed_ids=not args.no_seed,
+                    force=args.force,
+                )
+                print(
+                    "intraday-backfill: "
+                    f"targeted={result.symbols_targeted} "
+                    f"ok={result.symbols_ok} "
+                    f"skipped={result.symbols_skipped} "
+                    f"failed={result.symbols_failed} "
+                    f"ticks={result.ticks_inserted}"
+                )
+            finally:
+                await cse.aclose()
+                await storage.close()
+
+        asyncio.run(_intraday_bf())
         return
 
     if args.command == "hybrid-backfill":

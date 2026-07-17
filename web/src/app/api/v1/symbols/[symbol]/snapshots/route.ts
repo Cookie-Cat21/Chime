@@ -34,7 +34,8 @@ export async function GET(request: NextRequest, context: RouteContext) {
     if (n == null) {
       return jsonError(400, "validation_error", "limit must be a positive integer.");
     }
-    limit = Math.min(n, 200);
+    // Cap high enough for 1D expand (sessionsForRange("1D") ≈ 240).
+    limit = Math.min(n, 500);
   }
 
   try {
