@@ -603,6 +603,71 @@ class Storage:
                 out.append(symbol)
         return out
 
+    async def upsert_market_daily_summary(self, rows: list[dict[str, Any]]) -> int:
+        """Upsert CSE dailyMarketSummery rows (keyed by trade_date)."""
+        if not rows:
+            return 0
+        by_date: dict[date, dict[str, Any]] = {}
+        for row in rows:
+            d = row.get("trade_date")
+            if not isinstance(d, date):
+                continue
+            by_date[d] = row
+        if not by_date:
+            return 0
+        payload = list(by_date.values())
+        async with self._pool.connection() as conn:
+            async with conn.cursor() as cur:
+                await cur.executemany(
+                    """
+                    INSERT INTO market_daily_summary (
+                        trade_date, market_turnover, market_trades,
+                        equity_foreign_purchase, equity_foreign_sales,
+                        foreign_net, volume_of_turnover, market_cap, asi, raw
+                    ) VALUES (
+                        %(trade_date)s, %(market_turnover)s, %(market_trades)s,
+                        %(equity_foreign_purchase)s, %(equity_foreign_sales)s,
+                        %(foreign_net)s, %(volume_of_turnover)s, %(market_cap)s,
+                        %(asi)s, %(raw)s
+                    )
+                    ON CONFLICT (trade_date) DO UPDATE SET
+                        market_turnover = EXCLUDED.market_turnover,
+                        market_trades = EXCLUDED.market_trades,
+                        equity_foreign_purchase = EXCLUDED.equity_foreign_purchase,
+                        equity_foreign_sales = EXCLUDED.equity_foreign_sales,
+                        foreign_net = EXCLUDED.foreign_net,
+                        volume_of_turnover = EXCLUDED.volume_of_turnover,
+                        market_cap = EXCLUDED.market_cap,
+                        asi = EXCLUDED.asi,
+                        raw = EXCLUDED.raw,
+                        ingested_at = now()
+                    """,
+                    [
+                        {
+                            **r,
+                            "raw": Json(r.get("raw") or {}),
+                        }
+                        for r in payload
+                    ],
+                )
+        return len(payload)
+
+    async def list_market_daily_summary(self) -> list[dict[str, Any]]:
+        """All market_daily_summary rows ascending by trade_date."""
+        async with self._pool.connection() as conn:
+            rows = await (
+                await conn.execute(
+                    """
+                    SELECT trade_date, market_turnover, market_trades,
+                           equity_foreign_purchase, equity_foreign_sales,
+                           foreign_net, volume_of_turnover, market_cap, asi
+                    FROM market_daily_summary
+                    ORDER BY trade_date ASC
+                    """
+                )
+            ).fetchall()
+        return [dict(r) for r in rows]
+
     async def list_symbols_missing_sector(self) -> list[str]:
         """Symbols with daily bars (or any stock) missing a sector label."""
         async with self._pool.connection() as conn:
@@ -772,6 +837,67 @@ class Storage:
         # If already fraction-like tiny, keep; if looks like percent points keep as-is
         # for comparison against symbol ret * 100 below in score job.
         return pct
+
+    async def count_notices_since(self, symbol: str, *, since: datetime) -> int:
+        """Count buy-in / non-compliance / halt notices for ``symbol`` since."""
+        by_type = await self.count_notices_by_type_since(symbol, since=since)
+        return sum(by_type.values())
+
+    async def count_notices_by_type_since(
+        self, symbol: str, *, since: datetime
+    ) -> dict[str, int]:
+        """Per-type notice counts for ``symbol`` since ``since``."""
+        if not isinstance(symbol, str) or not symbol.strip():
+            return {}
+        if not isinstance(since, datetime):
+            return {}
+        sym = symbol.strip().upper()
+        async with self._pool.connection() as conn:
+            rows = await (
+                await conn.execute(
+                    """
+                    SELECT notice_type, COUNT(*)::int AS n
+                    FROM market_notices
+                    WHERE symbol = %s AND published_at >= %s
+                    GROUP BY notice_type
+                    """,
+                    (sym, since),
+                )
+            ).fetchall()
+        out: dict[str, int] = {}
+        for row in _as_rows(rows):
+            kind = row.get("notice_type")
+            n = _pg_count(row.get("n"))
+            if (
+                isinstance(kind, str)
+                and kind in {"buy_in", "non_compliance", "halt"}
+                and n is not None
+                and n > 0
+            ):
+                out[kind] = n
+        return out
+
+    async def get_paired_listing_symbol(self, symbol: str) -> str | None:
+        """Return the other voting/share class ticker if present (``.N`` ↔ ``.X``)."""
+        if not isinstance(symbol, str) or not symbol.strip():
+            return None
+        sym = symbol.strip().upper()
+        if ".N" in sym:
+            pair = sym.replace(".N", ".X", 1)
+        elif ".X" in sym:
+            pair = sym.replace(".X", ".N", 1)
+        else:
+            return None
+        if pair == sym:
+            return None
+        async with self._pool.connection() as conn:
+            row = await (
+                await conn.execute(
+                    "SELECT 1 FROM stocks WHERE symbol = %s",
+                    (pair,),
+                )
+            ).fetchone()
+        return pair if row is not None else None
 
     async def count_disclosures_since(self, symbol: str, *, since: datetime) -> int:
         if not isinstance(symbol, str) or not symbol.strip():
@@ -945,20 +1071,32 @@ class Storage:
                 """,
                 (sym, version, as_of),
             )
+            import json as _json
+
             await conn.execute(
                 """
                 INSERT INTO forecast_points (
-                    symbol, model_version, horizon_i, as_of, ts, yhat
+                    symbol, model_version, horizon_i, as_of, ts, yhat,
+                    confidence, confidence_band, gate, reasons
                 )
-                SELECT symbol, model_version, horizon_i, as_of, ts, yhat
+                SELECT
+                    symbol, model_version, horizon_i, as_of, ts, yhat,
+                    confidence, confidence_band, gate, reasons::jsonb
                 FROM UNNEST(
                     %s::text[],
                     %s::text[],
                     %s::smallint[],
                     %s::date[],
                     %s::timestamptz[],
-                    %s::double precision[]
-                ) AS t(symbol, model_version, horizon_i, as_of, ts, yhat)
+                    %s::double precision[],
+                    %s::double precision[],
+                    %s::text[],
+                    %s::text[],
+                    %s::text[]
+                ) AS t(
+                    symbol, model_version, horizon_i, as_of, ts, yhat,
+                    confidence, confidence_band, gate, reasons
+                )
                 """,
                 (
                     [p.symbol for p in clean],
@@ -967,6 +1105,18 @@ class Storage:
                     [p.as_of for p in clean],
                     [p.ts for p in clean],
                     [float(p.yhat) for p in clean],
+                    [
+                        float(p.confidence)
+                        if p.confidence is not None
+                        and isinstance(p.confidence, int | float)
+                        and not isinstance(p.confidence, bool)
+                        and math.isfinite(float(p.confidence))
+                        else None
+                        for p in clean
+                    ],
+                    [p.confidence_band for p in clean],
+                    [p.gate for p in clean],
+                    [_json.dumps(list(p.reasons or [])) for p in clean],
                 ),
             )
         return len(clean)
@@ -1266,10 +1416,21 @@ class Storage:
         )
 
     async def resolve_symbol_by_company_name(self, company: str | None) -> str | None:
-        """Map a CSE company/name string to a unique stocks.symbol (case-insensitive)."""
+        """Map a CSE company/name string to a unique stocks.symbol.
+
+        Collapses whitespace (CSE stocks often have double spaces in ``name``;
+        notice boards usually do not). Ambiguous matches return None.
+        """
         if not isinstance(company, str) or not company.strip():
             return None
-        name = company.strip()
+        # Skip market-ops labels that are not issuers.
+        collapsed = " ".join(company.split()).upper()
+        if not collapsed or collapsed in {
+            "TRADING AND MARKET SURVEILLANCE",
+            "COLOMBO STOCK EXCHANGE",
+            "CSE",
+        }:
+            return None
         async with self._pool.connection() as conn:
             rows = await (
                 await conn.execute(
@@ -1277,16 +1438,49 @@ class Storage:
                     SELECT symbol
                     FROM stocks
                     WHERE name IS NOT NULL
-                      AND lower(name) = lower(%s)
+                      AND regexp_replace(upper(btrim(name)), '\\s+', ' ', 'g')
+                          = %s
                     LIMIT 2
                     """,
-                    (name,),
+                    (collapsed,),
                 )
             ).fetchall()
         if len(rows) != 1:
             return None
         sym = _as_row(rows[0]).get("symbol")
         return sym.strip().upper() if isinstance(sym, str) and sym.strip() else None
+
+    async def list_latest_scores(
+        self, *, model_version: str
+    ) -> dict[str, float]:
+        """Latest score per symbol for ``model_version`` (for rank autocorr)."""
+        if not isinstance(model_version, str) or not model_version.strip():
+            return {}
+        async with self._pool.connection() as conn:
+            rows = await (
+                await conn.execute(
+                    """
+                    SELECT DISTINCT ON (symbol)
+                        symbol, score
+                    FROM symbol_scores
+                    WHERE model_version = %s
+                    ORDER BY symbol ASC, as_of DESC, computed_at DESC
+                    """,
+                    (model_version.strip(),),
+                )
+            ).fetchall()
+        out: dict[str, float] = {}
+        for row in _as_rows(rows):
+            sym = row.get("symbol")
+            score = row.get("score")
+            if not isinstance(sym, str) or not sym.strip():
+                continue
+            if isinstance(score, bool) or not isinstance(score, int | float):
+                continue
+            if not math.isfinite(float(score)):
+                continue
+            out[sym.strip().upper()] = float(score)
+        return out
 
     async def enqueue_disclosure_brief(
         self,
@@ -1699,7 +1893,7 @@ class Storage:
                         error = NULL,
                         updated_at = now()
                     WHERE disclosure_id = %s
-                      AND status IN ('pending', 'processing')
+                      AND status IN ('pending', 'processing', 'failed')
                     RETURNING disclosure_id
                     """,
                     (cleaned, model, tokens_in, tokens_out, disclosure_id),

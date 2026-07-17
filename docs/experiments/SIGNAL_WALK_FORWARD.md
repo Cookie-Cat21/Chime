@@ -1,27 +1,23 @@
 # Signal Board — walk-forward forecast eval
 
-**Date:** 2026-07-16  
-**Model:** `path_v0_fc` / naive mean of last 5 daily returns × 5 horizons  
-**Command:** `python3 -m chime eval-signals --limit 50`
+**Updated:** 2026-07-16  
+**Commands:** `python3 -m chime eval-signals --limit 50`
 
-## Results (50 symbols, Neon `daily_bars`)
+## Models tried
 
-| Metric | Value |
-|---|---|
-| Symbols used | 50 |
-| Origins | 2,032 |
-| Direction hits / total | 900 / 1,904 |
-| **Hit rate** | **0.473** |
-| MAE (price units) | 11.93 |
-| Horizon | 5 |
+| Model | Hit rate | MAE | Notes |
+|---|---:|---:|---|
+| `path_v0_fc` (mean of last 5 daily rets) | 0.473 | 11.93 | Baseline |
+| `path_v2_fc` (0.6×5d + 0.4×20d, flatten if \|drift\|&lt;0.2%) | 0.461 | 10.62 | MAE↓ but hit rate still ≈ chance |
 
 ## Interpretation
 
-Direction hit rate is **≈ chance (0.5)**. The naive path forecast is **not** an edge signal. It remains available as a **research overlay** (dashed sparkline) with NFA labeling — not a price target, not advice.
+Direction hit rate remains **≈ coin flip**. Per plan kill criteria (&lt; 0.55), **do not promote** the forecast as an edge signal. Keep sparkline overlay **opt-in** with NFA copy (“model estimate”).
 
-`path_v1` research **scores** (momentum / vol / liquidity / filing YoY / peer RS when sector present) are separate from this forecast and are explainable factor blends, not ML price oracles.
+Research **scores** (`path_v2`) are a separate product surface — transparent factor blend, not this forecast.
 
-## Next kill / improve criteria
+## Promote criteria (unchanged)
 
-- Promote a new forecast model only if walk-forward hit rate ≥ 0.55 on ≥100 symbols with leakage checklist.
-- Until then: keep overlay opt-in; default sparkline = realtime only.
+- Walk-forward hit rate ≥ **0.55** on ≥100 symbols  
+- Leakage checklist signed off  
+- Until then: realtime sparkline default; forecast checkbox only

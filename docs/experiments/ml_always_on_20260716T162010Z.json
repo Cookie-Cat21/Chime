@@ -1,0 +1,21 @@
+{
+  "lever": "aspi_cs_lmt_bag",
+  "mean_symbol_hit": 0.5938148530357762,
+  "pooled_hit": 0.5889059916766433,
+  "symbols_ge_070": 18,
+  "n_symbols": 264,
+  "n_rows": 17541,
+  "high_bucket_hit": 0.670172653304227,
+  "delta_vs_baseline": 0.0008052284923716346,
+  "keep": false,
+  "notes": "path+CS+aspi",
+  "extras": {
+    "symbols": 273,
+    "disclosures": 0,
+    "notices": 0,
+    "sector_rs": false,
+    "aspi": true,
+    "financials": false,
+    "aspi_points": 240
+  }
+}

@@ -1,0 +1,120 @@
+{
+  "decision": "GO",
+  "reasons": [
+    "B1_logistic h=1 hit_rate=0.587 (origins=1934)",
+    "B1_logistic h=1 IC=0.121 (origins=1934)",
+    "B2_ridge h=1 IC=0.187 (origins=1934)",
+    "M1_hgb_clf h=1 hit_rate=0.567 (origins=1934)",
+    "M1_hgb_clf h=1 IC=0.074 (origins=1934)",
+    "M2_hgb_reg h=1 IC=0.146 (origins=1934)",
+    "B1_logistic h=5 IC=0.146 (origins=1490)",
+    "B2_ridge h=5 IC=0.056 (origins=1490)",
+    "M1_hgb_clf h=5 IC=0.097 (origins=1490)",
+    "M2_hgb_reg h=5 IC=0.044 (origins=1490)"
+  ],
+  "leakage_ok": true,
+  "metrics": [
+    {
+      "model_id": "B1_logistic",
+      "horizon": 1,
+      "origins": 1934,
+      "direction_hits": 1135,
+      "direction_total": 1934,
+      "hit_rate": 0.5868665977249224,
+      "ic": 0.12109236289760014,
+      "mae": null,
+      "folds": 3
+    },
+    {
+      "model_id": "B2_ridge",
+      "horizon": 1,
+      "origins": 1934,
+      "direction_hits": 1013,
+      "direction_total": 1934,
+      "hit_rate": 0.5237849017580145,
+      "ic": 0.18734427180420554,
+      "mae": 0.022892492522499055,
+      "folds": 3
+    },
+    {
+      "model_id": "M1_hgb_clf",
+      "horizon": 1,
+      "origins": 1934,
+      "direction_hits": 1097,
+      "direction_total": 1934,
+      "hit_rate": 0.5672182006204757,
+      "ic": 0.07436335520729741,
+      "mae": null,
+      "folds": 3
+    },
+    {
+      "model_id": "M2_hgb_reg",
+      "horizon": 1,
+      "origins": 1934,
+      "direction_hits": 1016,
+      "direction_total": 1934,
+      "hit_rate": 0.5253360910031024,
+      "ic": 0.14613577932162308,
+      "mae": 0.02303918462780112,
+      "folds": 3
+    },
+    {
+      "model_id": "B0_naive",
+      "horizon": 5,
+      "origins": 1408,
+      "direction_hits": 458,
+      "direction_total": 976,
+      "hit_rate": 0.4692622950819672,
+      "ic": null,
+      "mae": 10.696723178772586,
+      "folds": 0
+    },
+    {
+      "model_id": "B1_logistic",
+      "horizon": 5,
+      "origins": 1490,
+      "direction_hits": 817,
+      "direction_total": 1490,
+      "hit_rate": 0.5483221476510067,
+      "ic": 0.14595668538888032,
+      "mae": null,
+      "folds": 2
+    },
+    {
+      "model_id": "B2_ridge",
+      "horizon": 5,
+      "origins": 1490,
+      "direction_hits": 685,
+      "direction_total": 1490,
+      "hit_rate": 0.4597315436241611,
+      "ic": 0.05580417386973592,
+      "mae": 0.04922982125380121,
+      "folds": 2
+    },
+    {
+      "model_id": "M1_hgb_clf",
+      "horizon": 5,
+      "origins": 1490,
+      "direction_hits": 804,
+      "direction_total": 1490,
+      "hit_rate": 0.5395973154362416,
+      "ic": 0.09747907940655322,
+      "mae": null,
+      "folds": 2
+    },
+    {
+      "model_id": "M2_hgb_reg",
+      "horizon": 5,
+      "origins": 1490,
+      "direction_hits": 740,
+      "direction_total": 1490,
+      "hit_rate": 0.4966442953020134,
+      "ic": 0.043791087241284554,
+      "mae": 0.05429371120835428,
+      "folds": 2
+    }
+  ],
+  "symbols": 40,
+  "bars_hint": "9517 daily_bars rows",
+  "report_md": "docs/experiments/ml_walkforward_20260716T135027Z.md"
+}

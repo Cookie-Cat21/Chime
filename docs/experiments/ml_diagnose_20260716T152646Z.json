@@ -1,0 +1,959 @@
+{
+  "model_id": "M1_hgb_clf",
+  "horizon": 1,
+  "panel": true,
+  "n_rows": 17541,
+  "pooled_hit": 0.5637078843851547,
+  "mean_symbol_hit": 0.5684083570213682,
+  "symbols_ge_070": 15,
+  "symbols_ge_075": 7,
+  "n_symbols": 264,
+  "bucket_counts": {
+    "HIGH": 1443,
+    "HIGH_HIT": 1028,
+    "HIGH_MISS": 415,
+    "LOW": 10106,
+    "LOW_HIT": 5294,
+    "LOW_MISS": 4812,
+    "MID": 5992,
+    "MID_HIT": 3566,
+    "MID_MISS": 2426
+  },
+  "bucket_hits": {
+    "HIGH": 0.7124047124047124,
+    "MID": 0.5951268357810414,
+    "LOW": 0.52384721947358
+  },
+  "feature_gaps": [
+    {
+      "feature": "range_20d",
+      "high_hit_mean": 0.06324275429244285,
+      "high_miss_mean": 0.05213670824937951,
+      "low_mean": 0.03993344637874079,
+      "std_gap_hit_vs_low": 0.8021058000878152,
+      "n_high_hit": 1028,
+      "n_high_miss": 415,
+      "n_low": 10106
+    },
+    {
+      "feature": "vol_20d",
+      "high_hit_mean": 0.04331622284319447,
+      "high_miss_mean": 0.03644947467917089,
+      "low_mean": 0.027524992037628593,
+      "std_gap_hit_vs_low": 0.6615991634066732,
+      "n_high_hit": 1028,
+      "n_high_miss": 415,
+      "n_low": 10106
+    },
+    {
+      "feature": "log_price",
+      "high_hit_mean": 3.1468595545497458,
+      "high_miss_mean": 3.507917409853075,
+      "low_mean": 4.07517583173526,
+      "std_gap_hit_vs_low": -0.6529046654432088,
+      "n_high_hit": 1028,
+      "n_high_miss": 415,
+      "n_low": 10106
+    },
+    {
+      "feature": "ret_5d",
+      "high_hit_mean": 0.025638623230515675,
+      "high_miss_mean": 0.021473339573512273,
+      "low_mean": -0.015016448908910365,
+      "std_gap_hit_vs_low": 0.5413351269551983,
+      "n_high_hit": 1028,
+      "n_high_miss": 415,
+      "n_low": 10106
+    },
+    {
+      "feature": "ret_1d",
+      "high_hit_mean": 0.010775239858035832,
+      "high_miss_mean": 0.00818613861194993,
+      "low_mean": -0.0044784908250957035,
+      "std_gap_hit_vs_low": 0.3948141689697027,
+      "n_high_hit": 1028,
+      "n_high_miss": 415,
+      "n_low": 10106
+    },
+    {
+      "feature": "vol_spike",
+      "high_hit_mean": 0.488763236874713,
+      "high_miss_mean": 0.530564740849192,
+      "low_mean": 1.138984333425974,
+      "std_gap_hit_vs_low": -0.37942961174523926,
+      "n_high_hit": 1028,
+      "n_high_miss": 415,
+      "n_low": 10106
+    },
+    {
+      "feature": "liquidity_20d",
+      "high_hit_mean": 994884.7968871596,
+      "high_miss_mean": 646901.8234939759,
+      "low_mean": 459466.5506332871,
+      "std_gap_hit_vs_low": 0.28512736999604316,
+      "n_high_hit": 1028,
+      "n_high_miss": 415,
+      "n_low": 10106
+    },
+    {
+      "feature": "turnover_20d",
+      "high_hit_mean": 7629902.850897374,
+      "high_miss_mean": 9548756.566873495,
+      "low_mean": 14563793.464436226,
+      "std_gap_hit_vs_low": -0.23172231418910283,
+      "n_high_hit": 1028,
+      "n_high_miss": 415,
+      "n_low": 10106
+    },
+    {
+      "feature": "long_gaps_40",
+      "high_hit_mean": 0.5038910505836576,
+      "high_miss_mean": 0.46265060240963857,
+      "low_mean": 0.5921234909954483,
+      "std_gap_hit_vs_low": -0.14199436568254595,
+      "n_high_hit": 1028,
+      "n_high_miss": 415,
+      "n_low": 10106
+    },
+    {
+      "feature": "ret_60d",
+      "high_hit_mean": -0.04591947366903141,
+      "high_miss_mean": -0.08230314792715442,
+      "low_mean": -0.03376729966412304,
+      "std_gap_hit_vs_low": -0.04401021496678195,
+      "n_high_hit": 1028,
+      "n_high_miss": 415,
+      "n_low": 10106
+    },
+    {
+      "feature": "ret_20d",
+      "high_hit_mean": -0.01991800764468524,
+      "high_miss_mean": -0.03093624930313048,
+      "low_mean": -0.023990563099570084,
+      "std_gap_hit_vs_low": 0.02811238815808711,
+      "n_high_hit": 1028,
+      "n_high_miss": 415,
+      "n_low": 10106
+    },
+    {
+      "feature": "vol_regime",
+      "high_hit_mean": 1.449409273546221,
+      "high_miss_mean": 1.2648255642668225,
+      "low_mean": 1.528541118760827,
+      "std_gap_hit_vs_low": -0.016630388594747005,
+      "n_high_hit": 1028,
+      "n_high_miss": 415,
+      "n_low": 10106
+    },
+    {
+      "feature": "max_gap_days",
+      "high_hit_mean": 4.67023346303502,
+      "high_miss_mean": 4.679518072289157,
+      "low_mean": 4.659608153572135,
+      "std_gap_hit_vs_low": 0.011265587476997789,
+      "n_high_hit": 1028,
+      "n_high_miss": 415,
+      "n_low": 10106
+    }
+  ],
+  "top_symbols": [
+    {
+      "symbol": "SEMB.X0000",
+      "n": 29,
+      "hit_rate": 0.9310344827586207,
+      "high_n": 16,
+      "high_hit_rate": 1.0,
+      "mean_abs_score": 0.24586801463994437,
+      "mean_liquidity": 3274568.763793104,
+      "mean_vol": 0.23156720014226712,
+      "sector": "Diversified Financials"
+    },
+    {
+      "symbol": "TESS.X0000",
+      "n": 29,
+      "hit_rate": 0.7931034482758621,
+      "high_n": 13,
+      "high_hit_rate": 0.8461538461538461,
+      "mean_abs_score": 0.18035941914845216,
+      "mean_liquidity": 243824.98965517242,
+      "mean_vol": 0.04352068784316344,
+      "sector": "Trading"
+    },
+    {
+      "symbol": "SEMB.N0000",
+      "n": 28,
+      "hit_rate": 0.7857142857142857,
+      "high_n": 16,
+      "high_hit_rate": 1.0,
+      "mean_abs_score": 0.2342475528373881,
+      "mean_liquidity": 9156020.480357142,
+      "mean_vol": 0.07896761746291499,
+      "sector": "Diversified Financials"
+    },
+    {
+      "symbol": "CBNK.N0000",
+      "n": 53,
+      "hit_rate": 0.7735849056603774,
+      "high_n": 2,
+      "high_hit_rate": 1.0,
+      "mean_abs_score": 0.09174402130446739,
+      "mean_liquidity": 652049.0028301886,
+      "mean_vol": 0.01502216099874715,
+      "sector": "Banks"
+    },
+    {
+      "symbol": "ASPH.N0000",
+      "n": 35,
+      "hit_rate": 0.7714285714285715,
+      "high_n": 25,
+      "high_hit_rate": 0.92,
+      "mean_abs_score": 0.26877249014875193,
+      "mean_liquidity": 13123484.26,
+      "mean_vol": 0.13420374932998094,
+      "sector": "Materials"
+    },
+    {
+      "symbol": "AGST.X0000",
+      "n": 48,
+      "hit_rate": 0.7708333333333334,
+      "high_n": 16,
+      "high_hit_rate": 0.9375,
+      "mean_abs_score": 0.14200916743489586,
+      "mean_liquidity": 8879.582291666668,
+      "mean_vol": 0.03467390951377165,
+      "sector": "Materials"
+    },
+    {
+      "symbol": "CITW.N0000",
+      "n": 26,
+      "hit_rate": 0.7692307692307693,
+      "high_n": 12,
+      "high_hit_rate": 1.0,
+      "mean_abs_score": 0.18442174788511245,
+      "mean_liquidity": 1540424.323076923,
+      "mean_vol": 0.03458459059011875,
+      "sector": "Consumer Services"
+    },
+    {
+      "symbol": "HPWR.N0000",
+      "n": 65,
+      "hit_rate": 0.7384615384615385,
+      "high_n": 7,
+      "high_hit_rate": 1.0,
+      "mean_abs_score": 0.11756496737931911,
+      "mean_liquidity": 174335.37615384615,
+      "mean_vol": 0.025297460901869896,
+      "sector": "Utilities"
+    },
+    {
+      "symbol": "CSLK.N0000",
+      "n": 64,
+      "hit_rate": 0.71875,
+      "high_n": 2,
+      "high_hit_rate": 1.0,
+      "mean_abs_score": 0.08487368232499777,
+      "mean_liquidity": 568321.70390625,
+      "mean_vol": 0.02681454587740934,
+      "sector": "Capital Goods"
+    },
+    {
+      "symbol": "CABO.N0000",
+      "n": 46,
+      "hit_rate": 0.717391304347826,
+      "high_n": 3,
+      "high_hit_rate": 1.0,
+      "mean_abs_score": 0.10095844395119535,
+      "mean_liquidity": 4127.05,
+      "mean_vol": 0.024538803405976587,
+      "sector": "Real Estate Management & Development"
+    },
+    {
+      "symbol": "LCBF.N0000",
+      "n": 67,
+      "hit_rate": 0.7164179104477612,
+      "high_n": 5,
+      "high_hit_rate": 1.0,
+      "mean_abs_score": 0.10560665995620003,
+      "mean_liquidity": 3983625.863432836,
+      "mean_vol": 0.041724372134185325,
+      "sector": "Diversified Financial Services"
+    },
+    {
+      "symbol": "PALM.N0000",
+      "n": 49,
+      "hit_rate": 0.7142857142857143,
+      "high_n": 6,
+      "high_hit_rate": 0.8333333333333334,
+      "mean_abs_score": 0.10616279536747428,
+      "mean_liquidity": 1730.1806122448982,
+      "mean_vol": 0.037111740896709114,
+      "sector": "Consumer Services"
+    },
+    {
+      "symbol": "MSL.N0000",
+      "n": 62,
+      "hit_rate": 0.7096774193548387,
+      "high_n": 4,
+      "high_hit_rate": 1.0,
+      "mean_abs_score": 0.09058096605766053,
+      "mean_liquidity": 4518.3645161290315,
+      "mean_vol": 0.037801804239389815,
+      "sector": "Services"
+    },
+    {
+      "symbol": "MULL.N0000",
+      "n": 34,
+      "hit_rate": 0.7058823529411765,
+      "high_n": 16,
+      "high_hit_rate": 0.6875,
+      "mean_abs_score": 0.19415188321493104,
+      "mean_liquidity": 630650.2352941176,
+      "mean_vol": 0.03734343096719967,
+      "sector": "Health Care Equipment & Services"
+    },
+    {
+      "symbol": "TESS.N0000",
+      "n": 44,
+      "hit_rate": 0.7045454545454546,
+      "high_n": 23,
+      "high_hit_rate": 0.782608695652174,
+      "mean_abs_score": 0.2126925065455922,
+      "mean_liquidity": 909112.109090909,
+      "mean_vol": 0.04202286626862174,
+      "sector": "Trading"
+    },
+    {
+      "symbol": "UBF.N0000",
+      "n": 33,
+      "hit_rate": 0.696969696969697,
+      "high_n": 9,
+      "high_hit_rate": 0.7777777777777778,
+      "mean_abs_score": 0.14332231793240136,
+      "mean_liquidity": 1860310.3151515152,
+      "mean_vol": 0.031143182860173497,
+      "sector": "Diversified Financial"
+    },
+    {
+      "symbol": "BERU.N0000",
+      "n": 46,
+      "hit_rate": 0.6956521739130435,
+      "high_n": 19,
+      "high_hit_rate": 0.6842105263157895,
+      "mean_abs_score": 0.18225886825276838,
+      "mean_liquidity": 418847.76086956525,
+      "mean_vol": 0.031012390191811286,
+      "sector": "Consumer Services"
+    },
+    {
+      "symbol": "PLR.N0000",
+      "n": 78,
+      "hit_rate": 0.6923076923076923,
+      "high_n": 1,
+      "high_hit_rate": 1.0,
+      "mean_abs_score": 0.07480929815544339,
+      "mean_liquidity": 1568435.7756410257,
+      "mean_vol": 0.036982398348675616,
+      "sector": "Real Estate (6010)"
+    },
+    {
+      "symbol": "EML.N0000",
+      "n": 71,
+      "hit_rate": 0.6901408450704225,
+      "high_n": 7,
+      "high_hit_rate": 1.0,
+      "mean_abs_score": 0.09972663165358517,
+      "mean_liquidity": 462861.65070422535,
+      "mean_vol": 0.04147299530246386,
+      "sector": "Commercial & Professional Services"
+    },
+    {
+      "symbol": "SIRA.N0000",
+      "n": 69,
+      "hit_rate": 0.6811594202898551,
+      "high_n": 0,
+      "high_hit_rate": null,
+      "mean_abs_score": 0.06500674656897856,
+      "mean_liquidity": 717440.0507246377,
+      "mean_vol": 0.02633857673587288,
+      "sector": "Capital Goods"
+    },
+    {
+      "symbol": "SFCL.N0000",
+      "n": 71,
+      "hit_rate": 0.676056338028169,
+      "high_n": 4,
+      "high_hit_rate": 0.75,
+      "mean_abs_score": 0.08199760990585918,
+      "mean_liquidity": 2453.7739436619718,
+      "mean_vol": 0.031255368664850756,
+      "sector": "Diversified Financials"
+    },
+    {
+      "symbol": "LOFC.N0000",
+      "n": 43,
+      "hit_rate": 0.6744186046511628,
+      "high_n": 1,
+      "high_hit_rate": 1.0,
+      "mean_abs_score": 0.10141303248511273,
+      "mean_liquidity": 1280658.6790697675,
+      "mean_vol": 0.02074051696774779,
+      "sector": "Diversified Financials"
+    },
+    {
+      "symbol": "JAT.N0000",
+      "n": 70,
+      "hit_rate": 0.6714285714285714,
+      "high_n": 2,
+      "high_hit_rate": 0.0,
+      "mean_abs_score": 0.08156897484108291,
+      "mean_liquidity": 225546.86357142855,
+      "mean_vol": 0.02300350515682905,
+      "sector": "Materials (1510)"
+    },
+    {
+      "symbol": "MGT.N0000",
+      "n": 70,
+      "hit_rate": 0.6714285714285714,
+      "high_n": 3,
+      "high_hit_rate": 1.0,
+      "mean_abs_score": 0.07722286026095315,
+      "mean_liquidity": 472259.455,
+      "mean_vol": 0.016652852841877015,
+      "sector": "Consumer Durables & Apparel"
+    },
+    {
+      "symbol": "ASIY.N0000",
+      "n": 69,
+      "hit_rate": 0.6666666666666666,
+      "high_n": 5,
+      "high_hit_rate": 1.0,
+      "mean_abs_score": 0.08728691738556613,
+      "mean_liquidity": 1259799.6101449274,
+      "mean_vol": 0.03813710323249612,
+      "sector": "Diversified Financials"
+    }
+  ],
+  "bottom_symbols": [
+    {
+      "symbol": "PARA.N0000",
+      "n": 30,
+      "hit_rate": 0.36666666666666664,
+      "high_n": 6,
+      "high_hit_rate": 0.6666666666666666,
+      "mean_abs_score": 0.11817213388987204,
+      "mean_liquidity": 295.8316666666667,
+      "mean_vol": 0.07156628398128136,
+      "sector": "Commercial & Professional Services"
+    },
+    {
+      "symbol": "CDB.X0000",
+      "n": 71,
+      "hit_rate": 0.38028169014084506,
+      "high_n": 11,
+      "high_hit_rate": 0.2727272727272727,
+      "mean_abs_score": 0.10679129056120688,
+      "mean_liquidity": 266470.4176056338,
+      "mean_vol": 0.07070952562952872,
+      "sector": "Diversified Financials"
+    },
+    {
+      "symbol": "DIST.N0000",
+      "n": 75,
+      "hit_rate": 0.38666666666666666,
+      "high_n": 3,
+      "high_hit_rate": 0.3333333333333333,
+      "mean_abs_score": 0.09400799671762237,
+      "mean_liquidity": 165800.0293333333,
+      "mean_vol": 0.014941850996708866,
+      "sector": "Food Beverage & Tobacco"
+    },
+    {
+      "symbol": "CTC.N0000",
+      "n": 76,
+      "hit_rate": 0.39473684210526316,
+      "high_n": 0,
+      "high_hit_rate": null,
+      "mean_abs_score": 0.06558187883300591,
+      "mean_liquidity": 24973.626315789475,
+      "mean_vol": 0.006196373698057724,
+      "sector": "FOOD BEVERAGE & TOBACCO"
+    },
+    {
+      "symbol": "TKYO.X0000",
+      "n": 75,
+      "hit_rate": 0.41333333333333333,
+      "high_n": 2,
+      "high_hit_rate": 1.0,
+      "mean_abs_score": 0.07821244322092469,
+      "mean_liquidity": 191589.79533333334,
+      "mean_vol": 0.018689393940274066,
+      "sector": "Materials"
+    },
+    {
+      "symbol": "CTEA.N0000",
+      "n": 29,
+      "hit_rate": 0.41379310344827586,
+      "high_n": 1,
+      "high_hit_rate": 1.0,
+      "mean_abs_score": 0.06939392386754394,
+      "mean_liquidity": 154.61206896551724,
+      "mean_vol": 0.02759168952248118,
+      "sector": "Food Beverage & Tobacco"
+    },
+    {
+      "symbol": "BUKI.N0000",
+      "n": 58,
+      "hit_rate": 0.41379310344827586,
+      "high_n": 1,
+      "high_hit_rate": 1.0,
+      "mean_abs_score": 0.08956965890429612,
+      "mean_liquidity": 654.0827586206897,
+      "mean_vol": 0.01862750628808828,
+      "sector": "FOOD BEVERAGE & TOBACCO"
+    },
+    {
+      "symbol": "SUN.N0000",
+      "n": 69,
+      "hit_rate": 0.42028985507246375,
+      "high_n": 3,
+      "high_hit_rate": 0.6666666666666666,
+      "mean_abs_score": 0.09471350539362086,
+      "mean_liquidity": 690920.9942028986,
+      "mean_vol": 0.02376074030297914,
+      "sector": "Food Beverage & Tobacco"
+    },
+    {
+      "symbol": "CALT.N0000",
+      "n": 73,
+      "hit_rate": 0.4246575342465753,
+      "high_n": 4,
+      "high_hit_rate": 0.75,
+      "mean_abs_score": 0.09013676277018683,
+      "mean_liquidity": 62886.69726027398,
+      "mean_vol": 0.014768815459446943,
+      "sector": "Investment Banking & Brokerage"
+    },
+    {
+      "symbol": "TYRE.N0000",
+      "n": 75,
+      "hit_rate": 0.4266666666666667,
+      "high_n": 9,
+      "high_hit_rate": 0.6666666666666666,
+      "mean_abs_score": 0.09295422377347815,
+      "mean_liquidity": 14822.197333333334,
+      "mean_vol": 0.013862914023580763,
+      "sector": "Automobiles & Components"
+    },
+    {
+      "symbol": "CCS.N0000",
+      "n": 77,
+      "hit_rate": 0.42857142857142855,
+      "high_n": 3,
+      "high_hit_rate": 0.3333333333333333,
+      "mean_abs_score": 0.0810488745747321,
+      "mean_liquidity": 349818.85909090907,
+      "mean_vol": 0.018940562428303304,
+      "sector": "FOOD BEVERAGE & TOBACCO"
+    },
+    {
+      "symbol": "CINS.N0000",
+      "n": 16,
+      "hit_rate": 0.4375,
+      "high_n": 0,
+      "high_hit_rate": null,
+      "mean_abs_score": 0.05367246895983523,
+      "mean_liquidity": 3464.85,
+      "mean_vol": 0.01337742494615741,
+      "sector": "Insurance"
+    },
+    {
+      "symbol": "COMB.X0000",
+      "n": 75,
+      "hit_rate": 0.44,
+      "high_n": 0,
+      "high_hit_rate": null,
+      "mean_abs_score": 0.06876818354550605,
+      "mean_liquidity": 72570.21533333334,
+      "mean_vol": 0.014527839828579957,
+      "sector": "Banks"
+    },
+    {
+      "symbol": "SOY.N0000",
+      "n": 34,
+      "hit_rate": 0.4411764705882353,
+      "high_n": 2,
+      "high_hit_rate": 0.5,
+      "mean_abs_score": 0.08426065742677309,
+      "mean_liquidity": 807.25,
+      "mean_vol": 0.021533714173086554,
+      "sector": "FOOD BEVERAGE & TOBACCO"
+    },
+    {
+      "symbol": "TPL.N0000",
+      "n": 70,
+      "hit_rate": 0.44285714285714284,
+      "high_n": 3,
+      "high_hit_rate": 0.0,
+      "mean_abs_score": 0.0896407791389827,
+      "mean_liquidity": 6203.135,
+      "mean_vol": 0.015181459385281815,
+      "sector": "Food Beverage & Tobacco"
+    },
+    {
+      "symbol": "VONE.N0000",
+      "n": 72,
+      "hit_rate": 0.4444444444444444,
+      "high_n": 3,
+      "high_hit_rate": 0.3333333333333333,
+      "mean_abs_score": 0.07637503880679626,
+      "mean_liquidity": 102561.67222222223,
+      "mean_vol": 0.017341815989293734,
+      "sector": "Utilities"
+    },
+    {
+      "symbol": "AHUN.N0000",
+      "n": 72,
+      "hit_rate": 0.4444444444444444,
+      "high_n": 4,
+      "high_hit_rate": 0.25,
+      "mean_abs_score": 0.0892400200902627,
+      "mean_liquidity": 68566.20277777777,
+      "mean_vol": 0.017511958962199495,
+      "sector": "Consumer Services"
+    },
+    {
+      "symbol": "LION.N0000",
+      "n": 40,
+      "hit_rate": 0.45,
+      "high_n": 2,
+      "high_hit_rate": 0.0,
+      "mean_abs_score": 0.08311767048010854,
+      "mean_liquidity": 1657.60875,
+      "mean_vol": 0.018351070828407662,
+      "sector": "Food Beverage & Tobacco"
+    },
+    {
+      "symbol": "HAYC.N0000",
+      "n": 72,
+      "hit_rate": 0.4583333333333333,
+      "high_n": 1,
+      "high_hit_rate": 0.0,
+      "mean_abs_score": 0.09237400900603482,
+      "mean_liquidity": 176963.7111111111,
+      "mean_vol": 0.019555893208078066,
+      "sector": "Materials"
+    },
+    {
+      "symbol": "HAYL.N0000",
+      "n": 74,
+      "hit_rate": 0.4594594594594595,
+      "high_n": 1,
+      "high_hit_rate": 1.0,
+      "mean_abs_score": 0.06866291115075189,
+      "mean_liquidity": 204989.94662162164,
+      "mean_vol": 0.015332126865782772,
+      "sector": "Capital Goods"
+    },
+    {
+      "symbol": "LMF.N0000",
+      "n": 78,
+      "hit_rate": 0.46153846153846156,
+      "high_n": 1,
+      "high_hit_rate": 1.0,
+      "mean_abs_score": 0.08153281539782892,
+      "mean_liquidity": 858823.733974359,
+      "mean_vol": 0.02858701687280687,
+      "sector": "Food Beverage & Tobacco"
+    },
+    {
+      "symbol": "LFIN.N0000",
+      "n": 78,
+      "hit_rate": 0.46153846153846156,
+      "high_n": 1,
+      "high_hit_rate": 1.0,
+      "mean_abs_score": 0.08220104968862024,
+      "mean_liquidity": 113717.62371794872,
+      "mean_vol": 0.017966432449393926,
+      "sector": "Diversified Financials"
+    },
+    {
+      "symbol": "CHMX.N0000",
+      "n": 52,
+      "hit_rate": 0.46153846153846156,
+      "high_n": 2,
+      "high_hit_rate": 0.5,
+      "mean_abs_score": 0.08972520597217501,
+      "mean_liquidity": 3129.681730769231,
+      "mean_vol": 0.019395219839543662,
+      "sector": "Materials"
+    },
+    {
+      "symbol": "MELS.N0000",
+      "n": 73,
+      "hit_rate": 0.4657534246575342,
+      "high_n": 2,
+      "high_hit_rate": 0.5,
+      "mean_abs_score": 0.09159316490482888,
+      "mean_liquidity": 238806.3089041096,
+      "mean_vol": 0.012392010331873026,
+      "sector": "Food Beverage & Tobacco"
+    },
+    {
+      "symbol": "LHCL.N0000",
+      "n": 73,
+      "hit_rate": 0.4657534246575342,
+      "high_n": 4,
+      "high_hit_rate": 0.5,
+      "mean_abs_score": 0.08879129879465605,
+      "mean_liquidity": 13834.31301369863,
+      "mean_vol": 0.016835770672560868,
+      "sector": "Health Care Equipment & Services"
+    }
+  ],
+  "recommendations": [
+    "Board mean per-symbol hit=0.568 (pooled=0.5637078843851547) \u2014 below 0.70\u20130.75 target; iterate levers.",
+    "Feature `range_20d`: HIGH_HIT has higher values than LOW (std gap=0.80) \u2014 use in filter or meta-label.",
+    "Feature `vol_20d`: HIGH_HIT has higher values than LOW (std gap=0.66) \u2014 use in filter or meta-label.",
+    "Feature `log_price`: HIGH_HIT has lower values than LOW (std gap=-0.65) \u2014 use in filter or meta-label.",
+    "15/264 symbols already \u226570% hit \u2014 study their trait overlap; apply that filter board-wide.",
+    "Large per-symbol hit dispersion \u2014 consider per-sector or liquidity-bucket models instead of one global clf.",
+    "Liquidity tercile mix: {\"HIGH_HIT\": {\"low\": 0.36284046692607, \"mid\": 0.2791828793774319, \"high\": 0.35797665369649806}, \"HIGH_MISS\": {\"low\": 0.3301204819277108, \"mid\": 0.3566265060240964, \"high\": 0.3132530120481928}, \"LOW\": {\"low\": 0.34068869978230754, \"mid\": 0.33485058381159705, \"high\": 0.32446071640609536}}",
+    "Vol tercile mix: {\"HIGH_HIT\": {\"low\": 0.07879377431906615, \"mid\": 0.35700389105058367, \"high\": 0.5642023346303502}, \"HIGH_MISS\": {\"low\": 0.13012048192771083, \"mid\": 0.3855421686746988, \"high\": 0.4843373493975904}, \"LOW\": {\"low\": 0.40619433999604193, \"mid\": 0.3213932317435187, \"high\": 0.2724124282604393}}"
+  ],
+  "sector_slice": [
+    {
+      "sector": "Food Beverage & Tobacco",
+      "n": 2067,
+      "hit_rate": 0.5462022254475085,
+      "mean_abs_score": 0.0976023468089016
+    },
+    {
+      "sector": "Diversified Financials",
+      "n": 1871,
+      "hit_rate": 0.5820416889363976,
+      "mean_abs_score": 0.09667035728801872
+    },
+    {
+      "sector": "Capital Goods",
+      "n": 1817,
+      "hit_rate": 0.5608145294441387,
+      "mean_abs_score": 0.08911283393903795
+    },
+    {
+      "sector": "Consumer Services",
+      "n": 1725,
+      "hit_rate": 0.5820289855072464,
+      "mean_abs_score": 0.10865100665334836
+    },
+    {
+      "sector": "Materials",
+      "n": 1535,
+      "hit_rate": 0.5563517915309446,
+      "mean_abs_score": 0.096093505384075
+    },
+    {
+      "sector": "Banks",
+      "n": 1146,
+      "hit_rate": 0.5349040139616056,
+      "mean_abs_score": 0.07863951564931107
+    },
+    {
+      "sector": "Real Estate Management & Development",
+      "n": 1121,
+      "hit_rate": 0.5691347011596789,
+      "mean_abs_score": 0.09973922975684842
+    },
+    {
+      "sector": "Retailing",
+      "n": 886,
+      "hit_rate": 0.5620767494356659,
+      "mean_abs_score": 0.0988103166838082
+    },
+    {
+      "sector": "FOOD BEVERAGE & TOBACCO",
+      "n": 680,
+      "hit_rate": 0.5,
+      "mean_abs_score": 0.0895613738855222
+    },
+    {
+      "sector": "Insurance",
+      "n": 634,
+      "hit_rate": 0.5473186119873817,
+      "mean_abs_score": 0.0909659968489714
+    },
+    {
+      "sector": "Utilities",
+      "n": 604,
+      "hit_rate": 0.5695364238410596,
+      "mean_abs_score": 0.10613631546559592
+    },
+    {
+      "sector": "Health Care Equipment & Services",
+      "n": 460,
+      "hit_rate": 0.5673913043478261,
+      "mean_abs_score": 0.10564536418334694
+    },
+    {
+      "sector": "Consumer Durables & Apparel",
+      "n": 353,
+      "hit_rate": 0.5779036827195467,
+      "mean_abs_score": 0.08640019429248672
+    },
+    {
+      "sector": "Commercial & Professional Services",
+      "n": 280,
+      "hit_rate": 0.5571428571428572,
+      "mean_abs_score": 0.09645350437792623
+    },
+    {
+      "sector": "Energy",
+      "n": 218,
+      "hit_rate": 0.5642201834862385,
+      "mean_abs_score": 0.09202130796991473
+    },
+    {
+      "sector": "Investment Banking & Brokerage",
+      "n": 148,
+      "hit_rate": 0.5405405405405406,
+      "mean_abs_score": 0.08729967283525156
+    },
+    {
+      "sector": "HealthCare Equipment & Services",
+      "n": 147,
+      "hit_rate": 0.5714285714285714,
+      "mean_abs_score": 0.10980631378724245
+    },
+    {
+      "sector": "Telecommunication Services",
+      "n": 147,
+      "hit_rate": 0.4965986394557823,
+      "mean_abs_score": 0.08708215082478654
+    },
+    {
+      "sector": "Food, Beverage & Tobacco",
+      "n": 143,
+      "hit_rate": 0.6083916083916084,
+      "mean_abs_score": 0.10190661159508806
+    },
+    {
+      "sector": "Diversified Financial",
+      "n": 137,
+      "hit_rate": 0.583941605839416,
+      "mean_abs_score": 0.09770670914773824
+    },
+    {
+      "sector": "Banks Finance & Insurance",
+      "n": 125,
+      "hit_rate": 0.616,
+      "mean_abs_score": 0.11328876509972664
+    },
+    {
+      "sector": "FOOD & STAPLES RETAILING",
+      "n": 108,
+      "hit_rate": 0.6203703703703703,
+      "mean_abs_score": 0.06887125617572362
+    },
+    {
+      "sector": "Real Estate (6010)",
+      "n": 78,
+      "hit_rate": 0.6923076923076923,
+      "mean_abs_score": 0.07480929815544339
+    },
+    {
+      "sector": "Automobiles & Components",
+      "n": 75,
+      "hit_rate": 0.4266666666666667,
+      "mean_abs_score": 0.09295422377347815
+    },
+    {
+      "sector": "Transportation",
+      "n": 74,
+      "hit_rate": 0.47297297297297297,
+      "mean_abs_score": 0.09513044044386225
+    },
+    {
+      "sector": "Household & Personal Products",
+      "n": 73,
+      "hit_rate": 0.6438356164383562,
+      "mean_abs_score": 0.0993156597965596
+    },
+    {
+      "sector": "Industrials",
+      "n": 73,
+      "hit_rate": 0.6438356164383562,
+      "mean_abs_score": 0.1040617322565717
+    },
+    {
+      "sector": "Consumer Finance",
+      "n": 73,
+      "hit_rate": 0.6027397260273972,
+      "mean_abs_score": 0.09867814228897509
+    },
+    {
+      "sector": "Trading",
+      "n": 73,
+      "hit_rate": 0.7397260273972602,
+      "mean_abs_score": 0.1998478553878242
+    },
+    {
+      "sector": "45103010 - Application Software",
+      "n": 71,
+      "hit_rate": 0.5211267605633803,
+      "mean_abs_score": 0.096051823341032
+    },
+    {
+      "sector": "Capital Goods.",
+      "n": 71,
+      "hit_rate": 0.5352112676056338,
+      "mean_abs_score": 0.08762626944798584
+    },
+    {
+      "sector": "Materials (1510)",
+      "n": 70,
+      "hit_rate": 0.6714285714285714,
+      "mean_abs_score": 0.08156897484108291
+    },
+    {
+      "sector": "Real Estate Development",
+      "n": 70,
+      "hit_rate": 0.6142857142857143,
+      "mean_abs_score": 0.10792313378647929
+    },
+    {
+      "sector": "Independent Power Producers & Energy Traders",
+      "n": 68,
+      "hit_rate": 0.5882352941176471,
+      "mean_abs_score": 0.08123146247256707
+    },
+    {
+      "sector": "Diversified Financial Services",
+      "n": 67,
+      "hit_rate": 0.7164179104477612,
+      "mean_abs_score": 0.10560665995620003
+    },
+    {
+      "sector": "Power and Energy",
+      "n": 66,
+      "hit_rate": 0.5303030303030303,
+      "mean_abs_score": 0.0980943758058402
+    },
+    {
+      "sector": "- Property & Casualty Insurance",
+      "n": 63,
+      "hit_rate": 0.6507936507936508,
+      "mean_abs_score": 0.1303752236218298
+    },
+    {
+      "sector": "Services",
+      "n": 62,
+      "hit_rate": 0.7096774193548387,
+      "mean_abs_score": 0.09058096605766053
+    },
+    {
+      "sector": "Multi-line Insurance",
+      "n": 50,
+      "hit_rate": 0.58,
+      "mean_abs_score": 0.12118114935916108
+    }
+  ]
+}

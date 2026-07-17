@@ -1,0 +1,27 @@
+{
+  "lever": "aspi_fin_yoy_sector_rs_cs_lmt_bag",
+  "mean_symbol_hit": 0.5910925043904816,
+  "pooled_hit": 0.5869700925032632,
+  "symbols_ge_070": 15,
+  "n_symbols": 265,
+  "n_rows": 17621,
+  "high_bucket_hit": 0.6790005721914935,
+  "delta_vs_baseline": -0.0013099979765069936,
+  "keep": false,
+  "notes": "path+CS+sector_rs+aspi+financials+yoy",
+  "extras": {
+    "symbols": 274,
+    "disclosures": 0,
+    "notices": 0,
+    "sector_rs": true,
+    "aspi": true,
+    "financials": true,
+    "yoy": true,
+    "sectors_mapped": 273,
+    "aspi_source": "daily_bars",
+    "aspi_points": 240,
+    "financial_filings_source": "cache",
+    "financial_filing_rows": 19150,
+    "yoy_events": 263
+  }
+}

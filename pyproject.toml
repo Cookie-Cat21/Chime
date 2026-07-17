@@ -25,6 +25,10 @@ dev = [
 briefs = [
     "pypdf>=5",
 ]
+ml = [
+    "scikit-learn>=1.5",
+    "numpy>=2",
+]
 
 [project.scripts]
 chime = "chime.__main__:main"
@@ -51,6 +55,8 @@ markers = [
 omit = [
     # Research CLI / eval helpers promoted beside the typed financial_pdf surface.
     "chime/extractors/cse_pdf_core.py",
+    # Offline ML experiment (optional [ml] extra) — not runtime bot/dash path.
+    "chime/ml/*",
 ]
 
 [tool.ruff]
@@ -72,8 +78,12 @@ warn_unused_configs = true
 packages = ["chime"]
 
 [[tool.mypy.overrides]]
-module = ["apscheduler.*", "telegram.*", "pypdf.*", "fitz"]
+module = ["apscheduler.*", "telegram.*", "pypdf.*", "fitz", "sklearn.*", "numpy.*"]
 ignore_missing_imports = true
+
+[[tool.mypy.overrides]]
+module = ["chime.ml.*"]
+ignore_errors = true
 
 # Research-grade PDF core (CLI + eval helpers); typed surface is financial_pdf.py.
 [[tool.mypy.overrides]]

@@ -73,6 +73,14 @@ DAYS_TRADE_ENDPOINT = "daysTrade"
 DAYS_TRADE_PATH = "/daysTrade"
 COMPANY_CHART_ENDPOINT = "companyChartDataByStock"
 COMPANY_CHART_PATH = "/companyChartDataByStock"
+INDEX_CHART_ENDPOINT = "chartData"
+INDEX_CHART_PATH = "/chartData"
+COMPANY_FINANCIALS_ENDPOINT = "financials"
+COMPANY_FINANCIALS_PATH = "/financials"
+FINANCIAL_ANNOUNCEMENT_ENDPOINT = "getFinancialAnnouncement"
+FINANCIAL_ANNOUNCEMENT_PATH = "/getFinancialAnnouncement"
+DAILY_MARKET_SUMMARY_ENDPOINT = "dailyMarketSummery"
+DAILY_MARKET_SUMMARY_PATH = "/dailyMarketSummery"
 COMPANY_PROFILE_ENDPOINT = "companyProfile"
 COMPANY_PROFILE_PATH = "/companyProfile"
 # Observed period map — docs/experiments/CSE_PATH_HISTORY_PROBE.md
@@ -100,6 +108,31 @@ ORDER_BOOK_ENDPOINT = "orderBook"
 ORDER_BOOK_PATH = "/orderBook"
 LEGACY_ANNOUNCEMENTS_ENDPOINT = "announcements"
 LEGACY_ANNOUNCEMENTS_PATH = "/announcements"
+
+
+def _flatten_daily_market_rows(raw: Any) -> list[dict[str, Any]]:
+    """CSE returns a nested list of single-element lists of objects."""
+    out: list[dict[str, Any]] = []
+    if not isinstance(raw, list):
+        return out
+    for item in raw:
+        if isinstance(item, dict):
+            out.append(item)
+            continue
+        if isinstance(item, list):
+            for sub in item:
+                if isinstance(sub, dict):
+                    out.append(sub)
+    return out
+
+
+def _ms_to_date(ms: Any) -> date | None:
+    if isinstance(ms, bool) or not isinstance(ms, int | float):
+        return None
+    try:
+        return datetime.fromtimestamp(float(ms) / 1000.0, tz=_COLOMBO).date()
+    except (OverflowError, OSError, ValueError):
+        return None
 
 
 def _reject_bool_numeric_value(value: Any) -> Any:
@@ -543,6 +576,16 @@ _DATE_OF_ANNOUNCEMENT_FORMATS = (
     "%Y-%m-%d",
 )
 
+# Buy-in / non-compliance boards often ship createdDate as a local clock string.
+_NOTICE_CREATED_DATE_FORMATS = (
+    "%d %b %Y %I:%M:%S %p",  # "14 Jul 2026 05:10:30 PM"
+    "%d %B %Y %I:%M:%S %p",
+    "%d %b %Y %H:%M:%S",
+    "%d %b %Y",
+    "%d %B %Y",
+    "%Y-%m-%d",
+)
+
 
 def _parse_date_of_announcement(value: str | None) -> datetime | None:
     """Parse CSE dateOfAnnouncement as Asia/Colombo midnight, converted to UTC.
@@ -556,6 +599,34 @@ def _parse_date_of_announcement(value: str | None) -> datetime | None:
     if not text:
         return None
     for fmt in _DATE_OF_ANNOUNCEMENT_FORMATS:
+        try:
+            naive = datetime.strptime(text, fmt)
+            return naive.replace(tzinfo=_COLOMBO).astimezone(UTC)
+        except ValueError:
+            continue
+    return None
+
+
+def _parse_notice_created_date(value: Any) -> datetime | None:
+    """Parse notice ``createdDate`` as epoch-ms int or Colombo clock string."""
+    if isinstance(value, bool):
+        return None
+    if isinstance(value, int):
+        return _try_ms_to_dt(value)
+    if isinstance(value, float) and math.isfinite(value):
+        return _try_ms_to_dt(int(value))
+    if not isinstance(value, str):
+        return None
+    text = value.strip()
+    if not text:
+        return None
+    # Digits-only → treat as epoch ms.
+    if text.isdigit():
+        try:
+            return _try_ms_to_dt(int(text))
+        except ValueError:
+            return None
+    for fmt in _NOTICE_CREATED_DATE_FORMATS:
         try:
             naive = datetime.strptime(text, fmt)
             return naive.replace(tzinfo=_COLOMBO).astimezone(UTC)
@@ -954,11 +1025,12 @@ class FlexibleNoticeRow(BaseModel):
     body: str | None = None
     remarks: str | None = None
     announcementCategory: str | None = None
-    createdDate: int | None = None
+    # CSE may send epoch-ms int OR local clock strings — keep raw, parse later.
+    createdDate: Any = None
     dateOfAnnouncement: str | None = None
     status: str | None = None
 
-    @field_validator("announcementId", "createdDate", mode="before")
+    @field_validator("announcementId", mode="before")
     @classmethod
     def _reject_bool_numeric(cls, value: Any) -> Any:
         return _reject_bool_numeric_value(value)
@@ -1018,6 +1090,7 @@ def flexible_row_to_notice(
         return None
     title = (
         (row.title if isinstance(row.title, str) else None)
+        or (row.company if isinstance(row.company, str) else None)
         or (row.announcementCategory if isinstance(row.announcementCategory, str) else None)
         or (row.name if isinstance(row.name, str) else None)
         or notice_type.replace("_", " ")
@@ -1029,7 +1102,7 @@ def flexible_row_to_notice(
             body_parts.append(part.strip())
     body = " — ".join(body_parts) if body_parts else None
     published = (
-        _try_ms_to_dt(row.createdDate)
+        _parse_notice_created_date(row.createdDate)
         or _parse_date_of_announcement(row.dateOfAnnouncement)
         or (now or datetime.now(UTC))
     )
@@ -1678,6 +1751,155 @@ class CSEClient:
 
         return cast(list[DailyBar], await self._guarded(COMPANY_CHART_ENDPOINT, _call))
 
+    async def fetch_index_chart(
+        self,
+        *,
+        chart_id: int = 1,
+        period: int = CHART_PERIOD_1Y,
+    ) -> list[tuple[date, float, float | None]]:
+        """Index-scale daily series from ``POST /chartData`` (ASPI-like).
+
+        ``symbol`` is ignored by CSE — do not use for per-stock paths.
+        Returns ``(trade_date, value, pct_change)`` ascending.
+        """
+        if isinstance(chart_id, bool) or not isinstance(chart_id, int) or chart_id <= 0:
+            return []
+        if isinstance(period, bool) or not isinstance(period, int):
+            return []
+        if period not in CHART_DAILY_PERIODS and period != CHART_PERIOD_INTRADAY:
+            return []
+
+        async def _call() -> list[tuple[date, float, float | None]]:
+            raw = await self._request(
+                "POST",
+                INDEX_CHART_PATH,
+                data={"chartId": str(chart_id), "period": str(period)},
+                log_context={"chart_id": chart_id, "period": period},
+            )
+            if not isinstance(raw, list):
+                log.error(
+                    "cse_schema_error",
+                    endpoint=INDEX_CHART_ENDPOINT,
+                    error="expected array",
+                )
+                raise ValueError(f"{INDEX_CHART_ENDPOINT}: expected JSON array")
+            by_date: dict[date, tuple[date, float, float | None]] = {}
+            for item in raw:
+                if not isinstance(item, dict):
+                    continue
+                d_raw = item.get("d")
+                v_raw = item.get("v")
+                pc_raw = item.get("pc")
+                if isinstance(d_raw, bool) or not isinstance(d_raw, int | float):
+                    continue
+                if isinstance(v_raw, bool) or not isinstance(v_raw, int | float):
+                    continue
+                if not math.isfinite(float(v_raw)) or float(v_raw) <= 0:
+                    continue
+                try:
+                    td = datetime.fromtimestamp(float(d_raw) / 1000.0, tz=UTC).date()
+                except (OverflowError, OSError, ValueError):
+                    continue
+                pc: float | None = None
+                if (
+                    not isinstance(pc_raw, bool)
+                    and isinstance(pc_raw, int | float)
+                    and math.isfinite(float(pc_raw))
+                ):
+                    pc = float(pc_raw)
+                by_date[td] = (td, float(v_raw), pc)
+            return [by_date[k] for k in sorted(by_date)]
+
+        return cast(
+            list[tuple[date, float, float | None]],
+            await self._guarded(INDEX_CHART_ENDPOINT, _call),
+        )
+
+    async def fetch_company_financial_docs(
+        self, symbol: str
+    ) -> list[tuple[str, date, str | None]]:
+        """Annual/quarterly PDF metadata from ``POST /financials``.
+
+        Returns ``(kind, manual_date, pdf_url)`` where kind is
+        ``annual`` / ``quarterly`` / ``other``. Numeric line items are not in
+        this payload — only filing dates + CDN paths.
+        """
+        if not isinstance(symbol, str) or not symbol.strip():
+            return []
+        sym = symbol.strip().upper()
+
+        async def _call() -> list[tuple[str, date, str | None]]:
+            raw = await self._request(
+                "POST",
+                COMPANY_FINANCIALS_PATH,
+                data={"symbol": sym},
+                log_context={"symbol": sym},
+            )
+            if not isinstance(raw, dict):
+                log.error(
+                    "cse_schema_error",
+                    endpoint=COMPANY_FINANCIALS_ENDPOINT,
+                    symbol=sym,
+                    error="expected object",
+                )
+                raise ValueError(f"{COMPANY_FINANCIALS_ENDPOINT}: expected JSON object")
+            out: list[tuple[str, date, str | None]] = []
+            for kind, key in (
+                ("annual", "infoAnnualData"),
+                ("quarterly", "infoQuarterlyData"),
+                ("other", "infoOtherData"),
+            ):
+                rows = raw.get(key)
+                if not isinstance(rows, list):
+                    continue
+                for row in rows:
+                    if not isinstance(row, dict):
+                        continue
+                    md = row.get("manualDate")
+                    if isinstance(md, bool) or not isinstance(md, int | float):
+                        continue
+                    try:
+                        td = datetime.fromtimestamp(float(md) / 1000.0, tz=UTC).date()
+                    except (OverflowError, OSError, ValueError):
+                        continue
+                    path = row.get("path")
+                    pdf = resolve_pdf_url(path if isinstance(path, str) else None)
+                    out.append((kind, td, pdf))
+            out.sort(key=lambda t: t[1])
+            return out
+
+        return cast(
+            list[tuple[str, date, str | None]],
+            await self._guarded(COMPANY_FINANCIALS_ENDPOINT, _call),
+        )
+
+    async def fetch_financial_announcements_feed(
+        self,
+    ) -> list[dict[str, Any]]:
+        """Recent market-wide financial PDF feed (``getFinancialAnnouncement``)."""
+
+        async def _call() -> list[dict[str, Any]]:
+            raw = await self._request(
+                "POST",
+                FINANCIAL_ANNOUNCEMENT_PATH,
+                json_body={},
+            )
+            if not isinstance(raw, dict):
+                return []
+            rows = raw.get("reqFinancialAnnouncemnets")
+            if not isinstance(rows, list):
+                return []
+            out: list[dict[str, Any]] = []
+            for row in rows:
+                if isinstance(row, dict):
+                    out.append(row)
+            return out
+
+        return cast(
+            list[dict[str, Any]],
+            await self._guarded(FINANCIAL_ANNOUNCEMENT_ENDPOINT, _call),
+        )
+
     async def fetch_company_sector(self, symbol: str) -> str | None:
         """Return sector label from ``POST /companyProfile`` ``reqComSumInfo``.
 
@@ -1840,6 +2062,56 @@ class CSEClient:
             return out
 
         return cast(list[MarketNotice], await self._guarded(endpoint, _call))
+
+    async def fetch_daily_market_summary(self) -> list[dict[str, Any]]:
+        """Market-wide daily turnover / foreign flow (``POST /dailyMarketSummery``)."""
+
+        async def _call() -> list[dict[str, Any]]:
+            raw = await self._request(
+                "POST",
+                DAILY_MARKET_SUMMARY_PATH,
+                json_body={},
+            )
+            rows = _flatten_daily_market_rows(raw)
+            out: list[dict[str, Any]] = []
+
+            def _num(row: dict[str, Any], key: str) -> float | None:
+                val = row.get(key)
+                if isinstance(val, bool) or not isinstance(val, int | float):
+                    return None
+                if not math.isfinite(float(val)):
+                    return None
+                return float(val)
+
+            for row in rows:
+                d = _ms_to_date(row.get("tradeDate"))
+                if d is None:
+                    continue
+                fp = _num(row, "equityForeignPurchase")
+                fs = _num(row, "equityForeignSales")
+                foreign_net = None
+                if fp is not None and fs is not None:
+                    foreign_net = fp - fs
+                out.append(
+                    {
+                        "trade_date": d,
+                        "market_turnover": _num(row, "marketTurnover"),
+                        "market_trades": _num(row, "marketTrades"),
+                        "equity_foreign_purchase": fp,
+                        "equity_foreign_sales": fs,
+                        "foreign_net": foreign_net,
+                        "volume_of_turnover": _num(row, "volumeOfTurnOverNumber"),
+                        "market_cap": _num(row, "marketCap"),
+                        "asi": _num(row, "asi"),
+                        "raw": row,
+                    }
+                )
+            return out
+
+        return cast(
+            list[dict[str, Any]],
+            await self._guarded(DAILY_MARKET_SUMMARY_ENDPOINT, _call),
+        )
 
     async def fetch_order_book(self, symbol: str) -> OrderBookSnapshot | None:
         """Fetch public order-book totals (``POST /orderBook`` form ``symbol=``)."""

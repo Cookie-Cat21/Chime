@@ -20,7 +20,12 @@ import { NfaInline } from "@/components/nfa-inline";
 import { OptionalLwcNote } from "@/components/optional-lwc-note";
 import { PageHeader } from "@/components/page-header";
 import { PriceRefresh } from "@/components/price-refresh";
-import { SparklineWithForecast } from "@/components/sparkline-with-forecast";
+import { ExpandablePriceChart } from "@/components/charts/expandable-price-chart";
+import {
+  normalizeDailyBar,
+  type ChartRangeKey,
+  type DailyBarPoint,
+} from "@/lib/api/daily-bars";
 import { finiteSparklinePoints } from "@/lib/sparkline";
 import { Button } from "@/components/ui/button";
 import {
@@ -382,12 +387,29 @@ export default async function SymbolDetailPage({
   searchParams: Promise<{
     category?: string | string[];
     compare?: string | string[];
+    expandChart?: string | string[];
+    range?: string | string[];
   }>;
 }) {
   await requirePageSession();
 
   const { symbol: raw } = await params;
   const sp = await searchParams;
+  const expandRaw = Array.isArray(sp.expandChart)
+    ? sp.expandChart[0]
+    : sp.expandChart;
+  const expandChart =
+    expandRaw === "1" || expandRaw === "true" || expandRaw === "yes";
+  const rangeRaw = Array.isArray(sp.range) ? sp.range[0] : sp.range;
+  const rangeKey = (rangeRaw ?? "").toUpperCase();
+  const initialChartRange: ChartRangeKey =
+    rangeKey === "1D" ||
+    rangeKey === "1M" ||
+    rangeKey === "3M" ||
+    rangeKey === "6M" ||
+    rangeKey === "1Y"
+      ? rangeKey
+      : "1D";
   // safeDecode — malformed % sequences → notFound (not URIError 500).
   const symbol = normalizeSymbolParam(raw);
   if (!symbol) {
@@ -417,6 +439,7 @@ export default async function SymbolDetailPage({
     compareRes,
     watchRes,
     forecastRes,
+    dailyBarsRes,
   ] = await Promise.all([
       serverApiGet(`/api/v1/symbols/${encoded}`),
       serverApiGet(`/api/v1/symbols/${encoded}/snapshots?limit=60`),
@@ -426,6 +449,7 @@ export default async function SymbolDetailPage({
       compareQs ? serverApiGet(compareQs) : Promise.resolve(null),
       serverApiGet("/api/v1/watchlist"),
       serverApiGet(`/api/v1/symbols/${encoded}/forecast`),
+      serverApiGet(`/api/v1/symbols/${encoded}/daily-bars?limit=260`),
     ]);
 
   if (symRes.status === 404) {
@@ -589,7 +613,43 @@ export default async function SymbolDetailPage({
   const snapsFailed = !snapRes.ok;
   const discsFailed = !discRes.ok;
 
+  const initialDailyBars: DailyBarPoint[] = [];
+  if (dailyBarsRes?.ok) {
+    try {
+      const body: unknown = await dailyBarsRes.json();
+      const raw =
+        body != null &&
+        typeof body === "object" &&
+        !Array.isArray(body) &&
+        Array.isArray((body as { bars?: unknown }).bars)
+          ? (body as { bars: unknown[] }).bars
+          : [];
+      for (const row of raw) {
+        if (row == null || typeof row !== "object" || Array.isArray(row)) {
+          continue;
+        }
+        const normalized = normalizeDailyBar(
+          row as {
+            trade_date: unknown;
+            open?: unknown;
+            high?: unknown;
+            low?: unknown;
+            price?: unknown;
+            close?: unknown;
+            volume?: unknown;
+          },
+        );
+        if (normalized) initialDailyBars.push(normalized);
+      }
+    } catch {
+      // leave empty — expand dialog can client-fetch
+    }
+  }
+
   const forecastPoints: { ts: string | null; price: number | null }[] = [];
+  let forecastConfidence: number | null = null;
+  let forecastBand: string | null = null;
+  let forecastGate: string | null = null;
   if (forecastRes?.ok) {
     try {
       const body: unknown = await forecastRes.json();
@@ -599,7 +659,17 @@ export default async function SymbolDetailPage({
         !Array.isArray(body) &&
         Array.isArray((body as { points?: unknown }).points)
       ) {
-        for (const row of (body as { points: unknown[] }).points) {
+        const meta = body as {
+          confidence?: unknown;
+          confidence_band?: unknown;
+          gate?: unknown;
+          points: unknown[];
+        };
+        forecastConfidence = toFiniteNumber(meta.confidence);
+        forecastBand =
+          typeof meta.confidence_band === "string" ? meta.confidence_band : null;
+        forecastGate = typeof meta.gate === "string" ? meta.gate : null;
+        for (const row of meta.points) {
           if (forecastPoints.length >= 30) break;
           if (row == null || typeof row !== "object" || Array.isArray(row)) {
             continue;
@@ -704,9 +774,16 @@ export default async function SymbolDetailPage({
                 Need two stored ticks for a sparkline.
               </p>
             ) : (
-              <SparklineWithForecast
+              <ExpandablePriceChart
+                symbol={data.symbol}
                 points={snaps.points}
                 forecastPoints={forecastPoints}
+                confidence={forecastConfidence}
+                confidenceBand={forecastBand}
+                gate={forecastGate}
+                initialOpen={expandChart}
+                initialBars={initialDailyBars}
+                initialRange={initialChartRange}
               />
             )}
             <OptionalLwcNote

@@ -1,0 +1,212 @@
+{
+  "decision": "GO_TRANSFER",
+  "reasons": [
+    "h=1 transfer hit 0.573 \u2264 cse_only 0.580 (cse_only::B1_logistic)",
+    "h=1 zero_shot hit 0.528 vs cse_only 0.580",
+    "h=5 transfer hit 0.596 > cse_only 0.552 (transfer::B1_logistic)",
+    "h=5 zero_shot hit 0.567 vs cse_only 0.552"
+  ],
+  "panel_symbols": 89,
+  "panel_bars": 189149,
+  "cse_symbols": 50,
+  "metrics": [
+    {
+      "model_id": "cse_only::B1_logistic",
+      "horizon": 1,
+      "origins": 2393,
+      "direction_hits": 1387,
+      "direction_total": 2393,
+      "hit_rate": 0.5796071876305893,
+      "ic": 0.11518366423405052,
+      "mae": null,
+      "folds": 3
+    },
+    {
+      "model_id": "zero_shot::B1_logistic",
+      "horizon": 1,
+      "origins": 2393,
+      "direction_hits": 1263,
+      "direction_total": 2393,
+      "hit_rate": 0.5277893857083159,
+      "ic": 0.007183135818237626,
+      "mae": null,
+      "folds": 3
+    },
+    {
+      "model_id": "transfer::B1_logistic",
+      "horizon": 1,
+      "origins": 2393,
+      "direction_hits": 1328,
+      "direction_total": 2393,
+      "hit_rate": 0.5549519431675721,
+      "ic": 0.016330096345128747,
+      "mae": null,
+      "folds": 3
+    },
+    {
+      "model_id": "cse_only::M1_hgb_clf",
+      "horizon": 1,
+      "origins": 2393,
+      "direction_hits": 1357,
+      "direction_total": 2393,
+      "hit_rate": 0.5670706226493941,
+      "ic": 0.10801687590347497,
+      "mae": null,
+      "folds": 3
+    },
+    {
+      "model_id": "zero_shot::M1_hgb_clf",
+      "horizon": 1,
+      "origins": 2393,
+      "direction_hits": 1243,
+      "direction_total": 2393,
+      "hit_rate": 0.5194316757208525,
+      "ic": 0.0032022414741940896,
+      "mae": null,
+      "folds": 3
+    },
+    {
+      "model_id": "transfer::M1_hgb_clf",
+      "horizon": 1,
+      "origins": 2393,
+      "direction_hits": 1372,
+      "direction_total": 2393,
+      "hit_rate": 0.5733389051399916,
+      "ic": 0.08235767957630254,
+      "mae": null,
+      "folds": 3
+    },
+    {
+      "model_id": "cse_only::M2_hgb_reg",
+      "horizon": 1,
+      "origins": 2393,
+      "direction_hits": 1301,
+      "direction_total": 2393,
+      "hit_rate": 0.5436690346844965,
+      "ic": 0.1542116263297225,
+      "mae": 0.022889829825039554,
+      "folds": 3
+    },
+    {
+      "model_id": "zero_shot::M2_hgb_reg",
+      "horizon": 1,
+      "origins": 2393,
+      "direction_hits": 1097,
+      "direction_total": 2393,
+      "hit_rate": 0.4584203928123694,
+      "ic": 0.04776590179094241,
+      "mae": 0.022313318735005992,
+      "folds": 3
+    },
+    {
+      "model_id": "transfer::M2_hgb_reg",
+      "horizon": 1,
+      "origins": 2393,
+      "direction_hits": 1346,
+      "direction_total": 2393,
+      "hit_rate": 0.5624738821562891,
+      "ic": 0.18324826807615566,
+      "mae": 0.021177160250701276,
+      "folds": 3
+    },
+    {
+      "model_id": "cse_only::B1_logistic",
+      "horizon": 5,
+      "origins": 1833,
+      "direction_hits": 1011,
+      "direction_total": 1833,
+      "hit_rate": 0.5515548281505729,
+      "ic": 0.14319392050812885,
+      "mae": null,
+      "folds": 2
+    },
+    {
+      "model_id": "zero_shot::B1_logistic",
+      "horizon": 5,
+      "origins": 1833,
+      "direction_hits": 1039,
+      "direction_total": 1833,
+      "hit_rate": 0.5668303327877796,
+      "ic": 0.11251445307704629,
+      "mae": null,
+      "folds": 2
+    },
+    {
+      "model_id": "transfer::B1_logistic",
+      "horizon": 5,
+      "origins": 1833,
+      "direction_hits": 1093,
+      "direction_total": 1833,
+      "hit_rate": 0.5962902345881069,
+      "ic": 0.10108061391774394,
+      "mae": null,
+      "folds": 2
+    },
+    {
+      "model_id": "cse_only::M1_hgb_clf",
+      "horizon": 5,
+      "origins": 1833,
+      "direction_hits": 981,
+      "direction_total": 1833,
+      "hit_rate": 0.5351882160392799,
+      "ic": 0.10337154836031748,
+      "mae": null,
+      "folds": 2
+    },
+    {
+      "model_id": "zero_shot::M1_hgb_clf",
+      "horizon": 5,
+      "origins": 1833,
+      "direction_hits": 897,
+      "direction_total": 1833,
+      "hit_rate": 0.48936170212765956,
+      "ic": 0.04307439193495678,
+      "mae": null,
+      "folds": 2
+    },
+    {
+      "model_id": "transfer::M1_hgb_clf",
+      "horizon": 5,
+      "origins": 1833,
+      "direction_hits": 997,
+      "direction_total": 1833,
+      "hit_rate": 0.5439170758319695,
+      "ic": 0.11576863956411358,
+      "mae": null,
+      "folds": 2
+    },
+    {
+      "model_id": "cse_only::M2_hgb_reg",
+      "horizon": 5,
+      "origins": 1833,
+      "direction_hits": 905,
+      "direction_total": 1833,
+      "hit_rate": 0.49372613202400434,
+      "ic": 0.03700436261911715,
+      "mae": 0.056704350396702394,
+      "folds": 2
+    },
+    {
+      "model_id": "zero_shot::M2_hgb_reg",
+      "horizon": 5,
+      "origins": 1833,
+      "direction_hits": 843,
+      "direction_total": 1833,
+      "hit_rate": 0.45990180032733224,
+      "ic": -0.008662719588899397,
+      "mae": 0.04910374688608181,
+      "folds": 2
+    },
+    {
+      "model_id": "transfer::M2_hgb_reg",
+      "horizon": 5,
+      "origins": 1833,
+      "direction_hits": 954,
+      "direction_total": 1833,
+      "hit_rate": 0.5204582651391162,
+      "ic": 0.069180341628253,
+      "mae": 0.053456622169986916,
+      "folds": 2
+    }
+  ]
+}
