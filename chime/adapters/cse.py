@@ -1830,9 +1830,12 @@ class CSEClient:
                     error=str(exc),
                 )
                 raise
+            # Cap hostile / oversized chart payloads (CSE usually << this).
+            max_points = 2_000
+            chart_rows = parsed.chartData[:max_points]
             # Last-wins per timestamp (hostile duplicate stamps).
             by_ts: dict[datetime, PriceSnapshot] = {}
-            for row in parsed.chartData:
+            for row in chart_rows:
                 snap = chart_point_to_intraday_snapshot(
                     row, symbol=sym, cse_stock_id=stock_id
                 )

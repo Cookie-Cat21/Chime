@@ -63,10 +63,12 @@ export function PriceRefresh({
 }) {
   const router = useRouter();
   const period = clampInterval(intervalMs);
-  const [now, setNow] = useState(() => Date.now());
+  // Avoid hydration mismatch: server Date.now() ≠ client Date.now() for age labels.
+  const [now, setNow] = useState<number | null>(null);
   const [streamSnapshotAt, setStreamSnapshotAt] = useState<string | null>(null);
 
   useEffect(() => {
+    setNow(Date.now());
     const tick = window.setInterval(() => {
       router.refresh();
       setNow(Date.now());
@@ -113,7 +115,8 @@ export function PriceRefresh({
   let tone: "ok" | "stale" | "down" = "ok";
   let label = "Refreshing";
   const snapshotAt = newestSnapshotAt(streamSnapshotAt, lastSnapshotAt);
-  if (typeof snapshotAt === "string" && snapshotAt) {
+  // Stable SSR + first client paint label until `now` mounts.
+  if (now != null && typeof snapshotAt === "string" && snapshotAt) {
     const t = Date.parse(snapshotAt);
     if (!Number.isNaN(t)) {
       const ageMs = Math.max(0, now - t);

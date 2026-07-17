@@ -19,12 +19,14 @@ import {
   HERO_DISPLAY_CANDLES,
   MIN_TICKS_FOR_INTRADAY,
   displayCandlesForRange,
+  filterLatestColomboSession,
+  isColomboSessionToday,
+  newestFiniteTicks,
   sessionsForRange,
   ticksToIntradayBars,
 } from "@/lib/api/daily-bars";
 import { isSafeClientApiPath } from "@/lib/api/client-fetch";
 import { toFiniteNumber } from "@/lib/api/finite-number";
-import { finiteSparklinePoints } from "@/lib/sparkline";
 import { formatCompactNumber, formatNumber, formatPct } from "@/lib/format";
 
 type Point = { ts: string | null; price: number | null | undefined };
@@ -73,7 +75,7 @@ export function ExpandablePriceChart({
     return src.slice(-HERO_DISPLAY_CANDLES);
   }, [bars, initialBars]);
   const compactIntraday = useMemo(() => {
-    const series = finiteSparklinePoints(points);
+    const series = filterLatestColomboSession(newestFiniteTicks(points));
     if (series.length < 2) return null;
     return ticksToIntradayBars(series, displayCandlesForRange("1D"));
   }, [points]);
@@ -102,24 +104,27 @@ export function ExpandablePriceChart({
     [forecastPoints],
   );
 
+  const sessionTicks = useMemo(
+    () => filterLatestColomboSession(newestFiniteTicks(tickPoints)),
+    [tickPoints],
+  );
+
   const intradayBars = useMemo(() => {
-    const series = finiteSparklinePoints(tickPoints);
-    return ticksToIntradayBars(series, displayCandlesForRange("1D"));
-  }, [tickPoints]);
+    return ticksToIntradayBars(sessionTicks, displayCandlesForRange("1D"));
+  }, [sessionTicks]);
 
   // Most CSE symbols only have a few poller ticks — 1D falls back to recent
   // daily path so the expand dialog isn't an empty "need more ticks" box.
   const oneDayDailyFallback = useMemo(() => {
     const src = bars ?? initialBars;
     if (!src || src.length < 2) return null;
-    return src.slice(-40);
+    return src.slice(-sessionsForRange("1M"));
   }, [bars, initialBars]);
 
-  const loadTicks = useCallback(async () => {
+  const fetchTicks = useCallback(async (): Promise<Point[] | null> => {
     const pathOnly = `/api/v1/symbols/${encodeURIComponent(symbol)}/snapshots`;
     if (!isSafeClientApiPath(pathOnly)) {
-      setError("Invalid request path.");
-      return;
+      throw new Error("Invalid request path.");
     }
     const limit = sessionsForRange("1D");
     const res = await fetch(`${pathOnly}?limit=${limit}`, {
@@ -127,8 +132,7 @@ export function ExpandablePriceChart({
       headers: { Accept: "application/json" },
     });
     if (!res.ok) {
-      setError(`Could not load realtime ticks (${res.status}).`);
-      return;
+      throw new Error(`Could not load realtime ticks (${res.status}).`);
     }
     const body: unknown = await res.json();
     const raw =
@@ -149,42 +153,32 @@ export function ExpandablePriceChart({
         price,
       });
     }
-    // Snapshots API already returns ascending; re-sort defensively by time.
-    const sorted =
-      out.length >= 2
-        ? [...out].sort((a, b) => {
-            const ta = a.ts ? Date.parse(a.ts) : Number.POSITIVE_INFINITY;
-            const tb = b.ts ? Date.parse(b.ts) : Number.POSITIVE_INFINITY;
-            if (ta !== tb) return ta - tb;
-            return 0;
-          })
-        : null;
-    setFetchedTicks(sorted);
-    setError(null);
-    setLastRefresh(new Date().toISOString());
+    if (out.length < 2) return null;
+    return [...out].sort((a, b) => {
+      const ta = a.ts ? Date.parse(a.ts) : Number.POSITIVE_INFINITY;
+      const tb = b.ts ? Date.parse(b.ts) : Number.POSITIVE_INFINITY;
+      if (ta !== tb) return ta - tb;
+      return 0;
+    });
   }, [symbol]);
 
-  const loadDaily = useCallback(
-    async (r: Exclude<ChartRangeKey, "1D">) => {
+  const fetchDaily = useCallback(
+    async (r: Exclude<ChartRangeKey, "1D">): Promise<DailyBarPoint[]> => {
       const limit = sessionsForRange(r);
       const pathOnly = `/api/v1/symbols/${encodeURIComponent(symbol)}/daily-bars`;
       if (!isSafeClientApiPath(pathOnly)) {
-        setBars([]);
-        setError("Invalid request path.");
-        return;
+        throw new Error("Invalid request path.");
       }
       const res = await fetch(`${pathOnly}?limit=${limit}`, {
         credentials: "same-origin",
         headers: { Accept: "application/json" },
       });
       if (!res.ok) {
-        setBars([]);
-        setError(
+        throw new Error(
           res.status === 404
             ? "Unknown symbol."
             : `Could not load daily path history (${res.status}).`,
         );
-        return;
       }
       const body: unknown = await res.json();
       const raw =
@@ -226,13 +220,7 @@ export function ExpandablePriceChart({
           volume: Number.isFinite(vol) ? vol : null,
         });
       }
-      if (out.length === 0) {
-        setError("Daily bars response was empty.");
-      } else {
-        setError(null);
-      }
-      setBars(out);
-      setLastRefresh(new Date().toISOString());
+      return out;
     },
     [symbol],
   );
@@ -245,22 +233,32 @@ export function ExpandablePriceChart({
       if (range === "1D") {
         setLoading(false);
         try {
-          await loadTicks();
+          const ticks = await fetchTicks();
+          if (cancelled) return;
+          setFetchedTicks(ticks);
+          setError(null);
+          setLastRefresh(new Date().toISOString());
         } catch {
           if (!cancelled) setError("Could not refresh realtime ticks.");
         }
         // Keep daily bars warm for the sparse-tick fallback.
-        if (!cancelled) {
-          if (initialBars && initialBars.length > 0) {
-            setBars((prev) =>
-              prev && prev.length >= 2 ? prev : initialBars.slice(-40),
-            );
-          } else {
-            try {
-              await loadDaily("1M");
-            } catch {
-              /* footnote handles empty */
+        if (cancelled) return;
+        if (initialBars && initialBars.length > 0) {
+          setBars((prev) =>
+            prev && prev.length >= 2
+              ? prev
+              : initialBars.slice(-sessionsForRange("1M")),
+          );
+        } else {
+          try {
+            const daily = await fetchDaily("1M");
+            if (cancelled) return;
+            if (daily.length === 0) {
+              setError("Daily bars response was empty.");
             }
+            setBars(daily);
+          } catch {
+            /* footnote handles empty */
           }
         }
         return;
@@ -275,7 +273,22 @@ export function ExpandablePriceChart({
         setLoading(true);
       }
       try {
-        await loadDaily(range);
+        const daily = await fetchDaily(range);
+        if (cancelled) return;
+        if (daily.length === 0) {
+          setBars([]);
+          setError("Daily bars response was empty.");
+        } else {
+          setBars(daily);
+          setError(null);
+          setLastRefresh(new Date().toISOString());
+        }
+      } catch (err) {
+        if (cancelled) return;
+        setBars([]);
+        setError(
+          err instanceof Error ? err.message : "Could not load daily path history.",
+        );
       } finally {
         if (!cancelled) setLoading(false);
       }
@@ -284,15 +297,28 @@ export function ExpandablePriceChart({
     return () => {
       cancelled = true;
     };
-  }, [open, range, loadTicks, loadDaily, initialBars]);
+  }, [open, range, fetchTicks, fetchDaily, initialBars]);
 
   useEffect(() => {
     if (!open || range !== "1D") return;
+    let cancelled = false;
     const id = window.setInterval(() => {
-      void loadTicks();
+      void (async () => {
+        try {
+          const ticks = await fetchTicks();
+          if (cancelled) return;
+          setFetchedTicks(ticks);
+          setLastRefresh(new Date().toISOString());
+        } catch {
+          /* keep prior ticks */
+        }
+      })();
     }, REALTIME_MS);
-    return () => window.clearInterval(id);
-  }, [open, range, loadTicks]);
+    return () => {
+      cancelled = true;
+      window.clearInterval(id);
+    };
+  }, [open, range, fetchTicks]);
 
   // Modal behaviour: Escape closes, page behind stays put, focus moves into
   // the dialog on open and returns to the expand trigger on close.
@@ -315,11 +341,13 @@ export function ExpandablePriceChart({
     };
   }, [open]);
 
-  const tickSeries = finiteSparklinePoints(tickPoints);
-  // Thin session prints (common after a quiet day) make ugly 2–6 gray
-  // mark-to-mark blocks — prefer recent daily OHLC until we have enough ticks.
+  // Thin / multi-day tick piles: prefer recent daily OHLC until the latest
+  // Colombo session has enough prints for a real intraday chart.
+  const sessionIsToday = isColomboSessionToday(sessionTicks);
   const intradayReady =
-    tickSeries.length >= MIN_TICKS_FOR_INTRADAY && intradayBars.length >= 4;
+    sessionIsToday &&
+    sessionTicks.length >= MIN_TICKS_FOR_INTRADAY &&
+    intradayBars.length >= 4;
   const chartBars =
     range === "1D"
       ? intradayReady
@@ -339,23 +367,31 @@ export function ExpandablePriceChart({
     const last = chartBars[chartBars.length - 1]!;
     let high = -Infinity;
     let low = Infinity;
+    let volume: number | null = null;
+    let volAny = false;
     for (const b of chartBars) {
       if (Number.isFinite(b.high)) high = Math.max(high, b.high);
       if (Number.isFinite(b.low)) low = Math.min(low, b.low);
       high = Math.max(high, b.close);
       low = Math.min(low, b.close);
+      if (b.volume != null && Number.isFinite(b.volume)) {
+        volume = (volume ?? 0) + b.volume;
+        volAny = true;
+      }
     }
     if (!Number.isFinite(high) || !Number.isFinite(low)) return null;
     const change = last.close - first.close;
     const changePct = first.close > 0 ? (change / first.close) * 100 : null;
+    const rangeOpen =
+      first.open != null && first.open > 0 ? first.open : first.close;
     return {
       lastClose: last.close,
       change,
       changePct,
-      open: last.open,
+      open: rangeOpen,
       high,
       low,
-      volume: last.volume,
+      volume: volAny ? volume : null,
       sessions: chartBars.length,
     };
   }, [chartBars]);
@@ -633,8 +669,8 @@ export function ExpandablePriceChart({
                   footnote={
                     range === "1D"
                       ? oneDayUsingDaily
-                        ? `Only ${tickSeries.length} stored tick${tickSeries.length === 1 ? "" : "s"} — showing last ${chartBars.length} daily sessions · research only`
-                        : `${tickSeries.length} live ticks → ${chartBars.length} intraday candles · research only`
+                        ? `Only ${sessionTicks.length} session tick${sessionTicks.length === 1 ? "" : "s"} — showing last ${chartBars.length} daily sessions · research only`
+                        : `${sessionTicks.length} session ticks → ${chartBars.length} intraday candles · research only`
                       : undefined
                   }
                 />

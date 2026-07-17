@@ -263,12 +263,12 @@ class Storage:
                     INSERT INTO price_snapshots (
                         symbol, price, change, change_pct, previous_close,
                         volume, trade_count, turnover, crossing_volume,
-                        high, low, open, market_cap, ts
+                        high, low, open, market_cap, ts, source
                     )
                     SELECT
                         symbol, price, change, change_pct, previous_close,
                         volume, trade_count, turnover, crossing_volume,
-                        high, low, open, market_cap, ts
+                        high, low, open, market_cap, ts, 'poller'
                     FROM UNNEST(
                         %s::text[],
                         %s::double precision[],
@@ -289,6 +289,21 @@ class Storage:
                         volume, trade_count, turnover, crossing_volume,
                         high, low, open, market_cap, ts
                     )
+                    ON CONFLICT (symbol, ts) DO UPDATE SET
+                        price = EXCLUDED.price,
+                        change = EXCLUDED.change,
+                        change_pct = EXCLUDED.change_pct,
+                        previous_close = EXCLUDED.previous_close,
+                        volume = EXCLUDED.volume,
+                        trade_count = EXCLUDED.trade_count,
+                        turnover = EXCLUDED.turnover,
+                        crossing_volume = EXCLUDED.crossing_volume,
+                        high = EXCLUDED.high,
+                        low = EXCLUDED.low,
+                        open = EXCLUDED.open,
+                        market_cap = EXCLUDED.market_cap,
+                        source = 'poller',
+                        ingested_at = now()
                     RETURNING id
                     """,
                     (
@@ -582,12 +597,10 @@ class Storage:
         return len(rows)
 
     async def persist_intraday_snapshots(self, snaps: list[PriceSnapshot]) -> int:
-        """Insert CSE intraday chart ticks into ``price_snapshots``.
+        """Insert CSE chart ticks as ``source='cse_intraday'``.
 
-        Unlike ``persist_market_snapshots`` (one row per symbol per board),
-        this keeps many timestamps per symbol. Skips rows whose
-        ``(symbol, ts)`` already exists so re-runs are idempotent.
-        Returns number of newly inserted rows.
+        Alert ``previous_snapshot`` ignores these rows so dense chart backfill
+        cannot mute price-cross fires. Idempotent on ``UNIQUE (symbol, ts)``.
         """
         if not snaps:
             return 0
@@ -631,11 +644,12 @@ class Storage:
             result = await conn.execute(
                 """
                 INSERT INTO price_snapshots (
-                    symbol, price, change, change_pct, volume, high, low, open, ts
+                    symbol, price, change, change_pct, volume, high, low, open,
+                    ts, source
                 )
                 SELECT
                     v.symbol, v.price, v.change, v.change_pct, v.volume,
-                    v.high, v.low, v.open, v.ts
+                    v.high, v.low, v.open, v.ts, 'cse_intraday'
                 FROM UNNEST(
                     %s::text[],
                     %s::double precision[],
@@ -649,11 +663,7 @@ class Storage:
                 ) AS v(
                     symbol, price, change, change_pct, volume, high, low, open, ts
                 )
-                WHERE NOT EXISTS (
-                    SELECT 1
-                    FROM price_snapshots ps
-                    WHERE ps.symbol = v.symbol AND ps.ts = v.ts
-                )
+                ON CONFLICT (symbol, ts) DO NOTHING
                 """,
                 (
                     symbols,
@@ -1453,7 +1463,9 @@ class Storage:
                 await conn.execute(
                     """
                     SELECT * FROM price_snapshots
-                    WHERE symbol = %s AND id < %s
+                    WHERE symbol = %s
+                      AND id < %s
+                      AND source = 'poller'
                     ORDER BY id DESC
                     LIMIT 1
                     """,
@@ -1518,6 +1530,7 @@ class Storage:
                         FROM price_snapshots ps
                         WHERE ps.symbol = %s
                           AND ps.id < %s
+                          AND ps.source = 'poller'
                           AND (ps.ts AT TIME ZONE 'Asia/Colombo')::date
                               < (now() AT TIME ZONE 'Asia/Colombo')::date
                         GROUP BY 1
