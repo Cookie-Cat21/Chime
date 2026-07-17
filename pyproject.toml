@@ -31,6 +31,10 @@ ml = [
     "xgboost>=2",
     "lightgbm>=4",
 ]
+hybrid = [
+    "yfinance>=0.2",
+    "pandas>=2",
+]
 
 [project.scripts]
 chime = "chime.__main__:main"
