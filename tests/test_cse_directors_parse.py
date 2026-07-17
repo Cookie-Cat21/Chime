@@ -94,6 +94,23 @@ def test_merge_jkh_board_shape() -> None:
     assert "senior_independent_director" in fernando.roles
 
 
+def test_dhammika_perera_display_alias() -> None:
+    from chime.extractors.cse_directors import parse_cse_director_row
+
+    seat = parse_cse_director_row(
+        {
+            "directorId": 16085,
+            "firstName": "K. A. D. D. (Non Executive Director)",
+            "lastName": "Perera",
+            "designationOther": "Co-Chairman",
+        },
+        source_bucket="top_posts",
+    )
+    assert seat is not None
+    assert seat.display_name == "Dhammika Perera"
+    assert seat.name_norm == "K A D D PERERA"
+
+
 def test_merge_hayleys_pandithage() -> None:
     seats = merge_cse_board(
         top_posts=[
@@ -116,5 +133,6 @@ def test_merge_hayleys_pandithage() -> None:
     assert by_name["M. Pandithage"].roles == ("chairman", "ceo") or set(
         by_name["M. Pandithage"].roles
     ) >= {"chairman", "ceo"}
-    perera = by_name["K. A. D. D. Perera"]
+    perera = by_name["Dhammika Perera"]
+    assert perera.name_norm == "K A D D PERERA"
     assert "deputy_chairman" in perera.roles

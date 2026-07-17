@@ -183,11 +183,12 @@ export async function queryPeopleGraph(
     if (!acc) {
       acc = {
         id: personId,
-        name:
+        name: preferredDisplayName(
           sanitizeDisclosureText(
             String(row.display_name ?? ""),
             MAX_STOCK_NAME_LENGTH,
           ) || "—",
+        ),
         roles: [],
         influence: 0,
         symbols: new Set(),
@@ -257,9 +258,8 @@ export async function queryPeopleGraph(
       merged.set(key, p);
       continue;
     }
-    // Keep longer display name; union roles; max influence components
-    const name =
-      p.name.length > prev.name.length ? p.name : prev.name;
+    // Prefer common public names (e.g. Dhammika) over initials-only CSE labels
+    const name = preferredDisplayName(p.name) || preferredDisplayName(prev.name);
     const roleMap = new Map<string, PersonNode["roles"][number]>();
     for (const r of [...prev.roles, ...p.roles]) {
       const rk = `${r.symbol}:${r.role}`;
@@ -296,16 +296,32 @@ export async function queryPeopleGraph(
 
 /** Collapse obvious duplicate board-name spellings for ranking only. */
 function softPersonKey(name: string): string {
-  const parts = name
+  const compact = name
     .replace(/\./g, " ")
-    .split(/\s+/)
-    .map((p) => p.trim())
-    .filter(Boolean);
-  if (parts.length === 0) return name.toUpperCase();
-  const last = parts[parts.length - 1].toUpperCase();
+    .replace(/\s+/g, " ")
+    .trim()
+    .toUpperCase();
+  // CSE lists him as K.A.D.D. Perera; filings/media use Dhammika Perera.
+  // Do NOT merge K.A.D.B. Perera (different Vallibel-group director).
+  if (
+    compact === "DHAMMIKA PERERA" ||
+    compact === "K A D D PERERA" ||
+    compact.startsWith("K A D D PERERA ")
+  ) {
+    return "ALIAS:DHAMMIKA_PERERA";
+  }
+  const parts = compact.split(/\s+/).filter(Boolean);
+  if (parts.length === 0) return compact;
+  const last = parts[parts.length - 1];
   const initials = parts
     .slice(0, -1)
-    .map((p) => p[0]?.toUpperCase() ?? "")
+    .map((p) => p[0] ?? "")
     .join("");
   return `${initials}:${last}`;
+}
+
+function preferredDisplayName(name: string): string {
+  const key = softPersonKey(name);
+  if (key === "ALIAS:DHAMMIKA_PERERA") return "Dhammika Perera";
+  return name;
 }

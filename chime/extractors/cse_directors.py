@@ -36,6 +36,12 @@ _INITIALS = re.compile(
     r"^(?P<init>(?:[A-Za-z]\.?\s*){1,6})\s*$"
 )
 
+# CSE lists some well-known directors only by initials. Prefer the common
+# public name for display; name_norm stays initials-based for identity.
+_DISPLAY_ALIASES: dict[str, str] = {
+    "K A D D PERERA": "Dhammika Perera",
+}
+
 
 @dataclass(frozen=True, slots=True)
 class CseDirectorSeat:
@@ -116,6 +122,12 @@ def parse_cse_person_name(
     return display, role_blobs
 
 
+def preferred_display_name(display_name: str, name_norm: str) -> str:
+    """Map CSE initials to a familiar public name when known."""
+    alias = _DISPLAY_ALIASES.get(name_norm.strip().upper() if name_norm else "")
+    return alias or display_name
+
+
 def roles_from_cse_text(*blobs: str | None) -> list[str]:
     """Map CSE designation / parenthetical text → schema roles.
 
@@ -159,9 +171,11 @@ def parse_cse_director_row(
     )
     if not display:
         return None
+    # Identity stays initials-based (CSE); alias only affects display_name.
     name_norm = normalize_person_name(display)
     if len(name_norm) < 2:
         return None
+    display = preferred_display_name(display, name_norm)
 
     designation = ""
     if isinstance(row.get("designationOther"), str):
