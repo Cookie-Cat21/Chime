@@ -113,10 +113,11 @@ export function CandlestickChart({
   }
   const lineMode = priceMax < 3 && preFlat / bars.length >= 0.4;
 
-  const padL = fitWidth ? 12 : 14;
-  const padR = 56;
-  const padT = fitWidth ? 18 : 20;
-  const padB = fitWidth ? 36 : 40;
+  const padL = fitWidth ? 8 : 14;
+  const padR = fitWidth ? 52 : 56;
+  // Tighter chrome so the OHLC band owns the frame (especially hero).
+  const padT = fitWidth ? 10 : 20;
+  const padB = fitWidth ? 28 : 40;
 
   const fc =
     showForecast && forecastPrices
@@ -179,8 +180,11 @@ export function CandlestickChart({
     barMax > barMin
       ? barMax - barMin
       : Math.max(Math.abs(barMax) * 0.02, 0.02);
-  let min = Math.max(0, barMin - barSpan * 0.12);
-  let max = barMax + barSpan * 0.12;
+  // Fit/pack charts: small pad so candles fill the plot; scroll mode keeps
+  // a bit more air for dense 1Y reads.
+  const yPad = fitWidth || pack ? 0.04 : 0.12;
+  let min = Math.max(0, barMin - barSpan * yPad);
+  let max = barMax + barSpan * yPad;
   const fcLo = barMin - barSpan * 0.35;
   const fcHi = barMax + barSpan * 0.35;
   for (const p of fc) {
@@ -232,7 +236,7 @@ export function CandlestickChart({
         className={cn(
           "relative overflow-hidden rounded-xl border border-border/50 bg-gradient-to-b from-muted/25 to-muted/10",
           pack
-            ? "mx-auto w-full max-w-full overflow-x-hidden"
+            ? "w-full max-w-full overflow-x-hidden"
             : fitWidth
               ? "w-full overflow-x-hidden"
               : "w-full overflow-x-auto overflow-y-hidden",
@@ -240,7 +244,14 @@ export function CandlestickChart({
         )}
         style={
           pack
-            ? { height: displayH, maxWidth: contentW }
+            ? // Width-first + aspect-ratio: avoids meet() letterboxing that
+              // left empty bands above/below the candles in a fixed-height box.
+              {
+                width: "100%",
+                maxWidth: contentW,
+                aspectRatio: `${Math.max(1, w)} / ${Math.max(1, h)}`,
+                height: "auto",
+              }
             : fitWidth && !fill
               ? { height: displayH }
               : undefined
@@ -252,20 +263,18 @@ export function CandlestickChart({
             pack ? "xMidYMid meet" : fitWidth ? "none" : "xMinYMid meet"
           }
           style={
-            pack
+            pack || fitWidth
               ? {
                   width: "100%",
                   height: "100%",
                   display: "block",
                 }
-              : fitWidth
-                ? { width: "100%", height: "100%", display: "block" }
-                : {
-                    width: w,
-                    height: 460,
-                    maxWidth: "none",
-                    display: "block",
-                  }
+              : {
+                  width: w,
+                  height: 460,
+                  maxWidth: "none",
+                  display: "block",
+                }
           }
           className={pack || fitWidth ? "h-full w-full" : "max-w-none"}
           role="img"

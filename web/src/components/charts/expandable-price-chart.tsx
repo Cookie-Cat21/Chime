@@ -397,8 +397,7 @@ export function ExpandablePriceChart({
             bars={compactBars}
             maxCandles={HERO_DISPLAY_CANDLES}
             fitWidth
-            pack
-            chartHeight={260}
+            chartHeight={220}
             footnote={
               compactDaily
                 ? "Daily OHLC · expand for ranges · research only"
