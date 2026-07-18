@@ -3992,6 +3992,28 @@ class Storage:
             return v if 0 <= v <= 23 else None
         return _hour(start), _hour(end)
 
+    async def count_digest_enabled_users(self) -> int:
+        """Count users with ``digest_enabled`` (closing-bell digest stub).
+
+        Log-only Phase A path — no Telegram sends from this count.
+        """
+        async with self._pool.connection() as conn:
+            row = await (
+                await conn.execute(
+                    """
+                    SELECT COUNT(*)::int AS n
+                      FROM users
+                     WHERE digest_enabled IS TRUE
+                    """
+                )
+            ).fetchone()
+        if row is None:
+            return 0
+        n = _as_row(row).get("n")
+        if isinstance(n, bool) or not isinstance(n, int) or n < 0:
+            return 0
+        return n
+
     async def _fetch_active_rule(
         self,
         conn: Any,

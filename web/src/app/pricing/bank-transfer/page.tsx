@@ -6,6 +6,7 @@ import { QuiverlyFooter } from "@/components/marketing/quiverly-footer";
 import { NfaInline } from "@/components/nfa-inline";
 import { Button } from "@/components/ui/button";
 import { telegramBotUrl } from "@/lib/marketing";
+import { NFA_FOOTER } from "@/lib/nfa";
 
 export const metadata = {
   title: "Pro bank transfer · Quiverly",
@@ -43,6 +44,9 @@ export default function BankTransferPage() {
           yet — this is the intentional Phase B path.
         </p>
         <NfaInline className="mt-4" />
+        <p className="mt-2 max-w-lg text-xs leading-relaxed text-muted-foreground">
+          {NFA_FOOTER} Quiverly does not induce dealing in securities.
+        </p>
 
         <section className="mt-10 space-y-6" aria-labelledby="transfer-steps">
           <h2 id="transfer-steps" className="sr-only">

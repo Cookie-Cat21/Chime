@@ -16,6 +16,7 @@ import json
 import os
 import random
 import signal
+from collections import defaultdict
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
 from datetime import UTC, datetime, time, timedelta
@@ -42,9 +43,11 @@ from chime.domain import (
     MARKET_SYMBOL,
     AlertEvent,
     AlertRule,
+    AlertType,
     Disclosure,
     PriceSnapshot,
     format_alert_message,
+    format_daily_move_batch_message,
     format_dead_letter_notify,
 )
 from chime.health import brief_queue_health_hint
@@ -266,6 +269,8 @@ class Poller:
         now = datetime.now(UTC)
         if not force and not is_market_open(now, self.settings):
             log.info("poll_skipped_outside_hours", now=now.isoformat())
+            # Closing-bell digest prefs exist; Phase A stub logs only (no spam).
+            await self._maybe_closing_bell_digest_stub()
             # Delivery is independent of market hours — retry unsent backlog
             # so Telegram failures overnight/weekend still drain.
             await self._retry_unsent_with_lock()
@@ -1625,8 +1630,116 @@ class Poller:
                 symbol=symbol,
             )
 
+    async def _maybe_closing_bell_digest_stub(self) -> None:
+        """Log-only closing-bell digest when any user has digest_enabled.
+
+        Prefs column already exists (Settings UI). Full digest Telegram path
+        is Phase C — this stub must never send messages.
+        """
+        try:
+            count_fn = getattr(self.storage, "count_digest_enabled_users", None)
+            if count_fn is None:
+                return
+            count = await count_fn()
+        except Exception:
+            log.exception("closing_bell_digest_stub_failed")
+            return
+        if not isinstance(count, int) or isinstance(count, bool) or count <= 0:
+            return
+        log.info(
+            "closing_bell_digest_stub",
+            digest_enabled_users=count,
+            action="log_only",
+        )
+
+    async def _deliver_batched_daily_moves(self, moves: list[PendingSend]) -> None:
+        """Send one batched Telegram message for ≥3 daily_move fires (same user)."""
+        if not moves:
+            return
+        telegram_id = moves[0].telegram_id
+        if await self._telegram_in_quiet_hours(telegram_id):
+            log.info(
+                "alert_held_quiet_hours_batch",
+                telegram_id=telegram_id,
+                count=len(moves),
+            )
+            return
+        rows: list[tuple[str, str, float | None]] = []
+        for item in moves:
+            ev = item.event
+            symbol = (
+                item.symbol
+                or (ev.symbol if ev is not None else None)
+                or _symbol_from_alert_message(item.message)
+                or "?"
+            )
+            trigger = ev.trigger if ev is not None else "daily move"
+            price = ev.current_price if ev is not None else None
+            rows.append((symbol, trigger, price))
+        message = format_daily_move_batch_message(rows)
+        result = _normalize_send_result(
+            await self._call_send(telegram_id, message, reply_markup=None)
+        )
+        log.info(
+            "daily_move_batch_sent",
+            telegram_id=telegram_id,
+            count=len(moves),
+            result=getattr(result, "name", str(result)),
+        )
+        if result is SendResult.OK:
+            for item in moves:
+                self._remember_delivered(item.log_id)
+                event_key = item.event.event_key if item.event is not None else None
+                token = await self._durably_remember_delivery_ok(
+                    item, event_key=event_key
+                )
+                delivery_marked = await self._mark_delivery_ok_best_effort(
+                    item.log_id,
+                    rule_id=item.rule_id,
+                    event_key=event_key,
+                )
+                marked = await self._mark_sent_best_effort(
+                    item.log_id,
+                    rule_id=item.rule_id,
+                    event_key=event_key,
+                )
+                if delivery_marked or marked:
+                    await self._forget_durable_delivery_ok(token)
+        elif result is SendResult.FAILED:
+            for item in moves:
+                await self._record_send_failure(
+                    item.log_id,
+                    rule_id=item.rule_id,
+                    telegram_id=telegram_id,
+                    symbol=item.symbol
+                    or (item.event.symbol if item.event is not None else None),
+                )
+        elif result is SendResult.DEFERRED:
+            for item in moves:
+                await self._record_send_deferred(
+                    item.log_id,
+                    rule_id=item.rule_id,
+                    telegram_id=telegram_id,
+                    symbol=item.symbol
+                    or (item.event.symbol if item.event is not None else None),
+                )
+
     async def _deliver_pending(self, pending: list[PendingSend]) -> None:
+        """Deliver claimed alerts; coalesce noisy daily_move bursts (≥3/user/tick)."""
+        by_user_moves: dict[int, list[PendingSend]] = defaultdict(list)
+        rest: list[PendingSend] = []
         for item in pending:
+            ev = item.event
+            if ev is not None and ev.type == AlertType.DAILY_MOVE:
+                by_user_moves[item.telegram_id].append(item)
+            else:
+                rest.append(item)
+        for telegram_id, moves in by_user_moves.items():
+            if len(moves) >= 3:
+                await self._deliver_batched_daily_moves(moves)
+            else:
+                rest.extend(moves)
+        for item in rest:
             await self._deliver_one(item)
 
     async def _claim_and_send(self, event: AlertEvent, *, disarm: bool = False) -> bool:

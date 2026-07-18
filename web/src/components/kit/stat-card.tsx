@@ -43,7 +43,9 @@ export function StatCard({
 
   const shellClass = cn(
     "rounded-xl border border-border bg-card p-5 transition-colors hover:border-foreground/20",
-    href ? "block focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-ring/50" : null,
+    href
+      ? "block focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-ring/50 focus-visible:ring-offset-2 focus-visible:ring-offset-background"
+      : null,
     className,
   );
 

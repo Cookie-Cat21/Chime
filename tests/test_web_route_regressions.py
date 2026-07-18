@@ -1319,6 +1319,77 @@ def test_phase_a_loops_11_20_surface_pins() -> None:
     assert 'href="/pricing"' in app_nav
 
 
+def test_phase_a_loops_21_30_surface_pins() -> None:
+    """Phase A loops 21–30: symbol CTA, watchlist Alert, login height, NFA, env."""
+    symbol = (WEB / "src" / "app" / "symbols" / "[symbol]" / "page.tsx").read_text(
+        encoding="utf-8"
+    )
+    watchlist = (WEB / "src" / "app" / "watchlist" / "page.tsx").read_text(
+        encoding="utf-8"
+    )
+    login_form = (WEB / "src" / "components" / "login-form.tsx").read_text(
+        encoding="utf-8"
+    )
+    stat = (WEB / "src" / "components" / "kit" / "stat-card.tsx").read_text(
+        encoding="utf-8"
+    )
+    history = (WEB / "src" / "app" / "alerts" / "history" / "page.tsx").read_text(
+        encoding="utf-8"
+    )
+    bank = (WEB / "src" / "app" / "pricing" / "bank-transfer" / "page.tsx").read_text(
+        encoding="utf-8"
+    )
+    pricing = (WEB / "src" / "app" / "pricing" / "page.tsx").read_text(encoding="utf-8")
+    root_env = (ROOT / ".env.example").read_text(encoding="utf-8")
+    bot = (ROOT / "chime" / "bot.py").read_text(encoding="utf-8")
+    poller = (ROOT / "chime" / "poller.py").read_text(encoding="utf-8")
+
+    # 21 — primary New alert ≥44px near price
+    assert 'data-testid="symbol-new-alert-cta"' in symbol
+    assert "min-h-11" in symbol
+    assert "New alert" in symbol
+
+    # 22 — watchlist Alert CTA per row
+    assert "/alerts?symbol=" in watchlist
+    assert "\n                            Alert\n" in watchlist or "\n                      Alert\n" in watchlist
+
+    # 23 — batch noisy daily_move in _deliver_pending
+    assert "_deliver_batched_daily_moves" in poller
+    assert "daily_move_batch_sent" in poller
+
+    # 24 — closing-bell digest stub (log-only)
+    assert "_maybe_closing_bell_digest_stub" in poller
+    assert "closing_bell_digest_stub" in poller
+    assert 'action="log_only"' in poller or "action=\"log_only\"" in poller
+
+    # 25 — login inputs min-h-11
+    assert "min-h-11" in login_form
+
+    # 26 — StatCard keyboard focus offset
+    assert "focus-visible:ring-offset-2" in stat
+    assert "focus-visible:ring-offset-background" in stat
+
+    # 27 — env notes for free caps, illiquid floor, bot username
+    assert "DASH_FREE_ALERT_QUOTA" in root_env
+    assert "DASH_FREE_WATCH_QUOTA" in root_env
+    assert "CHIME_ILLIQUID_MIN_VOLUME" in root_env
+    assert "TELEGRAM_BOT_USERNAME" in root_env
+
+    # 28 — START Skip → /help
+    assert "onboard:skip" in bot
+    assert 'InlineKeyboardButton("Skip"' in bot or '"Skip"' in bot
+
+    # 29 — history delivery badge short + truncate
+    assert 'label: "Unmarked"' in history
+    assert "max-w-[9rem]" in history or "truncate" in history
+
+    # 30 — NFA footer parity pricing ↔ bank-transfer
+    assert "NFA_FOOTER" in pricing
+    assert "NFA_FOOTER" in bank
+    assert "does not induce dealing" in pricing
+    assert "does not induce dealing" in bank
+
+
 def test_phase_a_loops_31_35_surface_pins() -> None:
     """Phase A loops 31–35: market empty CTA, health→overview, quiet hours honesty, Telegram hide."""
     market = (WEB / "src" / "app" / "market" / "page.tsx").read_text(encoding="utf-8")

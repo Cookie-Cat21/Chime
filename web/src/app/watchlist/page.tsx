@@ -228,7 +228,13 @@ export default async function WatchlistPage() {
                         {formatTs(item.ts)}
                       </td>
                       <td className="px-4 py-3">
-                        <div className="flex justify-end">
+                        <div className="flex items-center justify-end gap-3">
+                          <Link
+                            href={`/alerts?symbol=${encodeURIComponent(item.symbol)}`}
+                            className="inline-flex min-h-11 items-center rounded-sm px-1 text-xs font-medium text-foreground underline-offset-4 hover:underline focus-visible:ring-2 focus-visible:ring-ring/50 focus-visible:outline-none sm:min-h-8"
+                          >
+                            Alert
+                          </Link>
                           <UnwatchButton symbol={item.symbol} />
                         </div>
                       </td>
@@ -271,7 +277,13 @@ export default async function WatchlistPage() {
                       <ChangeBadge changePct={item.change_pct} />
                     </div>
                   </div>
-                  <div className="flex justify-end">
+                  <div className="flex items-center justify-end gap-3">
+                    <Link
+                      href={`/alerts?symbol=${encodeURIComponent(item.symbol)}`}
+                      className="inline-flex min-h-11 items-center rounded-sm px-1 text-xs font-medium text-foreground underline-offset-4 hover:underline focus-visible:ring-2 focus-visible:ring-ring/50 focus-visible:outline-none"
+                    >
+                      Alert
+                    </Link>
                     <UnwatchButton symbol={item.symbol} />
                   </div>
                 </li>

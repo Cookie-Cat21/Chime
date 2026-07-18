@@ -76,6 +76,7 @@ function pluralizeAttempts(count: number): string {
 }
 
 function deliveryCopy(event: HistoryPayload["events"][number]): {
+  /** Short label — fits mobile without overflow (Phase A loop 29). */
   label: string;
   description: string;
 } {
@@ -87,7 +88,7 @@ function deliveryCopy(event: HistoryPayload["events"][number]): {
       };
     case "delivered_unmarked":
       return {
-        label: "Delivered (unmarked)",
+        label: "Unmarked",
         description:
           "Telegram accepted the message, but the durable sent flag was not recorded.",
       };
@@ -101,7 +102,7 @@ function deliveryCopy(event: HistoryPayload["events"][number]): {
       };
     case "dead_lettered":
       return {
-        label: "Dead-lettered",
+        label: "Failed",
         description:
           event.attempt_count > 0
             ? `Retries stopped after ${pluralizeAttempts(event.attempt_count)}.`
@@ -387,23 +388,24 @@ export default async function AlertHistoryPage({
               const delivery = deliveryCopy(ev);
 
               return (
-                <li key={ev.id} className="flex flex-col gap-1 py-4 first:pt-0">
-                  <div className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1">
+                <li key={ev.id} className="flex min-w-0 flex-col gap-1 py-4 first:pt-0">
+                  <div className="flex min-w-0 flex-wrap items-baseline justify-between gap-x-3 gap-y-1">
                     <Link
                       href={`/symbols/${encodeURIComponent(ev.symbol)}`}
-                      className="font-mono text-sm font-medium underline-offset-4 hover:underline"
+                      className="min-w-0 truncate font-mono text-sm font-medium underline-offset-4 hover:underline"
                     >
                       {ev.symbol}
                     </Link>
-                    <time className="text-xs text-muted-foreground">
+                    <time className="shrink-0 text-xs text-muted-foreground">
                       {formatTs(ev.fired_at)}
                     </time>
                   </div>
-                  <div className="flex flex-wrap items-center gap-2 text-sm text-foreground">
-                    <span>{alertTypeLabel(ev.type)}</span>
+                  <div className="flex min-w-0 flex-wrap items-center gap-2 text-sm text-foreground">
+                    <span className="min-w-0 truncate">{alertTypeLabel(ev.type)}</span>
                     <DeliveryBadge
                       status={ev.delivery_status}
                       label={delivery.label}
+                      className="max-w-[9rem] shrink truncate sm:max-w-none"
                     />
                   </div>
                   <p className="text-xs text-muted-foreground">

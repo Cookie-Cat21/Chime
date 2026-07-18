@@ -8,10 +8,12 @@ from unittest.mock import AsyncMock, MagicMock
 import pytest
 
 from chime.bot import (
+    HELP_TEXT,
     build_application,
     mute_callback,
     normalize_symbol,
     onboard_callback,
+    _start_symbol_keyboard,
 )
 from chime.domain import AlertType, PriceSnapshot, disclaimer
 from chime.telegram_markup import fire_mute_keyboard
@@ -100,6 +102,26 @@ def _callback_update_context(
     context = MagicMock()
     context.application = application
     return update, context
+
+
+def test_start_keyboard_includes_skip() -> None:
+    markup = _start_symbol_keyboard()
+    flat = [btn.callback_data for row in markup.inline_keyboard for btn in row]
+    assert "onboard:skip" in flat
+    texts = [btn.text for row in markup.inline_keyboard for btn in row]
+    assert "Skip" in texts
+
+
+@pytest.mark.asyncio
+async def test_onboard_skip_shows_help_text() -> None:
+    storage = AsyncMock()
+    storage.ensure_user = AsyncMock(return_value=7)
+    update, context = _callback_update_context(data="onboard:skip", storage=storage)
+    await onboard_callback(update, context)
+    text = update.callback_query.edit_message_text.await_args.args[0]
+    assert text == HELP_TEXT
+    assert "/watch SYMBOL" in text
+    assert disclaimer() in text
 
 
 @pytest.mark.asyncio

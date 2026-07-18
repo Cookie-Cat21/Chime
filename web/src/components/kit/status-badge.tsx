@@ -52,7 +52,13 @@ export function DeliveryBadge({
   return (
     <Badge
       variant="outline"
-      className={cn(DELIVERY_CLASS[status], className)}
+      title={label}
+      className={cn(
+        DELIVERY_CLASS[status],
+        // Mobile history: keep chip short; sm+ can show full label width.
+        "max-w-[9rem] truncate sm:max-w-none",
+        className,
+      )}
     >
       {label}
     </Badge>

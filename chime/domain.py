@@ -690,6 +690,34 @@ def _clamp_telegram_message(msg: str) -> str:
     return head + suffix
 
 
+def format_daily_move_batch_message(
+    items: list[tuple[str, str, float | None]],
+) -> str:
+    """One Telegram body for ≥3 daily_move fires (same user, same tick).
+
+    ``items`` are ``(symbol, trigger, current_price)``. Always ends with NFA.
+    Caps listed rows so a hostile flood cannot blow past Telegram's 4096 limit.
+    """
+    n = len(items)
+    lines = [f"🔔 Daily movers ({n})", "Several daily-% rules fired this tick:"]
+    for symbol, trigger, price in items[:25]:
+        raw_symbol = symbol if isinstance(symbol, str) else ""
+        raw_trigger = trigger if isinstance(trigger, str) else ""
+        sym = _CTRL_RE.sub("", raw_symbol).strip() or "?"
+        trig = _CTRL_RE.sub("", raw_trigger).strip() or "daily move"
+        if price is not None and isinstance(price, (int, float)) and not isinstance(
+            price, bool
+        ):
+            lines.append(f"• {sym}: {trig} · {format_price_lkr(float(price))} LKR")
+        else:
+            lines.append(f"• {sym}: {trig}")
+    if n > 25:
+        lines.append(f"…and {n - 25} more")
+    lines.append("")
+    lines.append(disclaimer())
+    return _clamp_telegram_message("\n".join(lines))
+
+
 def format_alert_message(
     event: AlertEvent,
     *,

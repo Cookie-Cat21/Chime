@@ -162,7 +162,7 @@ export function LoginForm({
           <select
             id={fieldId}
             name="telegram_id"
-            className="border-input bg-background h-9 rounded-lg border px-3 text-sm outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 aria-invalid:border-destructive aria-invalid:ring-3 aria-invalid:ring-destructive/20"
+            className="border-input bg-background min-h-11 h-11 rounded-lg border px-3 text-sm outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 aria-invalid:border-destructive aria-invalid:ring-3 aria-invalid:ring-destructive/20"
             value={telegramId}
             onChange={(e) => {
               setTelegramId(e.target.value);
@@ -188,6 +188,7 @@ export function LoginForm({
             inputMode="numeric"
             autoComplete="username"
             placeholder="123456789"
+            className="min-h-11 h-11"
             value={telegramId}
             onChange={(e) => {
               setTelegramId(e.target.value);

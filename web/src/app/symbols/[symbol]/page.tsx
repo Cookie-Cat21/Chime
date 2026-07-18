@@ -606,7 +606,7 @@ export default async function SymbolDetailPage({
           <MarketSessionChip />
           <PriceRefresh lastSnapshotAt={data.last?.ts ?? null} />
           <WatchButton symbol={data.symbol} watching={isWatching} />
-          <Button asChild variant="outline" size="sm">
+          <Button asChild size="lg" className="min-h-11">
             <Link href={`/alerts?symbol=${encoded}`}>New alert</Link>
           </Button>
           <Button asChild variant="outline" size="sm">
@@ -677,6 +677,14 @@ export default async function SymbolDetailPage({
                 </p>
               ) : null}
             </div>
+            <Button
+              asChild
+              size="lg"
+              className="min-h-11 w-full shrink-0 sm:w-auto"
+              data-testid="symbol-new-alert-cta"
+            >
+              <Link href={`/alerts?symbol=${encoded}`}>New alert</Link>
+            </Button>
           </div>
 
           <div className="min-w-0 w-full">
@@ -925,7 +933,7 @@ export default async function SymbolDetailPage({
       <div className="fixed inset-x-0 bottom-0 z-30 border-t border-border/70 bg-background/95 p-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] shadow-lg backdrop-blur md:hidden">
         <div className="mx-auto flex max-w-6xl items-center justify-between gap-3">
           <WatchButton symbol={data.symbol} watching={isWatching} />
-          <Button asChild className="flex-1" size="sm">
+          <Button asChild className="min-h-11 flex-1" size="lg">
             <Link href={`/alerts?symbol=${encoded}`}>New alert</Link>
           </Button>
         </div>

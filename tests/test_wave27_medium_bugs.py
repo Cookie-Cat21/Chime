@@ -42,7 +42,9 @@ def test_history_ui_renders_delivered_unmarked() -> None:
         encoding="utf-8"
     )
     assert "delivered_unmarked" in source
-    assert "Delivered (unmarked)" in source
+    # Short mobile-safe chip label (Phase A loop 29); description keeps detail.
+    assert 'label: "Unmarked"' in source
+    assert "durable sent flag" in source
 
 
 def test_ensure_user_requires_safe_integer_id() -> None:

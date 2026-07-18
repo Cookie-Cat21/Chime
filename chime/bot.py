@@ -185,6 +185,7 @@ def _start_symbol_keyboard() -> InlineKeyboardMarkup:
             row[:3],
             row[3:],
             [InlineKeyboardButton("Type a ticker instead", callback_data="onboard:manual")],
+            [InlineKeyboardButton("Skip", callback_data="onboard:skip")],
         ]
     )
 
@@ -576,6 +577,11 @@ async def onboard_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -
                 f"Example: /watch JKH.N0000\n{disclaimer()}"
             )
         )
+        return
+
+    if data == "onboard:skip":
+        # Skip chips → same command dump as /help (no second guided prompt).
+        await query.edit_message_text(HELP_TEXT)
         return
 
     if data == "onboard:restart":
