@@ -20,19 +20,15 @@ export function HeroGridBackdrop({ className }: { className?: string }) {
       }}
     >
       <div
-        className="absolute inset-[-8%] opacity-[0.55]"
+        className="absolute inset-[-10%]"
         style={{
-          backgroundImage: `
-            linear-gradient(to right, oklch(0.92 0.004 250 / 0.55) 1px, transparent 1px),
-            linear-gradient(to bottom, oklch(0.92 0.004 250 / 0.55) 1px, transparent 1px),
-            repeating-conic-gradient(
-              from 0deg at 0 0,
-              oklch(0.94 0.005 250 / 0.55) 0deg 90deg,
-              transparent 90deg 180deg
-            )
-          `,
-          backgroundSize: "96px 96px, 96px 96px, 192px 192px",
-          backgroundPosition: "0 0, 0 0, 0 0",
+          backgroundImage: `repeating-conic-gradient(
+            from 0deg at 0 0,
+            oklch(0.93 0.006 250 / 0.72) 0deg 90deg,
+            transparent 90deg 180deg
+          )`,
+          backgroundSize: "112px 112px",
+          backgroundPosition: "center center",
         }}
       />
     </div>
