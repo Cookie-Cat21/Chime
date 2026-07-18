@@ -63,15 +63,15 @@ export function FaqSection({
               className="group overflow-hidden border border-border bg-muted/30 transition-colors not-last:border-b hover:bg-muted/50 data-[state=open]:border-border data-[state=open]:bg-muted/60"
             >
               <AccordionTrigger className="flex w-full items-center gap-4 px-5 py-4 hover:no-underline sm:px-6 sm:py-5 [&_[data-slot=accordion-trigger-icon]]:hidden">
-                <span className="w-8 shrink-0 text-center font-mono text-xs font-semibold tracking-widest text-muted-foreground/60 tabular-nums group-data-[state=open]:text-muted-foreground">
+                <span className="w-8 shrink-0 text-center font-mono text-xs font-semibold tracking-widest text-muted-foreground/60 tabular-nums group-aria-expanded/accordion-trigger:text-muted-foreground">
                   {num}
                 </span>
                 <span className="flex-1 text-left text-sm font-medium leading-snug text-foreground sm:text-base">
                   {item.question}
                 </span>
                 <span className="flex size-7 shrink-0 items-center justify-center text-muted-foreground">
-                  <Plus className="block size-3.5 group-data-[state=open]:hidden" />
-                  <Minus className="hidden size-3.5 group-data-[state=open]:block" />
+                  <Plus className="block size-3.5 group-aria-expanded/accordion-trigger:hidden" />
+                  <Minus className="hidden size-3.5 group-aria-expanded/accordion-trigger:inline" />
                 </span>
               </AccordionTrigger>
               <AccordionContent className="px-5 pb-5 pl-[4.25rem] sm:px-6 sm:pb-6">

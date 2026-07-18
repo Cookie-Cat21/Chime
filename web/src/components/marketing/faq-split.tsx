@@ -72,8 +72,8 @@ export function FaqSplit({
                     </span>
                   </div>
                   <div className="ml-auto flex size-8 shrink-0 items-center justify-center rounded-md bg-muted text-muted-foreground transition-colors group-hover:bg-muted/80">
-                    <Plus className="block size-3 group-data-[state=open]:hidden" />
-                    <Minus className="hidden size-3 group-data-[state=open]:block" />
+                    <Plus className="block size-3 group-aria-expanded/accordion-trigger:hidden" />
+                    <Minus className="hidden size-3 group-aria-expanded/accordion-trigger:inline" />
                   </div>
                 </AccordionTrigger>
                 <AccordionContent className="pr-12 pb-8 pl-[3.25rem]">
