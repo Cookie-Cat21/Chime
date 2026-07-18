@@ -1,6 +1,7 @@
 import { cn } from "@/lib/utils";
 
 import { SectionEyebrow } from "@/components/marketing/section-eyebrow";
+import { SignalPath } from "@/components/marketing/signal-path";
 
 const STEPS = [
   {
@@ -39,6 +40,8 @@ export function HowItWorks({ className }: { className?: string }) {
         Three steps. Telegram is the delivery surface; the dash is just where you
         manage the rules.
       </p>
+
+      <SignalPath />
 
       <ol className="mt-10 grid gap-0 border-t border-border/70 sm:grid-cols-3">
         {STEPS.map((step, index) => (

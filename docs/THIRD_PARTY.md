@@ -64,7 +64,9 @@ dev-only.
 | 2-tier pricing stub | [HyperUI Pricing](https://www.hyperui.dev/components/marketing/pricing) | MIT | 2026-07-15 | `/pricing` — Free / Later, **no checkout** |
 | Split hero structure | Cult Hero Color Panels (structure only) | Pattern only | 2026-07-15 | Copy left / proof right — **no shaders** |
 | Mid CTA left/right | [HyperUI CTAs](https://www.hyperui.dev/components/marketing/ctas) | MIT | 2026-07-15 | `MidCta` — ink band, dual actions |
-| Telegram proof panel | Daisy chat pattern (in-tree) | Pattern | 2026-07-15 | `TelegramProof` — not a device-frame hero |
+| Telegram proof panel | Daisy chat + Magic UI Animated List / phone chrome (in-tree) | Pattern | 2026-07-18 | `TelegramProof` — below-fold thin phone + stacking pings; no Magic UI npm |
+| Signal path beam | Magic UI Animated Beam rhythm (in-tree) | Pattern | 2026-07-18 | `SignalPath` — CSE → Quiverly → Telegram; slate dash, no purple glow |
+| Comment marquee | Aceternity / Magic UI marquee rhythm (in-tree) | Pattern | 2026-07-18 | `CommentMarquee` — illustrative reactions only; not fake customer quotes |
 
 ### Dash kit patterns (adapted in-tree — no new npm deps)
 

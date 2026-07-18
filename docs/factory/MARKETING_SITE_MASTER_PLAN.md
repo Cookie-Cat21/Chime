@@ -86,9 +86,10 @@ Log every pasted block in `THIRD_PARTY.md` (name, URL, MIT/SPDX, date).
 - Cult Pro / shader heroes / aurora / spline / container-scroll  
 - Shadcnblocks Pro + device-frame heroes + logo clouds + stats strips  
 - Watermelon dashboard packs  
-- Apple Cards Carousel, Animated Beam on `/`  
-- Newsletter mega-footers, fake testimonials, broker comparison tables  
+- Apple Cards Carousel (full editorial carousel)  
+- Newsletter mega-footers, **fake customer testimonials** / logo clouds, broker comparison tables  
 - daisyUI as npm/plugin dependency  
+- Magic UI / Aceternity / Cult as **npm** deps (in-tree pattern ports OK: thin phone proof, signal beam, labeled illustrative marquee)  
 
 ---
 
