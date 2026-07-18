@@ -65,3 +65,26 @@ export function QuiverlyWordmark({
     />
   );
 }
+
+/** Mark + wordmark lockup — use on branded entry surfaces so the SVG mark leads. */
+export function QuiverlyLockup({
+  size = "lg",
+  className,
+  priority = false,
+}: {
+  size?: BrandSize;
+  className?: string;
+  priority?: boolean;
+}) {
+  return (
+    <span
+      className={cn(
+        "inline-flex items-center gap-3 sm:gap-3.5",
+        className,
+      )}
+    >
+      <QuiverlyMark size={size} priority={priority} />
+      <QuiverlyWordmark size={size} priority={priority} />
+    </span>
+  );
+}
