@@ -1,7 +1,7 @@
 import { HugeiconsIcon } from "@hugeicons/react";
 import { ArrowUpRight01Icon } from "@hugeicons/core-free-icons";
 
-import { KoelMark } from "@/components/brand/koel-brand";
+import { KoelMark, KoelWordmark } from "@/components/brand/koel-brand";
 import { NFA_FOOTER } from "@/lib/nfa";
 
 /**
@@ -51,9 +51,7 @@ export function KoelFooter({
           <div className="lg:col-span-5 xl:col-span-4 flex flex-col gap-6 md:gap-8">
             <div className="flex items-center gap-2 text-foreground">
               <KoelMark size="sm" />
-              <span className="mt-0.5 text-lg font-medium tracking-wide">
-                koel
-              </span>
+              <KoelWordmark size="sm" />
             </div>
 
             <p className="max-w-[320px] text-[15px] leading-relaxed text-muted-foreground">
@@ -142,7 +140,7 @@ export function KoelFooter({
         <div className="flex w-full justify-center pb-0 md:mt-auto">
           <svg
             className="h-auto w-full select-none"
-            viewBox="0 240 4525 1550"
+            viewBox="0 239.9 4524.8 1559.1"
             preserveAspectRatio="xMidYMid slice"
             aria-label="koel"
             role="img"
@@ -152,9 +150,9 @@ export function KoelFooter({
                 id="koel-watermark-gradient"
                 gradientUnits="userSpaceOnUse"
                 x1="0"
-                y1="240"
-                x2="4525"
-                y2="1790"
+                y1="239.9"
+                x2="4524.8"
+                y2="1798.9"
               >
                 <stop offset="0%" stopColor="#F7D7DE" />
                 <stop offset="48%" stopColor="#E4D2F2" />
@@ -165,8 +163,8 @@ export function KoelFooter({
                 maskUnits="userSpaceOnUse"
                 x="0"
                 y="0"
-                width="4525"
-                height="1999"
+                width="4524.8"
+                height="1998.8"
               >
                 <g fill="#fff">
                   {KOEL_WATERMARK_PATHS.map((d) => (
@@ -177,9 +175,9 @@ export function KoelFooter({
             </defs>
             <rect
               x="0"
-              y="240"
-              width="4525"
-              height="1550"
+              y="239.9"
+              width="4524.8"
+              height="1559.1"
               fill="url(#koel-watermark-gradient)"
               mask="url(#koel-watermark-mask)"
             />
