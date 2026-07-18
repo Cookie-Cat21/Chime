@@ -40,6 +40,7 @@ This file tracks **external market / macro feeds** considered for Signal Board f
 ## Candidate intakes — broker / CDS public feeds (2026-07-18)
 
 Plan: [`docs/experiments/BROKER_PUBLIC_FEEDS_PLAN.md`](experiments/BROKER_PUBLIC_FEEDS_PLAN.md).  
+Spike (research-only, no Postgres): `python3 scripts/experiments/lolc_public_feeds_spike.py` → [`LOLC_PUBLIC_FEEDS_SPIKE.md`](experiments/LOLC_PUBLIC_FEEDS_SPIKE.md).  
 **Not holdings** — personal CDS/broker positions remain unavailable via public API.
 
 ### LOLC StockLens (fundamentals board)
