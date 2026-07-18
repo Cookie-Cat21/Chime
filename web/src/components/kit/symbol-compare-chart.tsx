@@ -629,10 +629,13 @@ export function SymbolCompareChart({
                 {base}
               </li>
             </ul>
+            {/* fitWidth fills the same h-56 card as the line overlay;
+                maxSlot caps pitch so wide viewports don't fatten candles. */}
             <CandlestickChart
               bars={candleBars}
               maxCandles={COMPARE_CANDLE_BARS}
               fitWidth
+              maxSlot={9}
               chartHeight={224}
               footnote={
                 mode === "indexed"
@@ -661,6 +664,7 @@ export function SymbolCompareChart({
             <svg
               viewBox={`0 0 ${svg.width} ${svg.height}`}
               className="h-56 w-full"
+              preserveAspectRatio="xMidYMid meet"
               role="img"
               aria-label={`Price compare for ${selectedSymbols.join(", ")} (${
                 mode === "indexed" ? "indexed to 100" : "LKR"
