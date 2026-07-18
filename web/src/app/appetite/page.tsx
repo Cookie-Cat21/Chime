@@ -1,0 +1,214 @@
+import Link from "next/link";
+
+import { AppetiteHistoryChart } from "@/components/appetite/appetite-history-chart";
+import { AppetiteMeter } from "@/components/appetite/appetite-meter";
+import { AppetiteTracker } from "@/components/appetite/appetite-tracker";
+import { AppNav } from "@/components/app-nav";
+import { EmptyState } from "@/components/empty-state";
+import { KpiStrip } from "@/components/kit/kpi-strip";
+import { NfaFooter } from "@/components/nfa-footer";
+import { NfaInline } from "@/components/nfa-inline";
+import { PageHeader } from "@/components/page-header";
+import { Button } from "@/components/ui/button";
+import {
+  BAND_LABEL,
+  daysInCurrentBand,
+  deltaVs,
+  queryAppetiteHistory,
+} from "@/lib/api/appetite";
+import { requirePageSession } from "@/lib/auth/page-session";
+import { getPool } from "@/lib/db";
+
+export const dynamic = "force-dynamic";
+
+export const metadata = {
+  title: "Market Appetite · Chime",
+  description:
+    "CSE market appetite research score from breadth, intensity, ASPI, and participation. Not financial advice.",
+};
+
+function fmtDelta(d: number | null): string {
+  if (d == null || !Number.isFinite(d)) return "—";
+  const r = Math.round(d * 10) / 10;
+  return `${r > 0 ? "+" : ""}${r.toFixed(1)}`;
+}
+
+export default async function AppetitePage() {
+  await requirePageSession();
+
+  let history: Awaited<ReturnType<typeof queryAppetiteHistory>> = [];
+  let loadError = false;
+  try {
+    history = await queryAppetiteHistory(getPool(), {
+      limit: 252,
+      source: "cse",
+    });
+  } catch {
+    loadError = true;
+  }
+
+  const latest = history.length ? history[history.length - 1]! : null;
+  const d1 = deltaVs(history, 1);
+  const d5 = deltaVs(history, 5);
+  const d21 = deltaVs(history, 21);
+  const inBand = daysInCurrentBand(history);
+
+  return (
+    <div className="min-h-screen bg-background">
+      <AppNav active="/appetite" />
+      <main className="mx-auto flex max-w-6xl flex-col gap-8 px-4 py-8 sm:px-6">
+        <PageHeader
+          eyebrow="Chime · Research"
+          title="Market Appetite"
+          description="Session mood proxy from CSE breadth, move intensity, ASPI day change, and participation. Higher ≠ buy — research only."
+          action={
+            <Button asChild variant="outline" size="sm">
+              <Link href="/overview">Overview</Link>
+            </Button>
+          }
+        />
+
+        {loadError ? (
+          <EmptyState
+            title="Could not load appetite"
+            description="Database unavailable. Retry shortly."
+          />
+        ) : !latest ? (
+          <EmptyState
+            title="No appetite history yet"
+            description="Run python3 -m chime appetite-backfill after path-backfill fills daily_bars."
+          />
+        ) : (
+          <>
+            <section aria-labelledby="appetite-hero-heading" className="space-y-4">
+              <div className="flex flex-wrap items-end justify-between gap-3">
+                <div>
+                  <h2 id="appetite-hero-heading" className="sr-only">
+                    Current appetite
+                  </h2>
+                  <p className="text-[10px] font-semibold uppercase tracking-[0.12em] text-muted-foreground">
+                    Latest session · {latest.trade_date}
+                  </p>
+                  <div className="mt-1 flex flex-wrap items-baseline gap-3">
+                    <span className="font-mono text-5xl font-semibold tabular-nums tracking-tight sm:text-6xl">
+                      {Math.round(latest.score)}
+                    </span>
+                    <span className="text-xl font-medium sm:text-2xl">
+                      {BAND_LABEL[latest.band]}
+                    </span>
+                  </div>
+                  <div className="mt-2">
+                    <NfaInline />
+                  </div>
+                </div>
+              </div>
+              <AppetiteMeter
+                score={latest.score}
+                band={latest.band}
+                size="lg"
+              />
+            </section>
+
+            <KpiStrip
+              ariaLabel="Appetite summary"
+              items={[
+                {
+                  id: "score",
+                  label: "Score",
+                  value: String(Math.round(latest.score)),
+                  hint: BAND_LABEL[latest.band],
+                },
+                {
+                  id: "d1",
+                  label: "Δ 1 session",
+                  value: fmtDelta(d1),
+                },
+                {
+                  id: "d5",
+                  label: "Δ 5 sessions",
+                  value: fmtDelta(d5),
+                },
+                {
+                  id: "d21",
+                  label: "Δ ~1 month",
+                  value: fmtDelta(d21),
+                },
+                {
+                  id: "band-days",
+                  label: "Days in band",
+                  value: String(inBand),
+                  hint: BAND_LABEL[latest.band],
+                },
+                {
+                  id: "univ",
+                  label: "Universe",
+                  value: String(latest.universe_n),
+                  hint:
+                    latest.advancers != null && latest.decliners != null
+                      ? `${latest.advancers}↑ / ${latest.decliners}↓`
+                      : undefined,
+                },
+              ]}
+            />
+
+            <section aria-labelledby="appetite-history-heading" className="space-y-2">
+              <h2
+                id="appetite-history-heading"
+                className="text-sm font-medium tracking-wide text-muted-foreground uppercase"
+              >
+                History (CSE path)
+              </h2>
+              <AppetiteHistoryChart historyAsc={history} />
+            </section>
+
+            <section aria-labelledby="appetite-tracker-heading" className="space-y-2">
+              <h2
+                id="appetite-tracker-heading"
+                className="text-sm font-medium tracking-wide text-muted-foreground uppercase"
+              >
+                Band chronology
+              </h2>
+              <AppetiteTracker historyAsc={history} limit={90} />
+            </section>
+
+            <section
+              aria-labelledby="appetite-method-heading"
+              className="rounded-lg border border-border/70 bg-muted/10 px-4 py-3 text-sm text-muted-foreground"
+            >
+              <h2
+                id="appetite-method-heading"
+                className="text-sm font-medium text-foreground"
+              >
+                How this is built
+              </h2>
+              <ul className="mt-2 list-disc space-y-1 pl-5">
+                <li>
+                  <span className="text-foreground">Breadth 40%</span> — share of
+                  listed names up on the session
+                </li>
+                <li>
+                  <span className="text-foreground">Intensity 25%</span> — among
+                  moves ≥2%, share that are up
+                </li>
+                <li>
+                  <span className="text-foreground">Index 20%</span> — ASPI day
+                  change mapped ±3% → 0–100
+                </li>
+                <li>
+                  <span className="text-foreground">Participation 15%</span> —
+                  turnover / volume participation
+                </li>
+              </ul>
+              <p className="mt-2 text-xs">
+                CSE-truth window is ~1 year of daily bars. Long Yahoo hybrid
+                history stays research-flagged and is not shown here by default.
+              </p>
+            </section>
+          </>
+        )}
+
+        <NfaFooter />
+      </main>
+    </div>
+  );
+}

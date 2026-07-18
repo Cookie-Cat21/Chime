@@ -353,6 +353,7 @@ def main(argv: list[str] | None = None) -> None:
             "disclosures-backfill",
             "financials-backfill",
             "aspi-backfill",
+            "appetite-backfill",
             "ml-score-outcomes",
             "ml-backfill-outcomes",
             "ml-loop-nightly",
@@ -367,7 +368,8 @@ def main(argv: list[str] | None = None) -> None:
             "path-backfill | intraday-backfill | hybrid-backfill | "
             "score-signals | eval-signals | "
             "sector-backfill | notices-backfill | disclosures-backfill | "
-            "financials-backfill | aspi-backfill | market-summary-backfill | "
+            "financials-backfill | aspi-backfill | appetite-backfill | "
+            "market-summary-backfill | "
             "ml-experiment | "
             "ml-forecast | ml-transfer | ml-harden | ml-diagnose | "
             "ml-iterate | ml-precision90 | ml-hpe | ml-forecast-unified | "
@@ -461,6 +463,14 @@ def main(argv: list[str] | None = None) -> None:
             "hpe_with_ltr_fallback | always_on | gated | gated_p90 | gated_ltr"
         ),
     )
+    parser.add_argument(
+        "--hybrid",
+        action="store_true",
+        help=(
+            "For appetite-backfill: read hybrid_daily_bars and store "
+            "source=hybrid_research"
+        ),
+    )
     args = parser.parse_args(argv)
     limit: int | None = None  # CLI per-command; rebound below
     if args.force and args.command not in (
@@ -477,6 +487,7 @@ def main(argv: list[str] | None = None) -> None:
         "disclosures-backfill",
         "financials-backfill",
         "aspi-backfill",
+        "appetite-backfill",
         "ml-loop-nightly",
         "ml-loop-retrain",
         "ml-loop-research",
@@ -486,13 +497,16 @@ def main(argv: list[str] | None = None) -> None:
             "--force is only valid for tick, path-backfill, intraday-backfill, "
             "hybrid-backfill, sector-backfill, notices-backfill, "
             "directors-backfill, disclosures-backfill, financials-backfill, "
-            "aspi-backfill, ml-forecast, ml-hpe, ml-forecast-unified, "
-            "ml-loop-nightly, ml-loop-retrain, ml-loop-research, or ml-ltr-ship"
+            "aspi-backfill, appetite-backfill, ml-forecast, ml-hpe, "
+            "ml-forecast-unified, ml-loop-nightly, ml-loop-retrain, "
+            "ml-loop-research, or ml-ltr-ship"
         )
     if args.period is not None and args.command != "path-backfill":
         parser.error("--period is only valid for path-backfill")
     if args.no_seed and args.command not in ("path-backfill", "intraday-backfill"):
         parser.error("--no-seed is only valid for path-backfill / intraday-backfill")
+    if args.hybrid and args.command != "appetite-backfill":
+        parser.error("--hybrid is only valid for appetite-backfill")
 
     if args.command == "migrate":
         configure_logging()
@@ -1546,6 +1560,40 @@ def main(argv: list[str] | None = None) -> None:
                 await storage.close()
 
         asyncio.run(_mkt())
+        return
+
+    if args.command == "appetite-backfill":
+        configure_logging()
+        settings = Settings.from_env(require_token=False)
+        appetite_source = "hybrid_research" if args.hybrid else "cse"
+
+        async def _appetite_bf() -> None:
+            from chime.appetite import backfill_appetite
+
+            storage = Storage(settings.database_url)
+            await storage.open()
+            try:
+                result = await backfill_appetite(
+                    storage,
+                    source=appetite_source,
+                    force=args.force,
+                )
+                rows = await storage.list_market_appetite_daily(source=appetite_source)
+                dates = [r["trade_date"] for r in rows if r.get("trade_date") is not None]
+                print(
+                    "appetite-backfill: "
+                    f"source={result.source} "
+                    f"targeted={result.dates_targeted} "
+                    f"upserted={result.dates_upserted} "
+                    f"skipped={result.dates_skipped} "
+                    f"rows={len(rows)} "
+                    f"min_date={min(dates) if dates else None} "
+                    f"max_date={max(dates) if dates else None}"
+                )
+            finally:
+                await storage.close()
+
+        asyncio.run(_appetite_bf())
         return
 
     if args.command == "ml-loop-research":
