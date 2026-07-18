@@ -1158,7 +1158,10 @@ def test_symbol_compare_chart_max_four() -> None:
         or "no cse" in route_src.lower()
     )
     assert "buildCompareChartRows" in lib_src
+    assert "scaleDailyBarsForCompare" in lib_src
     assert "indexed" in lib_src and "polyline" in ui_src
+    assert "CandlestickChart" in ui_src
+    assert "initialBars" in ui_src
     assert "SymbolCompareChart" in page
     assert "SCALE_OPTIONS" in ui_src
     assert "initialPeerSeries" in ui_src

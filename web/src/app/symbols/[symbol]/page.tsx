@@ -767,6 +767,7 @@ export default async function SymbolDetailPage({
         baseSymbol={data.symbol}
         initialPoints={snaps.points}
         initialPeerSeries={comparePeerSeries}
+        initialBars={initialDailyBars}
       />
 
       <FilingMetricsPanel
