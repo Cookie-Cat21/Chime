@@ -1,6 +1,6 @@
 # Third-party open-source dependencies
 
-Chime does **not** vendor upstream source trees into this repo. Runtime
+Quiverly does **not** vendor upstream source trees into this repo. Runtime
 dependencies come from PyPI (Python package) and npm (`web/`).
 
 ## Python (`pyproject.toml`)
@@ -70,7 +70,7 @@ dev-only.
 
 | Pattern | Source | License | Date | Notes |
 |---|---|---|---|---|
-| Rank bar list | [Tremor Bar List](https://tremor.so/docs/ui/bar-list) | Apache-2.0 pattern | 2026-07-17 | `RankBarList` — influence / shared seats; Chime tokens |
+| Rank bar list | [Tremor Bar List](https://tremor.so/docs/ui/bar-list) | Apache-2.0 pattern | 2026-07-17 | `RankBarList` — influence / shared seats; Quiverly tokens |
 | Filter chips | HyperUI filter density | MIT pattern | 2026-07-17 | `FilterChip` — All / Leadership on `/people` |
 | Event timeline | [HyperUI timelines](https://www.hyperui.dev/) | MIT pattern | 2026-07-17 | `EventTimeline` — dossier Across years |
 | KPI strip | HyperUI stats / IndexStrip density | MIT pattern | 2026-07-17 | `KpiStrip` — ownership map summary |
