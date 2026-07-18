@@ -3,9 +3,10 @@ import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 
 import { QuiverlyWordmark } from "@/components/brand/quiverly-brand";
-import { FaqSection } from "@/components/kit/faq-section";
+import { AnnouncementBar } from "@/components/marketing/announcement-bar";
 import { QuiverlyBento } from "@/components/marketing/quiverly-bento";
 import { EndCta } from "@/components/marketing/end-cta";
+import { FaqSplit } from "@/components/marketing/faq-split";
 import { FeatureList } from "@/components/marketing/feature-list";
 import { HeroGridBackdrop } from "@/components/marketing/hero-grid-backdrop";
 import { HowItWorks } from "@/components/marketing/how-it-works";
@@ -28,26 +29,31 @@ export const metadata = {
 
 const FAQ = [
   {
+    id: "tracker",
     question: "Is Quiverly a CSE Tracker Pro clone?",
     answer:
       "No. Quiverly is Telegram-first CSE alerting with a thin management dash. Portfolio, tax, screener, and heavy TA stay out of scope.",
   },
   {
+    id: "fires",
     question: "Where do alerts fire?",
     answer:
       "On Telegram. Manage symbols and rules in the dash; when a rule matches, you get the ping even if the browser is closed.",
   },
   {
+    id: "nfa",
     question: "Is this financial advice?",
     answer:
       "No. Prices and disclosures are informational only. Always verify filings and make your own decisions.",
   },
   {
+    id: "types",
     question: "What can I alert on?",
     answer:
       "Price above/below, daily % move, disclosures, activity signals, and (when enabled) EPS / YoY filing metrics.",
   },
   {
+    id: "tab",
     question: "Do I need to keep the dash open?",
     answer:
       "No. The dash is for setup and review. Push delivery is the point — Telegram carries the alert.",
@@ -55,8 +61,8 @@ const FAQ = [
 ];
 
 /**
- * Option A — wide left-rail hero + below-fold full-width proof band.
- * No announcement bar, no in-hero side proof panel.
+ * Option A — wide left-rail hero + below-fold proof band.
+ * Watermelon ports: announcement-8, faq-6, cta-1 (mid/end).
  */
 export default async function HomePage() {
   const cfg = getDashAuthConfig();
@@ -75,6 +81,7 @@ export default async function HomePage() {
 
   return (
     <div className="chime-atmosphere flex min-h-full flex-1 flex-col">
+      <AnnouncementBar />
       <MarketingNav />
       <main id="main-content" tabIndex={-1} className="flex flex-1 flex-col">
         {/* Hero — fills first viewport; proof stays below the fold */}
@@ -179,12 +186,11 @@ export default async function HomePage() {
 
           <MidCta telegramHref={botUrl} className="mt-20" />
 
-          <FaqSection
+          <FaqSplit
             className="mt-20"
-            eyebrow="FAQ"
-            heading="Before you start"
-            description="Short answers. The dash is daily; Telegram is the push cherry."
-            items={FAQ}
+            badge="FAQ"
+            title="Before you start"
+            faqs={FAQ}
           />
 
           <EndCta telegramHref={botUrl} className="mt-20" />

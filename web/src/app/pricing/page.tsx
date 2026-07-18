@@ -1,10 +1,8 @@
-import Link from "next/link";
-
 import { QuiverlyWordmark } from "@/components/brand/quiverly-brand";
 import { MarketingNav } from "@/components/marketing/marketing-nav";
+import { PricingPlans } from "@/components/marketing/pricing-plans";
 import { QuiverlyFooter } from "@/components/marketing/quiverly-footer";
 import { NfaInline } from "@/components/nfa-inline";
-import { Button } from "@/components/ui/button";
 import { telegramBotUrl } from "@/lib/marketing";
 
 export const metadata = {
@@ -12,7 +10,7 @@ export const metadata = {
   description: "Quiverly CSE alerts — free via Telegram for v1. No payments yet.",
 };
 
-/** HyperUI 2-tier stub — no checkout (payments fence). */
+/** Watermelon pricing-1 adapted — Free / Later, no checkout. */
 export default function PricingPage() {
   const botUrl = telegramBotUrl();
 
@@ -22,7 +20,7 @@ export default function PricingPage() {
       <main
         id="main-content"
         tabIndex={-1}
-        className="mx-auto flex w-full max-w-3xl flex-1 flex-col px-6 py-14"
+        className="mx-auto flex w-full max-w-4xl flex-1 flex-col px-6 py-14"
       >
         <QuiverlyWordmark size="lg" priority />
         <h1 className="mt-8 font-display text-4xl font-semibold tracking-tight sm:text-5xl">
@@ -34,52 +32,40 @@ export default function PricingPage() {
         </p>
         <NfaInline className="mt-4" />
 
-        <div className="mt-12 grid gap-6 sm:grid-cols-2">
-          <article className="rounded-lg border border-foreground bg-card/70 p-6">
-            <p className="text-xs font-semibold tracking-[0.18em] text-primary uppercase">
-              Now
-            </p>
-            <h2 className="mt-2 font-display text-2xl font-semibold">Free</h2>
-            <p className="mt-2 text-sm text-muted-foreground">
-              Telegram bot + thin dash for watchlist, rules, and fire history.
-            </p>
-            <ul className="mt-6 space-y-2 text-sm text-foreground">
-              <li>Price / move / disclosure alerts</li>
-              <li>Filing EPS / YoY when flags are on</li>
-              <li>No credit card · no checkout</li>
-            </ul>
-            <Button asChild className="mt-8 w-full" size="lg">
-              <Link href="/login">Open the dash</Link>
-            </Button>
-          </article>
-
-          <article className="rounded-lg border border-border/70 bg-card/40 p-6">
-            <p className="text-xs font-semibold tracking-[0.18em] text-muted-foreground uppercase">
-              Later
-            </p>
-            <h2 className="mt-2 font-display text-2xl font-semibold text-muted-foreground">
-              Paid tiers
-            </h2>
-            <p className="mt-2 text-sm text-muted-foreground">
-              Higher quotas, team seats, or delivery extras — only if users ask.
-              Not available yet.
-            </p>
-            <ul className="mt-6 space-y-2 text-sm text-muted-foreground">
-              <li>No Stripe / payments in v1</li>
-              <li>No fake “Pro” upsell on the dash</li>
-              <li>Telegram stays the primary surface</li>
-            </ul>
-            <Button
-              type="button"
-              variant="outline"
-              className="mt-8 w-full"
-              size="lg"
-              disabled
-            >
-              Coming later
-            </Button>
-          </article>
-        </div>
+        <PricingPlans
+          className="mt-12"
+          plans={[
+            {
+              id: "free",
+              title: "Free",
+              description:
+                "Telegram bot + thin dash for watchlist, rules, and fire history.",
+              price: "LKR 0",
+              features: [
+                "Price / move / disclosure alerts",
+                "Filing EPS / YoY when flags are on",
+                "No credit card · no checkout",
+              ],
+              buttonText: "Open the dash",
+              buttonHref: "/login",
+              isPopular: true,
+            },
+            {
+              id: "later",
+              title: "Paid tiers",
+              description:
+                "Higher quotas, team seats, or delivery extras — only if users ask. Not available yet.",
+              price: "—",
+              features: [
+                "No Stripe / payments in v1",
+                "No fake “Pro” upsell on the dash",
+                "Telegram stays the primary surface",
+              ],
+              buttonText: "Coming later",
+              buttonDisabled: true,
+            },
+          ]}
+        />
 
         {botUrl ? (
           <p className="mt-10 text-center text-sm text-muted-foreground">

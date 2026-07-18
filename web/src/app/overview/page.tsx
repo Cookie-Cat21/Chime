@@ -16,6 +16,7 @@ import {
   SectorHeatStrip,
   type SectorHeatItem,
 } from "@/components/kit/sector-heat-strip";
+import { NotificationList } from "@/components/kit/notification-list";
 import { ArmedBadge } from "@/components/kit/status-badge";
 import { StatCard } from "@/components/kit/stat-card";
 import { MarketSessionChip } from "@/components/market-session-chip";
@@ -618,48 +619,29 @@ export default async function OverviewPage() {
         </div>
 
         <section className="mt-10" aria-labelledby="overview-fires-heading">
-          <div className="flex items-end justify-between gap-3">
-            <h2
-              id="overview-fires-heading"
-              className="text-sm font-medium tracking-wide text-muted-foreground uppercase"
-            >
-              Recent fires
-            </h2>
-            <Link
-              href="/alerts/history"
-              className="text-xs text-muted-foreground underline-offset-4 hover:underline"
-            >
-              Full history
-            </Link>
+          <h2
+            id="overview-fires-heading"
+            className="text-sm font-medium tracking-wide text-muted-foreground uppercase"
+          >
+            Recent fires
+          </h2>
+          <div className="mt-4">
+            <NotificationList
+              viewAllHref="/alerts/history"
+              items={fires.map((ev) => ({
+                id: ev.id,
+                title: ev.symbol,
+                subtitle: [
+                  alertTypeLabel(ev.type),
+                  ev.message_text ? ev.message_text.slice(0, 80) : null,
+                ]
+                  .filter(Boolean)
+                  .join(" — "),
+                time: formatTs(ev.fired_at),
+                href: `/symbols/${encodeURIComponent(ev.symbol)}`,
+              }))}
+            />
           </div>
-          {fires.length === 0 ? (
-            <p className="mt-4 text-sm text-muted-foreground">
-              No fires recorded yet. When a rule matches, Telegram gets the push
-              and the audit trail shows up here.
-            </p>
-          ) : (
-            <ul className="mt-4 divide-y divide-border/60">
-              {fires.map((ev) => (
-                <li key={ev.id} className="py-3">
-                  <div className="flex flex-wrap items-baseline justify-between gap-2">
-                    <Link
-                      href={`/symbols/${encodeURIComponent(ev.symbol)}`}
-                      className="font-mono text-sm font-medium underline-offset-4 hover:underline"
-                    >
-                      {ev.symbol}
-                    </Link>
-                    <time className="text-xs text-muted-foreground">
-                      {formatTs(ev.fired_at)}
-                    </time>
-                  </div>
-                  <p className="mt-0.5 text-sm text-muted-foreground">
-                    {alertTypeLabel(ev.type)}
-                    {ev.message_text ? ` — ${ev.message_text}` : ""}
-                  </p>
-                </li>
-              ))}
-            </ul>
-          )}
         </section>
 
         <NfaInline className="mt-8" />

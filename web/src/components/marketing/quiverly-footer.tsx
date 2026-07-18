@@ -29,6 +29,7 @@ export function QuiverlyFooter({
     { label: "Home", href: "/" },
     { label: "How it works", href: "/#how-it-works" },
     { label: "Pricing", href: "/pricing" },
+    { label: "Blog", href: "/blog" },
   ];
   const legal: FooterLink[] = [
     { label: "Terms", href: "/legal/terms" },
