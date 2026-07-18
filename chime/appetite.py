@@ -114,11 +114,26 @@ def map_participation_z_score(z: float | None) -> float:
 
 
 def map_participation_volume_share(share_pct: float) -> float:
-    """Share of symbols with volume>0 that day → 0–100."""
+    """Share of symbols with volume>0 that day → 0–100 (weak fallback)."""
     pct = _finite(share_pct)
     if pct is None:
         return 50.0
     return _clamp(pct)
+
+
+def map_participation_volume_total(
+    total: float | None,
+    history: list[float] | None,
+) -> float | None:
+    """Market-wide volume sum z-score → 0–100; None if history too thin."""
+    t = _finite(total)
+    if t is None:
+        return None
+    hist = [h for h in (history or []) if _finite(h) is not None]
+    if len(hist) < 5:
+        return None
+    z = turnover_zscore(t, hist)
+    return map_participation_z_score(z)
 
 
 def turnover_zscore(value: float, history: list[float]) -> float | None:
@@ -141,6 +156,8 @@ def component_scores(
     aspi_change_pct: float | None = None,
     turnover: float | None = None,
     turnover_history: list[float] | None = None,
+    volume_total: float | None = None,
+    volume_total_history: list[float] | None = None,
 ) -> dict[str, float]:
     """Component scores (0–100) from one day's breadth inputs.
 
@@ -170,16 +187,25 @@ def component_scores(
         z = turnover_zscore(t, hist)
         participation = map_participation_z_score(z)
     else:
-        vols = volumes or []
-        if vols:
-            active = sum(
-                1
-                for v in vols
-                if (vv := _finite(v)) is not None and vv > 0.0
-            )
-            participation = map_participation_volume_share((active / len(vols)) * 100.0)
+        via_total = map_participation_volume_total(
+            volume_total, volume_total_history
+        )
+        if via_total is not None:
+            participation = via_total
         else:
-            participation = 50.0
+            # Last resort — share with volume>0 is often ~100% on CSE bars.
+            vols = volumes or []
+            if vols:
+                active = sum(
+                    1
+                    for v in vols
+                    if (vv := _finite(v)) is not None and vv > 0.0
+                )
+                participation = map_participation_volume_share(
+                    (active / len(vols)) * 100.0
+                )
+            else:
+                participation = 50.0
 
     return {
         "breadth": breadth,
@@ -217,6 +243,8 @@ def build_day_result(
     aspi_change_pct: float | None = None,
     turnover: float | None = None,
     turnover_history: list[float] | None = None,
+    volume_total: float | None = None,
+    volume_total_history: list[float] | None = None,
     source: str = "cse",
 ) -> AppetiteDayResult | None:
     """Build a scored day from breadth inputs. None if no usable changes."""
@@ -230,6 +258,8 @@ def build_day_result(
         aspi_change_pct=aspi_change_pct,
         turnover=turnover,
         turnover_history=turnover_history,
+        volume_total=volume_total,
+        volume_total_history=volume_total_history,
     )
     score = composite_score(comps)
     return AppetiteDayResult(
@@ -380,6 +410,19 @@ async def backfill_appetite(
 
     aspi_by_date = await storage.list_aspi_change_pcts(source=src)
 
+    volume_total_by_date: dict[date, float] = {}
+    for d, rows in by_date.items():
+        total = 0.0
+        any_v = False
+        for r in rows:
+            vv = _finite(r.get("volume"))
+            if vv is None:
+                continue
+            total += vv
+            any_v = True
+        if any_v:
+            volume_total_by_date[d] = total
+
     upserted = skipped = 0
     for trade_date in dates:
         if not force and trade_date in existing:
@@ -398,6 +441,11 @@ async def backfill_appetite(
             for d, v in sorted(turnover_by_date.items())
             if d <= trade_date and v is not None
         ]
+        vol_hist = [
+            v
+            for d, v in sorted(volume_total_by_date.items())
+            if d <= trade_date
+        ]
         result = build_day_result(
             trade_date=trade_date,
             change_pcts=change_pcts,
@@ -405,6 +453,8 @@ async def backfill_appetite(
             aspi_change_pct=aspi_by_date.get(trade_date),
             turnover=turnover,
             turnover_history=history,
+            volume_total=volume_total_by_date.get(trade_date),
+            volume_total_history=vol_hist,
             source=src,
         )
         if result is None:

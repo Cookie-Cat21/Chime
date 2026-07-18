@@ -30,7 +30,7 @@ export function AppetiteMeter({
   className?: string;
 }) {
   const s = Number.isFinite(score) ? Math.max(0, Math.min(100, score)) : 50;
-  const h = size === "lg" ? 18 : size === "sm" ? 10 : 14;
+  const h = size === "lg" ? 22 : size === "sm" ? 10 : 16;
   const label = BAND_LABEL[band];
 
   return (
@@ -52,33 +52,55 @@ export function AppetiteMeter({
               style={{
                 width: `${z.to - z.from}%`,
                 backgroundColor: BAND_ZONE_COLOR[z.band],
-                opacity: z.band === band ? 0.95 : 0.55,
+                opacity: z.band === band ? 1 : 0.45,
               }}
               title={BAND_LABEL[z.band]}
             />
           ))}
         </div>
-        {/* Needle */}
         <div
-          className="absolute top-0 bottom-0 w-0.5 bg-foreground shadow-sm"
+          className="absolute top-0 bottom-0 w-0.5 bg-foreground transition-[left] duration-500 ease-out motion-reduce:transition-none"
           style={{ left: `calc(${s}% - 1px)` }}
           aria-hidden
         />
         <div
-          className="absolute -top-1 h-0 w-0 border-x-[5px] border-x-transparent border-t-[6px] border-t-foreground"
+          className="absolute -top-1 h-0 w-0 border-x-[5px] border-x-transparent border-t-[6px] border-t-foreground transition-[left] duration-500 ease-out motion-reduce:transition-none"
           style={{ left: `calc(${s}% - 5px)` }}
           aria-hidden
         />
       </div>
       {size !== "sm" ? (
-        <div className="mt-1.5 flex justify-between font-mono text-[10px] tabular-nums text-muted-foreground">
-          <span>0</span>
+        <div className="mt-2 grid grid-cols-5 gap-1 text-center font-mono text-[10px] tabular-nums text-muted-foreground">
+          <span>Extreme</span>
           <span>Caution</span>
           <span>Neutral</span>
           <span>Appetite</span>
-          <span>100</span>
+          <span>Strong</span>
         </div>
       ) : null}
     </div>
+  );
+}
+
+export function AppetiteBandBadge({
+  band,
+  className,
+}: {
+  band: AppetiteBand;
+  className?: string;
+}) {
+  return (
+    <span
+      className={cn(
+        "inline-flex items-center rounded-md border border-border/60 px-2 py-0.5 text-sm font-medium",
+        className,
+      )}
+      style={{
+        backgroundColor: BAND_ZONE_COLOR[band],
+        color: "oklch(0.22 0.02 250)",
+      }}
+    >
+      {BAND_LABEL[band]}
+    </span>
   );
 }

@@ -1,10 +1,10 @@
 import Link from "next/link";
 
-import { AppetiteMeter } from "@/components/appetite/appetite-meter";
 import {
-  BAND_LABEL,
-  type AppetiteDay,
-} from "@/lib/api/appetite";
+  AppetiteBandBadge,
+  AppetiteMeter,
+} from "@/components/appetite/appetite-meter";
+import { type AppetiteDay } from "@/lib/api/appetite";
 import { NfaInline } from "@/components/nfa-inline";
 import { cn } from "@/lib/utils";
 
@@ -15,8 +15,8 @@ function AppetiteMiniSpark({ historyAsc }: { historyAsc: AppetiteDay[] }) {
   const min = Math.min(...scores);
   const max = Math.max(...scores);
   const span = max !== min ? max - min : 1;
-  const w = 160;
-  const h = 40;
+  const w = 180;
+  const h = 44;
   const pad = 3;
   const pts = series
     .map((d, i) => {
@@ -29,7 +29,7 @@ function AppetiteMiniSpark({ historyAsc }: { historyAsc: AppetiteDay[] }) {
   return (
     <svg
       viewBox={`0 0 ${w} ${h}`}
-      className="h-10 w-full"
+      className="h-11 w-full"
       role="img"
       aria-label={`Appetite spark, ${series.length} sessions`}
     >
@@ -85,26 +85,24 @@ export function AppetiteStrip({
   return (
     <section
       className={cn(
-        "rounded-lg border border-border/80 bg-muted/15 px-3 py-3 sm:px-4",
+        "rounded-lg border border-border/80 bg-muted/15 px-3 py-4 sm:px-4",
         className,
       )}
       aria-labelledby="appetite-strip-heading"
     >
       <div className="flex flex-wrap items-start justify-between gap-3">
-        <div>
+        <div className="min-w-0 flex-1">
           <p
             id="appetite-strip-heading"
             className="text-[10px] font-semibold uppercase tracking-[0.12em] text-muted-foreground"
           >
             Market Appetite
           </p>
-          <div className="mt-0.5 flex flex-wrap items-baseline gap-2">
-            <span className="font-mono text-2xl font-semibold tabular-nums tracking-tight">
+          <div className="mt-1 flex flex-wrap items-center gap-2">
+            <span className="font-mono text-3xl font-semibold tabular-nums tracking-tight">
               {Math.round(latest.score)}
             </span>
-            <span className="text-sm font-medium text-foreground">
-              {BAND_LABEL[latest.band]}
-            </span>
+            <AppetiteBandBadge band={latest.band} />
             <span
               className={cn(
                 "font-mono text-xs tabular-nums",
@@ -118,15 +116,16 @@ export function AppetiteStrip({
               {fmtDelta(delta1)} vs prior session
             </span>
           </div>
-          <p className="mt-0.5 font-mono text-[11px] tabular-nums text-muted-foreground">
-            {latest.trade_date}
+          <p className="mt-1 font-mono text-[11px] tabular-nums text-muted-foreground">
+            Session {latest.trade_date}
             {latest.advancers != null && latest.decliners != null
               ? ` · ${latest.advancers}↑ ${latest.decliners}↓`
               : null}
-            {` · n=${latest.universe_n}`}
+            {` · universe ${latest.universe_n}`}
+            {latest.aspi_change_pct == null ? " · ASPI day n/a" : null}
           </p>
         </div>
-        <div className="w-full max-w-[11rem] sm:w-40">
+        <div className="w-full max-w-[12rem] sm:w-44">
           <AppetiteMiniSpark historyAsc={historyAsc} />
         </div>
       </div>
@@ -134,9 +133,9 @@ export function AppetiteStrip({
         score={latest.score}
         band={latest.band}
         size="md"
-        className="mt-3"
+        className="mt-4"
       />
-      <div className="mt-2 flex flex-wrap items-center justify-between gap-2">
+      <div className="mt-3 flex flex-wrap items-center justify-between gap-2">
         <NfaInline />
         <Link
           href="/appetite"

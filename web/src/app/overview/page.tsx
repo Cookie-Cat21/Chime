@@ -20,6 +20,8 @@ import { PriceRefresh } from "@/components/price-refresh";
 import { Button } from "@/components/ui/button";
 import {
   deltaVs,
+  headlineDay,
+  headlineIndex,
   queryAppetiteHistory,
   type AppetiteDay,
 } from "@/lib/api/appetite";
@@ -262,17 +264,18 @@ export default async function OverviewPage() {
   let appetiteHistory: AppetiteDay[] = [];
   try {
     appetiteHistory = await queryAppetiteHistory(getPool(), {
-      limit: 60,
+      limit: 90,
       source: "cse",
     });
   } catch {
     appetiteHistory = [];
   }
-  const appetiteLatest =
-    appetiteHistory.length > 0
-      ? appetiteHistory[appetiteHistory.length - 1]!
-      : null;
-  const appetiteDelta1 = deltaVs(appetiteHistory, 1);
+  const appetiteLatest = headlineDay(appetiteHistory);
+  const appetiteDelta1 = deltaVs(
+    appetiteHistory,
+    1,
+    headlineIndex(appetiteHistory),
+  );
 
   const [
     watchRes,

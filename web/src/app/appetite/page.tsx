@@ -1,7 +1,11 @@
 import Link from "next/link";
 
+import { AppetiteComponents } from "@/components/appetite/appetite-components";
 import { AppetiteHistoryChart } from "@/components/appetite/appetite-history-chart";
-import { AppetiteMeter } from "@/components/appetite/appetite-meter";
+import {
+  AppetiteBandBadge,
+  AppetiteMeter,
+} from "@/components/appetite/appetite-meter";
 import { AppetiteTracker } from "@/components/appetite/appetite-tracker";
 import { AppNav } from "@/components/app-nav";
 import { EmptyState } from "@/components/empty-state";
@@ -11,9 +15,10 @@ import { NfaInline } from "@/components/nfa-inline";
 import { PageHeader } from "@/components/page-header";
 import { Button } from "@/components/ui/button";
 import {
-  BAND_LABEL,
   daysInCurrentBand,
   deltaVs,
+  headlineDay,
+  headlineIndex,
   queryAppetiteHistory,
 } from "@/lib/api/appetite";
 import { requirePageSession } from "@/lib/auth/page-session";
@@ -47,11 +52,17 @@ export default async function AppetitePage() {
     loadError = true;
   }
 
-  const latest = history.length ? history[history.length - 1]! : null;
-  const d1 = deltaVs(history, 1);
-  const d5 = deltaVs(history, 5);
-  const d21 = deltaVs(history, 21);
-  const inBand = daysInCurrentBand(history);
+  const hi = headlineIndex(history);
+  const latest = headlineDay(history);
+  const d1 = deltaVs(history, 1, hi);
+  const d5 = deltaVs(history, 5, hi);
+  const d21 = deltaVs(history, 21, hi);
+  const inBand = daysInCurrentBand(history, hi);
+  const thinSkipped =
+    history.length > 0 &&
+    hi >= 0 &&
+    hi < history.length - 1 &&
+    history[history.length - 1]!.universe_n < 100;
 
   return (
     <div className="min-h-screen bg-background">
@@ -60,7 +71,7 @@ export default async function AppetitePage() {
         <PageHeader
           eyebrow="Chime · Research"
           title="Market Appetite"
-          description="Session mood proxy from CSE breadth, move intensity, ASPI day change, and participation. Higher ≠ buy — research only."
+          description="Session mood proxy from CSE breadth, move intensity, ASPI day change, and participation. Higher scores are not a buy signal — research only."
           action={
             <Button asChild variant="outline" size="sm">
               <Link href="/overview">Overview</Link>
@@ -87,15 +98,19 @@ export default async function AppetitePage() {
                     Current appetite
                   </h2>
                   <p className="text-[10px] font-semibold uppercase tracking-[0.12em] text-muted-foreground">
-                    Latest session · {latest.trade_date}
+                    Headline session · {latest.trade_date}
+                    {thinSkipped
+                      ? " · newest thin day skipped for headline"
+                      : null}
                   </p>
-                  <div className="mt-1 flex flex-wrap items-baseline gap-3">
+                  <div className="mt-1 flex flex-wrap items-center gap-3">
                     <span className="font-mono text-5xl font-semibold tabular-nums tracking-tight sm:text-6xl">
                       {Math.round(latest.score)}
                     </span>
-                    <span className="text-xl font-medium sm:text-2xl">
-                      {BAND_LABEL[latest.band]}
-                    </span>
+                    <AppetiteBandBadge
+                      band={latest.band}
+                      className="text-base sm:text-lg"
+                    />
                   </div>
                   <div className="mt-2">
                     <NfaInline />
@@ -116,7 +131,7 @@ export default async function AppetitePage() {
                   id: "score",
                   label: "Score",
                   value: String(Math.round(latest.score)),
-                  hint: BAND_LABEL[latest.band],
+                  hint: latest.band.replaceAll("_", " "),
                 },
                 {
                   id: "d1",
@@ -137,7 +152,6 @@ export default async function AppetitePage() {
                   id: "band-days",
                   label: "Days in band",
                   value: String(inBand),
-                  hint: BAND_LABEL[latest.band],
                 },
                 {
                   id: "univ",
@@ -151,15 +165,37 @@ export default async function AppetitePage() {
               ]}
             />
 
-            <section aria-labelledby="appetite-history-heading" className="space-y-2">
-              <h2
-                id="appetite-history-heading"
-                className="text-sm font-medium tracking-wide text-muted-foreground uppercase"
-              >
-                History (CSE path)
-              </h2>
-              <AppetiteHistoryChart historyAsc={history} />
-            </section>
+            <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_280px]">
+              <section aria-labelledby="appetite-history-heading" className="space-y-2">
+                <h2
+                  id="appetite-history-heading"
+                  className="text-sm font-medium tracking-wide text-muted-foreground uppercase"
+                >
+                  History (CSE path · ~1y)
+                </h2>
+                <AppetiteHistoryChart historyAsc={history} />
+              </section>
+              <section aria-labelledby="appetite-components-heading" className="space-y-2">
+                <h2
+                  id="appetite-components-heading"
+                  className="text-sm font-medium tracking-wide text-muted-foreground uppercase"
+                >
+                  Components
+                </h2>
+                <AppetiteComponents components={latest.components} />
+                {latest.aspi_change_pct == null ? (
+                  <p className="text-[11px] text-muted-foreground">
+                    ASPI day change missing for this session — index component
+                    held near neutral.
+                  </p>
+                ) : (
+                  <p className="font-mono text-[11px] tabular-nums text-muted-foreground">
+                    ASPI {latest.aspi_change_pct >= 0 ? "+" : ""}
+                    {latest.aspi_change_pct.toFixed(2)}%
+                  </p>
+                )}
+              </section>
+            </div>
 
             <section aria-labelledby="appetite-tracker-heading" className="space-y-2">
               <h2
@@ -200,8 +236,10 @@ export default async function AppetitePage() {
                 </li>
               </ul>
               <p className="mt-2 text-xs">
-                CSE-truth window is ~1 year of daily bars. Long Yahoo hybrid
-                history stays research-flagged and is not shown here by default.
+                CSE-truth window is ~1 year of daily bars. Partial sessions
+                (thin universe) are kept in history but skipped for the
+                headline. Yahoo hybrid long history stays research-flagged and
+                is not shown here by default.
               </p>
             </section>
           </>

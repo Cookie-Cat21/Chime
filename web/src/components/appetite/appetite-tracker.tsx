@@ -3,6 +3,7 @@
 import {
   BAND_LABEL,
   BAND_ZONE_COLOR,
+  APPETITE_BANDS,
   type AppetiteDay,
 } from "@/lib/api/appetite";
 import { cn } from "@/lib/utils";
@@ -27,7 +28,7 @@ export function AppetiteTracker({
   }
 
   return (
-    <div className={cn("w-full", className)}>
+    <div className={cn("w-full space-y-2", className)}>
       <ul
         className="flex flex-wrap gap-0.5"
         aria-label={`Appetite band for last ${rows.length} sessions`}
@@ -44,7 +45,19 @@ export function AppetiteTracker({
           </li>
         ))}
       </ul>
-      <p className="mt-1.5 text-[11px] text-muted-foreground">
+      <ul className="flex flex-wrap gap-x-3 gap-y-1 text-[11px] text-muted-foreground">
+        {APPETITE_BANDS.map((b) => (
+          <li key={b} className="inline-flex items-center gap-1.5">
+            <span
+              className="inline-block h-2.5 w-2.5 rounded-[2px]"
+              style={{ backgroundColor: BAND_ZONE_COLOR[b] }}
+              aria-hidden
+            />
+            {BAND_LABEL[b]}
+          </li>
+        ))}
+      </ul>
+      <p className="text-[11px] text-muted-foreground">
         Last {rows.length} sessions · color = band (not a tip)
       </p>
     </div>

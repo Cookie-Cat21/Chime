@@ -152,32 +152,63 @@ export async function queryAppetiteHistory(
   return out.reverse();
 }
 
+/** Prefer a full-universe session for the headline (skip thin partial days). */
+export const MIN_HEADLINE_UNIVERSE = 100;
+
+export function headlineIndex(
+  historyAsc: AppetiteDay[],
+  minUniverse: number = MIN_HEADLINE_UNIVERSE,
+): number {
+  if (historyAsc.length === 0) return -1;
+  for (let i = historyAsc.length - 1; i >= 0; i--) {
+    if (historyAsc[i]!.universe_n >= minUniverse) return i;
+  }
+  return historyAsc.length - 1;
+}
+
+export function headlineDay(
+  historyAsc: AppetiteDay[],
+): AppetiteDay | null {
+  const i = headlineIndex(historyAsc);
+  return i >= 0 ? historyAsc[i]! : null;
+}
+
 export async function queryLatestAppetite(
   pool: Pool,
   source: "cse" | "hybrid_research" = "cse",
 ): Promise<AppetiteDay | null> {
-  const hist = await queryAppetiteHistory(pool, { limit: 1, source });
-  return hist[0] ?? null;
+  const hist = await queryAppetiteHistory(pool, { limit: 30, source });
+  return headlineDay(hist);
 }
 
 export function deltaVs(
   historyAsc: AppetiteDay[],
   daysBack: number,
+  fromIndex?: number,
 ): number | null {
   if (historyAsc.length < 2) return null;
-  const latest = historyAsc[historyAsc.length - 1]!;
-  const idx = historyAsc.length - 1 - daysBack;
+  const end =
+    fromIndex == null ? historyAsc.length - 1 : Math.min(fromIndex, historyAsc.length - 1);
+  if (end < 0) return null;
+  const latest = historyAsc[end]!;
+  const idx = end - daysBack;
   if (idx < 0) return null;
   const prev = historyAsc[idx]!;
   const d = latest.score - prev.score;
   return Number.isFinite(d) ? d : null;
 }
 
-export function daysInCurrentBand(historyAsc: AppetiteDay[]): number {
+export function daysInCurrentBand(
+  historyAsc: AppetiteDay[],
+  fromIndex?: number,
+): number {
   if (historyAsc.length === 0) return 0;
-  const band = historyAsc[historyAsc.length - 1]!.band;
+  const end =
+    fromIndex == null ? historyAsc.length - 1 : Math.min(fromIndex, historyAsc.length - 1);
+  if (end < 0) return 0;
+  const band = historyAsc[end]!.band;
   let n = 0;
-  for (let i = historyAsc.length - 1; i >= 0; i--) {
+  for (let i = end; i >= 0; i--) {
     if (historyAsc[i]!.band !== band) break;
     n += 1;
   }

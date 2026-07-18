@@ -89,7 +89,9 @@ export function AppetiteHistoryChart({
           </button>
         ))}
         <span className="ml-auto font-mono text-[11px] tabular-nums text-muted-foreground">
-          {first.trade_date} → {last.trade_date}
+          {first.trade_date} → {last.trade_date} · min{" "}
+          {Math.round(Math.min(...series.map((d) => d.score)))} / max{" "}
+          {Math.round(Math.max(...series.map((d) => d.score)))}
         </span>
       </div>
       <svg
@@ -113,7 +115,7 @@ export function AppetiteHistoryChart({
             />
           );
         })}
-        {[0, 25, 50, 75, 100].map((v) => {
+        {[0, 20, 40, 60, 80, 100].map((v) => {
           const y = padT + (1 - v / 100) * plotH;
           return (
             <g key={v}>
@@ -123,7 +125,8 @@ export function AppetiteHistoryChart({
                 y1={y}
                 y2={y}
                 stroke="currentColor"
-                strokeOpacity={0.08}
+                strokeOpacity={v % 40 === 0 ? 0.14 : 0.07}
+                strokeDasharray={v % 40 === 0 ? undefined : "3 4"}
               />
               <text
                 x={padL - 6}
