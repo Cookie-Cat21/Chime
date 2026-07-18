@@ -2,20 +2,14 @@
 
 import { Minus, Plus } from "lucide-react";
 
-import {
-  Accordion,
-  AccordionContent,
-  AccordionItem,
-  AccordionTrigger,
-} from "@/components/ui/accordion";
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
 
 export type FaqItem = { question: string; answer: string };
 
 /**
- * Watermelon faq-3 — numbered accordion FAQ.
- * Strip open-state gradient; lucide +/- instead of react-icons.
+ * Watermelon faq-3 — numbered FAQ rows.
+ * Native <details> for reliable expand (visual port of faq-3).
  */
 export function FaqSection({
   items,
@@ -53,36 +47,35 @@ export function FaqSection({
         ) : null}
       </div>
 
-      <Accordion type="single" collapsible className="flex w-full flex-col gap-2">
+      <div className="flex w-full flex-col gap-2">
         {items.map((item, i) => {
           const num = String(i + 1).padStart(2, "0");
           return (
-            <AccordionItem
+            <details
               key={item.question}
-              value={`item-${i}`}
-              className="group overflow-hidden border border-border bg-muted/30 transition-colors not-last:border-b hover:bg-muted/50 data-[state=open]:border-border data-[state=open]:bg-muted/60"
+              className="group overflow-hidden border border-border bg-muted/30 transition-colors hover:bg-muted/50 open:bg-muted/60"
             >
-              <AccordionTrigger className="flex w-full items-center gap-4 px-5 py-4 hover:no-underline sm:px-6 sm:py-5 [&_[data-slot=accordion-trigger-icon]]:hidden">
-                <span className="w-8 shrink-0 text-center font-mono text-xs font-semibold tracking-widest text-muted-foreground/60 tabular-nums group-aria-expanded/accordion-trigger:text-muted-foreground">
+              <summary className="flex cursor-pointer list-none items-center gap-4 px-5 py-4 marker:content-none sm:px-6 sm:py-5 [&::-webkit-details-marker]:hidden">
+                <span className="w-8 shrink-0 text-center font-mono text-xs font-semibold tracking-widest text-muted-foreground/60 tabular-nums">
                   {num}
                 </span>
                 <span className="flex-1 text-left text-sm font-medium leading-snug text-foreground sm:text-base">
                   {item.question}
                 </span>
                 <span className="flex size-7 shrink-0 items-center justify-center text-muted-foreground">
-                  <Plus className="block size-3.5 group-aria-expanded/accordion-trigger:hidden" />
-                  <Minus className="hidden size-3.5 group-aria-expanded/accordion-trigger:inline" />
+                  <Plus className="block size-3.5 group-open:hidden" />
+                  <Minus className="hidden size-3.5 group-open:inline" />
                 </span>
-              </AccordionTrigger>
-              <AccordionContent className="px-5 pb-5 pl-[4.25rem] sm:px-6 sm:pb-6">
+              </summary>
+              <div className="px-5 pb-5 pl-[4.25rem] sm:px-6 sm:pb-6">
                 <p className="text-sm leading-relaxed text-muted-foreground sm:text-base">
                   {item.answer}
                 </p>
-              </AccordionContent>
-            </AccordionItem>
+              </div>
+            </details>
           );
         })}
-      </Accordion>
+      </div>
     </section>
   );
 }

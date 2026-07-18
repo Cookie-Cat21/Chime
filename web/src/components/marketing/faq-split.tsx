@@ -2,12 +2,6 @@
 
 import { Minus, Plus } from "lucide-react";
 
-import {
-  Accordion,
-  AccordionContent,
-  AccordionItem,
-  AccordionTrigger,
-} from "@/components/ui/accordion";
 import { cn } from "@/lib/utils";
 
 export type FaqSplitItem = {
@@ -18,7 +12,7 @@ export type FaqSplitItem = {
 
 /**
  * Watermelon faq-6 — dashed split FAQ (paper / hairline layout).
- * lucide +/- instead of react-icons.
+ * Native <details> for reliable open/close (Radix accordion was no-op here).
  */
 export function FaqSplit({
   badge = "FAQ",
@@ -55,14 +49,13 @@ export function FaqSplit({
         </div>
 
         <div className="relative md:col-span-8 lg:col-span-7">
-          <Accordion type="single" collapsible className="w-full">
+          <div className="w-full">
             {faqs.map((faq, index) => (
-              <AccordionItem
+              <details
                 key={faq.id}
-                value={faq.id}
-                className="group border-b border-dashed border-border px-6 last:border-b-0 not-last:border-b md:px-8"
+                className="group border-b border-dashed border-border px-6 last:border-b-0 md:px-8"
               >
-                <AccordionTrigger className="flex w-full items-center py-6 hover:no-underline md:py-7 [&_[data-slot=accordion-trigger-icon]]:hidden">
+                <summary className="flex cursor-pointer list-none items-center py-6 marker:content-none md:py-7 [&::-webkit-details-marker]:hidden">
                   <div className="flex flex-1 items-center gap-5">
                     <span className="font-mono text-xs font-semibold tracking-widest text-muted-foreground tabular-nums">
                       Q{index + 1}
@@ -72,18 +65,18 @@ export function FaqSplit({
                     </span>
                   </div>
                   <div className="ml-auto flex size-8 shrink-0 items-center justify-center rounded-md bg-muted text-muted-foreground transition-colors group-hover:bg-muted/80">
-                    <Plus className="block size-3 group-aria-expanded/accordion-trigger:hidden" />
-                    <Minus className="hidden size-3 group-aria-expanded/accordion-trigger:inline" />
+                    <Plus className="block size-3 group-open:hidden" />
+                    <Minus className="hidden size-3 group-open:block" />
                   </div>
-                </AccordionTrigger>
-                <AccordionContent className="pr-12 pb-8 pl-[3.25rem]">
+                </summary>
+                <div className="pr-12 pb-8 pl-[3.25rem]">
                   <p className="text-sm leading-relaxed text-muted-foreground md:text-base">
                     {faq.answer}
                   </p>
-                </AccordionContent>
-              </AccordionItem>
+                </div>
+              </details>
             ))}
-          </Accordion>
+          </div>
         </div>
       </div>
     </section>
