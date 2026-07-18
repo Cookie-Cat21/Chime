@@ -6,6 +6,10 @@ import {
   cappedAlertThreshold,
   MAX_ALERT_THRESHOLD,
 } from "@/lib/api/finite-number";
+import {
+  effectiveAlertCreateCap,
+  FREE_ALERT_CAP,
+} from "@/lib/api/free-tier-caps";
 import { readJsonBody } from "@/lib/api/read-json-body";
 import { toSafePositiveInt } from "@/lib/api/safe-int";
 import { toIso } from "@/lib/api/time";
@@ -25,6 +29,8 @@ export const MAX_ALERT_RULES = 500;
 
 /**
  * GET /api/v1/alerts — session user's alert rules (active=true by default).
+ * Free-tier create cap: FREE_ALERT_CAP=3 via ``DASH_FREE_ALERT_QUOTA``
+ * (see ``lib/api/free-tier-caps.ts``).
  * Optional `?symbol=` filters to one CSE symbol (case-insensitive normalize).
  */
 export async function GET(request: NextRequest) {
@@ -230,11 +236,14 @@ export async function POST(request: NextRequest) {
     }
 
     const quota = await activeAlertQuota(gated.session.user_id);
-    if (quota.active_count >= quota.alert_quota_max) {
+    // Free-tier env cap when DB still has migration soft-default 100;
+    // raised alert_quota_max (≠100) honored up to DASH_ALERT_HARD_CAP.
+    const cap = effectiveAlertCreateCap(quota.alert_quota_max);
+    if (quota.active_count >= cap) {
       return jsonError(
         429,
         "alert_quota_exceeded",
-        "Active alert quota reached.",
+        `Active alert quota reached (${cap}). Free tier allows up to ${FREE_ALERT_CAP} unless your account quota was raised.`,
       );
     }
 

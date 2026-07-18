@@ -9,12 +9,18 @@ import { telegramBotUrl } from "@/lib/marketing";
 
 export const metadata = {
   title: "Pricing · Quiverly",
-  description: "Quiverly CSE alerts — free via Telegram for v1. No payments yet.",
+  description:
+    "Quiverly CSE alerts — Free via Telegram, Pro capacity (bank transfer), optional Brief. Not financial advice.",
 };
 
-/** HyperUI 2-tier stub — no checkout (payments fence). */
+const PRO_WAITLIST_MAILTO =
+  "mailto:hello@quiverly.app?subject=Quiverly%20Pro%20%E2%80%94%20bank%20transfer%20waitlist";
+
+/** Phase B tiers — Free / Pro / optional Brief. No PayHere checkout yet. */
 export default function PricingPage() {
   const botUrl = telegramBotUrl();
+  const freeCtaHref = botUrl ?? "/login";
+  const freeCtaExternal = Boolean(botUrl);
 
   return (
     <div className="chime-atmosphere flex min-h-full flex-1 flex-col">
@@ -22,61 +28,95 @@ export default function PricingPage() {
       <main
         id="main-content"
         tabIndex={-1}
-        className="mx-auto flex w-full max-w-3xl flex-1 flex-col px-6 py-14"
+        className="mx-auto flex w-full max-w-5xl flex-1 flex-col px-6 py-14"
       >
         <QuiverlyWordmark size="lg" priority />
         <h1 className="mt-8 font-display text-4xl font-semibold tracking-tight sm:text-5xl">
           Pricing
         </h1>
         <p className="mt-4 max-w-lg text-base leading-relaxed text-muted-foreground">
-          v1 is free while we prove Telegram-first CSE alerts. Payments are not
-          wired — and not in scope until the product earns it.
+          Start free on Telegram. Pro raises watch and alert capacity when you
+          outgrow the free caps — paid via bank transfer for now (no card
+          checkout).
         </p>
         <NfaInline className="mt-4" />
 
-        <div className="mt-12 grid gap-6 sm:grid-cols-2">
+        <div className="mt-12 grid gap-6 lg:grid-cols-3">
           <article className="rounded-lg border border-foreground bg-card/70 p-6">
             <p className="text-xs font-semibold tracking-[0.18em] text-primary uppercase">
-              Now
+              Free
             </p>
             <h2 className="mt-2 font-display text-2xl font-semibold">Free</h2>
+            <p className="mt-1 font-mono text-lg tabular-nums">Rs 0</p>
             <p className="mt-2 text-sm text-muted-foreground">
-              Telegram bot + thin dash for watchlist, rules, and fire history.
+              Telegram-first CSE alerts plus the thin dash to manage rules.
             </p>
             <ul className="mt-6 space-y-2 text-sm text-foreground">
+              <li>~5 watches · ~3 active rules</li>
               <li>Price / move / disclosure alerts</li>
-              <li>Filing EPS / YoY when flags are on</li>
-              <li>No credit card · no checkout</li>
+              <li>Standard delivery · short fire history</li>
             </ul>
             <Button asChild className="mt-8 w-full" size="lg">
-              <Link href="/login">Open the dash</Link>
+              {freeCtaExternal ? (
+                <a href={freeCtaHref} target="_blank" rel="noopener noreferrer">
+                  Open Telegram bot
+                </a>
+              ) : (
+                <Link href={freeCtaHref}>Open the dash</Link>
+              )}
             </Button>
+          </article>
+
+          <article className="rounded-lg border border-border/70 bg-card/70 p-6">
+            <p className="text-xs font-semibold tracking-[0.18em] text-muted-foreground uppercase">
+              Pro
+            </p>
+            <h2 className="mt-2 font-display text-2xl font-semibold">Pro</h2>
+            <p className="mt-1 font-mono text-lg tabular-nums">
+              Rs 490<span className="text-sm font-sans">/mo</span>
+            </p>
+            <p className="text-sm text-muted-foreground">
+              or Rs 4,900/yr
+            </p>
+            <p className="mt-2 text-sm text-muted-foreground">
+              Higher caps, quiet hours / digest, and longer history — never
+              “better tips.”
+            </p>
+            <ul className="mt-6 space-y-2 text-sm text-foreground">
+              <li>Higher watch + alert quotas</li>
+              <li>Priority queue · 90d fire history</li>
+              <li>Quiet hours &amp; digest controls</li>
+            </ul>
+            <Button asChild className="mt-8 w-full" size="lg" variant="outline">
+              <a href={PRO_WAITLIST_MAILTO}>
+                Coming soon — bank transfer
+              </a>
+            </Button>
+            <p className="mt-2 text-center text-xs text-muted-foreground">
+              Manual bank transfer + admin activate. No PayHere yet.
+            </p>
           </article>
 
           <article className="rounded-lg border border-border/70 bg-card/40 p-6">
             <p className="text-xs font-semibold tracking-[0.18em] text-muted-foreground uppercase">
-              Later
+              Optional
             </p>
-            <h2 className="mt-2 font-display text-2xl font-semibold text-muted-foreground">
-              Paid tiers
-            </h2>
+            <h2 className="mt-2 font-display text-2xl font-semibold">Brief</h2>
+            <p className="mt-1 font-mono text-lg tabular-nums">
+              Rs 1,490<span className="text-sm font-sans">/mo</span>
+            </p>
             <p className="mt-2 text-sm text-muted-foreground">
-              Higher quotas, team seats, or delivery extras — only if users ask.
-              Not available yet.
+              Metered AI disclosure briefs on top of Free or Pro. Always NFA.
             </p>
             <ul className="mt-6 space-y-2 text-sm text-muted-foreground">
-              <li>No Stripe / payments in v1</li>
-              <li>No fake “Pro” upsell on the dash</li>
-              <li>Telegram stays the primary surface</li>
+              <li>Filing summaries when flags + key are on</li>
+              <li>Same Postgres truth as the dash</li>
+              <li>Not investment advice</li>
             </ul>
-            <Button
-              type="button"
-              variant="outline"
-              className="mt-8 w-full"
-              size="lg"
-              disabled
-            >
-              Coming later
+            <Button asChild className="mt-8 w-full" size="lg" variant="outline">
+              <a href={PRO_WAITLIST_MAILTO}>
+                Coming soon — waitlist
+              </a>
             </Button>
           </article>
         </div>
@@ -94,7 +134,15 @@ export default function PricingPage() {
             </a>
             .
           </p>
-        ) : null}
+        ) : (
+          <p className="mt-10 text-center text-sm text-muted-foreground">
+            Prefer the dash?{" "}
+            <Link href="/login" className="underline underline-offset-4">
+              Sign in
+            </Link>
+            .
+          </p>
+        )}
       </main>
       <QuiverlyFooter telegramHref={botUrl} />
     </div>

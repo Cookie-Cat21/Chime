@@ -5,6 +5,7 @@ import {
   MAX_STOCK_SECTOR_LENGTH,
   sanitizeDisclosureText,
 } from "@/lib/api/disclosure-safe";
+import { FREE_WATCH_CAP, freeWatchCap } from "@/lib/api/free-tier-caps";
 import { toFiniteNumber } from "@/lib/api/market-browse";
 import { readJsonBody } from "@/lib/api/read-json-body";
 import { toIso } from "@/lib/api/time";
@@ -21,6 +22,8 @@ export const MAX_WATCHLIST_ITEMS = 500;
 /**
  * GET /api/v1/watchlist — session user's symbols + latest price_snapshots join.
  * Postgres only; no cse.lk.
+ * Free-tier create cap: FREE_WATCH_CAP=5 via ``DASH_FREE_WATCH_QUOTA``
+ * (see ``lib/api/free-tier-caps.ts``).
  */
 export async function GET(request: NextRequest) {
   const gated = await requireSession(request);
@@ -119,6 +122,35 @@ export async function POST(request: NextRequest) {
         404,
         "not_found",
         "Unknown symbol. The dashboard only accepts symbols already seeded in Postgres; wait for a poller tick or seed it from Telegram with /watch SYMBOL.",
+      );
+    }
+
+    const pool = getPool();
+    const countRes = await pool.query<{ n: string | number }>(
+      `SELECT COUNT(*)::int AS n FROM watchlist_items WHERE user_id = $1`,
+      [gated.session.user_id],
+    );
+    const rawCount = countRes.rows[0]?.n;
+    const watchCount =
+      typeof rawCount === "number" && Number.isSafeInteger(rawCount)
+        ? rawCount
+        : typeof rawCount === "string" && /^\d{1,15}$/.test(rawCount)
+          ? Number(rawCount)
+          : 0;
+    // FREE_WATCH_CAP=5 — free-tier create max (DASH_FREE_WATCH_QUOTA).
+    const cap = freeWatchCap();
+    const already =
+      (
+        await pool.query(
+          `SELECT 1 FROM watchlist_items WHERE user_id = $1 AND symbol = $2 LIMIT 1`,
+          [gated.session.user_id, symbol],
+        )
+      ).rowCount ?? 0;
+    if (already === 0 && watchCount >= cap) {
+      return jsonError(
+        429,
+        "watch_quota_exceeded",
+        `Watchlist quota reached (${cap}). Free tier allows up to ${FREE_WATCH_CAP} symbols.`,
       );
     }
 
