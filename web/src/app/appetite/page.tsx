@@ -44,8 +44,10 @@ export default async function AppetitePage() {
   let history: Awaited<ReturnType<typeof queryAppetiteHistory>> = [];
   let loadError = false;
   try {
+    // Load full available CSE history so MAX can diverge from 1Y when
+    // backfill grows past ~1y (today Neon holds ~242 sessions ≈ 1Y).
     history = await queryAppetiteHistory(getPool(), {
-      limit: 252,
+      limit: 2000,
       source: "cse",
     });
   } catch {
