@@ -6,6 +6,10 @@ import {
 
 export const MAX_COMPARE_SYMBOLS = 4;
 
+/** Poller ticks per symbol on the multi-company line overlay.
+ * Higher = denser / more accurate path (API max 200). */
+export const COMPARE_TICK_LIMIT = 180;
+
 /** Daily bars shown in single-symbol compare candles.
  * Tuned so fixed-pitch bodies (~8–9px) fill a typical card width
  * without fattening (≈1Y trading days after light aggregation). */

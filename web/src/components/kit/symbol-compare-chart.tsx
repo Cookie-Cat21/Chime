@@ -21,6 +21,7 @@ import { readBoundedResponseText } from "@/lib/api/read-bounded-text";
 import { normalizeSymbol } from "@/lib/api/symbol";
 import {
   COMPARE_CANDLE_BARS,
+  COMPARE_TICK_LIMIT,
   MAX_COMPARE_SYMBOLS,
   buildCompareChartRows,
   compareSeriesKey,
@@ -284,7 +285,7 @@ export function SymbolCompareChart({
       try {
         const qs = new URLSearchParams({
           symbols: [base, ...peerKey.split(",")].join(","),
-          limit: "60",
+          limit: String(COMPARE_TICK_LIMIT),
         });
         const res = await fetch(`/api/v1/compare?${qs.toString()}`, {
           credentials: "same-origin",

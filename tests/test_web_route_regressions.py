@@ -1159,6 +1159,7 @@ def test_symbol_compare_chart_max_four() -> None:
     )
     assert "buildCompareChartRows" in lib_src
     assert "scaleDailyBarsForCompare" in lib_src
+    assert "COMPARE_TICK_LIMIT" in lib_src
     assert "indexed" in lib_src and "polyline" in ui_src
     assert "CandlestickChart" in ui_src
     assert "initialBars" in ui_src
@@ -1166,10 +1167,14 @@ def test_symbol_compare_chart_max_four() -> None:
     candle_props = ui_src.split("<CandlestickChart")[1].split("/>")[0]
     assert "fitWidth" in candle_props
     assert "maxSlot" in candle_props
+    assert "COMPARE_TICK_LIMIT" in ui_src
     assert "SymbolCompareChart" in page
     assert "SCALE_OPTIONS" in ui_src
     assert "initialPeerSeries" in ui_src
     assert "compare=" in page or "comparePeers" in page
+    assert "DEFAULT_LIMIT = 180" in route_src or "DEFAULT_LIMIT=180" in route_src.replace(
+        " ", ""
+    )
 
 def test_dash_ux_improve_loops() -> None:
     """UX loops: watch state, alert type deep-link, metrics fail, chips, 404."""
