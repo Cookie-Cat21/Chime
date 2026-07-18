@@ -70,6 +70,10 @@ function installDbPool(opts: {
       captured.push({ sql, params });
       if (mode === "throw") throw new Error("postgres boom");
       assert(!sql.toLowerCase().includes("cse.lk"), "SQL must not mention cse.lk");
+      // Session revoke check (requireSession) — not a disclosures query.
+      if (sql.includes("FROM dash_sessions")) {
+        return { rows: [{ revoked: false }] };
+      }
       if (sql.includes("FROM stocks")) {
         return { rows: stockExists ? [{ "?column?": 1 }] : [] };
       }
@@ -146,9 +150,10 @@ async function testMapsBriefAndPdfFields(): Promise<void> {
   assert(bare.pdf_url === null, "null pdf_url preserved");
   assert(bare.brief === null, "null brief preserved");
   assert(bare.brief_status === null, "null brief_status preserved");
-  assert(captured.length === 2, "stocks existence + disclosures query");
-  assert(captured[1].params.includes(5), "limit param applied");
-  assert(captured[1].params.includes("JKH.N0000"), "symbol param applied");
+  const dataQueries = captured.filter((c) => !c.sql.includes("FROM dash_sessions"));
+  assert(dataQueries.length === 2, "stocks existence + disclosures query");
+  assert(dataQueries[1].params.includes(5), "limit param applied");
+  assert(dataQueries[1].params.includes("JKH.N0000"), "symbol param applied");
 }
 
 async function testRejectsHostilePdfUrlAndHrefSchemes(): Promise<void> {

@@ -62,6 +62,10 @@ function installDbPool(
       if (mode === "throw") {
         throw new Error("postgres://secret-user:secret-pass@db.internal/chime boom");
       }
+      // Session revoke check (requireSession) — not a browse query.
+      if (sql.includes("FROM dash_sessions")) {
+        return { rows: [{ revoked: false }] };
+      }
       assert(
         sql.includes("INNER JOIN LATERAL"),
         "browse SQL must INNER JOIN LATERAL latest snapshots",
@@ -113,9 +117,10 @@ async function testDefaultLimitAndSort(): Promise<void> {
   assert(body.sort === "change_pct", `default sort change_pct, got ${body.sort}`);
   assert(body.q === null, `default q null, got ${body.q}`);
   assert(typeof body.total === "number", "response includes total");
-  assert(captured.length === 2, "expected browse + count SQL queries");
-  const browse = browseQuery(captured);
-  countQuery(captured);
+  const dataQueries = captured.filter((c) => !c.sql.includes("FROM dash_sessions"));
+  assert(dataQueries.length === 2, "expected browse + count SQL queries");
+  const browse = browseQuery(dataQueries);
+  countQuery(dataQueries);
   assert(browse.params.includes(50), "params include default limit 50");
   assert(browse.params.includes(0), "params include offset 0");
   assert(

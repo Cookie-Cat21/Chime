@@ -17,7 +17,7 @@ type RouteContext = { params: Promise<{ code: string }> };
 
 /**
  * GET /api/v1/indexes/{code}/daily-bars — ASPI / S&P SL20 daily path.
- * Postgres ``daily_bars`` only (close series from CSE ``chartData``). Session required.
+ * Postgres ``daily_bars`` only (close series). Session required.
  */
 export async function GET(request: NextRequest, context: RouteContext) {
   const gated = await requireSession(request);
@@ -73,7 +73,7 @@ export async function GET(request: NextRequest, context: RouteContext) {
       count: bars.length,
       bars,
       disclaimer:
-        "Index daily path from Chime (CSE chartData closes) — research only, not financial advice.",
+        "Index daily path from Quiverly (Postgres closes) — research only, not financial advice.",
     });
   } catch (err) {
     console.error("GET /indexes/:code/daily-bars failed", err);

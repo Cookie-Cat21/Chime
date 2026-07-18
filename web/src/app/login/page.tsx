@@ -165,30 +165,12 @@ export default async function LoginPage({
         </p>
 
         <ul
-          className="chime-rise chime-rise-delay-3 mt-6 max-w-md space-y-2.5 text-sm text-muted-foreground"
+          className="chime-rise chime-rise-delay-3 mt-6 max-w-md list-disc space-y-2.5 pl-5 text-sm text-muted-foreground"
           aria-labelledby="login-explainer"
         >
-          <li className="flex gap-2.5">
-            <span
-              aria-hidden
-              className="mt-2 size-1 shrink-0 rounded-full bg-foreground/55"
-            />
-            <span>Overview of movers, watchlist, and armed rules</span>
-          </li>
-          <li className="flex gap-2.5">
-            <span
-              aria-hidden
-              className="mt-2 size-1 shrink-0 rounded-full bg-foreground/55"
-            />
-            <span>Price, move, and disclosure alerts</span>
-          </li>
-          <li className="flex gap-2.5">
-            <span
-              aria-hidden
-              className="mt-2 size-1 shrink-0 rounded-full bg-foreground/55"
-            />
-            <span>Push on Telegram when something matches</span>
-          </li>
+          <li>Overview of movers, watchlist, and armed rules</li>
+          <li>Price, move, and disclosure alerts</li>
+          <li>Push on Telegram when something matches</li>
         </ul>
 
         <NfaInline className="chime-rise chime-rise-delay-3 mt-5" />

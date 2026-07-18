@@ -22,6 +22,10 @@ type MoversBody = {
 
 type CapturedQuery = { sql: string; params: unknown[] };
 
+function dataQueries(captured: CapturedQuery[]): CapturedQuery[] {
+  return captured.filter((c) => !c.sql.includes("FROM dash_sessions"));
+}
+
 function fail(msg: string): never {
   console.error(`FAIL: ${msg}`);
   process.exit(1);
@@ -52,6 +56,10 @@ function installDbPool(
       if (mode === "throw") {
         throw new Error("postgres://secret-user:secret-pass@db.internal/chime boom");
       }
+      // Session revoke check (requireSession) — not a movers query.
+      if (sql.includes("FROM dash_sessions")) {
+        return { rows: [{ revoked: false }] };
+      }
       assert(
         sql.includes("INNER JOIN LATERAL"),
         "movers SQL must INNER JOIN LATERAL latest snapshots",
@@ -80,17 +88,18 @@ async function testDefaultDirectionUpAndLimit(): Promise<void> {
   assert(res.status === 200, `default should 200, got ${res.status}`);
   assert(body.direction === "up", `default direction up, got ${body.direction}`);
   assert(body.limit === 20, `default limit 20, got ${body.limit}`);
-  assert(captured.length === 1, "expected one SQL query");
+  const data = dataQueries(captured);
+  assert(data.length === 1, "expected one SQL query");
   assert(
-    captured[0].sql.includes("ps.change_pct > 0"),
+    data[0].sql.includes("ps.change_pct > 0"),
     "default up must sign-filter change_pct > 0",
   );
   assert(
-    captured[0].sql.includes("ps.change_pct DESC NULLS LAST"),
+    data[0].sql.includes("ps.change_pct DESC NULLS LAST"),
     "up sorts change_pct DESC",
   );
-  assert(captured[0].params.includes(20), "params include default limit 20");
-  assert(captured[0].params.includes(0), "params include offset 0");
+  assert(data[0].params.includes(20), "params include default limit 20");
+  assert(data[0].params.includes(0), "params include offset 0");
 }
 
 async function testPostFilterDropsNullPctAfterFinite(): Promise<void> {
@@ -247,16 +256,17 @@ async function testDirectionDownSignFilter(): Promise<void> {
   assert(res.status === 200, `direction=down should 200, got ${res.status}`);
   assert(body.direction === "down", `direction echo down, got ${body.direction}`);
   assert(body.limit === 5, `limit echo 5, got ${body.limit}`);
+  const data = dataQueries(captured);
   assert(
-    captured[0].sql.includes("ps.change_pct < 0"),
+    data[0].sql.includes("ps.change_pct < 0"),
     "down must sign-filter change_pct < 0",
   );
   assert(
-    !captured[0].sql.includes("ps.change_pct > 0"),
+    !data[0].sql.includes("ps.change_pct > 0"),
     "down must not use > 0 filter",
   );
   assert(
-    captured[0].sql.includes("ps.change_pct ASC NULLS LAST"),
+    data[0].sql.includes("ps.change_pct ASC NULLS LAST"),
     "down sorts change_pct ASC",
   );
 }
@@ -272,7 +282,10 @@ async function testInvalidDirectionRejected(): Promise<void> {
         ? body.error.code
         : undefined;
     assert(code === "validation_error", `expected validation_error, got ${code}`);
-    assert(captured.length === 0, `invalid direction must not hit DB (${raw})`);
+    assert(
+      dataQueries(captured).length === 0,
+      `invalid direction must not hit DB (${raw})`,
+    );
   }
 }
 
@@ -281,13 +294,16 @@ async function testLimitClampAndInvalidFallback(): Promise<void> {
     const { res, body, captured } = await call("limit=9999");
     assert(res.status === 200, `limit clamp should 200, got ${res.status}`);
     assert(body.limit === 50, `limit clamped to 50, got ${body.limit}`);
-    assert(captured[0].params.includes(50), "SQL params use clamped 50");
+    assert(dataQueries(captured)[0].params.includes(50), "SQL params use clamped 50");
   }
   for (const raw of ["0", "-3", "nope"]) {
     const { res, body, captured } = await call(`limit=${raw}`);
     assert(res.status === 200, `invalid limit ${raw} should 200, got ${res.status}`);
     assert(body.limit === 20, `invalid limit ${raw} → default 20, got ${body.limit}`);
-    assert(captured[0].params.includes(20), `params use default for limit=${raw}`);
+    assert(
+      dataQueries(captured)[0].params.includes(20),
+      `params use default for limit=${raw}`,
+    );
   }
 }
 
@@ -376,15 +392,19 @@ async function testFiniteEgressAndNoQFilter(): Promise<void> {
   assert(jkh.change_pct === 1.35, `JKH change_pct finite, got ${jkh.change_pct}`);
   assert(jkh.symbol === "JKH.N0000", "non-finite pct row dropped from movers");
   // Thin fence: movers must not accept q / LIKE search.
-  assert(!captured[0].sql.includes("LIKE"), "movers must not add LIKE q filter");
-  assert(!captured[0].sql.toLowerCase().includes("sector ="), "no sector filter");
+  const data = dataQueries(captured);
+  assert(!data[0].sql.includes("LIKE"), "movers must not add LIKE q filter");
+  assert(!data[0].sql.toLowerCase().includes("sector ="), "no sector filter");
 }
 
 async function testCaseInsensitiveDirection(): Promise<void> {
   const { res, body, captured } = await call("direction=DOWN");
   assert(res.status === 200, `DOWN should 200, got ${res.status}`);
   assert(body.direction === "down", `DOWN normalizes to down, got ${body.direction}`);
-  assert(captured[0].sql.includes("ps.change_pct < 0"), "DOWN → down filter");
+  assert(
+    dataQueries(captured)[0].sql.includes("ps.change_pct < 0"),
+    "DOWN → down filter",
+  );
 }
 
 async function main(): Promise<void> {

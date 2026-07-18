@@ -278,7 +278,7 @@ function parseIndexes(body: unknown): IndexStripItem[] {
   return out;
 }
 
-async function loadIndexChartData(): Promise<{
+async function loadIndexPathSeries(): Promise<{
   barsByCode: IndexStripBars;
   ticksByCode: IndexStripTicks;
 }> {
@@ -405,7 +405,7 @@ export default async function OverviewPage() {
     serverApiGet("/api/v1/alerts/history?limit=6"),
     serverApiGet("/api/v1/indexes"),
     serverApiGet("/api/v1/sectors"),
-    loadIndexChartData(),
+    loadIndexPathSeries(),
   ]);
 
   const watch = parseWatch(await readJson(watchRes));
