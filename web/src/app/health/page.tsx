@@ -25,6 +25,7 @@ import { normalizeSymbol } from "@/lib/api/symbol";
 import { MAX_DATE_MS, toIso } from "@/lib/api/time";
 import { requirePageSession } from "@/lib/auth/page-session";
 import { formatTs } from "@/lib/format";
+import { getMarketSessionState } from "@/lib/market-session";
 
 export const dynamic = "force-dynamic";
 
@@ -396,6 +397,7 @@ export default async function HealthPage() {
   const ml = payload?.ml ?? null;
   const snapshotAge = timestampAge(payload?.last_snapshot_at);
   const tickAge = timestampAge(payload?.poller?.last_tick_at);
+  const marketSession = getMarketSessionState();
   const pollerUnreachable =
     payload?.poller?.last_error === "health_url_unreachable";
   const pollerDegraded =
@@ -512,10 +514,17 @@ export default async function HealthPage() {
             </dl>
 
             {snapshotAge?.stale ? (
-              <StaleOpsNotice
-                title="Snapshot age is stale"
-                copy={`Last stored price snapshot is ${formatAge(snapshotAge)} old. Ops: confirm the poller is running during market hours and writing price_snapshots to Postgres.`}
-              />
+              marketSession.open ? (
+                <StaleOpsNotice
+                  title="Snapshot age is stale (market open)"
+                  copy={`Last stored price snapshot is ${formatAge(snapshotAge)} old while the CSE session is open (09:30–14:30 SLT). This looks like a quiet poller — confirm it is running and writing price_snapshots.`}
+                />
+              ) : (
+                <StaleOpsNotice
+                  title="Market closed — quiet snapshots expected"
+                  copy={`Last stored price snapshot is ${formatAge(snapshotAge)} old. CSE cash session is closed (weekdays 09:30–14:30 SLT), so age alone is not a poller failure. Check Health again after the next open if ticks should resume.`}
+                />
+              )
             ) : null}
 
             <section className="mt-10 border-t border-border/60 pt-6">
@@ -569,10 +578,17 @@ export default async function HealthPage() {
                 </>
               )}
               {tickAge?.stale ? (
-                <StaleOpsNotice
-                  title="Poller tick age is stale"
-                  copy={`Last poller tick is ${formatAge(tickAge)} old. Ops: check HEALTH_URL, the poller process, and recent poller logs before trusting green DB liveness.`}
-                />
+                marketSession.open ? (
+                  <StaleOpsNotice
+                    title="Poller tick age is stale (market open)"
+                    copy={`Last poller tick is ${formatAge(tickAge)} old while the session is open. Ops: check HEALTH_URL, the poller process, and recent logs — this is not expected quiet from a closed market.`}
+                  />
+                ) : (
+                  <StaleOpsNotice
+                    title="Market closed — tick age may look quiet"
+                    copy={`Last poller tick is ${formatAge(tickAge)} old. Outside 09:30–14:30 SLT weekdays the poller idles by design, so this is usually expected — not the same as an unreachable poller during the session.`}
+                  />
+                )
               ) : null}
             </section>
 

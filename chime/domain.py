@@ -725,10 +725,20 @@ def format_alert_message(
         title = truncate_disclosure_title(event.disclosure_title)
         if title:
             lines.append(f"Disclosure: {title}")
-    if event.disclosure_url:
-        safe_url = allowed_filing_url(event.disclosure_url)
-        if safe_url:
-            lines.append(safe_url)
+    # Disclosure fires must always carry a source link. Prefer the event URL when
+    # egress-safe; otherwise fall back to the CSE announcements page so a missing
+    # / rejected DB url never ships a title-only Telegram body.
+    source_url = (
+        allowed_filing_url(event.disclosure_url) if event.disclosure_url else None
+    )
+    if source_url is None and (
+        event.disclosure_title or event.disclosure_url or event.disclosure_id is not None
+    ):
+        from chime.adapters.cse import ANNOUNCEMENTS_PAGE
+
+        source_url = allowed_filing_url(ANNOUNCEMENTS_PAGE)
+    if source_url:
+        lines.append(source_url)
     dash_link = _dash_symbol_link(symbol)
     if dash_link:
         lines.append(dash_link)

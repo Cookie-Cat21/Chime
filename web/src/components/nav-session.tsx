@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useEffect, useState } from "react";
 
 import { Button } from "@/components/ui/button";
@@ -159,7 +160,7 @@ export function NavSession({ compact = false }: { compact?: boolean }) {
     <div
       className={
         compact
-          ? "flex items-center justify-between gap-3"
+          ? "flex flex-wrap items-center justify-between gap-3"
           : "hidden items-center gap-2 sm:flex"
       }
     >
@@ -170,6 +171,13 @@ export function NavSession({ compact = false }: { compact?: boolean }) {
       >
         {chipLabel(me)}
       </span>
+      <Link
+        href="/pricing"
+        className="shrink-0 rounded-sm text-xs font-medium text-muted-foreground underline-offset-4 hover:text-foreground hover:underline focus-visible:ring-2 focus-visible:ring-ring/50 focus-visible:outline-none"
+        data-testid="nav-pricing-link"
+      >
+        Pricing
+      </Link>
       <Button
         type="button"
         variant="ghost"

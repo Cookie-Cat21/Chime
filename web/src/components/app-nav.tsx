@@ -289,6 +289,17 @@ export function AppNav({ active }: { active?: string }) {
           </ul>
         </div>
         <div className="border-t border-border/60 py-3">
+          <p className="mb-2 px-0 text-xs font-medium tracking-wide text-muted-foreground uppercase">
+            Account
+          </p>
+          <Link
+            href="/pricing"
+            tabIndex={open ? undefined : -1}
+            onClick={() => setOpen(false)}
+            className="mb-2 flex min-h-11 items-center rounded-sm px-1 text-base text-muted-foreground focus-visible:ring-2 focus-visible:ring-ring/50 focus-visible:outline-none"
+          >
+            Pricing
+          </Link>
           <NavSession compact />
         </div>
       </nav>

@@ -25,10 +25,13 @@ function changeDirectionSr(pct: number | null): string {
  */
 export function MoversBarList({
   items,
+  watchedSymbols,
   className,
   empty = "No movers yet.",
 }: {
   items: MoverBarItem[];
+  /** Symbols already on the signed-in user’s watchlist (Watch → Watching). */
+  watchedSymbols?: Iterable<string>;
   className?: string;
   empty?: string;
 }) {
@@ -36,6 +39,7 @@ export function MoversBarList({
     return <p className="text-sm text-muted-foreground">{empty}</p>;
   }
 
+  const watched = new Set(watchedSymbols ?? []);
   const maxAbs = Math.max(
     ...items.map((i) =>
       i.change_pct != null && Number.isFinite(i.change_pct)
@@ -64,7 +68,10 @@ export function MoversBarList({
                 >
                   {item.symbol}
                 </Link>
-                <MoverRowActions symbol={item.symbol} />
+                <MoverRowActions
+                  symbol={item.symbol}
+                  watching={watched.has(item.symbol)}
+                />
               </div>
               <span className="flex shrink-0 items-center gap-2">
                 {item.price != null ? (

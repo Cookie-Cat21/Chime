@@ -73,7 +73,8 @@ type BrowsePayload = {
   total: number | null;
 };
 
-function browseHref(q: string, page: number, sector = ""): string {
+/** Build /market href — always keeps sector (+ q) across pagination. */
+export function browseHref(q: string, page: number, sector = ""): string {
   const params = new URLSearchParams();
   if (q) params.set("q", q);
   if (sector) params.set("sector", sector);
@@ -205,11 +206,13 @@ function MoversList({
   headingId,
   items,
   emptyLabel,
+  watchedSymbols,
 }: {
   title: string;
   headingId: string;
   items: MarketItem[];
   emptyLabel: string;
+  watchedSymbols: string[];
 }) {
   return (
     <div className="min-w-0 flex-1">
@@ -224,6 +227,7 @@ function MoversList({
       ) : (
         <MoversBarList
           items={items}
+          watchedSymbols={watchedSymbols}
           className="mt-3"
           empty={emptyLabel}
         />
@@ -361,7 +365,7 @@ export default async function MarketPage({
             <span className="font-medium text-foreground">{sector}</span>
             {" · "}
             <Link
-              href={q ? browseHref(q, 1) : "/market"}
+              href={browseHref(q, 1, "")}
               className="underline underline-offset-4 hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring/50 focus-visible:outline-none"
             >
               Clear sector
@@ -397,12 +401,14 @@ export default async function MarketPage({
                 headingId="movers-gainers-heading"
                 items={gainerItems}
                 emptyLabel="No gainers yet."
+                watchedSymbols={watchedSymbols ?? []}
               />
               <MoversList
                 title="Losers"
                 headingId="movers-losers-heading"
                 items={loserItems}
                 emptyLabel="No losers yet."
+                watchedSymbols={watchedSymbols ?? []}
               />
             </div>
           </section>
@@ -432,7 +438,7 @@ export default async function MarketPage({
                 {(sectorItems ?? []).map((item) => (
                   <li key={item.sector_id}>
                     <Link
-                      href={`/market?sector=${encodeURIComponent(item.name)}`}
+                      href={browseHref("", 1, item.name)}
                       className="flex items-center justify-between gap-2 py-2 focus-visible:ring-2 focus-visible:ring-ring/50 focus-visible:outline-none"
                       title={`${item.name} — browse sector`}
                     >

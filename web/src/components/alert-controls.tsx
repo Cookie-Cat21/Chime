@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 
@@ -150,6 +151,8 @@ export function AlertCreateForm({
   const [category, setCategory] = useState("");
   const [errors, setErrors] = useState<FieldErrors>({});
   const [pending, setPending] = useState(false);
+  /** Free-tier create cap hit — show Pricing link under the form error. */
+  const [quotaBlocked, setQuotaBlocked] = useState(false);
   // Advanced types collapsed by default (esp. small screens); open if deep-linked.
   const [showAdvanced, setShowAdvanced] = useState(() =>
     Boolean(initialType && isAdvancedAlertType(initialType)),
@@ -164,6 +167,7 @@ export function AlertCreateForm({
     showAdvanced || isAdvancedAlertType(type);
 
   function clearField(key: keyof FieldErrors) {
+    setQuotaBlocked(false);
     setErrors((prev) => {
       if (!prev[key] && !prev.form) return prev;
       const next = { ...prev };
@@ -176,6 +180,7 @@ export function AlertCreateForm({
   async function onSubmit(e: React.FormEvent) {
     e.preventDefault();
     setErrors({});
+    setQuotaBlocked(false);
     setPending(true);
     try {
       const next: FieldErrors = {};
@@ -257,6 +262,15 @@ export function AlertCreateForm({
         // Fail closed — never String()-coerce non-string error codes (objects
         // used to become "[object Object]" and mis-route field errors).
         const code = typeof codeRaw === "string" ? codeRaw : "";
+        if (code === "alert_quota_exceeded") {
+          const quotaMsg =
+            "You’ve hit the free-tier alert cap. Cancel an active rule, or see Pricing for a higher quota.";
+          setErrors({ form: quotaMsg });
+          setQuotaBlocked(true);
+          toast.error(quotaMsg);
+          return;
+        }
+        setQuotaBlocked(false);
         if (code === "invalid_symbol" || code === "not_found") {
           setErrors({ symbol: msg });
         } else if (msg.toLowerCase().includes("threshold")) {
@@ -271,6 +285,7 @@ export function AlertCreateForm({
         toast.error(msg);
         return;
       }
+      setQuotaBlocked(false);
       setSymbol("");
       setThreshold("");
       setCategory("");
@@ -497,6 +512,18 @@ export function AlertCreateForm({
             {pending ? "Creating…" : "Create alert"}
           </Button>
           <InlineError id="alert_form_error" message={formError} />
+          {quotaBlocked ? (
+            <p className="text-sm text-muted-foreground">
+              See{" "}
+              <Link
+                href="/pricing"
+                className="font-medium text-foreground underline underline-offset-4 focus-visible:ring-2 focus-visible:ring-ring/50 focus-visible:outline-none"
+              >
+                Pricing
+              </Link>{" "}
+              for higher watch and alert quotas. Not financial advice.
+            </p>
+          ) : null}
         </section>
       </div>
       {showFilingMetricsNote ? (

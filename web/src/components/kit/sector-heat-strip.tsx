@@ -42,7 +42,8 @@ export function SectorHeatStrip({
               href={href}
               title={`${item.name}: ${formatPct(pct)} — browse sector`}
               className={cn(
-                "inline-flex items-center rounded-md border px-2 py-1 text-xs focus-visible:ring-2 focus-visible:ring-ring/50 focus-visible:outline-none",
+                "inline-flex items-center rounded-md border px-2 py-1 text-xs outline-none",
+                "focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background",
                 up &&
                   "border-emerald-500/25 bg-emerald-500/10 text-emerald-800 dark:text-emerald-300",
                 down &&

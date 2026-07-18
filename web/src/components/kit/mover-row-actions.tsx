@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 
 import { useToast } from "@/components/toast";
 import { apiErrorMessage, apiMutate } from "@/lib/api/client-fetch";
@@ -11,12 +11,23 @@ import { normalizeSymbol } from "@/lib/api/symbol";
 /**
  * Real Watch mutate + Alert deep link for movers rows (replaces fake Watch→detail).
  */
-export function MoverRowActions({ symbol }: { symbol: string }) {
+export function MoverRowActions({
+  symbol,
+  watching: watchingProp = false,
+}: {
+  symbol: string;
+  /** From watchlist — avoids showing Watch when already watching. */
+  watching?: boolean;
+}) {
   const router = useRouter();
   const toast = useToast();
   const [pending, setPending] = useState(false);
-  const [watching, setWatching] = useState(false);
+  const [watching, setWatching] = useState(watchingProp);
   const alertHref = `/alerts?symbol=${encodeURIComponent(symbol)}`;
+
+  useEffect(() => {
+    setWatching(watchingProp);
+  }, [watchingProp]);
 
   async function onWatch() {
     const normalized = normalizeSymbol(symbol);

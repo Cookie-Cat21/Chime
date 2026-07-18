@@ -1089,6 +1089,7 @@ async def cmd_myalerts(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
         )
         return
     lines = ["Your alerts:"]
+    now = datetime.now(UTC)
     for r in rules:
         # Fail closed — non-string DB symbols used to throw on re.sub mid /myalerts.
         sym_raw = r.symbol if isinstance(r.symbol, str) else ""
@@ -1096,45 +1097,52 @@ async def cmd_myalerts(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
         if r.type == AlertType.DISCLOSURE:
             cat = sanitize_disclosure_category(r.category)
             if cat:
-                lines.append(f"#{r.id} {sym} disclosure {cat}")
+                line = f"#{r.id} {sym} disclosure {cat}"
             else:
-                lines.append(f"#{r.id} {sym} disclosure")
+                line = f"#{r.id} {sym} disclosure"
         elif r.type in NOTICE_ALERT_TYPES:
             label = {
                 AlertType.BUY_IN: "buyin",
                 AlertType.NON_COMPLIANCE: "noncompliance",
                 AlertType.HALT: "halt",
             }.get(r.type, r.type.value)
-            lines.append(f"#{r.id} {sym} {label}")
+            line = f"#{r.id} {sym} {label}"
         else:
             # Null / non-finite threshold must not TypeError the whole handler
             # (corrupt DB row / legacy insert); show "?" and keep listing.
             thr = r.threshold
             thr_s = f"{thr:g}" if thr is not None and math.isfinite(thr) else "?"
             if r.type == AlertType.DAILY_MOVE:
-                lines.append(f"#{r.id} {sym} move {thr_s}%")
+                line = f"#{r.id} {sym} move {thr_s}%"
             elif r.type == AlertType.PRICE_ABOVE:
-                lines.append(f"#{r.id} {sym} above {thr_s}")
+                line = f"#{r.id} {sym} above {thr_s}"
             elif r.type == AlertType.PRICE_BELOW:
-                lines.append(f"#{r.id} {sym} below {thr_s}")
+                line = f"#{r.id} {sym} below {thr_s}"
             elif r.type == AlertType.VOLUME_SPIKE:
-                lines.append(f"#{r.id} {sym} volume {thr_s}x")
+                line = f"#{r.id} {sym} volume {thr_s}x"
             elif r.type == AlertType.VOLUME_UP:
-                lines.append(f"#{r.id} {sym} volup {thr_s}x")
+                line = f"#{r.id} {sym} volup {thr_s}x"
             elif r.type == AlertType.VOLUME_DOWN:
-                lines.append(f"#{r.id} {sym} voldown {thr_s}x")
+                line = f"#{r.id} {sym} voldown {thr_s}x"
             elif r.type == AlertType.CROSSING_VOLUME:
-                lines.append(f"#{r.id} {sym} crossing {thr_s}x")
+                line = f"#{r.id} {sym} crossing {thr_s}x"
             elif r.type == AlertType.BIG_PRINT:
-                lines.append(f"#{r.id} {sym} print {thr_s}")
+                line = f"#{r.id} {sym} print {thr_s}"
             elif r.type == AlertType.GAP:
-                lines.append(f"#{r.id} {sym} gap {thr_s}%")
+                line = f"#{r.id} {sym} gap {thr_s}%"
             elif r.type == AlertType.BID_HEAVY:
-                lines.append(f"#{r.id} {sym} bidheavy {thr_s}x")
+                line = f"#{r.id} {sym} bidheavy {thr_s}x"
             elif r.type == AlertType.ASK_HEAVY:
-                lines.append(f"#{r.id} {sym} askheavy {thr_s}x")
+                line = f"#{r.id} {sym} askheavy {thr_s}x"
             else:
-                lines.append(f"#{r.id} {sym} {r.type.value} {thr_s}")
+                line = f"#{r.id} {sym} {r.type.value} {thr_s}"
+        muted = r.muted_until
+        if isinstance(muted, datetime):
+            muted_aware = muted if muted.tzinfo is not None else muted.replace(tzinfo=UTC)
+            if muted_aware > now:
+                # Compact ISO so /myalerts stays scannable on mobile.
+                line = f"{line} · muted until {muted_aware.strftime('%Y-%m-%d %H:%M UTC')}"
+        lines.append(line)
     # Category disclosure rules share a symbol with any-disclosure rules; the
     # numeric id from this list is the only way to cancel one filter.
     lines.append("")

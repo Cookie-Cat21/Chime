@@ -67,6 +67,21 @@ def test_disclosure_message_includes_url() -> None:
     assert disclaimer() in msg
 
 
+def test_disclosure_message_falls_back_to_announcements_page() -> None:
+    """Hostile / missing filing URL still ships a CSE source link on disclosure fires."""
+    msg = format_alert_message(
+        _disclosure_event(
+            disclosure_title="Board meeting",
+            disclosure_url="https://evil.example/phish",
+            disclosure_id=42,
+        )
+    )
+    assert "Board meeting" in msg
+    assert "https://www.cse.lk/announcements" in msg
+    assert "evil.example" not in msg
+    assert disclaimer() in msg
+
+
 def test_disclosure_message_truncates_long_titles() -> None:
     long_title = "A" * 200
     msg = format_alert_message(_disclosure_event(disclosure_title=long_title))

@@ -1255,3 +1255,66 @@ def test_symbol_data_quality_notices() -> None:
     assert "emptyMetricsHint" in panel
     assert "emptyBriefHint" in panel
 
+
+def test_phase_a_loops_11_20_surface_pins() -> None:
+    """Phase A loops 11–20: movers watch state, empty New alert, health copy, etc."""
+    market = (WEB / "src" / "app" / "market" / "page.tsx").read_text(encoding="utf-8")
+    overview = (WEB / "src" / "app" / "overview" / "page.tsx").read_text(
+        encoding="utf-8"
+    )
+    health = (WEB / "src" / "app" / "health" / "page.tsx").read_text(encoding="utf-8")
+    heat = (WEB / "src" / "components" / "kit" / "sector-heat-strip.tsx").read_text(
+        encoding="utf-8"
+    )
+    alerts_ctrl = (WEB / "src" / "components" / "alert-controls.tsx").read_text(
+        encoding="utf-8"
+    )
+    nav_session = (WEB / "src" / "components" / "nav-session.tsx").read_text(
+        encoding="utf-8"
+    )
+    app_nav = (WEB / "src" / "components" / "app-nav.tsx").read_text(encoding="utf-8")
+    movers = (WEB / "src" / "components" / "kit" / "movers-bar-list.tsx").read_text(
+        encoding="utf-8"
+    )
+    alerts_api = (
+        WEB / "src" / "app" / "api" / "v1" / "alerts" / "route.ts"
+    ).read_text(encoding="utf-8")
+
+    # 11 — movers Watch respects watchlist; browseHref exported for sector paging
+    assert "watchedSymbols" in movers
+    assert "export function browseHref" in market
+    assert "browseHref(q, page - 1, sector)" in market
+    assert "browseHref(q, page + 1, sector)" in market
+    assert 'browseHref("", 1, item.name)' in market
+
+    # 12 — overview armed-empty primary New alert
+    assert 'Link href="/alerts">New alert</Link>' in overview or (
+        'href="/alerts">New alert' in overview
+    )
+
+    # 14 — health distinguishes market closed vs stale-while-open
+    assert "getMarketSessionState" in health
+    assert "Market closed — quiet snapshots expected" in health
+    assert "Snapshot age is stale (market open)" in health
+
+    # 15 — sector heat keyboard focus rings with offset
+    assert "focus-visible:ring-offset-2" in heat
+    assert "focus-visible:ring-offset-background" in heat
+
+    # 16 — free-tier quota → Pricing
+    assert "alert_quota_exceeded" in alerts_ctrl
+    assert 'href="/pricing"' in alerts_ctrl
+    assert "Pricing" in alerts_api
+    assert "alert_quota_exceeded" in alerts_api
+
+    # 19 — sector preserved in pagination (rel prev/next)
+    assert 'rel="prev"' in market
+    assert 'rel="next"' in market
+    assert "sector)" in market  # browseHref(..., sector)
+
+    # 20 — Pricing in logged-in user / account area
+    assert 'href="/pricing"' in nav_session
+    assert 'data-testid="nav-pricing-link"' in nav_session
+    assert "Account" in app_nav
+    assert 'href="/pricing"' in app_nav
+

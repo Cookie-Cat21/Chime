@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 
 import { InlineError } from "@/components/inline-error";
 import { useToast } from "@/components/toast";
@@ -30,6 +30,11 @@ export function BrowseRowActions({
   const [pending, setPending] = useState(false);
   const [isWatching, setIsWatching] = useState(watching);
   const alertHref = `/alerts?symbol=${encodeURIComponent(symbol)}`;
+
+  // Keep Watching in sync after pagination / router.refresh() remounts props.
+  useEffect(() => {
+    setIsWatching(watching);
+  }, [watching]);
 
   async function onWatch() {
     setError(null);

@@ -243,7 +243,7 @@ export async function POST(request: NextRequest) {
       return jsonError(
         429,
         "alert_quota_exceeded",
-        `Active alert quota reached (${cap}). Free tier allows up to ${FREE_ALERT_CAP} unless your account quota was raised.`,
+        `Free tier allows up to ${FREE_ALERT_CAP} active alerts (you’re at ${cap}). Cancel one, or see Pricing for a higher quota.`,
       );
     }
 

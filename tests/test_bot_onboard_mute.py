@@ -26,6 +26,31 @@ def test_normalize_symbol_bare_ticker_appends_n0000() -> None:
 def test_fire_mute_keyboard_callback_data() -> None:
     markup = fire_mute_keyboard(42)
     assert markup.inline_keyboard[0][0].callback_data == "mute:42:24h"
+    assert markup.inline_keyboard[0][0].text == "Mute 24h"
+
+
+@pytest.mark.asyncio
+async def test_send_message_passes_fire_mute_keyboard_reply_markup() -> None:
+    """Fire cards attach Mute 24h via notify.send_message reply_markup passthrough."""
+    from chime.notify import SendResult, send_message
+
+    bot = AsyncMock()
+    bot.send_message = AsyncMock(return_value=None)
+    markup = fire_mute_keyboard(99)
+
+    result = await send_message(
+        bot,
+        chat_id=1001,
+        text="🔔 JKH.N0000\nTrigger: test\n\nNot financial advice.",
+        reply_markup=markup,
+    )
+
+    assert result is SendResult.OK
+    bot.send_message.assert_awaited_once()
+    kwargs = bot.send_message.await_args.kwargs
+    assert kwargs["chat_id"] == 1001
+    assert kwargs["reply_markup"] is markup
+    assert kwargs["reply_markup"].inline_keyboard[0][0].callback_data == "mute:99:24h"
 
 
 def test_build_application_registers_callback_handlers() -> None:

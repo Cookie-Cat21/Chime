@@ -640,14 +640,23 @@ export default async function OverviewPage() {
                 description={
                   rules.length === 0
                     ? "Create a price, move, or disclosure rule. When it matches, Telegram gets the ping."
-                    : "You have rules, but none are armed right now. Open Alerts to re-enable or unmute."
+                    : "You have rules, but none are armed right now. Open Alerts to re-enable or unmute — or set a new one."
                 }
                 action={
-                  <Button asChild size="sm">
-                    <Link href="/alerts">
-                      {rules.length === 0 ? "Create alert" : "Manage alerts"}
-                    </Link>
-                  </Button>
+                  <div className="flex flex-wrap gap-2">
+                    <Button asChild size="sm">
+                      <Link href="/alerts">New alert</Link>
+                    </Button>
+                    {rules.length > 0 ? (
+                      <Button asChild variant="outline" size="sm">
+                        <Link href="/alerts">Manage alerts</Link>
+                      </Button>
+                    ) : (
+                      <Button asChild variant="outline" size="sm">
+                        <Link href="/market">Browse</Link>
+                      </Button>
+                    )}
+                  </div>
                 }
               />
             ) : (
@@ -692,6 +701,7 @@ export default async function OverviewPage() {
             <div className="mt-4">
               <MoversBarList
                 items={gainers}
+                watchedSymbols={watch.map((w) => w.symbol)}
                 empty="No gainer snapshots yet — run the poller / tick."
               />
             </div>
@@ -706,6 +716,7 @@ export default async function OverviewPage() {
             <div className="mt-4">
               <MoversBarList
                 items={losers}
+                watchedSymbols={watch.map((w) => w.symbol)}
                 empty="No loser snapshots yet — run the poller / tick."
               />
             </div>

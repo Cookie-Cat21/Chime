@@ -290,6 +290,9 @@ async def test_cmd_myalerts_empty_and_formatted() -> None:
     assert "/alert JKH.N0000 disclosure Financial" in empty_reply
     assert disclaimer() in empty_reply
 
+    from datetime import UTC, datetime, timedelta
+
+    muted_until = datetime.now(UTC) + timedelta(hours=12)
     rules = [
         AlertRule(
             id=1,
@@ -322,6 +325,7 @@ async def test_cmd_myalerts_empty_and_formatted() -> None:
             symbol="HNB.N0000",
             type=AlertType.DISCLOSURE,
             threshold=None,
+            muted_until=muted_until,
         ),
     ]
     storage.list_alerts = AsyncMock(return_value=rules)
@@ -332,6 +336,8 @@ async def test_cmd_myalerts_empty_and_formatted() -> None:
     assert "#2 COMB.N0000 below 50" in reply
     assert "#3 SAMP.N0000 move 5%" in reply
     assert "#4 HNB.N0000 disclosure" in reply
+    assert "muted until" in reply
+    assert muted_until.strftime("%Y-%m-%d %H:%M UTC") in reply
     assert disclaimer() in reply
 
 
