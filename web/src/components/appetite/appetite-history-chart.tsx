@@ -10,7 +10,7 @@ import { cn } from "@/lib/utils";
 
 type RangeKey = "3M" | "1Y" | "MAX";
 
-/** Calendar-day windows (not session counts) so 3M clearly differs from 1Y. */
+/** Calendar-day windows for CSE-truth chips. MAX uses hybrid when available. */
 const RANGE_CALENDAR_DAYS: Record<Exclude<RangeKey, "MAX">, number> = {
   "3M": 92,
   "1Y": 365,
@@ -21,17 +21,17 @@ function parseTradeDateMs(iso: string): number {
   return Number.isFinite(t) ? t : Number.NaN;
 }
 
-function sliceByRange(historyAsc: AppetiteDay[], range: RangeKey): AppetiteDay[] {
+function sliceByCalendarDays(
+  historyAsc: AppetiteDay[],
+  calendarDays: number,
+): AppetiteDay[] {
   if (historyAsc.length === 0) return historyAsc;
-  if (range === "MAX") return historyAsc;
   const last = historyAsc[historyAsc.length - 1]!;
   const endMs = parseTradeDateMs(last.trade_date);
   if (!Number.isFinite(endMs)) {
-    // Fail soft — fall back to approx session windows.
-    const n = range === "3M" ? 63 : 252;
-    return historyAsc.slice(-n);
+    return historyAsc.slice(-(calendarDays <= 100 ? 63 : 252));
   }
-  const startMs = endMs - RANGE_CALENDAR_DAYS[range] * 86_400_000;
+  const startMs = endMs - calendarDays * 86_400_000;
   const sliced = historyAsc.filter((d) => {
     const ms = parseTradeDateMs(d.trade_date);
     return Number.isFinite(ms) && ms >= startMs;
@@ -81,7 +81,6 @@ function formatAxisDay(iso: string): string {
   return `${months[d.getUTCMonth()]} ${d.getUTCDate()}`;
 }
 
-/** Evenly spaced tick indexes — always include first + last. */
 function tickIndexes(n: number, target = 5): number[] {
   if (n <= 1) return [0];
   if (n <= target) return Array.from({ length: n }, (_, i) => i);
@@ -93,32 +92,31 @@ function tickIndexes(n: number, target = 5): number[] {
 }
 
 /**
- * Custom SVG area for appetite 0–100 history — no Recharts dep.
- * Range chips use calendar windows; MAX is full loaded series.
+ * Appetite history chart.
+ * 3M / 1Y = CSE-truth path. MAX = Yahoo+CSE hybrid research when loaded,
+ * otherwise falls back to full CSE with an honest note.
  */
 export function AppetiteHistoryChart({
   historyAsc,
+  hybridHistoryAsc = [],
   className,
 }: {
   historyAsc: AppetiteDay[];
+  /** Long research series (source=hybrid_research). Used only for MAX. */
+  hybridHistoryAsc?: AppetiteDay[];
   className?: string;
 }) {
   const [range, setRange] = useState<RangeKey>("1Y");
+  const hasHybrid = hybridHistoryAsc.length >= 2;
 
-  const series = useMemo(
-    () => sliceByRange(historyAsc, range),
-    [historyAsc, range],
-  );
+  const series = useMemo(() => {
+    if (range === "MAX") {
+      return hasHybrid ? hybridHistoryAsc : historyAsc;
+    }
+    return sliceByCalendarDays(historyAsc, RANGE_CALENDAR_DAYS[range]);
+  }, [historyAsc, hybridHistoryAsc, hasHybrid, range]);
 
-  const fullSpanDays = useMemo(() => {
-    if (historyAsc.length < 2) return 0;
-    const a = parseTradeDateMs(historyAsc[0]!.trade_date);
-    const b = parseTradeDateMs(historyAsc[historyAsc.length - 1]!.trade_date);
-    if (!Number.isFinite(a) || !Number.isFinite(b)) return historyAsc.length;
-    return Math.max(1, Math.round((b - a) / 86_400_000) + 1);
-  }, [historyAsc]);
-
-  const maxSameAs1Y = fullSpanDays > 0 && fullSpanDays <= 370;
+  const usingHybridMax = range === "MAX" && hasHybrid;
 
   if (series.length < 2) {
     return (
@@ -156,8 +154,7 @@ export function AppetiteHistoryChart({
 
   const first = series[0]!;
   const last = series[series.length - 1]!;
-  const xTicks = tickIndexes(series.length, series.length <= 80 ? 4 : 6);
-  // Short windows: day+month; longer: Mon YY
+  const xTicks = tickIndexes(series.length, usingHybridMax ? 6 : series.length <= 80 ? 4 : 6);
   const shortWindow = range === "3M";
 
   return (
@@ -185,18 +182,27 @@ export function AppetiteHistoryChart({
           {Math.round(Math.max(...series.map((d) => d.score)))}
         </span>
       </div>
-      {range === "MAX" && maxSameAs1Y ? (
+      {usingHybridMax ? (
+        <p
+          className="mb-2 rounded-md border border-amber-500/30 bg-amber-500/10 px-2.5 py-1.5 text-xs text-foreground"
+          role="status"
+        >
+          Research reconstruction (Yahoo + CSE) — not CSE official. 3M / 1Y stay
+          on the CSE-truth path.
+        </p>
+      ) : null}
+      {range === "MAX" && !hasHybrid ? (
         <p className="mb-2 text-xs text-muted-foreground" role="status">
-          MAX is the full CSE appetite history we have (~
-          {fullSpanDays} calendar days). It matches 1Y until longer backfill
-          lands — not a chart bug.
+          MAX is meant to be Yahoo+CSE hybrid research history. Hybrid appetite
+          scores are not loaded yet — showing full CSE path (~1y) until
+          ``appetite-backfill --hybrid`` finishes.
         </p>
       ) : null}
       <svg
         viewBox={`0 0 ${w} ${h}`}
         className="h-auto w-full"
         role="img"
-        aria-label={`Market Appetite from ${first.trade_date} to ${last.trade_date}, latest ${Math.round(last.score)}`}
+        aria-label={`Market Appetite from ${first.trade_date} to ${last.trade_date}, latest ${Math.round(last.score)}${usingHybridMax ? ", Yahoo+CSE research" : ""}`}
       >
         {zoneBands.map((z) => {
           const yTop = padT + (1 - z.y1 / 100) * plotH;
@@ -239,7 +245,6 @@ export function AppetiteHistoryChart({
             </g>
           );
         })}
-        {/* X-axis baseline + date ticks */}
         <line
           x1={padL}
           x2={padL + plotW}
