@@ -186,7 +186,8 @@ export function SettingsForm({ initial }: { initial: SettingsPreferences }) {
             Hours are Asia/Colombo (SLT). Set both ends, or leave both Off.
             Overnight windows work (e.g. 22:00→06:00). During quiet hours
             Telegram pushes are held and delivered after the window ends — not
-            dropped. Same start and end turns quiet hours off.
+            dropped. Same start and end turns quiet hours off. Quiet hours are
+            free — Pro is not required to use them.
           </p>
         </section>
 

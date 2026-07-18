@@ -143,12 +143,10 @@ export function TelegramLoginWidget({ botUsername }: Props) {
     };
   }, [bot, reactId, router]);
 
+  // Hide cleanly when TELEGRAM_BOT_USERNAME / DASH_TELEGRAM_BOT_USERNAME is
+  // unset — never mount telegram-widget.js without a bot (broken embed).
   if (!bot) {
-    return (
-      <p role="status" className="text-sm text-muted-foreground">
-        Telegram Login is enabled but the bot username is not configured.
-      </p>
-    );
+    return null;
   }
 
   return (

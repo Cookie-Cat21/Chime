@@ -476,14 +476,23 @@ export default async function MarketPage({
             description={
               filtered
                 ? "No symbols matched that filter. Try another query or sector, or browse again after the next market update."
-                : "No snapshot data yet. On the host, run make tick (or leave poller/both running) to seed browse, then refresh. Open Health if this persists."
+                : "No snapshot data yet — the trade summary board looks empty, or the poller has not seeded browse. On the host, run make tick (or leave poller/both running), then refresh this page. If it stays empty, check Health."
             }
             action={
               filtered ? (
                 <Button asChild variant="outline">
                   <Link href="/market">Clear filters</Link>
                 </Button>
-              ) : undefined
+              ) : (
+                <div className="flex flex-wrap gap-2">
+                  <Button asChild>
+                    <Link href="/health">Check Health</Link>
+                  </Button>
+                  <Button asChild variant="outline">
+                    <Link href="/overview">Back to Overview</Link>
+                  </Button>
+                </div>
+              )
             }
           />
         ) : (

@@ -62,7 +62,9 @@ export default async function LoginPage({
       : null;
   const telegramLoginFlag = process.env.DASH_TELEGRAM_LOGIN === "1";
   const botUsername = resolveTelegramBotUsername();
-  const showTelegramWidget = telegramLoginFlag && botUsername != null;
+  // Require a real bot username — flag alone must not render a broken embed.
+  const showTelegramWidget =
+    telegramLoginFlag && typeof botUsername === "string" && botUsername.length > 0;
 
   return (
     <main

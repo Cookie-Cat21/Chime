@@ -1318,3 +1318,36 @@ def test_phase_a_loops_11_20_surface_pins() -> None:
     assert "Account" in app_nav
     assert 'href="/pricing"' in app_nav
 
+
+def test_phase_a_loops_31_35_surface_pins() -> None:
+    """Phase A loops 31–35: market empty CTA, health→overview, quiet hours honesty, Telegram hide."""
+    market = (WEB / "src" / "app" / "market" / "page.tsx").read_text(encoding="utf-8")
+    health = (WEB / "src" / "app" / "health" / "page.tsx").read_text(encoding="utf-8")
+    settings = (WEB / "src" / "components" / "settings-form.tsx").read_text(
+        encoding="utf-8"
+    )
+    login = (WEB / "src" / "app" / "login" / "page.tsx").read_text(encoding="utf-8")
+    tg_widget = (
+        WEB / "src" / "components" / "telegram-login-widget.tsx"
+    ).read_text(encoding="utf-8")
+
+    # 31 — market empty when trade summary empty: clearer copy + Health CTA
+    assert "trade summary board looks empty" in market
+    assert "make tick" in market
+    assert 'href="/health">Check Health</Link>' in market
+    assert 'href="/overview">Back to Overview</Link>' in market
+
+    # 32 — health stale notices link back to Overview
+    assert "overviewHref" in health
+    assert 'href="/overview"' in health
+    assert "Back to Overview" in health
+
+    # 33 — quiet hours are free (Pro not required)
+    assert "Quiet hours are" in settings
+    assert "Pro is not required" in settings
+
+    # 34 — Telegram Login Widget hidden when bot username unset (no broken embed)
+    assert "return null;" in tg_widget
+    assert "bot username is not configured" not in tg_widget
+    assert "botUsername.length > 0" in login
+

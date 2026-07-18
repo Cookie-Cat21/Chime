@@ -518,11 +518,13 @@ export default async function HealthPage() {
                 <StaleOpsNotice
                   title="Snapshot age is stale (market open)"
                   copy={`Last stored price snapshot is ${formatAge(snapshotAge)} old while the CSE session is open (09:30–14:30 SLT). This looks like a quiet poller — confirm it is running and writing price_snapshots.`}
+                  overviewHref
                 />
               ) : (
                 <StaleOpsNotice
                   title="Market closed — quiet snapshots expected"
                   copy={`Last stored price snapshot is ${formatAge(snapshotAge)} old. CSE cash session is closed (weekdays 09:30–14:30 SLT), so age alone is not a poller failure. Check Health again after the next open if ticks should resume.`}
+                  overviewHref
                 />
               )
             ) : null}
@@ -582,11 +584,13 @@ export default async function HealthPage() {
                   <StaleOpsNotice
                     title="Poller tick age is stale (market open)"
                     copy={`Last poller tick is ${formatAge(tickAge)} old while the session is open. Ops: check HEALTH_URL, the poller process, and recent logs — this is not expected quiet from a closed market.`}
+                    overviewHref
                   />
                 ) : (
                   <StaleOpsNotice
                     title="Market closed — tick age may look quiet"
                     copy={`Last poller tick is ${formatAge(tickAge)} old. Outside 09:30–14:30 SLT weekdays the poller idles by design, so this is usually expected — not the same as an unreachable poller during the session.`}
+                    overviewHref
                   />
                 )
               ) : null}
@@ -998,7 +1002,16 @@ function Row({ label, value }: { label: string; value: string }) {
   );
 }
 
-function StaleOpsNotice({ title, copy }: { title: string; copy: string }) {
+function StaleOpsNotice({
+  title,
+  copy,
+  overviewHref = false,
+}: {
+  title: string;
+  copy: string;
+  /** When poller/snapshot age looks quiet, offer a path back to Overview. */
+  overviewHref?: boolean;
+}) {
   const safeTitle = sanitizeOpsNoticeText(
     title,
     MAX_OPS_NOTICE_TITLE,
@@ -1008,7 +1021,22 @@ function StaleOpsNotice({ title, copy }: { title: string; copy: string }) {
   return (
     <Alert className="mt-5" variant="default">
       <AlertTitle>{safeTitle}</AlertTitle>
-      {safeCopy ? <AlertDescription>{safeCopy}</AlertDescription> : null}
+      {safeCopy ? (
+        <AlertDescription>
+          <span className="block">{safeCopy}</span>
+          {overviewHref ? (
+            <span className="mt-2 block">
+              <Link
+                href="/overview"
+                className="font-medium text-foreground underline underline-offset-4 hover:text-foreground/90 focus-visible:ring-2 focus-visible:ring-ring/50 focus-visible:outline-none"
+              >
+                Back to Overview
+              </Link>
+              {" — check whether the dash still looks live while you investigate."}
+            </span>
+          ) : null}
+        </AlertDescription>
+      ) : null}
     </Alert>
   );
 }
