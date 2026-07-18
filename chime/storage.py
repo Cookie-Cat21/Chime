@@ -1186,9 +1186,12 @@ class Storage:
         out: list[PriceSnapshot] = []
         for row in _as_rows(rows):
             try:
-                out.append(_row_to_snapshot(row))
+                snap = _row_to_snapshot(row)
             except Exception:
                 continue
+            if snap is None:
+                continue
+            out.append(snap)
         return out
 
     async def upsert_market_appetite_daily(self, row: Any) -> None:
