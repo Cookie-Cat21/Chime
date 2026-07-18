@@ -11,5 +11,5 @@ Source design: [Canva — Chime rebrand to Koel](https://canva.link/mofjxofiv0cy
 | `koel-mark.svg` | Square black master K mark |
 | `canva/` | Raw Canva page PNGs/WebPs |
 
-Ink: `#1A1A1A`. Web runtime copies: `web/public/brand/koel-*` (transparent UI crops).
-Use via `KoelWordmark` / `KoelMark` in `web/src/components/brand/koel-brand.tsx`.
+Ink: `#111111`. Web runtime copies: `web/public/brand/koel-*` (transparent UI crops).
+Use via `KoelWordmark` / `KoelMark` / `KoelLockup` in `web/src/components/brand/koel-brand.tsx`.

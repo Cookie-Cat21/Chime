@@ -91,9 +91,9 @@ export default async function HomePage() {
             <div className="chime-rise">
               <KoelWordmark size="hero" priority />
             </div>
-            <h1 className="chime-rise chime-rise-delay-1 mt-10 font-display text-4xl font-semibold tracking-tight text-foreground sm:text-5xl sm:leading-[1.08]">
+            <h1 className="chime-rise chime-rise-delay-1 mt-10 font-display text-4xl font-semibold tracking-tight text-foreground sm:text-5xl sm:leading-[1.06]">
               CSE alerts on Telegram.
-              <span className="mt-2 block text-muted-foreground">
+              <span className="mt-2 block font-medium text-muted-foreground">
                 Dash when you need to manage.
               </span>
             </h1>
