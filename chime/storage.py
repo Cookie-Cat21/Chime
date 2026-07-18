@@ -974,6 +974,334 @@ class Storage:
             ).fetchall()
         return [dict(r) for r in rows]
 
+    def _bars_table_for_source(self, source: str) -> str:
+        """Return daily bars table name for appetite source (SQL-safe whitelist)."""
+        if source == "hybrid_research":
+            return "hybrid_daily_bars"
+        return "daily_bars"
+
+    async def list_daily_bar_trade_dates(self, *, source: str = "cse") -> list[date]:
+        """Distinct trade_dates present in the bars table for ``source``."""
+        table = self._bars_table_for_source(source)
+        async with self._pool.connection() as conn:
+            rows = await (
+                await conn.execute(
+                    f"""
+                    SELECT DISTINCT trade_date
+                    FROM {table}
+                    WHERE symbol <> 'ASPI'
+                    ORDER BY trade_date ASC
+                    """
+                )
+            ).fetchall()
+        out: list[date] = []
+        for row in _as_rows(rows):
+            d = row.get("trade_date")
+            if isinstance(d, date):
+                out.append(d)
+        return out
+
+    async def list_daily_bar_changes_for_date(
+        self, trade_date: date, *, source: str = "cse"
+    ) -> list[dict[str, Any]]:
+        """Per-symbol change_pct for ``trade_date`` (excludes ASPI).
+
+        change_pct = (price / lag(price) - 1) * 100 using the prior bar.
+        """
+        if not isinstance(trade_date, date):
+            return []
+        table = self._bars_table_for_source(source)
+        async with self._pool.connection() as conn:
+            rows = await (
+                await conn.execute(
+                    f"""
+                    WITH ordered AS (
+                        SELECT
+                            symbol,
+                            trade_date,
+                            price,
+                            volume,
+                            LAG(price) OVER (
+                                PARTITION BY symbol ORDER BY trade_date
+                            ) AS prev_price
+                        FROM {table}
+                        WHERE symbol <> 'ASPI'
+                    )
+                    SELECT
+                        symbol,
+                        trade_date,
+                        price,
+                        volume,
+                        prev_price,
+                        CASE
+                            WHEN prev_price IS NOT NULL
+                                 AND prev_price <> 0
+                                 AND price IS NOT NULL
+                            THEN (price / prev_price - 1.0) * 100.0
+                            ELSE NULL
+                        END AS change_pct
+                    FROM ordered
+                    WHERE trade_date = %s
+                    ORDER BY symbol ASC
+                    """,
+                    (trade_date,),
+                )
+            ).fetchall()
+        return [dict(r) for r in rows]
+
+    async def list_all_daily_bar_changes(
+        self, *, source: str = "cse"
+    ) -> list[dict[str, Any]]:
+        """All symbol/date change_pct rows (excludes ASPI) for appetite backfill."""
+        table = self._bars_table_for_source(source)
+        async with self._pool.connection() as conn:
+            rows = await (
+                await conn.execute(
+                    f"""
+                    WITH ordered AS (
+                        SELECT
+                            symbol,
+                            trade_date,
+                            price,
+                            volume,
+                            LAG(price) OVER (
+                                PARTITION BY symbol ORDER BY trade_date
+                            ) AS prev_price
+                        FROM {table}
+                        WHERE symbol <> 'ASPI'
+                    )
+                    SELECT
+                        symbol,
+                        trade_date,
+                        price,
+                        volume,
+                        CASE
+                            WHEN prev_price IS NOT NULL
+                                 AND prev_price <> 0
+                                 AND price IS NOT NULL
+                            THEN (price / prev_price - 1.0) * 100.0
+                            ELSE NULL
+                        END AS change_pct
+                    FROM ordered
+                    WHERE prev_price IS NOT NULL
+                    ORDER BY trade_date ASC, symbol ASC
+                    """
+                )
+            ).fetchall()
+        return [dict(r) for r in rows]
+
+    async def aspi_change_pct_for_date(
+        self, trade_date: date, *, source: str = "cse"
+    ) -> float | None:
+        """ASPI daily change_pct for ``trade_date`` from bars lag(price)."""
+        if not isinstance(trade_date, date):
+            return None
+        table = self._bars_table_for_source(source)
+        async with self._pool.connection() as conn:
+            row = await (
+                await conn.execute(
+                    f"""
+                    WITH ordered AS (
+                        SELECT
+                            trade_date,
+                            price,
+                            LAG(price) OVER (ORDER BY trade_date) AS prev_price
+                        FROM {table}
+                        WHERE symbol = 'ASPI'
+                    )
+                    SELECT
+                        CASE
+                            WHEN prev_price IS NOT NULL AND prev_price <> 0
+                            THEN (price / prev_price - 1.0) * 100.0
+                            ELSE NULL
+                        END AS change_pct
+                    FROM ordered
+                    WHERE trade_date = %s
+                    """,
+                    (trade_date,),
+                )
+            ).fetchone()
+        if row is None:
+            return None
+        val = _as_row(row).get("change_pct")
+        if isinstance(val, bool) or not isinstance(val, int | float):
+            return None
+        if not math.isfinite(float(val)):
+            return None
+        return float(val)
+
+    async def list_aspi_change_pcts(
+        self, *, source: str = "cse"
+    ) -> dict[date, float]:
+        """Map trade_date → ASPI change_pct for all dates with a prior bar."""
+        table = self._bars_table_for_source(source)
+        async with self._pool.connection() as conn:
+            rows = await (
+                await conn.execute(
+                    f"""
+                    WITH ordered AS (
+                        SELECT
+                            trade_date,
+                            price,
+                            LAG(price) OVER (ORDER BY trade_date) AS prev_price
+                        FROM {table}
+                        WHERE symbol = 'ASPI'
+                    )
+                    SELECT
+                        trade_date,
+                        (price / prev_price - 1.0) * 100.0 AS change_pct
+                    FROM ordered
+                    WHERE prev_price IS NOT NULL AND prev_price <> 0
+                    ORDER BY trade_date ASC
+                    """
+                )
+            ).fetchall()
+        out: dict[date, float] = {}
+        for row in _as_rows(rows):
+            d = row.get("trade_date")
+            val = row.get("change_pct")
+            if not isinstance(d, date):
+                continue
+            if isinstance(val, bool) or not isinstance(val, int | float):
+                continue
+            if not math.isfinite(float(val)):
+                continue
+            out[d] = float(val)
+        return out
+
+    async def list_latest_price_snapshots(self) -> list[PriceSnapshot]:
+        """Latest poller snapshot per symbol (for live appetite path)."""
+        async with self._pool.connection() as conn:
+            rows = await (
+                await conn.execute(
+                    """
+                    SELECT DISTINCT ON (symbol) *
+                    FROM price_snapshots
+                    WHERE source = 'poller'
+                      AND symbol <> 'MARKET'
+                    ORDER BY symbol ASC, ts DESC, id DESC
+                    """
+                )
+            ).fetchall()
+        out: list[PriceSnapshot] = []
+        for row in _as_rows(rows):
+            try:
+                snap = _row_to_snapshot(row)
+            except Exception:
+                continue
+            if snap is None:
+                continue
+            out.append(snap)
+        return out
+
+    async def upsert_market_appetite_daily(self, row: Any) -> None:
+        """Upsert one ``market_appetite_daily`` row (keyed by trade_date)."""
+        trade_date = getattr(row, "trade_date", None)
+        if not isinstance(trade_date, date):
+            return
+        score = getattr(row, "score", None)
+        if isinstance(score, bool) or not isinstance(score, int | float):
+            return
+        if not math.isfinite(float(score)):
+            return
+        band = getattr(row, "band", None)
+        if not isinstance(band, str) or not band.strip():
+            return
+        source = getattr(row, "source", "cse")
+        if source not in ("cse", "hybrid_research"):
+            source = "cse"
+        components = getattr(row, "components", None)
+        payload = components if isinstance(components, dict) else {}
+        universe_n = getattr(row, "universe_n", 0)
+        if isinstance(universe_n, bool) or not isinstance(universe_n, int) or universe_n < 0:
+            universe_n = 0
+
+        def _opt_int(value: Any) -> int | None:
+            if isinstance(value, bool) or not isinstance(value, int):
+                return None
+            return value
+
+        def _opt_float(value: Any) -> float | None:
+            if value is None or isinstance(value, bool):
+                return None
+            if not isinstance(value, int | float) or not math.isfinite(value):
+                return None
+            return float(value)
+
+        async with self._pool.connection() as conn:
+            await conn.execute(
+                """
+                INSERT INTO market_appetite_daily (
+                    trade_date, score, band, components, source,
+                    universe_n, advancers, decliners, unchanged,
+                    aspi_change_pct, computed_at
+                ) VALUES (
+                    %s, %s, %s, %s, %s,
+                    %s, %s, %s, %s,
+                    %s, now()
+                )
+                ON CONFLICT (trade_date) DO UPDATE SET
+                    score = EXCLUDED.score,
+                    band = EXCLUDED.band,
+                    components = EXCLUDED.components,
+                    source = EXCLUDED.source,
+                    universe_n = EXCLUDED.universe_n,
+                    advancers = EXCLUDED.advancers,
+                    decliners = EXCLUDED.decliners,
+                    unchanged = EXCLUDED.unchanged,
+                    aspi_change_pct = EXCLUDED.aspi_change_pct,
+                    computed_at = now()
+                """,
+                (
+                    trade_date,
+                    float(score),
+                    band.strip(),
+                    Json(payload),
+                    source,
+                    universe_n,
+                    _opt_int(getattr(row, "advancers", None)),
+                    _opt_int(getattr(row, "decliners", None)),
+                    _opt_int(getattr(row, "unchanged", None)),
+                    _opt_float(getattr(row, "aspi_change_pct", None)),
+                ),
+            )
+
+    async def list_market_appetite_daily(
+        self, *, source: str | None = None, limit: int | None = None
+    ) -> list[dict[str, Any]]:
+        """List appetite rows ascending by trade_date (optional source filter)."""
+        clauses: list[str] = []
+        params: list[Any] = []
+        if source in ("cse", "hybrid_research"):
+            clauses.append("source = %s")
+            params.append(source)
+        where = f"WHERE {' AND '.join(clauses)}" if clauses else ""
+        lim_sql = ""
+        if (
+            limit is not None
+            and isinstance(limit, int)
+            and not isinstance(limit, bool)
+            and limit > 0
+        ):
+            lim_sql = "LIMIT %s"
+            params.append(limit)
+        async with self._pool.connection() as conn:
+            rows = await (
+                await conn.execute(
+                    f"""
+                    SELECT trade_date, score, band, components, source,
+                           universe_n, advancers, decliners, unchanged,
+                           aspi_change_pct, computed_at
+                    FROM market_appetite_daily
+                    {where}
+                    ORDER BY trade_date ASC
+                    {lim_sql}
+                    """,
+                    tuple(params),
+                )
+            ).fetchall()
+        return [dict(r) for r in rows]
+
     async def list_symbols_missing_sector(self) -> list[str]:
         """Symbols with daily bars (or any stock) missing a sector label."""
         async with self._pool.connection() as conn:

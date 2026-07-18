@@ -1,5 +1,6 @@
 import Link from "next/link";
 
+import { AppetiteStrip } from "@/components/appetite/appetite-strip";
 import { AppNav } from "@/components/app-nav";
 import { EmptyState } from "@/components/empty-state";
 import { CakeCherryBanner } from "@/components/kit/cake-cherry-banner";
@@ -17,6 +18,14 @@ import { NfaInline } from "@/components/nfa-inline";
 import { PageHeader } from "@/components/page-header";
 import { PriceRefresh } from "@/components/price-refresh";
 import { Button } from "@/components/ui/button";
+import {
+  deltaVs,
+  headlineDay,
+  headlineIndex,
+  queryAppetiteHistory,
+  type AppetiteDay,
+} from "@/lib/api/appetite";
+import { getPool } from "@/lib/db";
 import {
   MAX_SECTOR_NAME_LENGTH,
   MAX_STOCK_NAME_LENGTH,
@@ -252,6 +261,22 @@ function parseSectors(body: unknown): SectorHeatItem[] {
 export default async function OverviewPage() {
   await requirePageSession();
 
+  let appetiteHistory: AppetiteDay[] = [];
+  try {
+    appetiteHistory = await queryAppetiteHistory(getPool(), {
+      limit: 90,
+      source: "cse",
+    });
+  } catch {
+    appetiteHistory = [];
+  }
+  const appetiteLatest = headlineDay(appetiteHistory);
+  const appetiteDelta1 = deltaVs(
+    appetiteHistory,
+    1,
+    headlineIndex(appetiteHistory),
+  );
+
   const [
     watchRes,
     upRes,
@@ -323,6 +348,13 @@ export default async function OverviewPage() {
           </h2>
           <IndexStrip items={indexes} />
         </section>
+
+        <AppetiteStrip
+          className="mt-4"
+          latest={appetiteLatest}
+          historyAsc={appetiteHistory}
+          delta1={appetiteDelta1}
+        />
 
         {sectors.length > 0 ? (
           <section className="mt-4" aria-labelledby="overview-sectors-heading">
