@@ -23,7 +23,9 @@ import { Separator } from "@/components/ui/separator";
 import {
   Select,
   SelectContent,
+  SelectGroup,
   SelectItem,
+  SelectLabel,
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
@@ -46,11 +48,17 @@ import {
   normalizeSymbol,
 } from "@/lib/api/symbol";
 
-const TYPE_OPTIONS: { value: AlertType; label: string }[] = [
+type TypeOption = { value: AlertType; label: string };
+
+/** v1 core rules — shown first (Phase A mobile create sheet). */
+const V1_CORE: TypeOption[] = [
   { value: "price_above", label: "Above price" },
   { value: "price_below", label: "Below price" },
   { value: "daily_move", label: "Daily move %" },
   { value: "disclosure", label: "New disclosure" },
+];
+
+const ADVANCED_OPTIONS: TypeOption[] = [
   { value: "volume_spike", label: "Volume spike (× avg)" },
   { value: "volume_up", label: "Heavy volume + up" },
   { value: "volume_down", label: "Heavy volume + down" },
@@ -72,6 +80,36 @@ const TYPE_OPTIONS: { value: AlertType; label: string }[] = [
   { value: "profit_yoy_below", label: "Profit YoY below" },
 ];
 
+const ADVANCED_TYPE_SET = new Set<AlertType>(
+  ADVANCED_OPTIONS.map((o) => o.value),
+);
+
+function isAdvancedAlertType(type: AlertType): boolean {
+  return ADVANCED_TYPE_SET.has(type);
+}
+
+function lastPricePrefill(
+  type: AlertType,
+  lastPrice: number | null | undefined,
+): string {
+  if (type !== "price_above" && type !== "price_below") return "";
+  if (lastPrice == null || !Number.isFinite(lastPrice) || lastPrice <= 0) {
+    return "";
+  }
+  return String(lastPrice);
+}
+
+function thresholdInitialValue(
+  initialThreshold: string | number | null | undefined,
+  type: AlertType,
+  lastPrice: number | null | undefined,
+): string {
+  if (initialThreshold != null && initialThreshold !== "") {
+    return String(initialThreshold);
+  }
+  return lastPricePrefill(type, lastPrice);
+}
+
 const MUTE_MS = 24 * 60 * 60 * 1000;
 
 type FieldErrors = {
@@ -85,10 +123,16 @@ type FieldErrors = {
 export function AlertCreateForm({
   initialSymbol = "",
   initialType,
+  initialThreshold,
+  lastPrice,
 }: {
   initialSymbol?: string;
   /** Prefill from ``/alerts?type=disclosure`` (and friends). */
   initialType?: AlertType | null;
+  /** Explicit threshold prefill (string or number). */
+  initialThreshold?: string | number | null;
+  /** When threshold empty and type is price_above/below, prefill from last print. */
+  lastPrice?: number | null;
 } = {}) {
   const router = useRouter();
   const toast = useToast();
@@ -96,16 +140,28 @@ export function AlertCreateForm({
   const [type, setType] = useState<AlertType>(() =>
     initialType && ALERT_TYPES.includes(initialType) ? initialType : "price_above",
   );
-  const [threshold, setThreshold] = useState("");
+  const [threshold, setThreshold] = useState(() =>
+    thresholdInitialValue(
+      initialThreshold,
+      initialType && ALERT_TYPES.includes(initialType) ? initialType : "price_above",
+      lastPrice,
+    ),
+  );
   const [category, setCategory] = useState("");
   const [errors, setErrors] = useState<FieldErrors>({});
   const [pending, setPending] = useState(false);
+  // Advanced types collapsed by default (esp. small screens); open if deep-linked.
+  const [showAdvanced, setShowAdvanced] = useState(() =>
+    Boolean(initialType && isAdvancedAlertType(initialType)),
+  );
 
   const needsThreshold = isThresholdAlertType(type);
   const showCategory = type === "disclosure";
   const showFilingMetricsNote = isFilingMetricsAlertType(type);
   const thresholdLabel = thresholdFieldLabel(type);
   const thresholdPlaceholder = thresholdFieldPlaceholder(type);
+  const showAdvancedGroup =
+    showAdvanced || isAdvancedAlertType(type);
 
   function clearField(key: keyof FieldErrors) {
     setErrors((prev) => {
@@ -292,6 +348,11 @@ export function AlertCreateForm({
                     setThreshold("");
                   } else {
                     setCategory("");
+                    // Prefill last print when switching into price cross with empty field.
+                    setThreshold((prev) => {
+                      if (prev.trim()) return prev;
+                      return lastPricePrefill(nextType, lastPrice);
+                    });
                   }
                   clearField("type");
                   clearField("threshold");
@@ -306,13 +367,35 @@ export function AlertCreateForm({
                   <SelectValue placeholder="Alert type" />
                 </SelectTrigger>
                 <SelectContent>
-                  {TYPE_OPTIONS.map((opt) => (
-                    <SelectItem key={opt.value} value={opt.value}>
-                      {opt.label}
-                    </SelectItem>
-                  ))}
+                  <SelectGroup>
+                    <SelectLabel>Core</SelectLabel>
+                    {V1_CORE.map((opt) => (
+                      <SelectItem key={opt.value} value={opt.value}>
+                        {opt.label}
+                      </SelectItem>
+                    ))}
+                  </SelectGroup>
+                  {showAdvancedGroup ? (
+                    <SelectGroup>
+                      <SelectLabel>Advanced</SelectLabel>
+                      {ADVANCED_OPTIONS.map((opt) => (
+                        <SelectItem key={opt.value} value={opt.value}>
+                          {opt.label}
+                        </SelectItem>
+                      ))}
+                    </SelectGroup>
+                  ) : null}
                 </SelectContent>
               </Select>
+              <label className="mt-1 flex cursor-pointer items-center gap-2 text-xs text-muted-foreground">
+                <input
+                  type="checkbox"
+                  className="size-3.5 rounded border-border"
+                  checked={showAdvanced}
+                  onChange={(e) => setShowAdvanced(e.target.checked)}
+                />
+                Show advanced alert types
+              </label>
             </div>
           </div>
         </section>
@@ -399,8 +482,9 @@ export function AlertCreateForm({
           </h3>
           <Button
             type="submit"
+            size="lg"
             disabled={pending}
-            className="h-10 w-full"
+            className="min-h-11 w-full"
             aria-busy={pending || undefined}
           >
             {pending ? "Creating…" : "Create alert"}

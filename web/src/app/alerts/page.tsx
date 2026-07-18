@@ -77,6 +77,26 @@ export default async function AlertsPage({
     qs.size > 0 ? `/api/v1/alerts?${qs.toString()}` : "/api/v1/alerts";
 
   const res = await serverApiGet(path);
+  let lastPrice: number | null = null;
+  if (symbolFilter) {
+    const symRes = await serverApiGet(
+      `/api/v1/symbols/${encodeURIComponent(symbolFilter)}`,
+    );
+    if (symRes.ok) {
+      try {
+        const body: unknown = await symRes.json();
+        if (body && typeof body === "object" && !Array.isArray(body)) {
+          const last = (body as { last?: unknown }).last;
+          if (last && typeof last === "object" && !Array.isArray(last)) {
+            lastPrice = toFiniteNumber((last as { price?: unknown }).price);
+          }
+        }
+      } catch {
+        lastPrice = null;
+      }
+    }
+  }
+
   let payload: AlertsPayload | null = null;
   if (res.ok) {
     try {
@@ -163,6 +183,7 @@ export default async function AlertsPage({
         <AlertCreateForm
           initialSymbol={symbolFilter}
           initialType={typeFilter}
+          lastPrice={lastPrice}
         />
         <p className="mt-3 text-xs text-muted-foreground">
           Quiet hours / digest:{" "}

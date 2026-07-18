@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 
+import { AlertCreateForm } from "@/components/alert-controls";
 import { AppNav } from "@/components/app-nav";
 import { EmptyState } from "@/components/empty-state";
 import {
@@ -799,6 +800,23 @@ export default async function SymbolDetailPage({
         />
       ) : null}
       <NfaInline className="mt-3" />
+
+      <section className="mt-8" aria-labelledby="symbol-alert-heading">
+        <h2
+          id="symbol-alert-heading"
+          className="text-sm font-medium tracking-wide text-muted-foreground uppercase"
+        >
+          Set an alert
+        </h2>
+        <p className="mt-1 text-sm text-muted-foreground">
+          Price crosses prefill from the last stored print when available.
+          Telegram still delivers the push.
+        </p>
+        <AlertCreateForm
+          initialSymbol={data.symbol}
+          lastPrice={data.last?.price ?? null}
+        />
+      </section>
 
       <SymbolCompareChart
         baseSymbol={data.symbol}
