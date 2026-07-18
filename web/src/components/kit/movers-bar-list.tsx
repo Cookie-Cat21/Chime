@@ -1,6 +1,7 @@
 import Link from "next/link";
 
 import { ChangeBadge } from "@/components/kit/change-badge";
+import { MoverRowActions } from "@/components/kit/mover-row-actions";
 import { formatNumber } from "@/lib/format";
 import { cn } from "@/lib/utils";
 
@@ -20,7 +21,7 @@ function changeDirectionSr(pct: number | null): string {
 
 /**
  * Tremor bar-list-01 pattern — proportional bars by |change_pct|.
- * Links to symbol detail; not a trading terminal.
+ * Watch mutates watchlist; Alert deep-links to create. Not a trading terminal.
  */
 export function MoversBarList({
   items,
@@ -55,18 +56,16 @@ export function MoversBarList({
         return (
           <li key={item.symbol}>
             <div className="mb-1 flex items-baseline justify-between gap-2">
-              <Link
-                href={`/symbols/${encodeURIComponent(item.symbol)}`}
-                aria-label={`Open ${item.symbol} detail to watch`}
-                className="group flex min-w-0 items-baseline gap-2 rounded-sm focus-visible:ring-2 focus-visible:ring-ring/50 focus-visible:outline-none"
-              >
-                <span className="font-mono text-sm font-medium underline-offset-4 group-hover:underline">
+              <div className="flex min-w-0 flex-wrap items-baseline gap-2">
+                <Link
+                  href={`/symbols/${encodeURIComponent(item.symbol)}`}
+                  aria-label={`Open ${item.symbol} detail`}
+                  className="rounded-sm font-mono text-sm font-medium underline-offset-4 hover:underline focus-visible:ring-2 focus-visible:ring-ring/50 focus-visible:outline-none"
+                >
                   {item.symbol}
-                </span>
-                <span className="shrink-0 text-xs font-medium text-foreground/70 underline-offset-4 group-hover:underline">
-                  Watch
-                </span>
-              </Link>
+                </Link>
+                <MoverRowActions symbol={item.symbol} />
+              </div>
               <span className="flex shrink-0 items-center gap-2">
                 {item.price != null ? (
                   <span className="font-mono text-xs tabular-nums text-muted-foreground">

@@ -4,6 +4,7 @@ import Link from "next/link";
 import { motion, useReducedMotion } from "motion/react";
 
 import { ChangeBadge } from "@/components/kit/change-badge";
+import { BrowseRowActions } from "@/components/market/browse-row-actions";
 import { formatNumber, formatTs } from "@/lib/format";
 import { cn } from "@/lib/utils";
 
@@ -18,7 +19,7 @@ export type BrowseRow = {
 };
 
 const GRID_COLS =
-  "minmax(140px,1.2fr) minmax(160px,1.4fr) minmax(120px,1fr) minmax(90px,0.8fr) minmax(90px,0.8fr) minmax(100px,0.9fr) minmax(110px,0.9fr) minmax(88px,0.7fr)";
+  "minmax(140px,1.2fr) minmax(160px,1.4fr) minmax(120px,1fr) minmax(90px,0.8fr) minmax(90px,0.8fr) minmax(100px,0.9fr) minmax(110px,0.9fr) minmax(140px,1fr)";
 
 /**
  * Dense CSE browse table — FinancialTable DNA without US-index columns.
@@ -26,12 +27,16 @@ const GRID_COLS =
  */
 export function BrowseTable({
   items,
+  watchedSymbols,
   className,
 }: {
   items: BrowseRow[];
+  /** Symbols already on the signed-in user’s watchlist (Watch CTA → Watching). */
+  watchedSymbols?: Iterable<string>;
   className?: string;
 }) {
   const reduceMotion = useReducedMotion();
+  const watched = new Set(watchedSymbols ?? []);
 
   return (
     <>
@@ -70,7 +75,6 @@ export function BrowseTable({
           >
             {items.map((item) => {
               const symbolHref = `/symbols/${encodeURIComponent(item.symbol)}`;
-              const alertHref = `/alerts?symbol=${encodeURIComponent(item.symbol)}`;
               return (
                 <motion.div
                   key={item.symbol}
@@ -135,13 +139,11 @@ export function BrowseTable({
                     <div className="text-right text-xs text-muted-foreground">
                       {formatTs(item.ts)}
                     </div>
-                    <div className="flex items-center justify-end gap-2">
-                      <Link
-                        href={alertHref}
-                        className="rounded-sm text-xs font-medium text-foreground underline-offset-4 hover:underline focus-visible:ring-2 focus-visible:ring-ring/50 focus-visible:outline-none"
-                      >
-                        Alert
-                      </Link>
+                    <div className="flex items-center justify-end">
+                      <BrowseRowActions
+                        symbol={item.symbol}
+                        watching={watched.has(item.symbol)}
+                      />
                     </div>
                   </div>
                 </motion.div>
@@ -158,7 +160,6 @@ export function BrowseTable({
       >
         {items.map((item) => {
           const symbolHref = `/symbols/${encodeURIComponent(item.symbol)}`;
-          const alertHref = `/alerts?symbol=${encodeURIComponent(item.symbol)}`;
           return (
             <li key={item.symbol} className="py-3">
               <div className="flex flex-wrap items-center justify-between gap-3">
@@ -185,13 +186,12 @@ export function BrowseTable({
                   <ChangeBadge changePct={item.change_pct} />
                 </div>
               </div>
-              <div className="mt-2 flex min-h-11 items-center gap-4">
-                <Link
-                  href={alertHref}
-                  className="inline-flex min-h-11 items-center text-sm font-medium text-foreground underline-offset-4 hover:underline focus-visible:ring-2 focus-visible:ring-ring/50 focus-visible:outline-none"
-                >
-                  Alert
-                </Link>
+              <div className="mt-2 flex min-h-11 flex-wrap items-center justify-between gap-3">
+                <BrowseRowActions
+                  symbol={item.symbol}
+                  watching={watched.has(item.symbol)}
+                  className="items-start"
+                />
                 <Link
                   href={symbolHref}
                   className="inline-flex min-h-11 items-center text-sm text-muted-foreground underline-offset-4 hover:underline focus-visible:ring-2 focus-visible:ring-ring/50 focus-visible:outline-none"

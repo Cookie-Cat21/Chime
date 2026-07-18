@@ -493,15 +493,21 @@ def test_market_page_fence_no_screener_or_quote_board() -> None:
     assert "/api/v1/sectors" in market_src
     assert 'aria-labelledby="sectors-heading"' in market_src
     assert 'aria-label="Sectors"' not in market_src
-    # Wave9 a11y: movers Watch is one labelled link; sectors list labelled by heading.
+    # Wave9 a11y + Phase A: symbol detail labelled; Watch mutates; Alert deep-links.
     # Bars live in kit/movers-bar-list (extracted from page); keep page heading ids.
     movers_kit = (
         WEB / "src" / "components" / "kit" / "movers-bar-list.tsx"
     ).read_text(encoding="utf-8")
-    assert "Open ${item.symbol} detail to watch" in movers_kit
+    mover_actions = (
+        WEB / "src" / "components" / "kit" / "mover-row-actions.tsx"
+    ).read_text(encoding="utf-8")
+    assert "Open ${item.symbol} detail" in movers_kit
+    assert "MoverRowActions" in movers_kit
+    assert 'apiMutate("/api/v1/watchlist"' in mover_actions
+    assert "/alerts?symbol=" in mover_actions
     assert "movers-gainers-heading" in market_src
     assert "movers-losers-heading" in market_src
-    assert "Watch" in movers_kit and "</span>" in movers_kit
+    assert "Watch" in mover_actions
     assert "title={item.name}" in market_src
     assert 'role="status"' in market_src
     assert "changeDirectionSr" in market_src or "changeDirectionSr" in movers_kit

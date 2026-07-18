@@ -297,14 +297,21 @@ export function AlertCreateForm({
 
   return (
     <form
+      id="alert-create"
       onSubmit={onSubmit}
-      className="mt-6 rounded-lg border border-border/70 p-4 sm:p-5"
+      className="mt-6 scroll-mt-20 rounded-xl border border-border/70 bg-muted/10 p-5 shadow-sm sm:rounded-lg sm:bg-transparent sm:p-5 sm:shadow-none max-md:space-y-1"
       noValidate
     >
-      <div className="grid gap-5 lg:grid-cols-[minmax(0,1.2fr)_auto_minmax(0,1fr)_auto_minmax(12rem,auto)] lg:items-start">
+      <div className="mb-4 md:hidden">
+        <h2 className="text-base font-medium text-foreground">Create alert</h2>
+        <p className="mt-1 text-sm text-muted-foreground">
+          Price cross, daily move %, or new disclosure — Telegram gets the ping.
+        </p>
+      </div>
+      <div className="grid gap-6 lg:grid-cols-[minmax(0,1.2fr)_auto_minmax(0,1fr)_auto_minmax(12rem,auto)] lg:items-start max-md:gap-7">
         <section
           aria-labelledby="alert-symbol-type-heading"
-          className="flex flex-col gap-3"
+          className="flex flex-col gap-3 max-md:gap-4"
         >
           <h3
             id="alert-symbol-type-heading"
@@ -318,7 +325,7 @@ export function AlertCreateForm({
               <Input
                 id="alert_symbol"
                 name="symbol"
-                className="h-10 font-mono"
+                className="h-11 font-mono md:h-10"
                 placeholder="JKH.N0000"
                 value={symbol}
                 onChange={(e) => {
@@ -361,7 +368,7 @@ export function AlertCreateForm({
               >
                 <SelectTrigger
                   id="alert_type"
-                  className="h-10 w-full"
+                  className="h-11 w-full md:h-10"
                   aria-invalid={errors.type ? true : undefined}
                 >
                   <SelectValue placeholder="Alert type" />
@@ -419,7 +426,7 @@ export function AlertCreateForm({
               <Input
                 id="alert_threshold"
                 name="threshold"
-                className="h-10 font-mono"
+                className="h-11 font-mono md:h-10"
                 inputMode="decimal"
                 placeholder={thresholdPlaceholder}
                 value={threshold}
@@ -440,7 +447,7 @@ export function AlertCreateForm({
               <Input
                 id="alert_category"
                 name="category"
-                className="h-10"
+                className="h-11 md:h-10"
                 placeholder="e.g. Financial Report"
                 value={category}
                 onChange={(e) => {
@@ -484,7 +491,7 @@ export function AlertCreateForm({
             type="submit"
             size="lg"
             disabled={pending}
-            className="min-h-11 w-full"
+            className="min-h-12 w-full md:min-h-11"
             aria-busy={pending || undefined}
           >
             {pending ? "Creating…" : "Create alert"}

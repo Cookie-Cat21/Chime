@@ -587,7 +587,7 @@ export default async function OverviewPage() {
                 {watch.map((item) => (
                   <li
                     key={item.symbol}
-                    className="flex items-center justify-between gap-3 py-3"
+                    className="flex flex-wrap items-center justify-between gap-3 py-3"
                   >
                     <Link
                       href={`/symbols/${encodeURIComponent(item.symbol)}`}
@@ -600,11 +600,17 @@ export default async function OverviewPage() {
                         </span>
                       ) : null}
                     </Link>
-                    <div className="flex shrink-0 items-center gap-3">
+                    <div className="flex shrink-0 flex-wrap items-center gap-3">
                       <span className="font-mono text-sm tabular-nums">
                         {formatNumber(item.price)}
                       </span>
                       <ChangeBadge changePct={item.change_pct} />
+                      <Link
+                        href={`/alerts?symbol=${encodeURIComponent(item.symbol)}`}
+                        className="inline-flex min-h-11 items-center text-xs font-medium text-foreground underline-offset-4 hover:underline focus-visible:ring-2 focus-visible:ring-ring/50 focus-visible:outline-none sm:min-h-0"
+                      >
+                        New alert
+                      </Link>
                     </div>
                   </li>
                 ))}
@@ -722,10 +728,16 @@ export default async function OverviewPage() {
             </Link>
           </div>
           {fires.length === 0 ? (
-            <p className="mt-4 text-sm text-muted-foreground">
-              No fires recorded yet. When a rule matches, Telegram gets the push
-              and the audit trail shows up here.
-            </p>
+            <EmptyState
+              className="mt-4"
+              title="No fires recorded yet"
+              description="When a rule matches, Telegram gets the push and the audit trail shows up here."
+              action={
+                <Button asChild size="sm">
+                  <Link href="/alerts">Create alert</Link>
+                </Button>
+              }
+            />
           ) : (
             <ul className="mt-4 divide-y divide-border/60">
               {fires.map((ev) => (

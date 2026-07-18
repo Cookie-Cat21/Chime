@@ -21,13 +21,20 @@ type Props = {
   allowlist: number[];
   defaultTelegramId: number | null;
   demoEnabled: boolean;
+  /** When false, parent supplies a visible heading (login page dual-path). */
+  headingVisible?: boolean;
 };
 
 function loginError(message: string) {
   return `${message} ${NFA_INLINE}`;
 }
 
-export function LoginForm({ allowlist, defaultTelegramId, demoEnabled }: Props) {
+export function LoginForm({
+  allowlist,
+  defaultTelegramId,
+  demoEnabled,
+  headingVisible = true,
+}: Props) {
   const router = useRouter();
   const reactId = useId();
   const fieldId = `telegram_id-${reactId}`;
@@ -143,7 +150,10 @@ export function LoginForm({ allowlist, defaultTelegramId, demoEnabled }: Props) 
       aria-labelledby="login-sign-in-heading"
       noValidate
     >
-      <h2 id="login-sign-in-heading" className="sr-only">
+      <h2
+        id="login-sign-in-heading"
+        className={headingVisible ? "text-sm font-medium text-foreground" : "sr-only"}
+      >
         Sign in
       </h2>
       <div className="flex flex-col gap-2">

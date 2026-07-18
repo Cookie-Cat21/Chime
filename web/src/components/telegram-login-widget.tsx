@@ -153,12 +153,21 @@ export function TelegramLoginWidget({ botUsername }: Props) {
 
   return (
     <div className="flex w-full flex-col gap-3">
-      <h2 className="text-sm font-medium text-foreground">Sign in with Telegram</h2>
+      <h2
+        id="login-telegram-heading"
+        className="text-sm font-medium text-foreground"
+      >
+        Sign in with Telegram
+      </h2>
+      <p className="text-xs text-muted-foreground">
+        Production path — authorize via the official Telegram widget, then land
+        on Overview.
+      </p>
       <div
         ref={containerRef}
         data-testid="telegram-login-widget"
         aria-busy={pending || undefined}
-        className="min-h-10"
+        className="flex min-h-11 items-center"
       />
       {pending ? (
         <p role="status" className="text-xs text-muted-foreground">

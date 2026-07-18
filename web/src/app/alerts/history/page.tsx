@@ -339,22 +339,16 @@ export default async function AlertHistoryPage({
                 <>
                   The history request succeeded, but no recorded fires match{" "}
                   <code className="font-mono text-xs">{symbolFilter}</code>.
-                  Clear the filter, or wait until a rule for that symbol matches
-                  — Telegram gets the push and this audit trail records it.
+                  Clear the filter, create a rule for this symbol, or wait until
+                  one matches — Telegram gets the push and this audit trail
+                  records it.
                 </>
               ) : (
                 <>
                   The history request succeeded, but there are no recorded fire
                   events yet. When a rule matches, Telegram gets the push and
                   the fire shows up here. Create a price, move, or disclosure
-                  alert on{" "}
-                  <Link
-                    href="/alerts"
-                    className="underline underline-offset-4"
-                  >
-                    Alerts
-                  </Link>
-                  , or use{" "}
+                  alert — or use{" "}
                   <code className="font-mono text-xs">
                     /alert SYMBOL above PRICE
                   </code>{" "}
@@ -363,15 +357,28 @@ export default async function AlertHistoryPage({
               )
             }
             action={
-              symbolFilter ? (
-                <Button asChild variant="outline">
-                  <Link href="/alerts/history">Clear filter</Link>
+              <div className="flex flex-wrap items-center justify-center gap-3">
+                <Button asChild size="lg" className="min-h-11">
+                  <Link
+                    href={
+                      symbolFilter
+                        ? `/alerts?symbol=${encodeURIComponent(symbolFilter)}`
+                        : "/alerts#alert-create"
+                    }
+                  >
+                    Create alert
+                  </Link>
                 </Button>
-              ) : (
-                <Button asChild variant="outline">
-                  <Link href="/alerts">Create an alert</Link>
-                </Button>
-              )
+                {symbolFilter ? (
+                  <Button asChild variant="outline" size="lg" className="min-h-11">
+                    <Link href="/alerts/history">Clear filter</Link>
+                  </Button>
+                ) : (
+                  <Button asChild variant="outline" size="lg" className="min-h-11">
+                    <Link href="/market">Browse market</Link>
+                  </Button>
+                )}
+              </div>
             }
           />
         ) : (

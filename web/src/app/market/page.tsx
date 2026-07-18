@@ -178,6 +178,28 @@ function asSectorItems(body: unknown): SectorItem[] | null {
   return out;
 }
 
+/** Watchlist symbols for browse Watch CTA state (cap parse). */
+function asWatchSymbols(body: unknown): string[] | null {
+  if (body == null || typeof body !== "object" || Array.isArray(body)) {
+    return null;
+  }
+  const items = (body as { items?: unknown }).items;
+  if (!Array.isArray(items)) return null;
+  const out: string[] = [];
+  for (const row of items) {
+    if (out.length >= 200) break;
+    if (row == null || typeof row !== "object" || Array.isArray(row)) continue;
+    const symbol = normalizeSymbol(
+      typeof (row as { symbol?: unknown }).symbol === "string"
+        ? (row as { symbol: string }).symbol
+        : null,
+    );
+    if (!symbol) continue;
+    out.push(symbol);
+  }
+  return out;
+}
+
 function MoversList({
   title,
   headingId,
@@ -237,7 +259,7 @@ export default async function MarketPage({
   if (q) qs.set("q", q);
   if (sector) qs.set("sector", sector);
 
-  const [res, gainersRes, losersRes, sectorsRes] = await Promise.all([
+  const [res, gainersRes, losersRes, sectorsRes, watchRes] = await Promise.all([
     serverApiGet(`/api/v1/symbols?${qs.toString()}`),
     // Top movers / sectors only when not filtering — keeps browse discovery thin.
     filtered
@@ -247,12 +269,14 @@ export default async function MarketPage({
       ? Promise.resolve(null)
       : serverApiGet("/api/v1/market/movers?direction=down&limit=5"),
     filtered ? Promise.resolve(null) : serverApiGet("/api/v1/sectors"),
+    serverApiGet("/api/v1/watchlist"),
   ]);
 
   const browse = await readJsonPayload(res, asBrowsePayload);
   const gainerItems = await readJsonPayload(gainersRes, asMarketItems);
   const loserItems = await readJsonPayload(losersRes, asMarketItems);
   const sectorItems = await readJsonPayload(sectorsRes, asSectorItems);
+  const watchedSymbols = await readJsonPayload(watchRes, asWatchSymbols);
 
   const marketItems = browse?.items ?? null;
   const total = browse?.total ?? null;
@@ -505,7 +529,10 @@ export default async function MarketPage({
                 </nav>
               ) : null}
             </div>
-            <BrowseTable items={marketItems} />
+            <BrowseTable
+              items={marketItems}
+              watchedSymbols={watchedSymbols ?? []}
+            />
             {hasPrev || hasNext ? (
               <nav
                 className="mt-4 flex items-center justify-between gap-2"

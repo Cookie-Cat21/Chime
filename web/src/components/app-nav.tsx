@@ -10,12 +10,12 @@ import { CommandPalette } from "@/components/command-palette";
 import { NavSession } from "@/components/nav-session";
 import { Button } from "@/components/ui/button";
 
-/** Primary nav — Scenarios stays off primary until Phase 3 AI is live. */
+/** Primary nav — Alerts first-class; Scenarios stays off until Phase 3 AI. */
 const primaryLinks = [
   { href: "/overview", label: "Overview" },
+  { href: "/alerts", label: "Alerts" },
   { href: "/market", label: "Browse" },
   { href: "/watchlist", label: "Watchlist" },
-  { href: "/alerts", label: "Alerts" },
   { href: "/alerts/history", label: "History" },
   { href: "/settings", label: "Settings" },
   { href: "/health", label: "Health" },
@@ -210,7 +210,7 @@ export function AppNav({ active }: { active?: string }) {
           {/* Mobile menu toggle */}
           <button
             type="button"
-            className="inline-flex h-10 w-10 items-center justify-center rounded-md text-foreground focus-visible:ring-2 focus-visible:ring-ring/50 focus-visible:outline-none sm:hidden"
+            className="inline-flex min-h-11 min-w-11 items-center justify-center rounded-md text-foreground focus-visible:ring-2 focus-visible:ring-ring/50 focus-visible:outline-none sm:hidden"
             aria-expanded={open}
             aria-controls="quiverly-mobile-nav"
             aria-label={open ? "Close menu" : "Open menu"}
@@ -241,6 +241,7 @@ export function AppNav({ active }: { active?: string }) {
         <ul className="flex flex-col">
           {primaryLinks.map((link) => {
             const isActive = activeHref === link.href;
+            const isAlerts = link.href === "/alerts";
             return (
               <li key={link.href}>
                 <Link
@@ -248,11 +249,11 @@ export function AppNav({ active }: { active?: string }) {
                   aria-current={isActive ? "page" : undefined}
                   tabIndex={open ? undefined : -1}
                   onClick={() => setOpen(false)}
-                  className={`block rounded-sm py-3 text-base focus-visible:ring-2 focus-visible:ring-ring/50 focus-visible:outline-none ${
+                  className={`flex min-h-11 items-center rounded-sm px-1 text-base focus-visible:ring-2 focus-visible:ring-ring/50 focus-visible:outline-none ${
                     isActive
                       ? "font-medium text-foreground"
                       : "text-muted-foreground"
-                  }`}
+                  } ${isAlerts ? "font-medium" : ""}`}
                 >
                   {link.label}
                 </Link>
@@ -274,7 +275,7 @@ export function AppNav({ active }: { active?: string }) {
                     aria-current={isActive ? "page" : undefined}
                     tabIndex={open ? undefined : -1}
                     onClick={() => setOpen(false)}
-                    className={`block rounded-sm py-3 text-base focus-visible:ring-2 focus-visible:ring-ring/50 focus-visible:outline-none ${
+                    className={`flex min-h-11 items-center rounded-sm px-1 text-base focus-visible:ring-2 focus-visible:ring-ring/50 focus-visible:outline-none ${
                       isActive
                         ? "font-medium text-foreground"
                         : "text-muted-foreground"
