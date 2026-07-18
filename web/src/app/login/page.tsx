@@ -7,6 +7,7 @@ import { LoginForm } from "@/components/login-form";
 import { HeroGridBackdrop } from "@/components/marketing/hero-grid-backdrop";
 import { NfaFooter } from "@/components/nfa-footer";
 import { NfaInline } from "@/components/nfa-inline";
+import { TelegramLoginWidget } from "@/components/telegram-login-widget";
 import {
   getDashAuthConfig,
   publicDemoAllowlist,
@@ -18,6 +19,20 @@ export const metadata = {
   title: "Sign in · Quiverly",
   description: "Sign in to the Quiverly CSE dashboard — Telegram alerts on top.",
 };
+
+function resolveTelegramBotUsername(): string | null {
+  const candidates = [
+    process.env.TELEGRAM_BOT_USERNAME,
+    process.env.DASH_TELEGRAM_BOT_USERNAME,
+  ];
+  for (const raw of candidates) {
+    if (typeof raw !== "string") continue;
+    const trimmed = raw.trim();
+    if (!trimmed) continue;
+    return trimmed.startsWith("@") ? trimmed.slice(1) : trimmed;
+  }
+  return null;
+}
 
 export default async function LoginPage({
   searchParams,
@@ -45,7 +60,9 @@ export default async function LoginPage({
     cfg.defaultTelegramId && cfg.allowlist.has(cfg.defaultTelegramId)
       ? cfg.defaultTelegramId
       : null;
-  const telegramLoginEnabled = process.env.DASH_TELEGRAM_LOGIN === "1";
+  const telegramLoginFlag = process.env.DASH_TELEGRAM_LOGIN === "1";
+  const botUsername = resolveTelegramBotUsername();
+  const showTelegramWidget = telegramLoginFlag && botUsername != null;
 
   return (
     <main
@@ -86,9 +103,33 @@ export default async function LoginPage({
           </p>
         ) : null}
 
+        <div className="chime-rise chime-rise-delay-2 mt-10 max-w-sm rounded-xl border border-border/70 bg-background/70 p-5 shadow-sm backdrop-blur-sm sm:p-6">
+          <div className="flex flex-col gap-6">
+            {showTelegramWidget ? (
+              <TelegramLoginWidget botUsername={botUsername} />
+            ) : null}
+            {cfg.demoAuthEnabled ? (
+              <LoginForm
+                allowlist={allowlist}
+                defaultTelegramId={defaultId}
+                demoEnabled={cfg.demoAuthEnabled}
+              />
+            ) : null}
+            {!showTelegramWidget && !cfg.demoAuthEnabled ? (
+              <p role="status" className="text-sm text-muted-foreground">
+                Demo sign-in is off. Set{" "}
+                <code className="font-mono text-xs">DASH_DEMO_AUTH=1</code> or
+                enable Telegram Login (
+                <code className="font-mono text-xs">DASH_TELEGRAM_LOGIN=1</code>{" "}
+                + bot username) for dashboard access.
+              </p>
+            ) : null}
+          </div>
+        </div>
+
         <p
           id="login-explainer"
-          className="chime-rise chime-rise-delay-2 mt-5 max-w-md text-base leading-relaxed text-muted-foreground"
+          className="chime-rise chime-rise-delay-3 mt-10 max-w-md text-base leading-relaxed text-muted-foreground"
         >
           Browse the market, watch symbols, and manage rules here. Telegram is
           the cherry — you still get the ping when a rule fires with the tab
@@ -96,7 +137,7 @@ export default async function LoginPage({
         </p>
 
         <ul
-          className="chime-rise chime-rise-delay-2 mt-6 max-w-md space-y-2.5 text-sm text-muted-foreground"
+          className="chime-rise chime-rise-delay-3 mt-6 max-w-md space-y-2.5 text-sm text-muted-foreground"
           aria-labelledby="login-explainer"
         >
           <li className="flex gap-2.5">
@@ -122,24 +163,7 @@ export default async function LoginPage({
           </li>
         </ul>
 
-        <NfaInline className="chime-rise chime-rise-delay-2 mt-5" />
-
-        <div className="chime-rise chime-rise-delay-3 mt-10 max-w-sm rounded-xl border border-border/70 bg-background/70 p-5 shadow-sm backdrop-blur-sm sm:p-6">
-          <LoginForm
-            allowlist={allowlist}
-            defaultTelegramId={defaultId}
-            demoEnabled={cfg.demoAuthEnabled}
-          />
-          {telegramLoginEnabled ? (
-            <p
-              aria-disabled="true"
-              className="mt-4 rounded-lg border border-border bg-muted/40 px-3 py-2 text-sm text-muted-foreground"
-            >
-              Telegram Login Widget when{" "}
-              <code className="font-mono text-xs">DASH_TELEGRAM_LOGIN=1</code>
-            </p>
-          ) : null}
-        </div>
+        <NfaInline className="chime-rise chime-rise-delay-3 mt-5" />
       </div>
       <div className="relative">
         <NfaFooter />
