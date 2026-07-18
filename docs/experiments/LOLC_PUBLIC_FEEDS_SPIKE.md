@@ -6,6 +6,9 @@
 
 > Not financial advice. No prod ingest. Truncated samples only — do not republish full boards.
 
+**Product decision (2026-07-18):** **Do not ship LOLC StockLens / `dividends_db` into Chime.**  
+LOLC [Terms](https://www.lolcsecurities.lk/terms-and-conditions.html) Use License is individual/non-business only and forbids commercial use, public presentation, copying, and transfer to another server. See [`THIRD_PARTY_DATA.md`](../THIRD_PARTY_DATA.md) (Tier E).
+
 ## What we pulled
 
 | Source | HTTP | Bytes | Notes |

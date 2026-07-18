@@ -1,10 +1,10 @@
 # Plan: Broker / CDS public feeds (not holdings)
 
 **Date:** 2026-07-18  
-**Status:** research complete · **spike script landed** · **no adapters shipped** · ToS gate open  
+**Status:** research complete · **LOLC rejected (ToS)** · no adapters shipped  
 **Fence:** Dash density + Telegram alerts + Signal Board factors. No portfolio sync, no buy/sell language, no competitor scrape.
 
-**Live spike (research-only):**  
+**Spike (historical only — do not productize LOLC):**  
 `python3 scripts/experiments/lolc_public_feeds_spike.py` → [`LOLC_PUBLIC_FEEDS_SPIKE.md`](./LOLC_PUBLIC_FEEDS_SPIKE.md)
 
 Related: [`docs/THIRD_PARTY_DATA.md`](../THIRD_PARTY_DATA.md) · [`docs/factory/workstreams/FACTOR_INDEX.md`](../factory/workstreams/FACTOR_INDEX.md) (F-086) · [`docs/factory/CHIME_MASTER_PLAN.md`](../factory/CHIME_MASTER_PLAN.md) (P1 / P1b)
@@ -13,15 +13,16 @@ Related: [`docs/THIRD_PARTY_DATA.md`](../THIRD_PARTY_DATA.md) · [`docs/factory/
 
 ## 1. Verdict
 
-Personal holdings remain unreachable via broker/CDS APIs.  
-What *is* useful (public, unauthenticated) is a small set of **fundamentals / calendar / market-health** feeds that fill gaps cse.lk leaves empty or sparse.
+Personal holdings remain unreachable via broker/CDS APIs.
+
+**LOLC StockLens + dividend CSV:** technically rich and intentionally public as website tools, but LOLC’s published **Use License** forbids commercial use, public presentation, copying, and transferring materials to another server. **Operator decision 2026-07-18: do not use in Chime** without written permission. Recorded as Tier E in `THIRD_PARTY_DATA.md`.
 
 | Priority | Source | Ship? | Why |
 |---|---|---|---|
-| **P0** | LOLC StockLens JSON | **Yes — after ToS** | Clean fundamentals board (PE/PBV/DY/EPS/NAV/ROE + foreign %) |
-| **P0** | LOLC dividend CSV | **Yes — after ToS** | Structured XD/pay calendar → alert type |
-| **P1** | CDS INFOLINE monthly PDFs | **Yes (thin)** | Domestic/foreign holding value series for Overview |
-| **P2** | First Capital research PDFs | **Maybe later** | Ratings/TPs as NFA metadata; Imperva-brittle; opinion layer |
+| — | LOLC StockLens JSON | **No (ToS)** | Would be useful fundamentals board — blocked by site license |
+| — | LOLC dividend CSV | **No (ToS)** | Would enable XD alerts — blocked by site license |
+| **P1** | CDS INFOLINE monthly PDFs | **Maybe later (thin)** | Domestic/foreign holding value series for Overview — separate ToS check |
+| — | First Capital research PDFs | **No / defer** | Imperva-brittle; opinion layer; low value vs cse.lk |
 
 ---
 
