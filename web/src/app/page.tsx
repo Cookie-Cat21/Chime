@@ -4,8 +4,6 @@ import { redirect } from "next/navigation";
 
 import { QuiverlyWordmark } from "@/components/brand/quiverly-brand";
 import { FaqSection } from "@/components/kit/faq-section";
-import { AnnouncementBar } from "@/components/marketing/announcement-bar";
-import { CommentMarquee } from "@/components/marketing/comment-marquee";
 import { QuiverlyBento } from "@/components/marketing/quiverly-bento";
 import { EndCta } from "@/components/marketing/end-cta";
 import { FeatureList } from "@/components/marketing/feature-list";
@@ -57,8 +55,8 @@ const FAQ = [
 ];
 
 /**
- * Option A — wide left-rail hero + below-fold proof band.
- * Announcement bar above nav; proof / beam / reactions stay below the fold.
+ * Option A — wide left-rail hero + below-fold full-width proof band.
+ * No announcement bar, no in-hero side proof panel.
  */
 export default async function HomePage() {
   const cfg = getDashAuthConfig();
@@ -77,7 +75,6 @@ export default async function HomePage() {
 
   return (
     <div className="chime-atmosphere flex min-h-full flex-1 flex-col">
-      <AnnouncementBar message="Market hours 09:30–14:30 SLT · Telegram push even if the tab is closed." />
       <MarketingNav />
       <main id="main-content" tabIndex={-1} className="flex flex-1 flex-col">
         {/* Hero — fills first viewport; proof stays below the fold */}
@@ -119,7 +116,7 @@ export default async function HomePage() {
           </div>
         </section>
 
-        {/* Proof — animated Telegram list inside thin phone chrome (below fold) */}
+        {/* Proof — floating Telegram notification cards, no device chrome */}
         <section
           aria-labelledby="proof-heading"
           className="border-y border-border/70 bg-foreground/[0.03]"
@@ -140,7 +137,7 @@ export default async function HomePage() {
             </div>
 
             <div className="lg:col-span-7">
-              <div className="mx-auto w-full max-w-sm lg:mr-0 lg:ml-auto">
+              <div className="mx-auto w-full max-w-sm sm:max-w-md lg:mr-0 lg:ml-auto lg:max-w-lg">
                 <TelegramProof />
               </div>
             </div>
@@ -179,8 +176,6 @@ export default async function HomePage() {
             </p>
             <QuiverlyBento className="mt-10" />
           </section>
-
-          <CommentMarquee className="mt-20" />
 
           <MidCta telegramHref={botUrl} className="mt-20" />
 

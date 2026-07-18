@@ -6,14 +6,14 @@ import { X } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 
-const STORAGE_KEY = "quiverly_announce_dismissed_v1";
+const STORAGE_KEY = "chime_announce_dismissed_v1";
 
 /**
  * Dismissible top bar — HyperUI / shadcnblocks banner pattern.
  * Renders visible by default (SSR + first paint); only hides after a prior dismiss.
  */
 export function AnnouncementBar({
-  message = "Market hours 09:30–14:30 SLT · Telegram push even if the tab is closed.",
+  message = "CSE alerts on Telegram — manage watchlist & rules in the dash.",
 }: {
   message?: string;
 }) {
