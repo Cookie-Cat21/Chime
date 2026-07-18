@@ -1158,15 +1158,9 @@ def test_symbol_compare_chart_max_four() -> None:
         or "no cse" in route_src.lower()
     )
     assert "buildCompareChartRows" in lib_src
-    assert "scaleDailyBarsForCompare" in lib_src
     assert "COMPARE_TICK_LIMIT" in lib_src
     assert "indexed" in lib_src and "polyline" in ui_src
-    assert "CandlestickChart" in ui_src
-    assert "initialBars" in ui_src
-    # Single-company candles fill the card but cap pitch (no fat stretch).
-    candle_props = ui_src.split("<CandlestickChart")[1].split("/>")[0]
-    assert "fitWidth" in candle_props
-    assert "maxSlot" in candle_props
+    assert "CandlestickChart" not in ui_src
     assert "COMPARE_TICK_LIMIT" in ui_src
     assert "SymbolCompareChart" in page
     assert "SCALE_OPTIONS" in ui_src

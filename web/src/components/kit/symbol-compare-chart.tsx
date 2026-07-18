@@ -2,7 +2,6 @@
 
 import { useEffect, useId, useMemo, useState } from "react";
 
-import { CandlestickChart } from "@/components/charts/candlestick-chart";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -10,22 +9,14 @@ import {
   CLIENT_API_BODY_MAX_CHARS,
   CLIENT_API_TIMEOUT_MS,
   apiErrorMessage,
-  isSafeClientApiPath,
 } from "@/lib/api/client-fetch";
-import {
-  type DailyBarPoint,
-  normalizeDailyBar,
-  sessionsForRange,
-} from "@/lib/api/daily-bars";
 import { readBoundedResponseText } from "@/lib/api/read-bounded-text";
 import { normalizeSymbol } from "@/lib/api/symbol";
 import {
-  COMPARE_CANDLE_BARS,
   COMPARE_TICK_LIMIT,
   MAX_COMPARE_SYMBOLS,
   buildCompareChartRows,
   compareSeriesKey,
-  scaleDailyBarsForCompare,
   type CompareScaleMode,
   type CompareSeries,
 } from "@/lib/compare-chart";
@@ -48,8 +39,6 @@ type Props = {
   initialPoints?: { ts: string | null; price: number | null | undefined }[];
   /** Optional SSR peer series (e.g. from ?compare=) so overlays paint without hydration. */
   initialPeerSeries?: CompareSeries[];
-  /** SSR daily OHLC for single-company candles (same path as the hero chart). */
-  initialBars?: DailyBarPoint[] | null;
   className?: string;
 };
 
@@ -82,29 +71,6 @@ function parseComparePayload(body: unknown): CompareSeries[] {
       ];
     });
     out.push({ symbol, points });
-  }
-  return out;
-}
-
-function parseDailyBarsPayload(body: unknown): DailyBarPoint[] {
-  if (!body || typeof body !== "object" || Array.isArray(body)) return [];
-  const raw = (body as { bars?: unknown }).bars;
-  if (!Array.isArray(raw)) return [];
-  const out: DailyBarPoint[] = [];
-  for (const row of raw) {
-    if (row == null || typeof row !== "object" || Array.isArray(row)) continue;
-    const normalized = normalizeDailyBar(
-      row as {
-        trade_date: unknown;
-        open?: unknown;
-        high?: unknown;
-        low?: unknown;
-        price?: unknown;
-        close?: unknown;
-        volume?: unknown;
-      },
-    );
-    if (normalized) out.push(normalized);
   }
   return out;
 }
@@ -203,7 +169,6 @@ export function SymbolCompareChart({
   baseSymbol,
   initialPoints = [],
   initialPeerSeries = [],
-  initialBars = null,
   className,
 }: Props) {
   const base = normalizeSymbol(baseSymbol) ?? baseSymbol.toUpperCase();
@@ -245,14 +210,6 @@ export function SymbolCompareChart({
     useState<CompareSeries[]>(initialPeerSeries);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [dailyBars, setDailyBars] = useState<DailyBarPoint[] | null>(
-    initialBars && initialBars.length > 0 ? initialBars : null,
-  );
-  const [barsLoading, setBarsLoading] = useState(false);
-  const [barsAttempted, setBarsAttempted] = useState(() =>
-    Boolean(initialBars && initialBars.length >= 2),
-  );
-
   const selectedPeers = useMemo(() => {
     const list: string[] = [];
     for (let i = 0; i < scale - 1; i++) {
@@ -268,7 +225,6 @@ export function SymbolCompareChart({
   );
 
   const peerKey = selectedPeers.join(",");
-  const singleSymbol = selectedSymbols.length === 1;
 
   useEffect(() => {
     // Empty peerKey: series useMemo already falls back to base-only — no
@@ -339,64 +295,6 @@ export function SymbolCompareChart({
     };
   }, [base, peerKey]);
 
-  // Single-company view: load daily OHLC for candles when SSR bars missing.
-  useEffect(() => {
-    if (!singleSymbol) return;
-    if (dailyBars && dailyBars.length >= 2) return;
-    if (barsAttempted) return;
-
-    let cancelled = false;
-    const ctrl = new AbortController();
-    const timer = setTimeout(() => ctrl.abort(), CLIENT_API_TIMEOUT_MS);
-
-    async function loadBars() {
-      const pathOnly = `/api/v1/symbols/${encodeURIComponent(base)}/daily-bars`;
-      if (!isSafeClientApiPath(pathOnly)) {
-        if (!cancelled) setBarsAttempted(true);
-        return;
-      }
-      setBarsLoading(true);
-      try {
-        const res = await fetch(
-          `${pathOnly}?limit=${sessionsForRange("1Y")}`,
-          {
-            credentials: "same-origin",
-            signal: ctrl.signal,
-            headers: { Accept: "application/json" },
-          },
-        );
-        const bounded = await readBoundedResponseText(
-          res,
-          CLIENT_API_BODY_MAX_CHARS,
-        );
-        if (!bounded.ok || !res.ok) return;
-        let body: unknown = null;
-        try {
-          body = bounded.text ? JSON.parse(bounded.text) : null;
-        } catch {
-          body = null;
-        }
-        const bars = parseDailyBarsPayload(body);
-        if (!cancelled && bars.length >= 2) setDailyBars(bars);
-      } catch {
-        /* line fallback below */
-      } finally {
-        clearTimeout(timer);
-        if (!cancelled) {
-          setBarsLoading(false);
-          setBarsAttempted(true);
-        }
-      }
-    }
-
-    void loadBars();
-    return () => {
-      cancelled = true;
-      ctrl.abort();
-      clearTimeout(timer);
-    };
-  }, [base, singleSymbol, dailyBars, barsAttempted]);
-
   const series = useMemo(() => {
     if (selectedPeers.length === 0) return [baseSeries];
     const bySymbol = new Map(peerSeries.map((s) => [s.symbol, s]));
@@ -416,18 +314,9 @@ export function SymbolCompareChart({
     [selectedSymbols, rows],
   );
 
-  const candleBars = useMemo(() => {
-    if (!singleSymbol) return null;
-    const src = dailyBars;
-    if (!src || src.length < 2) return null;
-    const scaled = scaleDailyBarsForCompare(src, mode, COMPARE_CANDLE_BARS);
-    return scaled.length >= 2 ? scaled : null;
-  }, [singleSymbol, dailyBars, mode]);
-
   const needsPeers = scale > 1;
-  const showCandles = singleSymbol && candleBars != null;
   const showLineChart =
-    !showCandles && svg != null && (!needsPeers || selectedPeers.length >= 1);
+    svg != null && (!needsPeers || selectedPeers.length >= 1);
 
   function addPeerFromDraft() {
     const next = normalizeSymbol(draft);
@@ -475,10 +364,9 @@ export function SymbolCompareChart({
           Price compare
         </h2>
         <p className="mt-1 max-w-xl text-sm text-muted-foreground">
-          One company → daily OHLC candles. Two or more → overlay lines from
-          stored ticks (up to {MAX_COMPARE_SYMBOLS}). Indexed mode starts each
-          series at 100 so different price levels stay readable. Not financial
-          advice.
+          Overlay up to {MAX_COMPARE_SYMBOLS} listed symbols from stored ticks
+          (~{COMPARE_TICK_LIMIT} points each). Indexed mode starts each line at
+          100 so different price levels stay readable. Not financial advice.
         </p>
       </div>
 
@@ -605,12 +493,6 @@ export function SymbolCompareChart({
           </p>
         ) : null}
 
-        {barsLoading && singleSymbol && !candleBars ? (
-          <p className="text-sm text-muted-foreground" role="status">
-            Loading daily candles…
-          </p>
-        ) : null}
-
         {!loading && needsPeers && selectedPeers.length === 0 ? (
           <p className="text-sm text-muted-foreground" role="status">
             Add {scale - 1} more compan{scale - 1 === 1 ? "y" : "ies"} to fill
@@ -618,34 +500,7 @@ export function SymbolCompareChart({
           </p>
         ) : null}
 
-        {showCandles && candleBars ? (
-          <div className="rounded-lg border border-border/70 bg-muted/15 p-3">
-            <ul className="mb-2 flex flex-wrap gap-3" aria-label="Series legend">
-              <li className="flex items-center gap-2 font-mono text-xs">
-                <span
-                  className="inline-block size-2.5 rounded-full"
-                  style={{ background: SERIES_STROKES[0] }}
-                  aria-hidden
-                />
-                {base}
-              </li>
-            </ul>
-            {/* fitWidth fills the same h-56 card as the line overlay;
-                maxSlot caps pitch so wide viewports don't fatten candles. */}
-            <CandlestickChart
-              bars={candleBars}
-              maxCandles={COMPARE_CANDLE_BARS}
-              fitWidth
-              maxSlot={8}
-              chartHeight={224}
-              footnote={
-                mode === "indexed"
-                  ? "Daily OHLC · indexed (first close = 100) · research only"
-                  : "Daily OHLC (LKR) · research only"
-              }
-            />
-          </div>
-        ) : showLineChart && svg ? (
+        {showLineChart && svg ? (
           <div className="rounded-lg border border-border/70 bg-muted/15 p-3">
             <ul className="mb-2 flex flex-wrap gap-3" aria-label="Series legend">
               {svg.series.map((s) => (
@@ -722,13 +577,13 @@ export function SymbolCompareChart({
               {mode === "indexed"
                 ? "Y axis: indexed (first tick = 100)."
                 : "Y axis: last price (LKR)."}{" "}
-              Multi-company overlay uses stored poller ticks — not financial
+              Stored poller ticks (~{COMPARE_TICK_LIMIT}) — not financial
               advice.
             </p>
           </div>
-        ) : !loading && !barsLoading && !needsPeers ? (
+        ) : !loading && !needsPeers ? (
           <p className="text-sm text-muted-foreground" role="status">
-            Need daily path history or at least two stored ticks for {base}.
+            Need at least two stored ticks for {base}.
           </p>
         ) : null}
       </div>
