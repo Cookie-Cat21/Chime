@@ -635,7 +635,7 @@ export function SymbolCompareChart({
               bars={candleBars}
               maxCandles={COMPARE_CANDLE_BARS}
               fitWidth
-              maxSlot={9}
+              maxSlot={8}
               chartHeight={224}
               footnote={
                 mode === "indexed"

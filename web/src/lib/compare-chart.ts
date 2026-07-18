@@ -6,8 +6,10 @@ import {
 
 export const MAX_COMPARE_SYMBOLS = 4;
 
-/** Hero-style depth for single-symbol compare candles. */
-export const COMPARE_CANDLE_BARS = 80;
+/** Daily bars shown in single-symbol compare candles.
+ * Tuned so fixed-pitch bodies (~8–9px) fill a typical card width
+ * without fattening (≈1Y trading days after light aggregation). */
+export const COMPARE_CANDLE_BARS = 120;
 
 export type ComparePoint = { ts: string | null; price: number };
 export type CompareSeries = { symbol: string; points: ComparePoint[] };
