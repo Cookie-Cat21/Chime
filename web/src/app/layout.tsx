@@ -49,12 +49,12 @@ const jetbrains = JetBrains_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "Chime",
+  title: "Quiverly",
   description:
     "Telegram-first CSE alerting — manage watchlists and alert rules.",
   icons: {
-    icon: [{ url: "/brand/chime-mark.svg", type: "image/svg+xml" }],
-    apple: [{ url: "/brand/chime-mark.png" }],
+    icon: [{ url: "/brand/quiverly-mark.svg", type: "image/svg+xml" }],
+    apple: [{ url: "/brand/quiverly-mark.png" }],
   },
 };
 

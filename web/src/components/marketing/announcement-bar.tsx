@@ -20,7 +20,7 @@ export function AnnouncementBar({
   const [dismissed, setDismissed] = useState(false);
 
   useEffect(() => {
-    const root = document.getElementById("chime-announce");
+    const root = document.getElementById("quiverly-announce");
     if (!root) return;
 
     try {
@@ -62,7 +62,7 @@ export function AnnouncementBar({
 
   return (
     <div
-      id="chime-announce"
+      id="quiverly-announce"
       role="region"
       aria-label="Announcement"
       className="border-b border-border/70 bg-foreground text-background"

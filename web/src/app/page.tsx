@@ -2,9 +2,9 @@ import Link from "next/link";
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 
-import { ChimeWordmark } from "@/components/brand/chime-brand";
+import { QuiverlyWordmark } from "@/components/brand/quiverly-brand";
 import { FaqSection } from "@/components/kit/faq-section";
-import { ChimeBento } from "@/components/marketing/chime-bento";
+import { QuiverlyBento } from "@/components/marketing/quiverly-bento";
 import { EndCta } from "@/components/marketing/end-cta";
 import { FeatureList } from "@/components/marketing/feature-list";
 import { HeroGridBackdrop } from "@/components/marketing/hero-grid-backdrop";
@@ -12,7 +12,7 @@ import { HowItWorks } from "@/components/marketing/how-it-works";
 import { MarketingNav } from "@/components/marketing/marketing-nav";
 import { MidCta } from "@/components/marketing/mid-cta";
 import { SectionEyebrow } from "@/components/marketing/section-eyebrow";
-import { ChimeFooter } from "@/components/marketing/chime-footer";
+import { QuiverlyFooter } from "@/components/marketing/quiverly-footer";
 import { TelegramProof } from "@/components/marketing/telegram-proof";
 import { NfaInline } from "@/components/nfa-inline";
 import { Button } from "@/components/ui/button";
@@ -21,16 +21,16 @@ import { verifySessionToken } from "@/lib/auth/session";
 import { telegramBotUrl } from "@/lib/marketing";
 
 export const metadata = {
-  title: "Chime — CSE alerts on Telegram",
+  title: "Quiverly — CSE alerts on Telegram",
   description:
     "Telegram-first Colombo Stock Exchange alerts. Watch symbols, set rules in a thin dash, get pinged when something fires.",
 };
 
 const FAQ = [
   {
-    question: "Is Chime a CSE Tracker Pro clone?",
+    question: "Is Quiverly a CSE Tracker Pro clone?",
     answer:
-      "No. Chime is Telegram-first CSE alerting with a thin management dash. Portfolio, tax, screener, and heavy TA stay out of scope.",
+      "No. Quiverly is Telegram-first CSE alerting with a thin management dash. Portfolio, tax, screener, and heavy TA stay out of scope.",
   },
   {
     question: "Where do alerts fire?",
@@ -82,7 +82,7 @@ export default async function HomePage() {
           <HeroGridBackdrop />
           <div className="relative max-w-xl lg:max-w-2xl">
             <div className="chime-rise">
-              <ChimeWordmark size="hero" priority />
+              <QuiverlyWordmark size="hero" priority />
             </div>
             <h1 className="chime-rise chime-rise-delay-1 mt-10 font-display text-4xl font-semibold tracking-tight text-foreground sm:text-5xl sm:leading-[1.08]">
               CSE alerts on Telegram.
@@ -174,7 +174,7 @@ export default async function HomePage() {
               A poller that never stops checking, and a bot that never keeps
               you waiting.
             </p>
-            <ChimeBento className="mt-10" />
+            <QuiverlyBento className="mt-10" />
           </section>
 
           <MidCta telegramHref={botUrl} className="mt-20" />
@@ -190,7 +190,7 @@ export default async function HomePage() {
           <EndCta telegramHref={botUrl} className="mt-20" />
         </div>
       </main>
-      <ChimeFooter telegramHref={botUrl} />
+      <QuiverlyFooter telegramHref={botUrl} />
     </div>
   );
 }

@@ -1,15 +1,15 @@
 import Link from "next/link";
 
-import { ChimeWordmark } from "@/components/brand/chime-brand";
+import { QuiverlyWordmark } from "@/components/brand/quiverly-brand";
 import { MarketingNav } from "@/components/marketing/marketing-nav";
-import { ChimeFooter } from "@/components/marketing/chime-footer";
+import { QuiverlyFooter } from "@/components/marketing/quiverly-footer";
 import { NfaInline } from "@/components/nfa-inline";
 import { Button } from "@/components/ui/button";
 import { telegramBotUrl } from "@/lib/marketing";
 
 export const metadata = {
-  title: "Pricing · Chime",
-  description: "Chime CSE alerts — free via Telegram for v1. No payments yet.",
+  title: "Pricing · Quiverly",
+  description: "Quiverly CSE alerts — free via Telegram for v1. No payments yet.",
 };
 
 /** HyperUI 2-tier stub — no checkout (payments fence). */
@@ -24,7 +24,7 @@ export default function PricingPage() {
         tabIndex={-1}
         className="mx-auto flex w-full max-w-3xl flex-1 flex-col px-6 py-14"
       >
-        <ChimeWordmark size="lg" priority />
+        <QuiverlyWordmark size="lg" priority />
         <h1 className="mt-8 font-display text-4xl font-semibold tracking-tight sm:text-5xl">
           Pricing
         </h1>
@@ -96,7 +96,7 @@ export default function PricingPage() {
           </p>
         ) : null}
       </main>
-      <ChimeFooter telegramHref={botUrl} />
+      <QuiverlyFooter telegramHref={botUrl} />
     </div>
   );
 }

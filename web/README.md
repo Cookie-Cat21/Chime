@@ -1,4 +1,4 @@
-# Chime dashboard (`web/`)
+# Quiverly dashboard (`web/`)
 
 Next.js App Router + Tailwind + shadcn/ui scaffold for the thin CSE alert
 dashboard. Reads **Postgres only** — never calls cse.lk from this package.

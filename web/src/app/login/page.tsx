@@ -2,7 +2,7 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import { cookies } from "next/headers";
 
-import { ChimeWordmark } from "@/components/brand/chime-brand";
+import { QuiverlyWordmark } from "@/components/brand/quiverly-brand";
 import { LoginForm } from "@/components/login-form";
 import { NfaFooter } from "@/components/nfa-footer";
 import { NfaInline } from "@/components/nfa-inline";
@@ -14,8 +14,8 @@ import {
 import { verifySessionToken } from "@/lib/auth/session";
 
 export const metadata = {
-  title: "Sign in · Chime",
-  description: "Sign in to the Chime CSE dashboard — Telegram alerts on top.",
+  title: "Sign in · Quiverly",
+  description: "Sign in to the Quiverly CSE dashboard — Telegram alerts on top.",
 };
 
 export default async function LoginPage({
@@ -53,9 +53,9 @@ export default async function LoginPage({
           <Link
             href="/"
             className="inline-block motion-safe:transition-opacity motion-safe:hover:opacity-80"
-            aria-label="Chime home"
+            aria-label="Quiverly home"
           >
-            <ChimeWordmark size="hero" priority />
+            <QuiverlyWordmark size="hero" priority />
           </Link>
         </div>
         <h1 className="chime-rise chime-rise-delay-1 mt-5 font-display text-2xl font-semibold tracking-tight text-foreground sm:text-3xl">

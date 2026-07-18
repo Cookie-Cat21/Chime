@@ -84,7 +84,7 @@ export async function generateMetadata({
   // Fail closed — never echo hostile / undecodable raw into <title>.
   const symbol = normalizeSymbolParam(raw) ?? "Symbol";
   return {
-    title: `${symbol} · Chime`,
+    title: `${symbol} · Quiverly`,
     description: `Last price and disclosures for ${symbol}.`,
   };
 }
@@ -309,7 +309,7 @@ export default async function SymbolDetailPage({
           title={`Couldn’t load ${symbol}`}
           description={
             <>
-              Chime couldn’t fetch this symbol from Postgres just now. Check
+              Quiverly couldn’t fetch this symbol from Postgres just now. Check
               your connection, then try again — or open it from your{" "}
               <Link href="/watchlist" className="underline underline-offset-4">
                 watchlist
@@ -729,7 +729,7 @@ export default async function SymbolDetailPage({
           title="No snapshot yet"
           description={
             <>
-              Chime hasn’t stored a price tick for {data.symbol}. During
+              Quiverly hasn’t stored a price tick for {data.symbol}. During
               market hours (09:30–14:30 SLT, weekdays) the poller writes
               snapshots here. Outside those hours this stays empty until the
               next session. Not financial advice.
@@ -811,7 +811,7 @@ export default async function SymbolDetailPage({
             title="Couldn’t load disclosures"
             description={
               <>
-                Chime couldn’t read stored filings for{" "}
+                Quiverly couldn’t read stored filings for{" "}
                 <code className="font-mono text-xs">{data.symbol}</code> just
                 now. Check your connection, then try again — this is not an
                 empty list.

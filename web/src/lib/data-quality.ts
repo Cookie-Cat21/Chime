@@ -108,7 +108,7 @@ export function buildDataQualityNotices(
       tone: "danger",
       title: "Filing metrics unavailable right now",
       description:
-        "Chime couldn’t load stored filing metrics for this symbol. Retry in a moment — this is a temporary load error, not proof that no filings exist.",
+        "Quiverly couldn’t load stored filing metrics for this symbol. Retry in a moment — this is a temporary load error, not proof that no filings exist.",
     });
   }
 
@@ -117,7 +117,7 @@ export function buildDataQualityNotices(
       id: "no-price",
       tone: "warning",
       title: "No stored price yet",
-      description: `Chime has not stored a price tick for ${symbol}. Snapshots appear during market hours (09:30–14:30 SLT, weekdays) once the symbol is watched. Not financial advice.`,
+      description: `Quiverly has not stored a price tick for ${symbol}. Snapshots appear during market hours (09:30–14:30 SLT, weekdays) once the symbol is watched. Not financial advice.`,
     });
   } else if (input.snapshotStale) {
     notices.push({
@@ -148,7 +148,7 @@ export function buildDataQualityNotices(
         id: "no-disclosures",
         tone: "warning",
         title: "No disclosures stored yet",
-        description: `Chime has not ingested CSE announcements for ${symbol}. Filing metrics and AI briefs need those disclosures first.`,
+        description: `Quiverly has not ingested CSE announcements for ${symbol}. Filing metrics and AI briefs need those disclosures first.`,
       });
     } else if (q.financial_filings === 0) {
       notices.push({
@@ -156,7 +156,7 @@ export function buildDataQualityNotices(
         tone: "warning",
         title: "No financial-statement filings yet",
         description:
-          "Announcements may exist, but Chime has not found CSE financial-statement PDFs for this symbol. Metrics and YoY need those filings — warrants, prefs, and thinly listed names often have none.",
+          "Announcements may exist, but Quiverly has not found CSE financial-statement PDFs for this symbol. Metrics and YoY need those filings — warrants, prefs, and thinly listed names often have none.",
       });
     } else if (q.with_pdf === 0) {
       notices.push({
@@ -173,7 +173,7 @@ export function buildDataQualityNotices(
         id: "extract-failed",
         tone: "warning",
         title: "Filing metrics could not be extracted",
-        description: `Chime tried ${q.metrics_failed} filing PDF${q.metrics_failed === 1 ? "" : "s"} for ${symbol}, but could not mark a clean extract (scanned pages, unusual layouts, or non-LKR summary tables). Any numbers shown still need verification against the source PDF — this is not proof the issuer has no results.`,
+        description: `Quiverly tried ${q.metrics_failed} filing PDF${q.metrics_failed === 1 ? "" : "s"} for ${symbol}, but could not mark a clean extract (scanned pages, unusual layouts, or non-LKR summary tables). Any numbers shown still need verification against the source PDF — this is not proof the issuer has no results.`,
       });
     } else if (
       q.metrics_ok === 0 &&
@@ -206,7 +206,7 @@ export function buildDataQualityNotices(
         tone: "warning",
         title: "AI brief failed for recent filings",
         description:
-          "Brief generation did not complete for this symbol’s filings (model limits or extract issues). Chime will retry on the brief drain — this is not investment advice.",
+          "Brief generation did not complete for this symbol’s filings (model limits or extract issues). Quiverly will retry on the brief drain — this is not investment advice.",
       });
     } else if (q.briefs_pending > 0) {
       notices.push({

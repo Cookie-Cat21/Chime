@@ -87,7 +87,7 @@ export function LoginForm({ allowlist, defaultTelegramId, demoEnabled }: Props) 
       if (!bounded.ok) {
         setError(
           loginError(
-            "Chime couldn't sign you in (response too large). Try again.",
+            "Quiverly couldn't sign you in (response too large). Try again.",
           ),
         );
         return;
@@ -110,7 +110,7 @@ export function LoginForm({ allowlist, defaultTelegramId, demoEnabled }: Props) 
         ) {
           setError(
             loginError(
-              "Chime couldn't sign you in. Check the Telegram ID and try again.",
+              "Quiverly couldn't sign you in. Check the Telegram ID and try again.",
             ),
           );
           return;
@@ -118,15 +118,15 @@ export function LoginForm({ allowlist, defaultTelegramId, demoEnabled }: Props) 
         // Cap + strip controls — hostile error.message must not balloon UI.
         const apiMsg = apiErrorMessage(data, "");
         const detail = apiMsg
-          ? `Chime couldn't sign you in: ${apiMsg}`
-          : `Chime couldn't sign you in (${res.status}). Try again.`;
+          ? `Quiverly couldn't sign you in: ${apiMsg}`
+          : `Quiverly couldn't sign you in (${res.status}). Try again.`;
         setError(loginError(detail));
         return;
       }
       router.push("/overview");
       router.refresh();
     } catch {
-      setError(loginError("Chime couldn't reach the sign-in endpoint. Try again."));
+      setError(loginError("Quiverly couldn't reach the sign-in endpoint. Try again."));
     } finally {
       setPending(false);
     }
