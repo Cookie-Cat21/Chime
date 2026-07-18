@@ -1,8 +1,12 @@
 import { cn } from "@/lib/utils";
 
+const COLS = 8;
+const ROWS = 6;
+const CELL_COUNT = COLS * ROWS;
+
 /**
- * Soft checker atmosphere — large filled squares fading at the edges.
- * Matches the koel login/landing brand boards (not a busy hairline grid).
+ * Soft large-square checker atmosphere for koel brand surfaces.
+ * Filled tiles only (no hairline borders), radially faded at the edges.
  */
 export function HeroGridBackdrop({ className }: { className?: string }) {
   return (
@@ -14,23 +18,30 @@ export function HeroGridBackdrop({ className }: { className?: string }) {
       )}
       style={{
         maskImage:
-          "radial-gradient(70% 65% at 45% 35%, black 0%, transparent 78%)",
+          "radial-gradient(75% 70% at 40% 30%, black 10%, transparent 80%)",
         WebkitMaskImage:
-          "radial-gradient(70% 65% at 45% 35%, black 0%, transparent 78%)",
+          "radial-gradient(75% 70% at 40% 30%, black 10%, transparent 80%)",
       }}
     >
       <div
-        className="absolute inset-[-10%]"
+        className="grid h-full w-full"
         style={{
-          backgroundImage: `repeating-conic-gradient(
-            from 0deg at 0 0,
-            oklch(0.93 0.006 250 / 0.72) 0deg 90deg,
-            transparent 90deg 180deg
-          )`,
-          backgroundSize: "112px 112px",
-          backgroundPosition: "center center",
+          gridTemplateColumns: `repeat(${COLS}, minmax(0, 1fr))`,
+          gridTemplateRows: `repeat(${ROWS}, minmax(0, 1fr))`,
         }}
-      />
+      >
+        {Array.from({ length: CELL_COUNT }).map((_, index) => {
+          const col = index % COLS;
+          const row = Math.floor(index / COLS);
+          const filled = (col + row) % 2 === 0;
+          return (
+            <div
+              key={index}
+              className={cn(filled && "bg-foreground/[0.045]")}
+            />
+          );
+        })}
+      </div>
     </div>
   );
 }
