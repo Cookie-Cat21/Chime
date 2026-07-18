@@ -41,9 +41,9 @@ export function QuiverlyFooter({
 
   return (
     <footer
-      className={`relative w-full bg-background text-muted-foreground font-sans overflow-hidden flex flex-col justify-between border-t border-border ${className ?? ""}`}
+      className={`relative w-full bg-background text-muted-foreground font-sans overflow-hidden flex flex-col justify-between ${className ?? ""}`}
     >
-      <div className="relative z-10 max-w-[1400px] w-full mx-auto px-6 md:px-12 lg:px-16 pt-20 md:pt-32 flex flex-col border-x border-dashed border-border">
+      <div className="relative z-10 max-w-[1400px] w-full mx-auto px-6 md:px-12 lg:px-16 pt-20 md:pt-32 flex flex-col rounded-t-3xl border-t border-x border-dashed border-border">
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-16 lg:gap-8 mb-10 md:mb-16 lg:mb-24">
           <div className="lg:col-span-5 xl:col-span-4 flex flex-col gap-6 md:gap-8">
             <div className="flex items-center gap-2 text-foreground">
