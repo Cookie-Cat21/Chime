@@ -59,7 +59,9 @@ function testTechLabels() {
 
 function testFundamentalsHonesty() {
   assert.equal(scaleEquityUnits(5, "millions"), 5_000_000);
+  // Tiny units stay rejected; unknown mid-range promotes to Rs mn.
   assert.equal(scaleEquityUnits(1, "units"), null);
+  assert.equal(scaleEquityUnits(4455.267, "unknown"), 4455.267 * 1e6);
 
   const empty = computeFundamentals({
     equity: null,
