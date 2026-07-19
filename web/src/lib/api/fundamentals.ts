@@ -23,14 +23,24 @@ export type FundamentalsLabels = {
   currency: string;
 };
 
-/** Scale raw extract to LKR units; reject tiny junk. */
+/**
+ * Scale raw extract to LKR units; reject tiny junk.
+ * When scale is unknown, CSE annuals often store equity in Rs mn
+ * (e.g. COMB 4455.267) — promote those into millions so Book can show
+ * without inventing a NAV from price alone.
+ */
 export function scaleEquityUnits(
   equity: number | null,
   scale: string | null,
 ): number | null {
-  if (equity == null || !Number.isFinite(equity)) return null;
-  const mult =
-    scale === "millions" ? 1e6 : scale === "thousands" ? 1e3 : 1;
+  if (equity == null || !Number.isFinite(equity) || equity <= 0) return null;
+  let mult = 1;
+  if (scale === "millions") mult = 1e6;
+  else if (scale === "thousands") mult = 1e3;
+  else if (scale == null || scale === "unknown" || scale === "units") {
+    // Already full LKR vs Rs-mn shorthand.
+    if (equity < 10_000) mult = 1e6;
+  }
   const v = equity * mult;
   return Number.isFinite(v) && v >= 10_000 ? v : null;
 }

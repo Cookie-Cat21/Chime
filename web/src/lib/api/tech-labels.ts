@@ -15,7 +15,7 @@ export type TechLabels = {
   sma50_pct: number | null;
   atr_pct: number | null;
   macd_bias: "BULL" | "BEAR" | null;
-  bb_pos: "▲" | "▼" | "SQZ" | "•" | null;
+  bb_pos: "ABOVE" | "BELOW" | "SQZ" | "MID" | null;
   week52_pct: number | null;
 };
 
@@ -87,9 +87,9 @@ function bbPos(closes: number[], period = 20): TechLabels["bb_pos"] {
   if (width < 0.04) return "SQZ";
   const upper = mean + 2 * std;
   const lower = mean - 2 * std;
-  if (last >= upper) return "▲";
-  if (last <= lower) return "▼";
-  return "•";
+  if (last >= upper) return "ABOVE";
+  if (last <= lower) return "BELOW";
+  return "MID";
 }
 
 export function barsFromDaily(
