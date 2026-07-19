@@ -6,6 +6,7 @@ import {
   aggregateBarsForDisplay,
   candleBodyOpen,
   isCloseOnlyBars,
+  synthesizePriorCloseCandles,
   type DailyBarPoint,
 } from "@/lib/api/daily-bars";
 import { formatNumber } from "@/lib/format";
@@ -15,18 +16,16 @@ import { cn } from "@/lib/utils";
 function barTooltip(
   b: DailyBarPoint,
   bodyOpen: number,
-  closeOnly: boolean,
+  closeCandles: boolean,
 ): string {
-  if (closeOnly) {
-    return `${b.trade_date} · Close ${formatNumber(b.close)}`;
-  }
   const vol =
     b.volume != null && Number.isFinite(b.volume)
       ? ` · Vol ${formatNumber(Math.round(b.volume), 0)}`
       : "";
-  return `${b.trade_date} · O ${formatNumber(b.open ?? bodyOpen)} H ${formatNumber(
+  const ohlc = `${b.trade_date} · O ${formatNumber(b.open ?? bodyOpen)} H ${formatNumber(
     b.high,
   )} L ${formatNumber(b.low)} C ${formatNumber(b.close)}${vol}`;
+  return closeCandles ? `${ohlc} · close→close` : ohlc;
 }
 
 /**
@@ -59,9 +58,9 @@ export function CandlestickChart({
   footnote,
   maxCandles = 72,
   /**
-   * ``close`` — CSE index paths (ASPI / S&P SL20) are close-only; render a
-   * continuous close line instead of fake thin candles. ``auto`` detects
-   * close-only OHLC; ``ohlc`` always draws candles.
+   * ``close`` — CSE index paths (ASPI / S&P SL20) are close-only; synthesize
+   * prior-close OHLC candles (not session range). ``auto`` detects
+   * close-only series; ``ohlc`` always draws stored candles.
    */
   variant = "auto",
 }: {
@@ -125,21 +124,27 @@ export function CandlestickChart({
   }, [fitWidth, fill, chartHeight, rawBars.length]);
 
   const priceMax = Math.max(...rawBars.map((b) => b.close), 0);
-  const closeOnly =
+  // CSE index feeds are close-only — synthesize prior-close OHLC so candles
+  // have real bodies (open→close) instead of H=L=C sticks or a line fallback.
+  const closeCandles =
     variant === "close" ||
     (variant === "auto" && isCloseOnlyBars(rawBars));
+  const sourceBars = closeCandles
+    ? synthesizePriorCloseCandles(rawBars)
+    : rawBars;
   // Scroll mode may keep a dense 1Y series; fit-width always respects
   // maxCandles so the plot can scale into the container without overflow.
-  // Close-only index paths keep every session — aggregation halves 1Y into
-  // sparse fake candles (e.g. 240 → 120).
-  const adaptiveMax = closeOnly
-    ? Math.max(maxCandles, rawBars.length)
-    : maxCandles >= 200 && !fitWidth
-      ? maxCandles
-      : priceMax > 0 && priceMax < 2
-        ? Math.min(maxCandles, 40)
-        : maxCandles;
-  const bars = aggregateBarsForDisplay(rawBars, adaptiveMax);
+  // For close→close indexes, cap density so multi-day aggregates keep
+  // readable body height on ASPI-scale ranges.
+  const adaptiveMax =
+    closeCandles && fitWidth
+      ? Math.min(maxCandles, 90)
+      : maxCandles >= 200 && !fitWidth
+        ? maxCandles
+        : priceMax > 0 && priceMax < 2
+          ? Math.min(maxCandles, 40)
+          : maxCandles;
+  const bars = aggregateBarsForDisplay(sourceBars, adaptiveMax);
 
   if (bars.length < 2) {
     return (
@@ -157,7 +162,7 @@ export function CandlestickChart({
     if (Math.abs(bars[i]!.close - o) < 1e-12) preFlat += 1;
   }
   const lineMode =
-    closeOnly || (priceMax < 3 && preFlat / bars.length >= 0.4);
+    !closeCandles && priceMax < 3 && preFlat / bars.length >= 0.4;
 
   const padL = fitWidth ? 8 : 14;
   const padR = fitWidth ? 52 : 56;
@@ -255,8 +260,8 @@ export function CandlestickChart({
 
   const first = bars[0]!;
   const last = bars[n - 1]!;
-  const aria = closeOnly
-    ? `Daily closes from ${first.trade_date} to ${last.trade_date}, close ${formatNumber(last.close)}`
+  const aria = closeCandles
+    ? `Close-to-close candles from ${first.trade_date} to ${last.trade_date}, close ${formatNumber(last.close)}`
     : `Candles from ${first.trade_date} to ${last.trade_date}, close ${formatNumber(last.close)}`;
   const gridYs = [0, 0.25, 0.5, 0.75, 1].map((t) => padT + t * plotH);
 
@@ -388,37 +393,17 @@ export function CandlestickChart({
           ))}
           {lineMode ? (
             <>
-              {closeOnly ? (
-                <path
-                  className="fill-foreground/[0.06]"
-                  d={[
-                    `M ${drawPadL + slot / 2} ${padT + plotH}`,
-                    ...bars.map((b, i) => {
-                      const x = drawPadL + slot * i + slot / 2;
-                      return `L ${x} ${yFor(b.close)}`;
-                    }),
-                    `L ${drawPadL + slot * (n - 1) + slot / 2} ${padT + plotH}`,
-                    "Z",
-                  ].join(" ")}
-                />
-              ) : null}
               <path
                 fill="none"
-                className={
-                  closeOnly
-                    ? "stroke-foreground/80"
-                    : "stroke-foreground/70"
-                }
-                strokeWidth={closeOnly ? 2 : 2.25}
+                className="stroke-foreground/70"
+                strokeWidth={2.25}
                 strokeLinejoin="round"
                 strokeLinecap="round"
                 d={bars
                   .map((b, i) => {
                     const x = drawPadL + slot * i + slot / 2;
                     const y = yFor(b.close);
-                    if (i === 0) return `M ${x} ${y}`;
-                    // Indexes: continuous close path. Penny names: step path.
-                    return closeOnly ? `L ${x} ${y}` : `H ${x} V ${y}`;
+                    return i === 0 ? `M ${x} ${y}` : `H ${x} V ${y}`;
                   })
                   .join(" ")}
               />
@@ -430,7 +415,7 @@ export function CandlestickChart({
                 const down = b.close < bodyOpen;
                 return (
                   <g key={`${b.trade_date}-${i}`}>
-                    <title>{barTooltip(b, bodyOpen, closeOnly)}</title>
+                    <title>{barTooltip(b, bodyOpen, false)}</title>
                     <rect
                       x={cx - slot / 2}
                       y={padT}
@@ -438,7 +423,7 @@ export function CandlestickChart({
                       height={plotH}
                       fill="transparent"
                     />
-                    {!closeOnly && (up || down) ? (
+                    {up || down ? (
                       <circle
                         cx={cx}
                         cy={yC}
@@ -479,8 +464,15 @@ export function CandlestickChart({
 
               // Flat / doji (incl. CSE null-open when close ≈ prior close):
               // real high–low wick + thin body — never a fake "+" cross.
+              // Index close→close moves are small vs ASPI scale — floor body
+              // height so candles stay readable after fit-width packing.
               const naturalH = Math.abs(yC - yO);
-              const bodyH = up || down ? Math.max(naturalH, 5) : Math.max(2, slot * 0.08);
+              const minBody = closeCandles
+                ? Math.max(6, slot * 0.22)
+                : 5;
+              const bodyH = up || down
+                ? Math.max(naturalH, minBody)
+                : Math.max(2, slot * 0.08);
               const bodyTop =
                 up || down
                   ? Math.min(yO, yC) - (bodyH - naturalH) / 2
@@ -488,7 +480,7 @@ export function CandlestickChart({
 
               return (
                 <g key={`${b.trade_date}-${i}`}>
-                  <title>{barTooltip(b, bodyOpen, false)}</title>
+                  <title>{barTooltip(b, bodyOpen, closeCandles)}</title>
                   <rect
                     x={cx - slot / 2}
                     y={padT}
@@ -604,8 +596,8 @@ export function CandlestickChart({
       </div>
       <p className="mt-2.5 shrink-0 text-xs leading-relaxed text-muted-foreground">
         {footnote ??
-          (closeOnly
-            ? `${rawBars.length} daily closes · ${formatNumber(first.close)} → ${formatNumber(last.close)} · CSE index path (close only) · research only`
+          (closeCandles
+            ? `${rawBars.length} daily closes${aggregated ? ` → ${n} candles` : ""} · close→close (CSE has no session OHLC) · ${formatNumber(first.close)} → ${formatNumber(last.close)} · research only`
             : `${rawBars.length} sessions${aggregated ? ` → ${n} ${lineMode ? "points" : "candles"}` : ""}${lineMode ? " · step path (tick-size name)" : ""} · close ${formatNumber(first.close)} → ${formatNumber(last.close)} · ${upN} up / ${downN} down${flatN ? ` / ${flatN} flat` : ""}${fc.length > 0 ? " · dashed = model forecast" : ""} · research only`)}
       </p>
     </div>

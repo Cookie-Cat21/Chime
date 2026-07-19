@@ -237,9 +237,9 @@ export function candleBodyOpen(bars: DailyBarPoint[], index: number): number {
 }
 
 /**
- * True when the series is close-only (CSE index ``chartData`` / ASPI path):
- * every bar has H=L=C and no stored open. Candles look like sparse sticks —
- * prefer a close line instead.
+ * True when the series is close-only (CSE index path): every bar has H=L=C
+ * and no stored open. Session OHLC is unavailable — synthesize close→close
+ * candles before drawing.
  */
 export function isCloseOnlyBars(bars: DailyBarPoint[]): boolean {
   if (!Array.isArray(bars) || bars.length < 2) return false;
@@ -253,6 +253,36 @@ export function isCloseOnlyBars(bars: DailyBarPoint[]): boolean {
     checked += 1;
   }
   return checked >= 2;
+}
+
+/**
+ * Build close→close candles from a close-only series (ASPI / S&P SL20).
+ * Open = prior close; high/low = max/min(open, close). Not session OHLC —
+ * CSE index feeds only publish daily closes.
+ */
+export function synthesizePriorCloseCandles(
+  bars: DailyBarPoint[],
+): DailyBarPoint[] {
+  if (!Array.isArray(bars) || bars.length === 0) return [];
+  const out: DailyBarPoint[] = [];
+  for (let i = 0; i < bars.length; i++) {
+    const b = bars[i]!;
+    const open =
+      i > 0 && Number.isFinite(bars[i - 1]!.close) && bars[i - 1]!.close > 0
+        ? bars[i - 1]!.close
+        : b.close;
+    const high = Math.max(open, b.close);
+    const low = Math.min(open, b.close);
+    out.push({
+      trade_date: b.trade_date,
+      open,
+      high,
+      low,
+      close: b.close,
+      volume: b.volume,
+    });
+  }
+  return out;
 }
 
 /**
