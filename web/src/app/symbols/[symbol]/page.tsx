@@ -524,7 +524,10 @@ export default async function SymbolDetailPage({
     }
   }
 
-  const periodReturns = computePeriodReturns(closesFromBars(initialDailyBars));
+  const periodReturns = computePeriodReturns(
+    closesFromBars(initialDailyBars),
+    initialDailyBars,
+  );
   const techLabels = computeTechLabels(barsFromDaily(initialDailyBars));
   const quote = data;
   const fundamentals = computeFundamentals({

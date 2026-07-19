@@ -7,6 +7,7 @@ import assert from "node:assert/strict";
 import {
   closesFromBars,
   computePeriodReturns,
+  returnPctAtCalendarDays,
   returnPctAtHorizon,
 } from "./src/lib/api/period-returns.ts";
 import {
@@ -27,12 +28,33 @@ function testPeriodReturns() {
   assert.ok(pct != null);
   assert.ok(Math.abs(pct! - ((109 - 104) / 104) * 100) < 1e-9);
 
-  const long = Array.from({ length: 300 }, (_, i) => 50 + i * 0.1);
+  const long = Array.from({ length: 230 }, (_, i) => 50 + i * 0.1);
   const rets = computePeriodReturns(long);
   assert.ok(rets["1W"] != null);
   assert.ok(rets["1M"] != null);
   assert.ok(rets["3M"] != null);
+  // CSE-depth fallback (~220 sessions) — NYSE 252 would stay null.
   assert.ok(rets["1Y"] != null);
+
+  // Calendar 1Y: 242 sessions evenly spanning 364 calendar days (CSE period=5).
+  const dated: { trade_date: string; close: number }[] = [];
+  const startMs = Date.UTC(2025, 6, 17); // 2025-07-17
+  const spanDays = 364;
+  for (let i = 0; i < 242; i++) {
+    const dayOffset = Math.round((i * spanDays) / 241);
+    const d = new Date(startMs + dayOffset * 86_400_000);
+    dated.push({
+      trade_date: d.toISOString().slice(0, 10),
+      close: 100 + i * 0.05,
+    });
+  }
+  const cal = returnPctAtCalendarDays(dated, 365);
+  assert.ok(cal != null, "calendar 1Y over CSE-depth series");
+  const withDates = computePeriodReturns(
+    dated.map((b) => b.close),
+    dated,
+  );
+  assert.ok(withDates["1Y"] != null);
 
   assert.deepEqual(
     closesFromBars([{ close: 1 }, { price: 2 }, { close: "x" }, { close: -1 }]),
