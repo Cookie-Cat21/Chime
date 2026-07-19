@@ -4,6 +4,7 @@ import { useMemo, useState } from "react";
 
 import {
   BAND_ZONE_COLOR,
+  MIN_HEADLINE_UNIVERSE,
   bandForScore,
   type AppetiteDay,
 } from "@/lib/api/appetite";
@@ -284,6 +285,10 @@ export function AppetiteHistoryChart({
       : aggregateMode === "week"
         ? "weekly avg"
         : null;
+  /** Tip is a sparse session — headline prefers a fuller board day. */
+  const tipThin =
+    last.universe_n > 0 && last.universe_n < MIN_HEADLINE_UNIVERSE;
+  const tipCoord = coords[coords.length - 1]!;
 
   return (
     <div className={cn("w-full", className)}>
@@ -336,7 +341,7 @@ export function AppetiteHistoryChart({
         viewBox={`0 0 ${w} ${h}`}
         className="h-auto w-full"
         role="img"
-        aria-label={`Market Appetite from ${first.trade_date} to ${last.trade_date}, latest ${Math.round(last.score)}${usingHybridLong ? ", Yahoo+CSE research" : ""}${aggLabel ? `, ${aggLabel}` : ""}`}
+        aria-label={`Market Appetite from ${first.trade_date} to ${last.trade_date}, tip ${Math.round(last.score)}${tipThin ? ", thin session" : ""}${usingHybridLong ? ", Yahoo+CSE research" : ""}${aggLabel ? `, ${aggLabel}` : ""}`}
       >
         {zoneBands.map((z) => {
           const yTop = padT + (1 - z.y1 / 100) * plotH;
@@ -430,13 +435,32 @@ export function AppetiteHistoryChart({
           strokeLinejoin="round"
           strokeLinecap="round"
         />
-        <circle
-          cx={coords[coords.length - 1]!.x}
-          cy={coords[coords.length - 1]!.y}
-          r={3.5}
-          className="fill-foreground"
-        />
+        {tipThin ? (
+          <circle
+            cx={tipCoord.x}
+            cy={tipCoord.y}
+            r={5}
+            fill="none"
+            stroke="currentColor"
+            className="text-foreground"
+            strokeWidth={2}
+          />
+        ) : (
+          <circle
+            cx={tipCoord.x}
+            cy={tipCoord.y}
+            r={3.5}
+            className="fill-foreground"
+          />
+        )}
       </svg>
+      {tipThin ? (
+        <p className="mt-2 text-xs text-muted-foreground" role="status">
+          Chart tip {last.trade_date}: {Math.round(last.score)} — thin session (
+          {last.universe_n} names). Hollow dot = not used for the headline
+          (needs ≥{MIN_HEADLINE_UNIVERSE} names).
+        </p>
+      ) : null}
     </div>
   );
 }

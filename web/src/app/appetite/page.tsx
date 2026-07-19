@@ -13,8 +13,10 @@ import { KpiStrip } from "@/components/kit/kpi-strip";
 import { NfaFooter } from "@/components/nfa-footer";
 import { NfaInline } from "@/components/nfa-inline";
 import { PageHeader } from "@/components/page-header";
+import { SoftPageRefresh } from "@/components/soft-page-refresh";
 import { Button } from "@/components/ui/button";
 import {
+  MIN_HEADLINE_UNIVERSE,
   daysInCurrentBand,
   deltaVs,
   headlineDay,
@@ -68,20 +70,23 @@ export default async function AppetitePage() {
   const d5 = deltaVs(history, 5, hi);
   const d21 = deltaVs(history, 21, hi);
   const inBand = daysInCurrentBand(history, hi);
+  const rawTip = history.length > 0 ? history[history.length - 1]! : null;
   const thinSkipped =
-    history.length > 0 &&
+    rawTip != null &&
     hi >= 0 &&
     hi < history.length - 1 &&
-    history[history.length - 1]!.universe_n < 100;
+    rawTip.universe_n < MIN_HEADLINE_UNIVERSE;
 
   return (
     <div className="min-h-screen bg-background">
       <AppNav active="/appetite" />
+      {/* Soft reload — picks up new appetite rows without SSE. */}
+      <SoftPageRefresh intervalMs={60_000} />
       <main className="mx-auto flex max-w-6xl flex-col gap-8 px-4 py-8 sm:px-6">
         <PageHeader
           eyebrow="koel · Research"
           title="Market Appetite"
-          description="Session mood proxy from CSE breadth, move intensity, ASPI day change, and participation. Higher scores are not a tip — research only."
+          description="Session mood proxy from CSE breadth, move intensity, ASPI day change, and participation. Higher scores are not a tip — research only. Soft-reloads about every minute."
           action={
             <Button asChild variant="outline" size="sm">
               <Link href="/overview">Overview</Link>
@@ -122,6 +127,28 @@ export default async function AppetitePage() {
                       className="text-base sm:text-lg"
                     />
                   </div>
+                  {thinSkipped && rawTip ? (
+                    <p
+                      className="mt-3 max-w-xl rounded-md border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-xs text-foreground"
+                      role="status"
+                    >
+                      Latest session{" "}
+                      <span className="font-mono tabular-nums">
+                        {rawTip.trade_date}
+                      </span>
+                      :{" "}
+                      <span className="font-mono tabular-nums font-medium">
+                        {Math.round(rawTip.score)}
+                      </span>{" "}
+                      ({rawTip.band.replaceAll("_", " ")}) · only{" "}
+                      <span className="font-mono tabular-nums">
+                        {rawTip.universe_n}
+                      </span>{" "}
+                      names traded (need ≥{MIN_HEADLINE_UNIVERSE} for headline).
+                      That sparse day is the chart tip (hollow dot) — the big
+                      number stays on the last full board session.
+                    </p>
+                  ) : null}
                   <div className="mt-2">
                     <NfaInline />
                   </div>
@@ -250,8 +277,8 @@ export default async function AppetitePage() {
               </ul>
               <p className="mt-2 text-xs">
                 CSE-truth window is ~1 year of daily bars (3M / 1Y chips).
-                Partial sessions (thin universe) are kept in history but
-                skipped for the headline.{" "}
+                Partial sessions (fewer than {MIN_HEADLINE_UNIVERSE} names) stay
+                on the chart tip but are skipped for the headline number.{" "}
                 <span className="text-foreground">5Y</span> /{" "}
                 <span className="text-foreground">MAX</span> use the Yahoo+CSE
                 hybrid research reconstruction when scored — never labeled as
