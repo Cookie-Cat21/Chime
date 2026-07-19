@@ -467,7 +467,7 @@ export function ExpandablePriceChart({
             footnote={
               compactDaily
                 ? seriesKind === "index"
-                  ? "Daily closes · expand for ranges · research only"
+                  ? "Close→close candles · expand for ranges · research only"
                   : "Daily OHLC · expand for ranges · research only"
                 : "Intraday from stored ticks · research only"
             }
@@ -678,7 +678,7 @@ export function ExpandablePriceChart({
                 )}
                 <span className="ml-auto font-sans text-[11px] text-muted-foreground">
                   {seriesKind === "index"
-                    ? "CSE index daily closes — research only, not financial advice."
+                    ? "Close→close candles from CSE daily closes — research only, not financial advice."
                     : range === "1D" && !oneDayUsingDaily
                       ? "Intraday candles from live ticks — research only, not financial advice."
                       : "Green up / red down vs prior close — research only, not financial advice."}
@@ -728,7 +728,8 @@ export function ExpandablePriceChart({
                   variant={seriesKind === "index" ? "close" : "auto"}
                   maxCandles={
                     seriesKind === "index"
-                      ? sessionsForRange(range === "1D" ? "1Y" : range)
+                      ? // Cap so close→close aggregates stay thick on ASPI scale.
+                        Math.min(90, sessionsForRange(range === "1D" ? "3M" : range))
                       : range === "1D" && oneDayUsingDaily
                         ? 40
                         : displayCandlesForRange(range)
@@ -736,7 +737,7 @@ export function ExpandablePriceChart({
                   className="min-h-0 flex-1"
                   footnote={
                     seriesKind === "index"
-                      ? `${chartBars.length} daily closes · CSE index path (no session OHLC) · research only`
+                      ? undefined
                       : range === "1D"
                         ? oneDayUsingDaily
                           ? `Only ${sessionTicks.length} session tick${sessionTicks.length === 1 ? "" : "s"} — showing last ${chartBars.length} daily sessions · research only`

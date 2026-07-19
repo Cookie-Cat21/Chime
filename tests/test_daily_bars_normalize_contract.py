@@ -108,7 +108,7 @@ def _is_close_only_bars(bars: list[dict]) -> bool:
 
 
 def test_index_close_only_series_detected() -> None:
-    """ASPI / SNP_SL20 daily_bars are close-only — must not look like OHLC candles."""
+    """ASPI / SNP_SL20 daily_bars are close-only — need synthesized candles."""
     bars = [
         {"open": None, "high": 21000.0, "low": 21000.0, "close": 21000.0},
         {"open": None, "high": 21100.0, "low": 21100.0, "close": 21100.0},
@@ -124,3 +124,27 @@ def test_index_close_only_series_detected() -> None:
         )
         is False
     )
+
+
+def test_synthesize_prior_close_candles() -> None:
+    """Mirror web ``synthesizePriorCloseCandles`` for index close→close bodies."""
+    closes = [100.0, 105.0, 102.0]
+
+    def synth(vals: list[float]) -> list[dict]:
+        out = []
+        for i, c in enumerate(vals):
+            o = vals[i - 1] if i > 0 else c
+            out.append(
+                {
+                    "open": o,
+                    "high": max(o, c),
+                    "low": min(o, c),
+                    "close": c,
+                }
+            )
+        return out
+
+    bars = synth(closes)
+    assert bars[0] == {"open": 100.0, "high": 100.0, "low": 100.0, "close": 100.0}
+    assert bars[1] == {"open": 100.0, "high": 105.0, "low": 100.0, "close": 105.0}
+    assert bars[2] == {"open": 105.0, "high": 105.0, "low": 102.0, "close": 102.0}
