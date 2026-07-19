@@ -4,7 +4,6 @@ import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 
 import { LiveIndicator } from "@/components/live-indicator";
-import { toIso } from "@/lib/api/time";
 import { isMarketSessionOpen } from "@/lib/market-session";
 
 /** Soft-cap refresh interval — never hammer the dash SSR path. */
@@ -23,32 +22,6 @@ function clampInterval(ms: number): number {
   );
 }
 
-function readSnapshotTs(raw: unknown): string | null {
-  if (!raw || typeof raw !== "object" || Array.isArray(raw)) return null;
-  const r = raw as Record<string, unknown>;
-  const direct =
-    toIso(r.ts) ??
-    toIso(r.lastSnapshotAt) ??
-    toIso(r.last_snapshot_at) ??
-    toIso(r.snapshot_at);
-  if (direct) return direct;
-  if (r.snapshot && typeof r.snapshot === "object" && !Array.isArray(r.snapshot)) {
-    return toIso((r.snapshot as { ts?: unknown }).ts);
-  }
-  return null;
-}
-
-function newestSnapshotAt(
-  left: string | null | undefined,
-  right: string | null | undefined,
-): string | null {
-  const leftIso = toIso(left);
-  const rightIso = toIso(right);
-  if (!leftIso) return rightIso;
-  if (!rightIso) return leftIso;
-  return Date.parse(leftIso) >= Date.parse(rightIso) ? leftIso : rightIso;
-}
-
 /**
  * Near-realtime prices: re-fetch Server Components from Postgres on an
  * interval. CSE has no public quote WebSocket — freshness tracks the poller
@@ -65,7 +38,6 @@ export function PriceRefresh({
   const router = useRouter();
   const period = clampInterval(intervalMs);
   const [now, setNow] = useState(() => Date.now());
-  const [streamSnapshotAt, setStreamSnapshotAt] = useState<string | null>(null);
   const [marketOpen, setMarketOpen] = useState(() => isMarketSessionOpen());
 
   useEffect(() => {
@@ -84,41 +56,9 @@ export function PriceRefresh({
     };
   }, [period, router]);
 
-  useEffect(() => {
-    if (typeof window.EventSource === "undefined") return;
-    let source: EventSource;
-    try {
-      source = new window.EventSource("/api/v1/stream/snapshots");
-    } catch {
-      return;
-    }
-    const handleSnapshot = (event: Event) => {
-      if (!(event instanceof MessageEvent)) return;
-      try {
-        const data = typeof event.data === "string" ? event.data : "";
-        const next = readSnapshotTs(JSON.parse(data));
-        if (!next) return;
-        setStreamSnapshotAt(next);
-        setNow(Date.now());
-        router.refresh();
-      } catch {
-        // Ignore malformed stream events; interval refresh remains active.
-      }
-    };
-    source.addEventListener("snapshot", handleSnapshot);
-    source.onmessage = handleSnapshot;
-    source.onerror = () => {
-      source.close();
-    };
-    return () => {
-      source.removeEventListener("snapshot", handleSnapshot);
-      source.close();
-    };
-  }, [router]);
-
   let tone: "ok" | "stale" | "down" | "closed" = "ok";
   let label = "Refreshing";
-  const snapshotAt = newestSnapshotAt(streamSnapshotAt, lastSnapshotAt);
+  const snapshotAt = lastSnapshotAt;
   if (!marketOpen) {
     // Outside session hours, aged ticks are expected — calm closed tone.
     tone = "closed";
