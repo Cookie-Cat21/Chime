@@ -1,5 +1,9 @@
 import type { NextRequest } from "next/server";
 
+import {
+  type CiHealthBlock,
+  queryGithubActionsHealth,
+} from "@/lib/api/github-actions-health";
 import { queryMlHealth } from "@/lib/api/ml-health";
 import { readBoundedResponseText } from "@/lib/api/read-bounded-text";
 import { toIso } from "@/lib/api/time";
@@ -265,10 +269,99 @@ export function sanitizePollerHealth(raw: unknown): PollerHealth | null {
   return poller;
 }
 
+type DataInventory = {
+  disclosures: number;
+  filing_metrics: number;
+  ready_briefs: number;
+  stocks: number;
+  price_snapshots: number;
+  active_alerts: number;
+  watchlist_items: number;
+  latest_migration: string | null;
+  latest_migration_at: string | null;
+  appetite_cse_tip: string | null;
+};
+
+async function queryDataInventory(
+  pool: ReturnType<typeof getPool>,
+): Promise<DataInventory | null> {
+  const inv = await pool.query<{
+    disclosures: string | number;
+    filing_metrics: string | number;
+    ready_briefs: string | number;
+    stocks: string | number;
+    price_snapshots: string | number;
+    active_alerts: string | number;
+    watchlist_items: string | number;
+  }>(
+    `SELECT
+       (SELECT COUNT(*)::bigint FROM disclosures) AS disclosures,
+       (SELECT COUNT(*)::bigint FROM filing_metrics) AS filing_metrics,
+       (SELECT COUNT(*)::bigint FROM disclosure_briefs WHERE status = 'ready') AS ready_briefs,
+       (SELECT COUNT(*)::bigint FROM stocks) AS stocks,
+       (SELECT COUNT(*)::bigint FROM price_snapshots) AS price_snapshots,
+       (SELECT COUNT(*)::bigint FROM alert_rules WHERE active = TRUE) AS active_alerts,
+       (SELECT COUNT(*)::bigint FROM watchlist_items) AS watchlist_items`,
+  );
+  const row = inv.rows[0];
+  if (!row) return null;
+
+  let latest_migration: string | null = null;
+  let latest_migration_at: string | null = null;
+  try {
+    const mig = await pool.query<{
+      filename: string;
+      applied_at: Date | string;
+    }>(
+      `SELECT filename, applied_at
+         FROM schema_migrations
+        ORDER BY applied_at DESC, filename DESC
+        LIMIT 1`,
+    );
+    const m = mig.rows[0];
+    if (m?.filename) {
+      latest_migration = String(m.filename).slice(0, 128);
+      latest_migration_at = toIso(m.applied_at);
+    }
+  } catch (err) {
+    console.error("GET /health migration tip failed", err);
+  }
+
+  let appetite_cse_tip: string | null = null;
+  try {
+    const tip = await pool.query<{ tip: string | null }>(
+      `SELECT MAX(trade_date)::text AS tip
+         FROM market_appetite_daily
+        WHERE source = 'cse'`,
+    );
+    const raw = tip.rows[0]?.tip;
+    appetite_cse_tip =
+      typeof raw === "string" && /^\d{4}-\d{2}-\d{2}$/.test(raw) ? raw : null;
+  } catch (err) {
+    console.error("GET /health appetite tip failed", err);
+  }
+
+  return {
+    disclosures: toNonNegativeSafeInt(row.disclosures, 0),
+    filing_metrics: toNonNegativeSafeInt(row.filing_metrics, 0),
+    ready_briefs: toNonNegativeSafeInt(row.ready_briefs, 0),
+    stocks: toNonNegativeSafeInt(row.stocks, 0),
+    price_snapshots: toNonNegativeSafeInt(row.price_snapshots, 0),
+    active_alerts: toNonNegativeSafeInt(row.active_alerts, 0),
+    watchlist_items: toNonNegativeSafeInt(row.watchlist_items, 0),
+    latest_migration,
+    latest_migration_at,
+    appetite_cse_tip,
+  };
+}
+
 /**
- * GET /api/v1/health — session required. Full ops detail only for
- * ``DASH_OPS_TELEGRAM_IDS`` (S-05). Everyone else gets a summary.
- * Postgres only from this handler; optional HEALTH_URL for poller detail.
+ * GET /api/v1/health — session required.
+ *
+ * Product tier (every signed-in user): DB ping, snapshot freshness, data
+ * inventory, GitHub Actions (fail-soft). Full ops detail (poller proxy via
+ * HEALTH_URL, delivery, retention, ML) only for ``DASH_OPS_TELEGRAM_IDS``
+ * (S-05).
  */
 export async function GET(request: NextRequest) {
   const gated = await requireSession(request);
@@ -298,16 +391,23 @@ export async function GET(request: NextRequest) {
     retrying: 0,
     dead_lettered: 0,
   };
+  let dataInventory: DataInventory | null = null;
 
   try {
     const pool = getPool();
     await pool.query("SELECT 1");
     dbOk = true;
+    const snap = await pool.query<{ max_ts: Date | string | null }>(
+      `SELECT MAX(ts) AS max_ts FROM price_snapshots`,
+    );
+    lastSnapshotAt = toIso(snap.rows[0]?.max_ts ?? null);
+    try {
+      dataInventory = await queryDataInventory(pool);
+    } catch (err) {
+      console.error("GET /health inventory failed", err);
+      dataInventory = null;
+    }
     if (opsDetail) {
-      const snap = await pool.query<{ max_ts: Date | string | null }>(
-        `SELECT MAX(ts) AS max_ts FROM price_snapshots`,
-      );
-      lastSnapshotAt = toIso(snap.rows[0]?.max_ts ?? null);
       try {
         const deliveryResult = await pool.query<{
           delivered_24h: string | number;
@@ -345,20 +445,30 @@ export async function GET(request: NextRequest) {
     dbOk = false;
   }
 
-  // Non-ops: summary only — no delivery / retention / poller proxy (S-05).
+  // Fail-soft CI — never blocks health status. Disabled when
+  // HEALTH_GITHUB_ACTIONS=0 (unit harness).
+  let ci: CiHealthBlock | null = null;
+  try {
+    ci = await queryGithubActionsHealth();
+  } catch (err) {
+    console.error("GET /health CI block failed", err);
+    ci = null;
+  }
+
+  // Non-ops: product health only — no delivery / retention / poller proxy (S-05).
   if (!opsDetail) {
     const status = dbOk ? "ok" : "degraded";
-    return jsonOk(
-      {
-        status,
-        db_ok: dbOk,
-        started_at: null,
-        last_snapshot_at: null,
-        poller: null,
-        detail: false,
-      },
-      dbOk ? 200 : 503,
-    );
+    const payload: Record<string, unknown> = {
+      status,
+      db_ok: dbOk,
+      started_at: null,
+      last_snapshot_at: lastSnapshotAt,
+      poller: null,
+      detail: false,
+    };
+    if (dataInventory != null) payload.data = dataInventory;
+    if (ci != null) payload.ci = ci;
+    return jsonOk(payload, dbOk ? 200 : 503);
   }
 
   // Fail closed — non-string HEALTH_URL mocks used to throw on .trim before
@@ -457,41 +567,12 @@ export async function GET(request: NextRequest) {
   const httpStatus = status === "ok" ? 200 : 503;
 
   let ml: Awaited<ReturnType<typeof queryMlHealth>> | null = null;
-  let dataInventory: {
-    disclosures: number;
-    filing_metrics: number;
-    ready_briefs: number;
-    stocks: number;
-  } | null = null;
   if (dbOk) {
     try {
-      const pool = getPool();
-      ml = await queryMlHealth(pool);
-      const inv = await pool.query<{
-        disclosures: string | number;
-        filing_metrics: string | number;
-        ready_briefs: string | number;
-        stocks: string | number;
-      }>(
-        `SELECT
-           (SELECT COUNT(*)::bigint FROM disclosures) AS disclosures,
-           (SELECT COUNT(*)::bigint FROM filing_metrics) AS filing_metrics,
-           (SELECT COUNT(*)::bigint FROM disclosure_briefs WHERE status = 'ready') AS ready_briefs,
-           (SELECT COUNT(*)::bigint FROM stocks) AS stocks`,
-      );
-      const row = inv.rows[0];
-      if (row) {
-        dataInventory = {
-          disclosures: toNonNegativeSafeInt(row.disclosures, 0),
-          filing_metrics: toNonNegativeSafeInt(row.filing_metrics, 0),
-          ready_briefs: toNonNegativeSafeInt(row.ready_briefs, 0),
-          stocks: toNonNegativeSafeInt(row.stocks, 0),
-        };
-      }
+      ml = await queryMlHealth(getPool());
     } catch (err) {
-      console.error("GET /health ml/inventory block failed", err);
+      console.error("GET /health ml block failed", err);
       ml = null;
-      dataInventory = null;
     }
   }
 
@@ -516,6 +597,9 @@ export async function GET(request: NextRequest) {
   }
   if (dataInventory != null) {
     payload.data = dataInventory;
+  }
+  if (ci != null) {
+    payload.ci = ci;
   }
 
   if (!dbOk && httpStatus === 503) {
