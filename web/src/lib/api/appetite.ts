@@ -128,7 +128,9 @@ export async function queryAppetiteHistory(
   pool: Pool,
   opts: { limit?: number; source?: "cse" | "hybrid_research" } = {},
 ): Promise<AppetiteDay[]> {
-  const limit = Math.min(Math.max(opts.limit ?? 252, 1), 2000);
+  // Hybrid Yahoo+CSE MAX can span ~2000→today (~6–7k sessions).
+  const hardCap = opts.source === "hybrid_research" ? 8000 : 2000;
+  const limit = Math.min(Math.max(opts.limit ?? 252, 1), hardCap);
   const source = opts.source ?? "cse";
   const result = await pool.query(
     `

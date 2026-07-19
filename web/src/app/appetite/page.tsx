@@ -42,12 +42,22 @@ export default async function AppetitePage() {
   await requirePageSession();
 
   let history: Awaited<ReturnType<typeof queryAppetiteHistory>> = [];
+  let hybridHistory: Awaited<ReturnType<typeof queryAppetiteHistory>> = [];
   let loadError = false;
   try {
-    history = await queryAppetiteHistory(getPool(), {
-      limit: 252,
-      source: "cse",
-    });
+    // CSE-truth for 3M/1Y; hybrid Yahoo+CSE research series for MAX.
+    const [cse, hybrid] = await Promise.all([
+      queryAppetiteHistory(getPool(), {
+        limit: 2000,
+        source: "cse",
+      }),
+      queryAppetiteHistory(getPool(), {
+        limit: 8000,
+        source: "hybrid_research",
+      }),
+    ]);
+    history = cse;
+    hybridHistory = hybrid;
   } catch {
     loadError = true;
   }
@@ -171,9 +181,12 @@ export default async function AppetitePage() {
                   id="appetite-history-heading"
                   className="text-sm font-medium tracking-wide text-muted-foreground uppercase"
                 >
-                  History (CSE path · ~1y)
+                  History · 3M/1Y CSE · MAX Yahoo+CSE research
                 </h2>
-                <AppetiteHistoryChart historyAsc={history} />
+                <AppetiteHistoryChart
+                  historyAsc={history}
+                  hybridHistoryAsc={hybridHistory}
+                />
               </section>
               <section aria-labelledby="appetite-components-heading" className="space-y-2">
                 <h2
@@ -236,10 +249,13 @@ export default async function AppetitePage() {
                 </li>
               </ul>
               <p className="mt-2 text-xs">
-                CSE-truth window is ~1 year of daily bars. Partial sessions
-                (thin universe) are kept in history but skipped for the
-                headline. Yahoo hybrid long history stays research-flagged and
-                is not shown here by default.
+                CSE-truth window is ~1 year of daily bars (3M / 1Y chips).
+                Partial sessions (thin universe) are kept in history but
+                skipped for the headline.{" "}
+                <span className="text-foreground">MAX</span> uses the Yahoo+CSE
+                hybrid research reconstruction when scored — never labeled as
+                official CSE — with recent CSE sessions stitched after the
+                hybrid tip.
               </p>
             </section>
           </>
