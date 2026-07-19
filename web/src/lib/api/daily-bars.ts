@@ -237,6 +237,25 @@ export function candleBodyOpen(bars: DailyBarPoint[], index: number): number {
 }
 
 /**
+ * True when the series is close-only (CSE index ``chartData`` / ASPI path):
+ * every bar has H=L=C and no stored open. Candles look like sparse sticks —
+ * prefer a close line instead.
+ */
+export function isCloseOnlyBars(bars: DailyBarPoint[]): boolean {
+  if (!Array.isArray(bars) || bars.length < 2) return false;
+  let checked = 0;
+  for (const b of bars) {
+    if (b.open != null && Number.isFinite(b.open) && b.open > 0) return false;
+    const eps = Math.max(Math.abs(b.close) * 1e-9, 1e-9);
+    if (Math.abs(b.high - b.close) > eps || Math.abs(b.low - b.close) > eps) {
+      return false;
+    }
+    checked += 1;
+  }
+  return checked >= 2;
+}
+
+/**
  * Downsample dense daily series into fewer OHLC candles for readable charts.
  */
 export function aggregateBarsForDisplay(

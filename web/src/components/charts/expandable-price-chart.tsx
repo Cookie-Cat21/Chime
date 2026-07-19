@@ -231,14 +231,18 @@ export function ExpandablePriceChart({
         ) {
           continue;
         }
-        const vol = Number(b.volume);
+        // Number(null) === 0 — treat missing volume as null, not zero.
+        const volRaw = b.volume;
+        const vol =
+          volRaw == null || volRaw === "" ? null : Number(volRaw);
         out.push({
           trade_date: tradeDate,
           open: o != null && o > 0 ? o : null,
           high,
           low,
           close,
-          volume: Number.isFinite(vol) ? vol : null,
+          volume:
+            vol != null && Number.isFinite(vol) && vol >= 0 ? vol : null,
         });
       }
       return out;
@@ -459,6 +463,7 @@ export function ExpandablePriceChart({
             maxCandles={HERO_DISPLAY_CANDLES}
             fitWidth
             chartHeight={220}
+            variant={seriesKind === "index" ? "close" : "auto"}
             footnote={
               compactDaily
                 ? seriesKind === "index"
@@ -621,25 +626,62 @@ export function ExpandablePriceChart({
             {/* Window stats — O/H/L/C over the selected range */}
             {windowStats ? (
               <dl className="flex shrink-0 flex-wrap items-baseline gap-x-6 gap-y-1 border-b border-border/40 px-5 py-2 font-mono text-xs tabular-nums">
-                <WindowStat label="Open" value={formatNumber(windowStats.open)} />
-                <WindowStat label="High" value={formatNumber(windowStats.high)} />
-                <WindowStat label="Low" value={formatNumber(windowStats.low)} />
-                <WindowStat
-                  label="Close"
-                  value={formatNumber(windowStats.lastClose)}
-                />
-                <WindowStat
-                  label="Vol"
-                  value={
-                    windowStats.volume == null
-                      ? "—"
-                      : formatCompactNumber(Math.round(windowStats.volume), 1)
-                  }
-                />
+                {seriesKind === "index" ? (
+                  <>
+                    <WindowStat
+                      label="From"
+                      value={formatNumber(windowStats.open)}
+                    />
+                    <WindowStat
+                      label="High"
+                      value={formatNumber(windowStats.high)}
+                    />
+                    <WindowStat
+                      label="Low"
+                      value={formatNumber(windowStats.low)}
+                    />
+                    <WindowStat
+                      label="Close"
+                      value={formatNumber(windowStats.lastClose)}
+                    />
+                  </>
+                ) : (
+                  <>
+                    <WindowStat
+                      label="Open"
+                      value={formatNumber(windowStats.open)}
+                    />
+                    <WindowStat
+                      label="High"
+                      value={formatNumber(windowStats.high)}
+                    />
+                    <WindowStat
+                      label="Low"
+                      value={formatNumber(windowStats.low)}
+                    />
+                    <WindowStat
+                      label="Close"
+                      value={formatNumber(windowStats.lastClose)}
+                    />
+                    <WindowStat
+                      label="Vol"
+                      value={
+                        windowStats.volume == null
+                          ? "—"
+                          : formatCompactNumber(
+                              Math.round(windowStats.volume),
+                              1,
+                            )
+                      }
+                    />
+                  </>
+                )}
                 <span className="ml-auto font-sans text-[11px] text-muted-foreground">
-                  {range === "1D" && !oneDayUsingDaily
-                    ? "Intraday candles from live ticks — research only, not financial advice."
-                    : "Green up / red down vs prior close — research only, not financial advice."}
+                  {seriesKind === "index"
+                    ? "CSE index daily closes — research only, not financial advice."
+                    : range === "1D" && !oneDayUsingDaily
+                      ? "Intraday candles from live ticks — research only, not financial advice."
+                      : "Green up / red down vs prior close — research only, not financial advice."}
                 </span>
               </dl>
             ) : null}
@@ -683,18 +725,23 @@ export function ExpandablePriceChart({
                   fitWidth
                   showForecast={showForecast}
                   forecastPrices={forecastPrices}
+                  variant={seriesKind === "index" ? "close" : "auto"}
                   maxCandles={
-                    range === "1D" && oneDayUsingDaily
-                      ? 40
-                      : displayCandlesForRange(range)
+                    seriesKind === "index"
+                      ? sessionsForRange(range === "1D" ? "1Y" : range)
+                      : range === "1D" && oneDayUsingDaily
+                        ? 40
+                        : displayCandlesForRange(range)
                   }
                   className="min-h-0 flex-1"
                   footnote={
-                    range === "1D"
-                      ? oneDayUsingDaily
-                        ? `Only ${sessionTicks.length} session tick${sessionTicks.length === 1 ? "" : "s"} — showing last ${chartBars.length} daily sessions · research only`
-                        : `${sessionTicks.length} session ticks → ${chartBars.length} intraday candles · research only`
-                      : undefined
+                    seriesKind === "index"
+                      ? `${chartBars.length} daily closes · CSE index path (no session OHLC) · research only`
+                      : range === "1D"
+                        ? oneDayUsingDaily
+                          ? `Only ${sessionTicks.length} session tick${sessionTicks.length === 1 ? "" : "s"} — showing last ${chartBars.length} daily sessions · research only`
+                          : `${sessionTicks.length} session ticks → ${chartBars.length} intraday candles · research only`
+                        : undefined
                   }
                 />
               )}
