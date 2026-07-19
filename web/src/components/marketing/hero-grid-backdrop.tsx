@@ -37,7 +37,7 @@ export function HeroGridBackdrop({ className }: { className?: string }) {
           return (
             <div
               key={index}
-              className={cn(filled && "bg-foreground/[0.045]")}
+              className={cn(filled && "bg-foreground/[0.07]")}
             />
           );
         })}
