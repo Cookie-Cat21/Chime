@@ -37,8 +37,9 @@ export function scaleEquityUnits(
   let mult = 1;
   if (scale === "millions") mult = 1e6;
   else if (scale === "thousands") mult = 1e3;
-  else if (scale == null || scale === "unknown" || scale === "units") {
-    // Already full LKR vs Rs-mn shorthand.
+  else if (scale == null || scale === "unknown") {
+    // Unknown mid-range → treat as Rs mn (CSE annual shorthand).
+    // Explicit ``units`` stays literal and may reject as tiny.
     if (equity < 10_000) mult = 1e6;
   }
   const v = equity * mult;
