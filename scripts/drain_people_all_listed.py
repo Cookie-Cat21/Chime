@@ -45,11 +45,17 @@ async def _pending_annual_by_symbol(storage: Storage) -> list[Disclosure]:
               AND d.symbol LIKE '%.N0000'
               AND p.id IS NULL
               AND (
-                d.title ILIKE '%annual%'
-                OR d.category ILIKE '%annual%'
-                OR d.title ILIKE '%audited%'
-                OR d.title ILIKE '%financial statement%'
-                OR d.external_id LIKE 'financials:annual:%'
+                d.external_id LIKE 'financials:annual:%'
+                OR (
+                  (
+                    d.title ILIKE '%annual report%'
+                    OR d.title ILIKE '%audited financial%'
+                    OR d.category ILIKE '%ANNUAL%'
+                    OR d.category = 'FINANCIAL STATEMENTS - ANNUAL'
+                  )
+                  AND d.title NOT ILIKE '%quarter%'
+                  AND d.title NOT ILIKE '%interim%'
+                )
               )
             ORDER BY d.symbol, d.published_at DESC NULLS LAST, d.id DESC
             """
