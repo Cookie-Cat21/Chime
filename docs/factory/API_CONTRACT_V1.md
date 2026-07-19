@@ -128,11 +128,15 @@ May also return CSRF material if not using a separate endpoint:
 
 ---
 
-## Health (ops-gated)
+## Health (session + ops tiers)
 
 ### `GET /api/v1/health`
 
 Requires authenticated session (v1). Prefer proxying poller health and/or DB ping — **one** source of truth; do not invent conflicting fields.
+
+**Product tier** (every signed-in user): `db_ok`, `last_snapshot_at`, `data` inventory counts, optional `ci` (GitHub Actions, fail-soft). `detail: false`, `poller: null`.
+
+**Ops tier** (`DASH_OPS_TELEGRAM_IDS`): also `started_at`, `poller` (optional `HEALTH_URL` loopback proxy), `delivery`, `retention`, `ml`. `detail: true`.
 
 **Response** `200` (healthy) or `503` (degraded)
 
@@ -140,8 +144,27 @@ Requires authenticated session (v1). Prefer proxying poller health and/or DB pin
 {
   "status": "ok",
   "db_ok": true,
+  "detail": true,
   "started_at": "2026-07-11T03:30:00+00:00",
   "last_snapshot_at": "2026-07-11T09:00:00+00:00",
+  "data": {
+    "stocks": 278,
+    "price_snapshots": 1000,
+    "disclosures": 10,
+    "filing_metrics": 4,
+    "ready_briefs": 2,
+    "active_alerts": 5,
+    "watchlist_items": 8,
+    "latest_migration": "026_market_appetite_daily.sql",
+    "latest_migration_at": "2026-07-18T00:00:00.000Z",
+    "appetite_cse_tip": "2026-07-17"
+  },
+  "ci": {
+    "repo": "Cookie-Cat21/Koel",
+    "html_url": "https://github.com/Cookie-Cat21/Koel/actions",
+    "runs": [],
+    "fetched_at": "2026-07-19T12:00:00.000Z"
+  },
   "poller": {
     "last_tick_at": "2026-07-11T09:00:00+00:00",
     "last_tick_ok": true,
@@ -155,7 +178,7 @@ Requires authenticated session (v1). Prefer proxying poller health and/or DB pin
 }
 ```
 
-`status` is `"ok"` \| `"degraded"`. Omit or null `poller` when `HEALTH_URL` is unset and only DB liveness is available. When proxying poller loopback health, any explicit poller failure flag (`last_tick_ok === false`, `price_poll_ok === false`, or `disclosure_poll_ok === false`) MUST make the response `503` with `status: "degraded"`, even if `db_ok` is true. Forward `watched_missing` (string[]) and `circuits` (endpoint → breaker snapshot) when present. Do not expose this payload anonymously without an explicit future public-liveness subset (`status` + `db_ok` only).
+`status` is `"ok"` \| `"degraded"`. Omit or null `poller` when `HEALTH_URL` is unset and only DB liveness is available. When proxying poller loopback health, any explicit poller failure flag (`last_tick_ok === false`, `price_poll_ok === false`, or `disclosure_poll_ok === false`) MUST make the response `503` with `status: "degraded"`, even if `db_ok` is true. Forward `watched_missing` (string[]) and `circuits` (endpoint → breaker snapshot) when present. `ci` never drives status. Do not expose this payload anonymously without an explicit future public-liveness subset (`status` + `db_ok` only).
 
 ---
 

@@ -2,6 +2,7 @@ import {
   Activity,
   Crosshair,
   Database,
+  GitBranch,
   LineChart,
   Radio,
   Sparkles,
@@ -75,11 +76,44 @@ type MlHealthBlock = {
   disclaimer: string;
 };
 
+type DataInventory = {
+  disclosures: number;
+  filing_metrics: number;
+  ready_briefs: number;
+  stocks: number;
+  price_snapshots: number;
+  active_alerts: number;
+  watchlist_items: number;
+  latest_migration: string | null;
+  latest_migration_at: string | null;
+  appetite_cse_tip: string | null;
+};
+
+type CiRun = {
+  workflow: string;
+  status: string;
+  conclusion: string | null;
+  branch: string;
+  event: string;
+  run_number: number;
+  html_url: string;
+  updated_at: string | null;
+};
+
+type CiHealthBlock = {
+  repo: string;
+  html_url: string;
+  runs: CiRun[];
+  fetched_at: string;
+  error?: string;
+};
+
 type HealthPayload = {
   status: "ok" | "degraded";
   db_ok: boolean;
   started_at: string | null;
   last_snapshot_at: string | null;
+  detail?: boolean;
   poller: {
     last_tick_at?: string | null;
     last_tick_ok?: boolean;
@@ -101,6 +135,8 @@ type HealthPayload = {
     snapshot_retention_days: number;
   };
   ml?: MlHealthBlock | null;
+  data?: DataInventory | null;
+  ci?: CiHealthBlock | null;
 };
 
 function healthUiString(raw: unknown): string | null {
@@ -237,11 +273,134 @@ function parseHealthPayload(body: unknown): HealthPayload | null {
     db_ok: r.db_ok,
     started_at: healthTs(r.started_at),
     last_snapshot_at: healthTs(r.last_snapshot_at),
+    detail: typeof r.detail === "boolean" ? r.detail : undefined,
     poller,
     delivery: parseDelivery(r.delivery),
     retention: parseRetention(r.retention),
     ml: parseMl(r.ml),
+    data: parseDataInventory(r.data),
+    ci: parseCi(r.ci),
   };
+}
+
+function parseDataInventory(raw: unknown): DataInventory | null {
+  if (raw == null || typeof raw !== "object" || Array.isArray(raw)) {
+    return null;
+  }
+  const d = raw as Record<string, unknown>;
+  const num = (key: string): number | null => {
+    const n = toNonNegativeSafeInt(d[key], -1);
+    return n >= 0 ? n : null;
+  };
+  const stocks = num("stocks");
+  const disclosures = num("disclosures");
+  const filing_metrics = num("filing_metrics");
+  const ready_briefs = num("ready_briefs");
+  const price_snapshots = num("price_snapshots");
+  const active_alerts = num("active_alerts");
+  const watchlist_items = num("watchlist_items");
+  if (
+    stocks == null ||
+    disclosures == null ||
+    filing_metrics == null ||
+    ready_briefs == null ||
+    price_snapshots == null ||
+    active_alerts == null ||
+    watchlist_items == null
+  ) {
+    return null;
+  }
+  const mig =
+    typeof d.latest_migration === "string"
+      ? healthUiString(d.latest_migration)
+      : null;
+  const tip =
+    typeof d.appetite_cse_tip === "string" &&
+    /^\d{4}-\d{2}-\d{2}$/.test(d.appetite_cse_tip)
+      ? d.appetite_cse_tip
+      : null;
+  return {
+    stocks,
+    disclosures,
+    filing_metrics,
+    ready_briefs,
+    price_snapshots,
+    active_alerts,
+    watchlist_items,
+    latest_migration: mig,
+    latest_migration_at: healthTs(d.latest_migration_at),
+    appetite_cse_tip: tip,
+  };
+}
+
+function parseCi(raw: unknown): CiHealthBlock | null {
+  if (raw == null || typeof raw !== "object" || Array.isArray(raw)) {
+    return null;
+  }
+  const c = raw as Record<string, unknown>;
+  const repo = healthUiString(c.repo);
+  const htmlUrl =
+    typeof c.html_url === "string" &&
+    c.html_url.startsWith("https://github.com/")
+      ? c.html_url.slice(0, 256)
+      : null;
+  if (!repo || !htmlUrl) return null;
+  const runs: CiRun[] = [];
+  if (Array.isArray(c.runs)) {
+    for (const item of c.runs) {
+      if (!item || typeof item !== "object" || Array.isArray(item)) continue;
+      const row = item as Record<string, unknown>;
+      const workflow = healthUiString(row.workflow);
+      const status = healthUiString(row.status)?.toLowerCase() ?? null;
+      const branch = healthUiString(row.branch) ?? "—";
+      const event = healthUiString(row.event) ?? "—";
+      const runNumber = toNonNegativeSafeInt(row.run_number, -1);
+      const url =
+        typeof row.html_url === "string" &&
+        row.html_url.startsWith("https://github.com/")
+          ? row.html_url.slice(0, 256)
+          : null;
+      if (!workflow || !status || runNumber < 0 || !url) continue;
+      const conclusionRaw = healthUiString(row.conclusion)?.toLowerCase() ?? null;
+      runs.push({
+        workflow,
+        status,
+        conclusion: conclusionRaw,
+        branch,
+        event,
+        run_number: runNumber,
+        html_url: url,
+        updated_at: healthTs(row.updated_at),
+      });
+      if (runs.length >= 12) break;
+    }
+  }
+  const err = healthUiString(c.error) ?? undefined;
+  return {
+    repo,
+    html_url: htmlUrl,
+    runs,
+    fetched_at: healthTs(c.fetched_at) ?? new Date(0).toISOString(),
+    ...(err ? { error: err } : {}),
+  };
+}
+
+function ciToneClass(conclusion: string | null, status: string): string {
+  if (status !== "completed") {
+    return "border-sky-500/35 bg-sky-500/10 text-sky-900 dark:text-sky-100";
+  }
+  if (conclusion === "success") {
+    return "border-emerald-500/35 bg-emerald-500/10 text-emerald-800 dark:text-emerald-200";
+  }
+  if (conclusion === "failure" || conclusion === "timed_out") {
+    return "border-red-500/35 bg-red-500/10 text-red-800 dark:text-red-200";
+  }
+  return "border-border/70 bg-muted/40 text-muted-foreground";
+}
+
+function ciLabel(conclusion: string | null, status: string): string {
+  if (status !== "completed") return status.replaceAll("_", " ");
+  return (conclusion ?? "done").replaceAll("_", " ");
 }
 
 function pctLabel(raw: number | null | undefined): string {
@@ -394,6 +553,9 @@ export default async function HealthPage() {
   const delivery = payload?.delivery ?? null;
   const retention = payload?.retention ?? null;
   const ml = payload?.ml ?? null;
+  const data = payload?.data ?? null;
+  const ci = payload?.ci ?? null;
+  const opsDetail = payload?.detail === true;
   const snapshotAge = timestampAge(payload?.last_snapshot_at);
   const tickAge = timestampAge(payload?.poller?.last_tick_at);
   const pollerUnreachable =
@@ -414,7 +576,7 @@ export default async function HealthPage() {
         <PageHeader
           eyebrow="Ops"
           title="Health"
-          description="Read-only ops view — database ping and optional poller status. No deploy controls here."
+          description="Read-only — Postgres freshness, data inventory, and GitHub Actions. Poller tick detail needs HEALTH_URL on a host that can reach the poller loopback. No deploy controls here."
           action={
             payload ? (
               <LiveIndicator
@@ -518,14 +680,168 @@ export default async function HealthPage() {
               />
             ) : null}
 
+            {data != null ? (
+              <section
+                className="mt-10 border-t border-border/60 pt-6"
+                aria-labelledby="data-heading"
+              >
+                <h2
+                  id="data-heading"
+                  className="text-sm font-medium tracking-wide text-muted-foreground uppercase"
+                >
+                  Data inventory
+                </h2>
+                <p className="mt-2 text-sm text-muted-foreground">
+                  Counts from Postgres — what the dash can actually serve.
+                </p>
+                <div className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+                  <StatCard
+                    label="Listed stocks"
+                    value={data.stocks.toLocaleString()}
+                    icon={Database}
+                  />
+                  <StatCard
+                    label="Price snapshots"
+                    value={data.price_snapshots.toLocaleString()}
+                    icon={Timer}
+                  />
+                  <StatCard
+                    label="Disclosures"
+                    value={data.disclosures.toLocaleString()}
+                    hint={`${data.filing_metrics.toLocaleString()} filing metrics · ${data.ready_briefs.toLocaleString()} ready briefs`}
+                  />
+                  <StatCard
+                    label="Active alerts"
+                    value={data.active_alerts.toLocaleString()}
+                    hint={`${data.watchlist_items.toLocaleString()} watchlist rows`}
+                    icon={Activity}
+                  />
+                </div>
+                <dl className="mt-5 grid grid-cols-1 gap-5 sm:grid-cols-2">
+                  <Row
+                    label="Latest migration"
+                    value={
+                      data.latest_migration
+                        ? `${data.latest_migration}${
+                            data.latest_migration_at
+                              ? ` · ${formatTs(data.latest_migration_at)}`
+                              : ""
+                          }`
+                        : "—"
+                    }
+                  />
+                  <Row
+                    label="Appetite CSE tip"
+                    value={data.appetite_cse_tip ?? "—"}
+                  />
+                </dl>
+              </section>
+            ) : null}
+
+            {ci != null ? (
+              <section
+                className="mt-10 border-t border-border/60 pt-6"
+                aria-labelledby="ci-heading"
+              >
+                <div className="flex flex-wrap items-end justify-between gap-3">
+                  <div className="min-w-0">
+                    <h2
+                      id="ci-heading"
+                      className="text-sm font-medium tracking-wide text-muted-foreground uppercase"
+                    >
+                      GitHub Actions
+                    </h2>
+                    <p className="mt-2 max-w-2xl text-sm text-muted-foreground">
+                      Latest run per workflow on{" "}
+                      <span className="font-mono text-foreground">{ci.repo}</span>
+                      . Informational only — does not change health status.
+                    </p>
+                  </div>
+                  <a
+                    href={ci.html_url}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="shrink-0 text-sm font-medium text-foreground underline-offset-4 hover:underline"
+                  >
+                    Open Actions →
+                  </a>
+                </div>
+                {ci.error && ci.runs.length === 0 ? (
+                  <p className="mt-3 text-sm text-muted-foreground" role="status">
+                    Could not load Actions ({ci.error}). Check network egress or
+                    set optional <code className="font-mono text-xs">GITHUB_TOKEN</code>.
+                  </p>
+                ) : ci.runs.length === 0 ? (
+                  <p className="mt-3 text-sm text-muted-foreground">
+                    No recent workflow runs returned.
+                  </p>
+                ) : (
+                  <ul className="mt-4 divide-y divide-border/60 rounded-xl border border-border">
+                    {ci.runs.map((run) => (
+                      <li key={`${run.workflow}-${run.run_number}`}>
+                        <a
+                          href={run.html_url}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="flex flex-wrap items-center gap-3 px-4 py-3 transition-colors hover:bg-muted/40"
+                        >
+                          <span className="grid size-8 shrink-0 place-items-center rounded-full bg-muted text-foreground">
+                            <GitBranch className="size-4" aria-hidden />
+                          </span>
+                          <div className="min-w-0 flex-1">
+                            <p className="truncate text-sm font-medium text-foreground">
+                              {run.workflow}
+                              <span className="ml-2 font-mono text-xs text-muted-foreground">
+                                #{run.run_number}
+                              </span>
+                            </p>
+                            <p className="mt-0.5 truncate font-mono text-xs text-muted-foreground">
+                              {run.branch} · {run.event}
+                              {run.updated_at
+                                ? ` · ${formatTs(run.updated_at)}`
+                                : ""}
+                            </p>
+                          </div>
+                          <span
+                            className={`inline-flex shrink-0 items-center rounded-full border px-2.5 py-1 text-xs font-medium capitalize ${ciToneClass(
+                              run.conclusion,
+                              run.status,
+                            )}`}
+                          >
+                            {ciLabel(run.conclusion, run.status)}
+                          </span>
+                        </a>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </section>
+            ) : null}
+
             <section className="mt-10 border-t border-border/60 pt-6">
               <h2 className="text-sm font-medium tracking-wide text-muted-foreground uppercase">
                 Poller
               </h2>
               {payload.poller == null ? (
-                <p className="mt-3 text-sm text-muted-foreground">
-                  No poller detail (HEALTH_URL unset). DB liveness only.
-                </p>
+                <div className="mt-3 space-y-2 text-sm text-muted-foreground">
+                  <p>
+                    No live poller tick detail. On Vercel this is expected —
+                    <code className="mx-1 font-mono text-xs">HEALTH_URL</code>
+                    only proxies loopback (
+                    <code className="font-mono text-xs">127.0.0.1</code>
+                    ). Snapshot age above is the DB-side freshness signal.
+                  </p>
+                  {!opsDetail ? (
+                    <p>
+                      Full poller / Telegram delivery / model blocks also need
+                      your Telegram id in{" "}
+                      <code className="font-mono text-xs">
+                        DASH_OPS_TELEGRAM_IDS
+                      </code>
+                      .
+                    </p>
+                  ) : null}
+                </div>
               ) : (
                 <>
                   {pollerUnreachable ? (

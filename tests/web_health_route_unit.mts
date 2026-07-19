@@ -63,16 +63,62 @@ function makeRequest(): NextRequest {
 
 function installDbPool(): string[] {
   process.env.DATABASE_URL = "postgres://unit.test/chime";
+  process.env.DASH_OPS_TELEGRAM_IDS = "9001";
+  process.env.HEALTH_GITHUB_ACTIONS = "0";
   const queries: string[] = [];
   (globalThis as typeof globalThis & { __chimePgPool?: unknown }).__chimePgPool = {
     query: async (sql: string) => {
       queries.push(sql);
-      if (sql.includes("SELECT 1")) return { rows: [] };
+      if (sql.includes("FROM dash_sessions")) {
+        return { rows: [{ revoked: false }] };
+      }
+      if (sql.includes("SELECT telegram_id FROM users")) {
+        return { rows: [{ telegram_id: 9001 }] };
+      }
+      if (sql.includes("SELECT 1")) return { rows: [{ "?column?": 1 }] };
       if (sql.includes("MAX(ts)")) return { rows: [{ max_ts: null }] };
       if (sql.includes("FROM alert_log")) {
         return {
           rows: [{ delivered_24h: 2, retrying: 1, dead_lettered: 3 }],
         };
+      }
+      if (sql.includes("FROM disclosures") && sql.includes("AS stocks")) {
+        return {
+          rows: [
+            {
+              disclosures: 10,
+              filing_metrics: 4,
+              ready_briefs: 2,
+              stocks: 278,
+              price_snapshots: 1000,
+              active_alerts: 5,
+              watchlist_items: 8,
+            },
+          ],
+        };
+      }
+      if (sql.includes("FROM schema_migrations")) {
+        return {
+          rows: [
+            {
+              filename: "026_market_appetite_daily.sql",
+              applied_at: "2026-07-18T00:00:00.000Z",
+            },
+          ],
+        };
+      }
+      if (sql.includes("FROM market_appetite_daily")) {
+        return { rows: [{ tip: "2026-07-17" }] };
+      }
+      // ML health / other ops extras — fail soft in route.
+      if (
+        sql.includes("model_registry") ||
+        sql.includes("forecast_outcomes") ||
+        sql.includes("market_daily_summary") ||
+        sql.includes("order_book_snapshots") ||
+        sql.includes("forecast_points")
+      ) {
+        return { rows: [] };
       }
       throw new Error(`unexpected query: ${sql}`);
     },
@@ -129,7 +175,14 @@ async function testWatchedMissingDegradesRoute(): Promise<void> {
       "retention default forwarded",
     );
     assert(seenUrls.length === 1, `expected one health fetch, got ${seenUrls.length}`);
-    assert(queries.length === 3, `expected three DB queries, got ${queries.length}`);
+    assert(
+      queries.some((q) => q.includes("SELECT telegram_id FROM users")),
+      "ops gate must look up telegram_id",
+    );
+    assert(
+      queries.some((q) => q.includes("FROM disclosures")),
+      "inventory query expected",
+    );
   } finally {
     globalThis.fetch = originalFetch;
   }
