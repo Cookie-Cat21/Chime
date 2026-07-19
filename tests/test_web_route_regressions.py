@@ -1252,3 +1252,25 @@ def test_symbol_data_quality_notices() -> None:
     assert "emptyMetricsHint" in panel
     assert "emptyBriefHint" in panel
 
+
+def test_index_charts_use_close_path_not_fake_candles() -> None:
+    """ASPI / SNP_SL20 are CSE close-only — expand chart must force close line."""
+    expand = (
+        WEB / "src" / "components" / "charts" / "expandable-price-chart.tsx"
+    ).read_text(encoding="utf-8")
+    candles = (
+        WEB / "src" / "components" / "charts" / "candlestick-chart.tsx"
+    ).read_text(encoding="utf-8")
+    daily = (WEB / "src" / "lib" / "api" / "daily-bars.ts").read_text(encoding="utf-8")
+    strip = (WEB / "src" / "components" / "kit" / "index-strip.tsx").read_text(
+        encoding="utf-8"
+    )
+    assert 'seriesKind="index"' in strip
+    assert 'variant={seriesKind === "index" ? "close" : "auto"}' in expand
+    assert 'variant?: "auto" | "ohlc" | "close"' in candles
+    assert "isCloseOnlyBars" in daily
+    assert "isCloseOnlyBars" in candles
+    # Number(null) === 0 was showing Vol 0.0 for indexes.
+    assert 'volRaw == null || volRaw === ""' in expand
+    assert "CSE index path (no session OHLC)" in expand
+

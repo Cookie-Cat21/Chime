@@ -5,13 +5,21 @@ import { useLayoutEffect, useRef, useState } from "react";
 import {
   aggregateBarsForDisplay,
   candleBodyOpen,
+  isCloseOnlyBars,
   type DailyBarPoint,
 } from "@/lib/api/daily-bars";
 import { formatNumber } from "@/lib/format";
 import { cn } from "@/lib/utils";
 
 /** Native SVG hover tooltip text — date + OHLC (+ volume when stored). */
-function barTooltip(b: DailyBarPoint, bodyOpen: number): string {
+function barTooltip(
+  b: DailyBarPoint,
+  bodyOpen: number,
+  closeOnly: boolean,
+): string {
+  if (closeOnly) {
+    return `${b.trade_date} · Close ${formatNumber(b.close)}`;
+  }
   const vol =
     b.volume != null && Number.isFinite(b.volume)
       ? ` · Vol ${formatNumber(Math.round(b.volume), 0)}`
@@ -50,6 +58,12 @@ export function CandlestickChart({
   chartHeight,
   footnote,
   maxCandles = 72,
+  /**
+   * ``close`` — CSE index paths (ASPI / S&P SL20) are close-only; render a
+   * continuous close line instead of fake thin candles. ``auto`` detects
+   * close-only OHLC; ``ohlc`` always draws candles.
+   */
+  variant = "auto",
 }: {
   bars: DailyBarPoint[];
   className?: string;
@@ -62,6 +76,7 @@ export function CandlestickChart({
   chartHeight?: number;
   footnote?: string;
   maxCandles?: number;
+  variant?: "auto" | "ohlc" | "close";
 }) {
   const frameRef = useRef<HTMLDivElement | null>(null);
   const [frame, setFrame] = useState({ w: 720, h: chartHeight ?? 280 });
@@ -110,10 +125,16 @@ export function CandlestickChart({
   }, [fitWidth, fill, chartHeight, rawBars.length]);
 
   const priceMax = Math.max(...rawBars.map((b) => b.close), 0);
+  const closeOnly =
+    variant === "close" ||
+    (variant === "auto" && isCloseOnlyBars(rawBars));
   // Scroll mode may keep a dense 1Y series; fit-width always respects
   // maxCandles so the plot can scale into the container without overflow.
-  const adaptiveMax =
-    maxCandles >= 200 && !fitWidth
+  // Close-only index paths keep every session — aggregation halves 1Y into
+  // sparse fake candles (e.g. 240 → 120).
+  const adaptiveMax = closeOnly
+    ? Math.max(maxCandles, rawBars.length)
+    : maxCandles >= 200 && !fitWidth
       ? maxCandles
       : priceMax > 0 && priceMax < 2
         ? Math.min(maxCandles, 40)
@@ -135,7 +156,8 @@ export function CandlestickChart({
     const o = candleBodyOpen(bars, i);
     if (Math.abs(bars[i]!.close - o) < 1e-12) preFlat += 1;
   }
-  const lineMode = priceMax < 3 && preFlat / bars.length >= 0.4;
+  const lineMode =
+    closeOnly || (priceMax < 3 && preFlat / bars.length >= 0.4);
 
   const padL = fitWidth ? 8 : 14;
   const padR = fitWidth ? 52 : 56;
@@ -233,7 +255,9 @@ export function CandlestickChart({
 
   const first = bars[0]!;
   const last = bars[n - 1]!;
-  const aria = `Candles from ${first.trade_date} to ${last.trade_date}, close ${formatNumber(last.close)}`;
+  const aria = closeOnly
+    ? `Daily closes from ${first.trade_date} to ${last.trade_date}, close ${formatNumber(last.close)}`
+    : `Candles from ${first.trade_date} to ${last.trade_date}, close ${formatNumber(last.close)}`;
   const gridYs = [0, 0.25, 0.5, 0.75, 1].map((t) => padT + t * plotH);
 
   // Pre-pass direction counts — mutating during the JSX map breaks React
@@ -364,17 +388,37 @@ export function CandlestickChart({
           ))}
           {lineMode ? (
             <>
+              {closeOnly ? (
+                <path
+                  className="fill-foreground/[0.06]"
+                  d={[
+                    `M ${drawPadL + slot / 2} ${padT + plotH}`,
+                    ...bars.map((b, i) => {
+                      const x = drawPadL + slot * i + slot / 2;
+                      return `L ${x} ${yFor(b.close)}`;
+                    }),
+                    `L ${drawPadL + slot * (n - 1) + slot / 2} ${padT + plotH}`,
+                    "Z",
+                  ].join(" ")}
+                />
+              ) : null}
               <path
                 fill="none"
-                className="stroke-foreground/70"
-                strokeWidth={2.25}
+                className={
+                  closeOnly
+                    ? "stroke-foreground/80"
+                    : "stroke-foreground/70"
+                }
+                strokeWidth={closeOnly ? 2 : 2.25}
                 strokeLinejoin="round"
                 strokeLinecap="round"
                 d={bars
                   .map((b, i) => {
                     const x = drawPadL + slot * i + slot / 2;
                     const y = yFor(b.close);
-                    return i === 0 ? `M ${x} ${y}` : `H ${x} V ${y}`;
+                    if (i === 0) return `M ${x} ${y}`;
+                    // Indexes: continuous close path. Penny names: step path.
+                    return closeOnly ? `L ${x} ${y}` : `H ${x} V ${y}`;
                   })
                   .join(" ")}
               />
@@ -386,7 +430,7 @@ export function CandlestickChart({
                 const down = b.close < bodyOpen;
                 return (
                   <g key={`${b.trade_date}-${i}`}>
-                    <title>{barTooltip(b, bodyOpen)}</title>
+                    <title>{barTooltip(b, bodyOpen, closeOnly)}</title>
                     <rect
                       x={cx - slot / 2}
                       y={padT}
@@ -394,7 +438,7 @@ export function CandlestickChart({
                       height={plotH}
                       fill="transparent"
                     />
-                    {up || down ? (
+                    {!closeOnly && (up || down) ? (
                       <circle
                         cx={cx}
                         cy={yC}
@@ -444,7 +488,7 @@ export function CandlestickChart({
 
               return (
                 <g key={`${b.trade_date}-${i}`}>
-                  <title>{barTooltip(b, bodyOpen)}</title>
+                  <title>{barTooltip(b, bodyOpen, false)}</title>
                   <rect
                     x={cx - slot / 2}
                     y={padT}
@@ -560,7 +604,9 @@ export function CandlestickChart({
       </div>
       <p className="mt-2.5 shrink-0 text-xs leading-relaxed text-muted-foreground">
         {footnote ??
-          `${rawBars.length} sessions${aggregated ? ` → ${n} ${lineMode ? "points" : "candles"}` : ""}${lineMode ? " · step path (tick-size name)" : ""} · close ${formatNumber(first.close)} → ${formatNumber(last.close)} · ${upN} up / ${downN} down${flatN ? ` / ${flatN} flat` : ""}${fc.length > 0 ? " · dashed = model forecast" : ""} · research only`}
+          (closeOnly
+            ? `${rawBars.length} daily closes · ${formatNumber(first.close)} → ${formatNumber(last.close)} · CSE index path (close only) · research only`
+            : `${rawBars.length} sessions${aggregated ? ` → ${n} ${lineMode ? "points" : "candles"}` : ""}${lineMode ? " · step path (tick-size name)" : ""} · close ${formatNumber(first.close)} → ${formatNumber(last.close)} · ${upN} up / ${downN} down${flatN ? ` / ${flatN} flat` : ""}${fc.length > 0 ? " · dashed = model forecast" : ""} · research only`)}
       </p>
     </div>
   );

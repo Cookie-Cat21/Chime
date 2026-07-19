@@ -90,3 +90,37 @@ def test_body_open_uses_prior_close() -> None:
 
     assert body_open(1) == 20.0
     assert bars[1]["close"] < body_open(1)  # down day → red
+
+
+def _is_close_only_bars(bars: list[dict]) -> bool:
+    """Mirror web ``isCloseOnlyBars`` (index CSE path = H=L=C, no open)."""
+    if len(bars) < 2:
+        return False
+    for b in bars:
+        o = b.get("open")
+        if isinstance(o, (int, float)) and not isinstance(o, bool) and float(o) > 0:
+            return False
+        close = float(b["close"])
+        eps = max(abs(close) * 1e-9, 1e-9)
+        if abs(float(b["high"]) - close) > eps or abs(float(b["low"]) - close) > eps:
+            return False
+    return True
+
+
+def test_index_close_only_series_detected() -> None:
+    """ASPI / SNP_SL20 daily_bars are close-only — must not look like OHLC candles."""
+    bars = [
+        {"open": None, "high": 21000.0, "low": 21000.0, "close": 21000.0},
+        {"open": None, "high": 21100.0, "low": 21100.0, "close": 21100.0},
+        {"open": None, "high": 20950.0, "low": 20950.0, "close": 20950.0},
+    ]
+    assert _is_close_only_bars(bars) is True
+    assert (
+        _is_close_only_bars(
+            [
+                {"open": 100.0, "high": 105.0, "low": 99.0, "close": 102.0},
+                {"open": 102.0, "high": 106.0, "low": 101.0, "close": 104.0},
+            ]
+        )
+        is False
+    )
