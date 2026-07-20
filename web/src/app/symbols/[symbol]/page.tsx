@@ -645,6 +645,9 @@ export default async function SymbolDetailPage({
             <Link href={`/alerts?symbol=${encoded}`}>New alert</Link>
           </Button>
           <Button asChild variant="outline" size="sm">
+            <Link href={`/dividends?symbol=${encoded}`}>Dividends</Link>
+          </Button>
+          <Button asChild variant="outline" size="sm">
             <Link href={`/graph?symbol=${encoded}`}>Ownership map</Link>
           </Button>
           <Button asChild variant="outline" size="sm">
