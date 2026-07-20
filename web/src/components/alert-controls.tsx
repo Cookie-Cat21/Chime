@@ -66,6 +66,8 @@ const TYPE_OPTIONS: { value: AlertType; label: string }[] = [
   { value: "book_pressure", label: "|Book imbalance| ≥ % (MARKET)" },
   { value: "usdlkr_move", label: "|USD/LKR move| ≥ % (MARKET)" },
   { value: "oil_move", label: "|Brent move| ≥ % (MARKET)" },
+  { value: "xd_soon", label: "XD soon (days)" },
+  { value: "xd_digest", label: "XD digest days (MARKET)" },
   { value: "bid_heavy", label: "Bid-heavy book (×)" },
   { value: "ask_heavy", label: "Ask-heavy book (×)" },
   { value: "eps_above", label: "EPS above" },
@@ -444,6 +446,7 @@ export function AlertCreateForm({
 function thresholdFieldLabel(type: AlertType): string {
   if (type === "appetite_band") return "Appetite score";
   if (type === "foreign_flow") return "Foreign net (LKR)";
+  if (type === "xd_soon" || type === "xd_digest") return "Days";
   if (
     type === "book_pressure" ||
     type === "usdlkr_move" ||
@@ -470,6 +473,7 @@ function thresholdFieldLabel(type: AlertType): string {
 function thresholdFieldPlaceholder(type: AlertType): string {
   if (type === "appetite_band") return "61";
   if (type === "foreign_flow") return "1000000";
+  if (type === "xd_soon" || type === "xd_digest") return "7";
   if (
     type === "book_pressure" ||
     type === "usdlkr_move" ||

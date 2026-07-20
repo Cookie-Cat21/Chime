@@ -59,11 +59,19 @@ import { normalizeSymbol, normalizeSymbolParam } from "@/lib/api/symbol";
 import { toIso } from "@/lib/api/time";
 import { requirePageSession } from "@/lib/auth/page-session";
 import {
+  loadDividendEventsForSymbol,
+  type DividendEvent,
+} from "@/lib/db/dividend-events";
+import {
   loadSymbolPageDisclosures,
   loadSymbolPageEquity,
   loadSymbolPageMetrics,
   loadSymbolPageStock,
 } from "@/lib/db/symbol-page-data";
+import {
+  estimateDividendYieldPct,
+  formatDividendDate,
+} from "@/lib/dividends";
 import {
   formatCompactNumber,
   formatNumber,
@@ -285,8 +293,9 @@ export default async function SymbolDetailPage({
   let filingComparison: FilingMetricComparison | null = null;
   let latestBrief: LatestBrief | null = null;
   let filingQuality: FilingQualitySummary | null = null;
+  let dividendEvents: DividendEvent[] = [];
 
-  const [stockResult, discResult, metricsResult, equityResult, snapRes, compareRes, watchRes, forecastRes, dailyBarsRes, metricsApiRes] =
+  const [stockResult, discResult, metricsResult, equityResult, dividendResult, snapRes, compareRes, watchRes, forecastRes, dailyBarsRes, metricsApiRes] =
     await Promise.all([
       loadSymbolPageStock(symbol)
         .then((row) => ({ ok: true as const, row }))
@@ -303,6 +312,9 @@ export default async function SymbolDetailPage({
       loadSymbolPageEquity(symbol)
         .then((row) => ({ ok: true as const, row }))
         .catch(() => ({ ok: false as const, row: null })),
+      loadDividendEventsForSymbol(symbol)
+        .then((items) => ({ ok: true as const, items }))
+        .catch(() => ({ ok: false as const, items: [] as DividendEvent[] })),
       serverApiGet(`/api/v1/symbols/${encoded}/snapshots?limit=180`),
       compareQs ? serverApiGet(compareQs) : Promise.resolve(null),
       serverApiGet("/api/v1/watchlist"),
@@ -417,6 +429,9 @@ export default async function SymbolDetailPage({
     } catch {
       filingQuality = null;
     }
+  }
+  if (dividendResult.ok) {
+    dividendEvents = dividendResult.items;
   }
 
   let snaps: SnapshotsPayload = { points: [] };
@@ -545,6 +560,12 @@ export default async function SymbolDetailPage({
     marketCap: quote?.market_cap ?? null,
     profit: filingMetrics?.profit ?? null,
   });
+  const latestDividendEvent =
+    dividendEvents.find((event) => event.dps != null) ?? null;
+  const dividendYieldPct = estimateDividendYieldPct(
+    latestDividendEvent?.dps ?? null,
+    quote?.last?.price ?? null,
+  );
 
   const forecastPoints: { ts: string | null; price: number | null }[] = [];
   let forecastConfidence: number | null = null;
@@ -643,6 +664,9 @@ export default async function SymbolDetailPage({
           <WatchButton symbol={data.symbol} watching={isWatching} />
           <Button asChild variant="outline" size="sm">
             <Link href={`/alerts?symbol=${encoded}`}>New alert</Link>
+          </Button>
+          <Button asChild variant="outline" size="sm">
+            <Link href={`/dividends?symbol=${encoded}`}>Dividends</Link>
           </Button>
           <Button asChild variant="outline" size="sm">
             <Link href={`/graph?symbol=${encoded}`}>Ownership map</Link>
@@ -785,6 +809,15 @@ export default async function SymbolDetailPage({
           comparison={filingComparison}
         />
         <FundamentalsStrip labels={fundamentals} />
+        {latestDividendEvent?.dps != null ? (
+          <DividendYieldStrip
+            symbol={data.symbol}
+            dps={latestDividendEvent.dps}
+            yieldPct={dividendYieldPct}
+            xd={latestDividendEvent.d_xd}
+            pay={latestDividendEvent.d_pay}
+          />
+        ) : null}
       </section>
 
       {!data.last ? (
@@ -996,6 +1029,71 @@ function Stat({
       >
         {value}
       </dd>
+    </div>
+  );
+}
+
+function DividendYieldStrip({
+  symbol,
+  dps,
+  yieldPct,
+  xd,
+  pay,
+}: {
+  symbol: string;
+  dps: number;
+  yieldPct: number | null;
+  xd: string | null;
+  pay: string | null;
+}) {
+  return (
+    <div
+      className="flex flex-wrap items-center gap-2 border-t border-border/50 px-5 py-3 sm:px-6"
+      aria-label="Dividend event yield"
+    >
+      <span className="text-xs font-medium tracking-wide text-muted-foreground uppercase">
+        Dividend
+      </span>
+      <span className="text-xs text-muted-foreground">
+        DPS{" "}
+        <span className="font-mono tabular-nums text-foreground">
+          {formatNumber(dps)} LKR
+        </span>
+      </span>
+      <span className="text-xs text-muted-foreground">
+        Event yield{" "}
+        <span className="font-mono tabular-nums text-foreground">
+          {yieldPct != null ? formatPct(yieldPct) : "—"}
+        </span>
+      </span>
+      {xd ? (
+        <span className="text-xs text-muted-foreground">
+          XD{" "}
+          <span className="font-mono tabular-nums text-foreground">
+            {formatDividendDate(xd)}
+          </span>
+        </span>
+      ) : null}
+      {pay ? (
+        <span className="text-xs text-muted-foreground">
+          Pay{" "}
+          <span className="font-mono tabular-nums text-foreground">
+            {formatDividendDate(pay)}
+          </span>
+        </span>
+      ) : null}
+      <Link
+        href={`/dividends?symbol=${encodeURIComponent(symbol)}`}
+        className="text-xs text-muted-foreground underline-offset-4 hover:underline"
+      >
+        Calculator
+      </Link>
+      <Link
+        href={`/alerts?symbol=${encodeURIComponent(symbol)}&type=xd_soon`}
+        className="text-xs text-muted-foreground underline-offset-4 hover:underline"
+      >
+        XD alert
+      </Link>
     </div>
   );
 }

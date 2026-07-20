@@ -170,6 +170,10 @@ export function alertTypeLabel(type: unknown): string {
       return "USD/LKR move";
     case "oil_move":
       return "Oil move";
+    case "xd_soon":
+      return "XD soon";
+    case "xd_digest":
+      return "XD digest";
     default:
       // Fail closed — never echo unknown / hostile type strings into the UI.
       return "Unknown";
@@ -236,6 +240,10 @@ export function alertTypeBotHint(type: unknown): string {
       return "/alert MARKET usdlkr PCT";
     case "oil_move":
       return "/alert MARKET oil PCT";
+    case "xd_soon":
+      return "/alert SYMBOL xd soon DAYS";
+    case "xd_digest":
+      return "/alert MARKET xd_digest DAYS";
     default:
       return "";
   }

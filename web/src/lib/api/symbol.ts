@@ -65,6 +65,8 @@ export const ALERT_TYPES = [
   "book_pressure",
   "usdlkr_move",
   "oil_move",
+  "xd_soon",
+  "xd_digest",
 ] as const;
 
 /** Alert types that require a positive numeric threshold (parity Python). */
@@ -93,6 +95,8 @@ export const THRESHOLD_ALERT_TYPES = [
   "book_pressure",
   "usdlkr_move",
   "oil_move",
+  "xd_soon",
+  "xd_digest",
 ] as const;
 
 /** Notice-style alerts with no threshold (bid/ask need thresholds — not here). */
@@ -111,6 +115,7 @@ export const MARKET_FORCE_ALERT_TYPES = [
   "book_pressure",
   "usdlkr_move",
   "oil_move",
+  "xd_digest",
 ] as const;
 
 export function isMarketForceAlertType(value: unknown): boolean {

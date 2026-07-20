@@ -1,6 +1,7 @@
 import Link from "next/link";
 
 import { AppNav } from "@/components/app-nav";
+import { XdWeekStrip } from "@/components/dividends/xd-week-strip";
 import { TapePulseStrip } from "@/components/tape/tape-pulse-strip";
 import { EmptyState } from "@/components/empty-state";
 import { CakeCherryBanner } from "@/components/kit/cake-cherry-banner";
@@ -57,6 +58,7 @@ import { serverApiGet } from "@/lib/api/server-fetch";
 import { isAlertType, normalizeSymbol } from "@/lib/api/symbol";
 import { toIso } from "@/lib/api/time";
 import { requirePageSession } from "@/lib/auth/page-session";
+import { loadUpcomingDividendEvents } from "@/lib/db/dividend-events";
 import { alertTypeLabel, formatNumber, formatTs } from "@/lib/format";
 
 export const dynamic = "force-dynamic";
@@ -378,7 +380,7 @@ function parseSectors(body: unknown): SectorHeatItem[] {
  * Telegram push stays the cherry (see Alerts / History + bot).
  */
 export default async function OverviewPage() {
-  await requirePageSession();
+  const session = await requirePageSession();
 
   const pool = getPool();
   let appetiteHistory: AppetiteDay[] = [];
@@ -412,6 +414,7 @@ export default async function OverviewPage() {
     indexesRes,
     sectorsRes,
     indexCharts,
+    xdWeek,
   ] = await Promise.all([
     serverApiGet("/api/v1/watchlist"),
     serverApiGet("/api/v1/market/movers?direction=up&limit=5"),
@@ -421,6 +424,12 @@ export default async function OverviewPage() {
     serverApiGet("/api/v1/indexes"),
     serverApiGet("/api/v1/sectors"),
     loadIndexDailyPath(),
+    loadUpcomingDividendEvents({
+      horizonDays: 7,
+      userId: session.user_id,
+      watchlistOnly: true,
+      limit: 8,
+    }).catch(() => []),
   ]);
 
   const watch = parseWatch(await readJson(watchRes));
@@ -520,6 +529,8 @@ export default async function OverviewPage() {
             <SectorHeatStrip items={sectors} />
           </section>
         ) : null}
+
+        <XdWeekStrip className="mt-4" items={xdWeek} />
 
         <div className="mt-8 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
           <StatCard label="Watching" value={String(watch.length)} hint="On your list" />
