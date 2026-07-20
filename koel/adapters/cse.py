@@ -1382,11 +1382,11 @@ class CSEClient:
                 )
             # Indexes (ASPI / SNP_SL20) hit companyProfile with HTTP 204 + empty
             # body; treat as soft miss instead of JSONDecodeError noise.
+            # Only treat *present* empty bytes as empty — mocks may omit
+            # ``content`` and expose ``text`` / ``json()`` instead.
             raw_body = getattr(response, "content", None)
-            empty_body = not raw_body or (
-                isinstance(raw_body, (bytes, bytearray)) and not raw_body.strip()
-            )
-            if status == 204 or empty_body:
+            empty_bytes = isinstance(raw_body, (bytes, bytearray)) and not raw_body.strip()
+            if status == 204 or empty_bytes:
                 log.info(
                     "cse_empty_response",
                     path=path,
