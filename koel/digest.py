@@ -140,7 +140,12 @@ def format_digest_message(
             sym = str(getattr(ev, "symbol", None) or "?").strip() or "?"
             d_xd = getattr(ev, "d_xd", None)
             dps = getattr(ev, "dps", None)
-            xd_s = d_xd.isoformat() if hasattr(d_xd, "isoformat") else str(d_xd or "?")
+            if d_xd is None:
+                xd_s = "?"
+            elif hasattr(d_xd, "isoformat"):
+                xd_s = d_xd.isoformat()
+            else:
+                xd_s = str(d_xd)
             dps_s = f" Rs {dps:g}" if isinstance(dps, int | float) and not isinstance(dps, bool) else ""
             lines.append(f"• {sym} XD {xd_s}{dps_s}")
 

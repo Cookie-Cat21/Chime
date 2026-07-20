@@ -19,10 +19,10 @@ Ship or harden these now. Each maps to an existing master-plan ID where noted.
 **Map:** Marketing copy principles · `DASH_CAKE_CHERRY` one-liner · D10 banner.
 
 **Acceptance**
-- [ ] Signed-out `/` leads with Telegram push job + dash as daily surface (not portfolio).
-- [ ] Explicit differentiator: Tracker Pro-style browser-open alerts vs koel Telegram (NFA nearby).
-- [ ] FAQ or non-goals: no portfolio / tax / tips / heavy screener.
-- [ ] Adversarial: remove nav → brand still obvious; no tip language.
+- [x] Signed-out `/` leads with Telegram push job + dash as daily surface (not portfolio).
+- [x] Explicit differentiator: Tracker Pro-style browser-open alerts vs koel Telegram (NFA nearby).
+- [x] FAQ or non-goals: no portfolio / tax / tips / heavy screener.
+- [x] Adversarial: remove nav → brand still obvious; no tip language.
 
 ### P0-2 — Public market + sector strip
 
@@ -30,10 +30,10 @@ Ship or harden these now. Each maps to an existing master-plan ID where noted.
 **Map:** D11 Index strip · D12 Sector heat strip · TIJORI browse.
 
 **Acceptance**
-- [ ] Public (or session-light) surface shows ASPI / S&P SL20 + sector change strip from **poller-persisted** data only.
-- [ ] No cse.lk calls from `web/`; empty state honest if poller cold.
-- [ ] Links into symbol/browse discovery — not a multi-filter screener.
-- [ ] NFA under price-adjacent strip.
+- [x] Public (or session-light) surface shows movers + sector change strip from **poller-persisted** data only (`/market` + public read APIs).
+- [x] No cse.lk calls from `web/`; empty state honest if poller cold.
+- [x] Links into symbol/browse discovery — not a multi-filter screener.
+- [x] NFA under price-adjacent strip.
 
 ### P0-3 — Beginner primer
 
@@ -41,10 +41,10 @@ Ship or harden these now. Each maps to an existing master-plan ID where noted.
 **Map:** Marketing W3-ish education · primer route or FAQ block (thin).
 
 **Acceptance**
-- [ ] Short primer (one page or FAQ section): CDS account (link out to [cds.lk](https://www.cds.lk/) / CSE app), market hours (SLT), symbol form, how koel alerts work.
-- [ ] Zero buy/sell tips; “how to use koel” not “what to buy”.
-- [ ] CTA → Telegram bot + dash login only.
-- [ ] Mobile-readable; no card wall of stats.
+- [x] Short primer: public `/learn` + bot `/primer` — CDS (cds.lk), broker, trading app, koel alerts; market hours SLT.
+- [x] Zero buy/sell tips; “how to use koel” not “what to buy”.
+- [x] CTA → Telegram bot + dash login only.
+- [x] Mobile-readable; no card wall of stats.
 
 ### P0-4 — XD Telegram polish
 
@@ -52,10 +52,10 @@ Ship or harden these now. Each maps to an existing master-plan ID where noted.
 **Map:** Cherry `xd_soon` / `xd_digest` · [API_CONTRACT_V1](API_CONTRACT_V1.md) dividend section · [BROKER_PUBLIC_FEEDS_PLAN](../experiments/BROKER_PUBLIC_FEEDS_PLAN.md) Phase 2.
 
 **Acceptance**
-- [ ] Bot help shows `/alert SYMBOL xd DAYS` and `/alert MARKET xd_digest DAYS` with examples.
-- [ ] Fire copy: symbol · D_XD · DPS if known · dash/deep link · **NFA**.
-- [ ] Dedupe proven: one fire per `(rule, d_xd)` / digest week key (existing tests stay green).
-- [ ] No LOLC/ToS scrape; calendar from koel-persisted `dividend_events` only.
+- [x] Bot help shows `/alert SYMBOL xd DAYS` and `/alert MARKET xd_digest DAYS` with examples.
+- [x] Confirm copy for `xd_soon` / `xd_digest`; `xd_digest` normalized to MARKET.
+- [x] Dedupe proven: one fire per `(rule, d_xd)` / digest week key (existing tests stay green).
+- [x] No LOLC/ToS scrape; calendar from koel-persisted `dividend_events` only.
 
 ### P0-5 — EOD digest job
 
@@ -63,10 +63,10 @@ Ship or harden these now. Each maps to an existing master-plan ID where noted.
 **Map:** Master plan **C5** · `users.digest_enabled` already stored ([BOT_DASH_PARITY.md](BOT_DASH_PARITY.md)).
 
 **Acceptance**
-- [ ] Scheduled job (Colombo EOD) sends one Telegram digest when `digest_enabled` and there were fires that day (or explicit empty-skip).
-- [ ] Quiet hours still suppress intraday sends; digest does not burn retry counters incorrectly.
-- [ ] Flag default respects existing prefs; ops can disable globally.
-- [ ] Message capped + NFA; lists symbol + rule type + price/context.
+- [x] EOD window job (`python3 -m koel digest` + poller off-hours) sends one Telegram digest when `digest_enabled`.
+- [x] Quiet hours still suppress intraday sends; digest claim uses `last_digest_on` (no retry burn).
+- [x] Flag default respects existing prefs; empty day can skip.
+- [x] Message capped + NFA; lists fires / movers / upcoming XD context.
 
 ### P0-6 — Ardeno Wave B1 / B2
 
@@ -90,9 +90,9 @@ Ship or harden these now. Each maps to an existing master-plan ID where noted.
 **Map:** [docs/runbooks/TIJORI.md](../runbooks/TIJORI.md) § Briefs-on soak · `AI_BRIEFS_ENABLED=0` default.
 
 **Acceptance**
-- [ ] This backlog (and/or HANDOFF) links the controlled soak checklist — do not flip prod blindly.
-- [ ] No code path that enables briefs without key + daily cap honesty.
-- [ ] Ops can follow: one replica → watch ledger → keep sleep ≥ 0.5s.
+- [x] Controlled soak checklist: [AI_BRIEFS_ENABLE.md](../runbooks/AI_BRIEFS_ENABLE.md) (linked from TIJORI) — do not flip prod blindly.
+- [x] No code path that enables briefs without key + daily cap honesty (default `AI_BRIEFS_ENABLED=0`).
+- [x] Ops can follow: one replica → watch ledger → keep sleep ≥ 0.5s.
 
 ---
 
