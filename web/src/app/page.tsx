@@ -117,7 +117,7 @@ export default async function HomePage() {
                 )}
               </Button>
               <Button asChild variant="outline" size="lg">
-                <Link href="/login">Open the dash</Link>
+                <Link href="/market">Browse market</Link>
               </Button>
             </div>
           </div>

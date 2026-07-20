@@ -10,6 +10,8 @@ import { cn } from "@/lib/utils";
 /** Public-only chrome — not the dash AppNav. */
 export function MarketingNav() {
   const pathname = usePathname();
+  const onMarket =
+    pathname === "/market" || (pathname?.startsWith("/market/") ?? false);
   const onPricing = pathname === "/pricing";
   const onLearn = pathname === "/learn";
   const onBlog = pathname === "/blog" || (pathname?.startsWith("/blog/") ?? false);
@@ -29,6 +31,16 @@ export function MarketingNav() {
           aria-label="Marketing"
           className="flex items-center gap-4 text-sm text-muted-foreground"
         >
+          <Link
+            href="/market"
+            aria-current={onMarket ? "page" : undefined}
+            className={cn(
+              "hover:text-foreground",
+              onMarket && "font-medium text-foreground underline underline-offset-4",
+            )}
+          >
+            Browse
+          </Link>
           <Link
             href="/#how-it-works"
             className={cn(

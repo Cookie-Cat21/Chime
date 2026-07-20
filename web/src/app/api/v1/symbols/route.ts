@@ -14,7 +14,7 @@ import {
 } from "@/lib/api/market-query";
 import { toNonNegativeSafeInt, toSafePositiveInt } from "@/lib/api/safe-int";
 import { jsonError, jsonOk } from "@/lib/auth/errors";
-import { requireSession } from "@/lib/auth/guard";
+import { optionalSession } from "@/lib/auth/guard";
 import { getPool } from "@/lib/db";
 
 export const runtime = "nodejs";
@@ -28,13 +28,12 @@ const MAX_LIMIT = 200;
  * substring, max 64, LIKE-metachar escaped), sector (exact name, light P1),
  * has_eps=1 (EPS extract present), sort=change_pct|symbol (default change_pct).
  * Response includes ``total`` for pagination.
- * Session required; CSRF not required (safe GET).
+ * Session optional (public market data); CSRF not required (safe GET).
  * No cse.lk. Not a multi-filter screener.
  */
 export async function GET(request: NextRequest) {
-  // Session only — GET must not require CSRF (double-submit is for mutations).
-  const gated = await requireSession(request);
-  if (!gated.ok) return gated.response;
+  // Public browse — session soft-resolved for future personalization; never 401.
+  await optionalSession(request);
 
   const sp = request.nextUrl.searchParams;
   // Digits-only SafeInteger — reject float trunc / sci-notation soft-accept.

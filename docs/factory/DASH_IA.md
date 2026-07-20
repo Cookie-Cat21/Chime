@@ -14,7 +14,7 @@ The dashboard is the daily surface. Telegram remains the push channel when you�
 | `/` | Marketing landing (signed-out) · redirect → `/overview` when signed in | — |
 | `/login` | Local/demo sign-in (v1); Telegram Login Widget later | public |
 | `/overview` | Signed-in home: movers, watch peek, armed alerts, recent fires | user |
-| `/market` | CSE symbol browse (latest snapshots from Postgres) | user |
+| `/market` | CSE symbol browse (latest snapshots from Postgres) | public browse (auth for personalized actions) |
 | `/signals` | Signal Board — research scores + reasons (NFA; higher ≠ buy) | user |
 | `/watchlist` | User watchlist + last price / change | user |
 | `/alerts` | Active alert rules CRUD | user |
@@ -39,10 +39,11 @@ App shell: sticky top nav — Overview · Browse · Watchlist · Alerts · Histo
 - No marketing sections, stats, or feature grids
 
 ### `/market`
+- **Public browse** — no session required to read symbols / movers / sectors. Signed-out chrome uses marketing nav; signed-in uses AppNav. Watchlist / alert mutations stay auth-gated (soft-gate copy → `/login`).
 - Header: “Browse” + search (symbol/name); subtitle: snapshots for watch discovery, alerts stay on Telegram
-- Fetches `GET /api/v1/symbols?limit=100&sort=change_pct` (+ `q` when searching)
-- Top movers strip (gainers/losers): one symbol+Watch link → `/symbols/[symbol]` (unique `aria-label`, no duplicate tab stops; no inline POST/JS), plus “Add via watchlist” note → `/watchlist`
-- Sectors strip (optional): name + change_pct from `GET /api/v1/sectors`; list uses `aria-labelledby` the Sectors heading; truncated names keep `title`
+- Fetches `GET /api/v1/symbols?limit=100&sort=change_pct` (+ `q` when searching) — session optional
+- Top movers strip (gainers/losers): one symbol+Watch link → `/symbols/[symbol]` (unique `aria-label`, no duplicate tab stops; no inline POST/JS), plus “Add via watchlist” note → `/watchlist` (or sign-in when logged out)
+- Sector heat strip (`SectorHeatStrip`, same as overview): name + change_pct from `GET /api/v1/sectors` when not in filtered-browse-only mode — soft color strip, not a heatmap/treemap terminal
 - List rows: `symbol` (→ `/symbols/[symbol]`) · name · last `price` · `change_pct` · snapshot `ts`
 - Sorted by `change_pct` desc by default (thin movers view — not a screener)
 - Empty state: no snapshots yet — run `make tick` (or leave poller/both running), then refresh; search miss is a separate empty
@@ -123,7 +124,7 @@ Base: `/api/v1`. JSON request/response. User routes scoped by **session** `user_
 
 | Method | Path | Request | Response |
 |---|---|---|---|
-| `GET` | `/api/v1/symbols` | `?limit=&offset=&q=&sort=` | `{ "items": [{ "symbol", "name", "sector", "price", "change", "change_pct", "ts" }], "limit", "offset", "sort", "q" }` (snapshots only) |
+| `GET` | `/api/v1/symbols` | `?limit=&offset=&q=&sort=` (session optional — public browse) | `{ "items": [{ "symbol", "name", "sector", "price", "change", "change_pct", "ts" }], "limit", "offset", "sort", "q" }` (snapshots only) |
 | `GET` | `/api/v1/symbols/{symbol}` | — | `{ "symbol", "name", "sector", "last": SlimLast \| null }` |
 | `GET` | `/api/v1/symbols/{symbol}/snapshots` | `?limit=60` | `{ "points": [{ "ts", "price", "change_pct" }] }` |
 | `GET` | `/api/v1/symbols/{symbol}/disclosures` | `?limit=20` | `{ "items": [{ "id", "external_id", "title", "category", "url", "published_at", "company_name", "pdf_url", "brief", "brief_status" }] }` |

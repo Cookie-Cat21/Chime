@@ -71,6 +71,45 @@ export async function requireSession(
 }
 
 /**
+ * Soft session for public GET routes. Missing / invalid / revoked cookie →
+ * ``session: null`` (never 401). Missing ``DASH_SESSION_SECRET`` → null.
+ * DB errors during revoke check keep the HMAC session (availability parity
+ * with ``requirePageSession``) so public market reads still succeed.
+ *
+ * Use when the payload is public either way; call ``requireSession`` when
+ * the route must reject anonymous callers.
+ */
+export async function optionalSession(
+  request: NextRequest,
+): Promise<{ session: SessionPayload | null }> {
+  const cfg = getDashAuthConfig();
+  if (!cfg.sessionSecret) {
+    return { session: null };
+  }
+
+  const token = request.cookies.get(SESSION_COOKIE)?.value;
+  if (!token) {
+    return { session: null };
+  }
+
+  const session = verifySessionToken(token, cfg.sessionSecret);
+  if (!session) {
+    return { session: null };
+  }
+
+  try {
+    if (await isDashSessionRevoked(session.sid)) {
+      return { session: null };
+    }
+  } catch (err) {
+    console.error("optionalSession revoke check failed", err);
+    // Prefer availability for public GETs — keep HMAC session.
+  }
+
+  return { session };
+}
+
+/**
  * Session + CSRF for POST/PATCH/PUT/DELETE under /api/v1 (including logout).
  * Login (`POST /auth/demo`) is the only CSRF-exempt mutation.
  *

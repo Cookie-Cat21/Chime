@@ -3,7 +3,7 @@ import type { NextRequest } from "next/server";
 import { queryMarketBrowse } from "@/lib/api/market-browse";
 import { toSafePositiveInt } from "@/lib/api/safe-int";
 import { jsonError, jsonOk } from "@/lib/auth/errors";
-import { requireSession } from "@/lib/auth/guard";
+import { optionalSession } from "@/lib/auth/guard";
 import { getPool } from "@/lib/db";
 
 export const runtime = "nodejs";
@@ -15,12 +15,11 @@ const MAX_LIMIT = 50;
  * GET /api/v1/market/movers — thin top movers from the same browse query.
  * Query: direction=up|down (default up), limit (default 20, max 50).
  * Sign-filtered: up ⇒ change_pct > 0, down ⇒ change_pct < 0 (no flats/nulls).
- * Session required; CSRF not required (safe GET). Postgres only.
- * Not a screener — no sector/volume/q filters, no multi-sort UI.
+ * Session optional (public market data); CSRF not required (safe GET).
+ * Postgres only. Not a screener — no sector/volume/q filters, no multi-sort UI.
  */
 export async function GET(request: NextRequest) {
-  const gated = await requireSession(request);
-  if (!gated.ok) return gated.response;
+  await optionalSession(request);
 
   const sp = request.nextUrl.searchParams;
   const directionParam = sp.get("direction");
