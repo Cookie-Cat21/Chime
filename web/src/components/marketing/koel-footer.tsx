@@ -23,6 +23,7 @@ export function KoelFooter({
   const product: FooterLink[] = [
     { label: "Home", href: "/" },
     { label: "How it works", href: "/#how-it-works" },
+    { label: "Learn", href: "/learn" },
     { label: "Pricing", href: "/pricing" },
     { label: "Blog", href: "/blog" },
   ];

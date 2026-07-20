@@ -11,6 +11,7 @@ import { cn } from "@/lib/utils";
 export function MarketingNav() {
   const pathname = usePathname();
   const onPricing = pathname === "/pricing";
+  const onLearn = pathname === "/learn";
   const onBlog = pathname === "/blog" || (pathname?.startsWith("/blog/") ?? false);
   const onLegal = pathname?.startsWith("/legal/") ?? false;
 
@@ -38,10 +39,20 @@ export function MarketingNav() {
             How it works
           </Link>
           <Link
+            href="/learn"
+            aria-current={onLearn ? "page" : undefined}
+            className={cn(
+              "hover:text-foreground",
+              onLearn && "font-medium text-foreground underline underline-offset-4",
+            )}
+          >
+            Learn
+          </Link>
+          <Link
             href="/pricing"
             aria-current={onPricing ? "page" : undefined}
             className={cn(
-              "hover:text-foreground",
+              "hidden hover:text-foreground sm:inline",
               onPricing && "font-medium text-foreground underline underline-offset-4",
             )}
           >
