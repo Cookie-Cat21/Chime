@@ -2,6 +2,7 @@ import Link from "next/link";
 
 import { AppNav } from "@/components/app-nav";
 import { EmptyState } from "@/components/empty-state";
+import { HelpLink } from "@/components/help-link";
 import { NfaFooter } from "@/components/nfa-footer";
 import { NfaInline } from "@/components/nfa-inline";
 import { PageHeader } from "@/components/page-header";
@@ -195,6 +196,7 @@ export default async function SignalsPage() {
         <PageHeader
           title="Signal Board"
           description="Research scores from CSE daily path factors (momentum, volatility, liquidity). Higher score is not a buy — informational only. Spoke means a selective forecast exists; Silent means the model stayed quiet."
+          action={<HelpLink topic="signals">How scores work</HelpLink>}
         />
         <NfaInline className="mt-3" />
         {board != null && board.as_of ? (

@@ -16,6 +16,7 @@ import { AlertBanner } from "@/components/kit/alert-banner";
 import { StatCard } from "@/components/kit/stat-card";
 import { LiveIndicator } from "@/components/live-indicator";
 import { NfaFooter } from "@/components/nfa-footer";
+import { HelpLink } from "@/components/help-link";
 import { PageHeader } from "@/components/page-header";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { sanitizeDisclosureText } from "@/lib/api/disclosure-safe";
@@ -630,20 +631,29 @@ export default async function HealthPage() {
           title="Health"
           description="Read-only — Postgres freshness, data inventory, and GitHub Actions. Poller tick detail needs HEALTH_URL on a host that can reach the poller loopback. No deploy controls here."
           action={
-            payload ? (
-              <LiveIndicator
-                tone={pollerUnreachable || !ok ? (pollerUnreachable ? "down" : "stale") : "ok"}
-                label={
-                  pollerUnreachable
-                    ? "Unreachable"
-                    : ok
-                      ? "Live"
-                      : "Degraded"
-                }
-              />
-            ) : (
-              <LiveIndicator tone="down" label="Unreachable" />
-            )
+            <div className="flex flex-wrap items-center gap-2">
+              <HelpLink topic="health">Poller help</HelpLink>
+              {payload ? (
+                <LiveIndicator
+                  tone={
+                    pollerUnreachable || !ok
+                      ? pollerUnreachable
+                        ? "down"
+                        : "stale"
+                      : "ok"
+                  }
+                  label={
+                    pollerUnreachable
+                      ? "Unreachable"
+                      : ok
+                        ? "Live"
+                        : "Degraded"
+                  }
+                />
+              ) : (
+                <LiveIndicator tone="down" label="Unreachable" />
+              )}
+            </div>
           }
         />
 
