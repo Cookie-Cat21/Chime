@@ -390,7 +390,7 @@ def main(argv: list[str] | None = None) -> None:
             "digest: ignore 14:30–16:00 SLT window; "
             "path-backfill/intraday-backfill/hybrid-backfill/"
             "sector-backfill/notices-backfill/directors-backfill/"
-            "corporate-actions-backfill: "
+            "corporate-actions-backfill/macro-tick: "
             "run even if flag off"
         ),
     )
@@ -505,6 +505,7 @@ def main(argv: list[str] | None = None) -> None:
         "aspi-backfill",
         "appetite-backfill",
         "corporate-actions-backfill",
+        "macro-tick",
         "ml-loop-nightly",
         "ml-loop-retrain",
         "ml-loop-research",
@@ -515,7 +516,7 @@ def main(argv: list[str] | None = None) -> None:
             "intraday-backfill, hybrid-backfill, sector-backfill, notices-backfill, "
             "directors-backfill, disclosures-backfill, financials-backfill, "
             "aspi-backfill, appetite-backfill, corporate-actions-backfill, "
-            "ml-forecast, ml-hpe, "
+            "macro-tick, ml-forecast, ml-hpe, "
             "ml-forecast-unified, ml-loop-nightly, ml-loop-retrain, "
             "ml-loop-research, or ml-ltr-ship"
         )
