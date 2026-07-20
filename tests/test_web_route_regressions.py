@@ -456,7 +456,10 @@ def test_market_page_and_nav_browse_link() -> None:
     assert "No snapshot data yet" in market_src
     nav_src = nav.read_text(encoding="utf-8")
     assert 'href: "/market", label: "Browse"' in nav_src
+    assert "primaryLinks" in nav_src
+    assert "moreLinks" in nav_src
     assert "hidden={!open}" in nav_src
+    # Mobile sheet stays attribute-toggled (not a ternary mount/unmount).
     assert "{open ? (" not in nav_src
     watch_src = watchlist.read_text(encoding="utf-8")
     assert 'href="/market"' in watch_src

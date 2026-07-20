@@ -11,7 +11,10 @@ import { Button } from "@/components/ui/button";
 
 type NavLink = { href: string; label: string };
 
-/** Daily surface — kept in the primary bar. */
+/**
+ * Primary nav — Scenarios stays off primary until Phase 3 AI is live.
+ * Daily surface stays in the bar; research/ops fold under More.
+ */
 const primaryLinks = [
   { href: "/overview", label: "Overview" },
   { href: "/market", label: "Browse" },
@@ -82,18 +85,18 @@ function NavMoreMenu({
   activeHref: string | undefined;
   onNavigate?: () => void;
 }) {
-  const [open, setOpen] = useState(false);
+  const [menuOpen, setMenuOpen] = useState(false);
   const rootRef = useRef<HTMLDivElement>(null);
   const menuId = useId();
   const moreActive = moreLinks.some((l) => l.href === activeHref);
 
   useEffect(() => {
-    if (!open) return;
+    if (!menuOpen) return;
     const onDoc = (e: MouseEvent) => {
-      if (!rootRef.current?.contains(e.target as Node)) setOpen(false);
+      if (!rootRef.current?.contains(e.target as Node)) setMenuOpen(false);
     };
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") setOpen(false);
+      if (e.key === "Escape") setMenuOpen(false);
     };
     document.addEventListener("mousedown", onDoc);
     document.addEventListener("keydown", onKey);
@@ -101,18 +104,18 @@ function NavMoreMenu({
       document.removeEventListener("mousedown", onDoc);
       document.removeEventListener("keydown", onKey);
     };
-  }, [open]);
+  }, [menuOpen]);
 
   return (
     <div ref={rootRef} className="relative">
       <button
         type="button"
-        aria-expanded={open}
+        aria-expanded={menuOpen}
         aria-controls={menuId}
         aria-haspopup="menu"
-        onClick={() => setOpen((v) => !v)}
+        onClick={() => setMenuOpen((v) => !v)}
         className={
-          moreActive || open
+          moreActive || menuOpen
             ? "rounded-sm font-medium text-foreground focus-visible:ring-2 focus-visible:ring-ring/50 focus-visible:outline-none"
             : "rounded-sm text-muted-foreground transition-colors hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring/50 focus-visible:outline-none"
         }
@@ -122,32 +125,32 @@ function NavMoreMenu({
           ▾
         </span>
       </button>
-      {open ? (
-        <div
-          id={menuId}
-          role="menu"
-          className="absolute top-full left-0 z-50 mt-2 min-w-[11rem] rounded-md border border-border bg-background py-1 shadow-sm"
-        >
-          {moreLinks.map((link) => {
-            const isActive = activeHref === link.href;
-            return (
-              <Link
-                key={link.href}
-                href={link.href}
-                role="menuitem"
-                aria-current={isActive ? "page" : undefined}
-                className={linkClass(isActive, true)}
-                onClick={() => {
-                  setOpen(false);
-                  onNavigate?.();
-                }}
-              >
-                {link.label}
-              </Link>
-            );
-          })}
-        </div>
-      ) : null}
+      <div
+        id={menuId}
+        role="menu"
+        hidden={!menuOpen}
+        className="absolute top-full left-0 z-50 mt-2 min-w-[11rem] rounded-md border border-border bg-background py-1 shadow-sm"
+      >
+        {moreLinks.map((link) => {
+          const isActive = activeHref === link.href;
+          return (
+            <Link
+              key={link.href}
+              href={link.href}
+              role="menuitem"
+              aria-current={isActive ? "page" : undefined}
+              tabIndex={menuOpen ? undefined : -1}
+              className={linkClass(isActive, true)}
+              onClick={() => {
+                setMenuOpen(false);
+                onNavigate?.();
+              }}
+            >
+              {link.label}
+            </Link>
+          );
+        })}
+      </div>
     </div>
   );
 }
