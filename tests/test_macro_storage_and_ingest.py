@@ -11,6 +11,12 @@ import pytest
 
 from koel.adapters.macro_cbsl import _mid
 from koel.adapters.macro_eia import _parse_bulk_series_line, _parse_eia_payload
+from koel.adapters.macro_food import _parse_period, parse_cbsl_ccpi_xlsx
+from koel.adapters.macro_tourism import (
+    discover_tourism_xlsx_url,
+    parse_cbsl_tourism_earnings_xlsx,
+)
+from koel.adapters.macro_world import parse_fred_csv, parse_yahoo_chart
 from koel.macro_ingest import run_macro_tick
 from koel.storage import Storage
 
@@ -194,25 +200,33 @@ async def test_run_macro_tick_disabled() -> None:
     settings = MagicMock()
     settings.cbsl_fx_enabled = False
     settings.eia_oil_enabled = False
+    settings.world_index_research_enabled = False
     settings.sltda_tourism_enabled = False
     settings.dcs_food_enabled = False
     result = await run_macro_tick(storage, settings)
     assert result["cbsl_fx"] == 0
     assert result["eia_oil"] == 0
+    assert result["cbsl_tourism"] == 0
+    assert result["cbsl_ccpi"] == 0
+    assert result["world_indexes"] == 0
     assert "cbsl_fx_disabled" in result["skipped"]
     assert "eia_oil_disabled" in result["skipped"]
+    assert "sltda_tourism_disabled" in result["skipped"]
+    assert "dcs_food_disabled" in result["skipped"]
+    assert "world_indexes_disabled" in result["skipped"]
     storage.upsert_macro_series.assert_not_called()
 
 
 @pytest.mark.asyncio
 async def test_run_macro_tick_force_upserts() -> None:
     storage = MagicMock()
-    storage.upsert_macro_series = AsyncMock(side_effect=[3, 2])
+    storage.upsert_macro_series = AsyncMock(side_effect=[3, 2, 4, 5, 6])
     settings = MagicMock()
     settings.cbsl_fx_enabled = False
     settings.eia_oil_enabled = False
-    settings.sltda_tourism_enabled = True
-    settings.dcs_food_enabled = True
+    settings.world_index_research_enabled = False
+    settings.sltda_tourism_enabled = False
+    settings.dcs_food_enabled = False
     with (
         patch(
             "koel.macro_ingest.fetch_cbsl_fx_rows",
@@ -222,8 +236,160 @@ async def test_run_macro_tick_force_upserts() -> None:
             "koel.macro_ingest.fetch_eia_oil_rows",
             new=AsyncMock(return_value=[{"series_id": "BRENT_SPOT"}]),
         ),
+        patch(
+            "koel.macro_ingest.fetch_tourism_rows",
+            new=AsyncMock(return_value=[{"series_id": "TOURISM_ARRIVALS"}]),
+        ),
+        patch(
+            "koel.macro_ingest.fetch_food_pressure_rows",
+            new=AsyncMock(return_value=[{"series_id": "FOOD_PRESSURE"}]),
+        ),
+        patch(
+            "koel.macro_ingest.fetch_world_index_rows",
+            new=AsyncMock(return_value=[{"series_id": "WORLD_SPX"}]),
+        ),
     ):
         result = await run_macro_tick(storage, settings, force=True)
     assert result["cbsl_fx"] == 3
     assert result["eia_oil"] == 2
+    assert result["cbsl_tourism"] == 4
+    assert result["cbsl_ccpi"] == 5
+    assert result["world_indexes"] == 6
     assert result["skipped"] == []
+
+
+@pytest.mark.asyncio
+async def test_run_macro_tick_records_feed_errors() -> None:
+    storage = MagicMock()
+    storage.upsert_macro_series = AsyncMock()
+    settings = MagicMock()
+    settings.cbsl_fx_enabled = True
+    settings.eia_oil_enabled = True
+    settings.world_index_research_enabled = True
+    settings.sltda_tourism_enabled = True
+    settings.dcs_food_enabled = True
+    boom = RuntimeError("upstream down")
+    with (
+        patch("koel.macro_ingest.fetch_cbsl_fx_rows", new=AsyncMock(side_effect=boom)),
+        patch("koel.macro_ingest.fetch_eia_oil_rows", new=AsyncMock(side_effect=boom)),
+        patch("koel.macro_ingest.fetch_tourism_rows", new=AsyncMock(side_effect=boom)),
+        patch(
+            "koel.macro_ingest.fetch_food_pressure_rows",
+            new=AsyncMock(side_effect=boom),
+        ),
+        patch(
+            "koel.macro_ingest.fetch_world_index_rows",
+            new=AsyncMock(side_effect=boom),
+        ),
+    ):
+        result = await run_macro_tick(storage, settings, force=False)
+    assert result["skipped"] == [
+        "cbsl_fx_error",
+        "eia_oil_error",
+        "cbsl_tourism_error",
+        "cbsl_ccpi_error",
+        "world_indexes_error",
+    ]
+    storage.upsert_macro_series.assert_not_called()
+
+
+def test_parse_cbsl_tourism_earnings_minimal() -> None:
+    import openpyxl
+
+    wb = openpyxl.Workbook()
+    ws = wb.active
+    ws["B2"] = "Earnings from Tourism (a)"
+    ws["C5"] = 2024
+    ws["D5"] = 2025
+    ws["B6"] = "January"
+    ws["C6"] = 100.5
+    ws["D6"] = 200.25
+    ws["B7"] = "February"
+    ws["C7"] = 110.0
+    ws["D7"] = 0  # rejected
+    buf = __import__("io").BytesIO()
+    wb.save(buf)
+    rows = parse_cbsl_tourism_earnings_xlsx(buf.getvalue(), max_points=10)
+    assert len(rows) == 3  # Jan24, Feb24, Jan25 (Feb25 zero dropped)
+    assert rows[0]["series_id"] == "TOURISM_ARRIVALS"
+    assert rows[0]["as_of_date"].isoformat() == "2024-01-01"
+    assert rows[0]["value"] == 100.5
+    assert rows[-1]["as_of_date"].isoformat() == "2025-01-01"
+    assert rows[-1]["value"] == 200.25
+    assert "demo" not in rows[-1]["attribution"].lower()
+
+
+def test_discover_tourism_xlsx_url() -> None:
+    html = (
+        '<a href="/sites/default/files/cbslweb_documents/statistics/'
+        'table2.14.1_20260626_e.xlsx">Earnings from Tourism '
+        "(2009 January to Latest)</a>"
+    )
+    url = discover_tourism_xlsx_url(html)
+    assert url is not None
+    assert url.endswith("table2.14.1_20260626_e.xlsx")
+
+
+def test_parse_cbsl_ccpi_and_period() -> None:
+    assert _parse_period("2026 June") == date(2026, 6, 1)
+    assert _parse_period("June 2026") == date(2026, 6, 1)
+    assert _parse_period("nope") is None
+
+    import openpyxl
+
+    wb = openpyxl.Workbook()
+    ws = wb.active
+    ws["B5"] = "2026 May"
+    ws["C5"] = 203.4
+    ws["B6"] = "2026 June"
+    ws["C6"] = 207.7
+    buf = __import__("io").BytesIO()
+    wb.save(buf)
+    rows = parse_cbsl_ccpi_xlsx(buf.getvalue(), max_points=10)
+    assert len(rows) == 2
+    assert rows[-1]["series_id"] == "FOOD_PRESSURE"
+    assert rows[-1]["value"] == 207.7
+    assert rows[-1]["unit"] == "index"
+
+
+def test_parse_fred_csv_skips_dots() -> None:
+    text = (
+        "DATE,SP500\n"
+        "2026-07-15,7572.40\n"
+        "2026-07-16,.\n"
+        "2026-07-17,7457.69\n"
+    )
+    rows = parse_fred_csv(
+        text,
+        series_id="WORLD_SPX",
+        attribution="FRED SP500 — research / delayed, not CSE official",
+        max_points=10,
+    )
+    assert len(rows) == 2
+    assert rows[-1]["value"] == 7457.69
+    assert rows[-1]["as_of_date"].isoformat() == "2026-07-17"
+
+
+def test_parse_yahoo_chart_closes() -> None:
+    from datetime import UTC, datetime
+
+    day = int(datetime(2026, 7, 17, 12, tzinfo=UTC).timestamp())
+    prev = int(datetime(2026, 7, 16, 12, tzinfo=UTC).timestamp())
+    payload = {
+        "chart": {
+            "result": [
+                {
+                    "timestamp": [prev, day],
+                    "indicators": {"quote": [{"close": [100.0, 105.5]}]},
+                }
+            ]
+        }
+    }
+    rows = parse_yahoo_chart(
+        payload,
+        series_id="WORLD_FTSE",
+        attribution="Yahoo ^FTSE — research / delayed, not CSE official",
+    )
+    assert len(rows) == 2
+    assert rows[-1]["value"] == 105.5
+    assert "research" in rows[-1]["attribution"].lower()

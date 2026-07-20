@@ -68,42 +68,47 @@ Probe notes only. **Not license clearance.** Complete the full checklist before 
 - [x] Fail-soft: empty oil Context cards
 - [x] NFA: descriptive Δ% only; optional energy-sector bridge chip
 
-### DCS food / CPI (F-093 / food pressure) — candidate
+### Food pressure / CCPI (F-093) — adapter shipped via CBSL (flagged)
 
-- [ ] Source: [DCS Weekly Retail Prices dashboard](https://www.statistics.gov.lk/DashBoard/Prices/) (HTTP 200) · monthly [CCPI](https://www.statistics.gov.lk/InflationAndPrices/StaticalInformation/MonthlyCCPI) · optional [CBSL Daily Price Report](https://www.cbsl.gov.lk/statistics/economic-indicators/price-report)
-- [ ] ToS / license: DCS copyright notice on dashboard (“All Rights Reserved”) — **confirm redistribution** before any scrape/parse; prefer published bulletins/spreadsheets if clearer
-- [ ] Auth: none
-- [ ] Rate limit: weekly (retail) / monthly (CCPI)
-- [ ] Schema: `macro_series` + small staple basket → food pressure score in `macro_snapshots_daily`
-- [ ] Flag: `DCS_FOOD_ENABLED` default `0`
-- [ ] Fail-soft: hide Food module on `/context`
-- [ ] NFA: staples pressure, not “inflation trade”
+- [x] Source: CBSL [CCPI and CCPI Core](https://www.cbsl.gov.lk/en/statistics/statistical-tables/real-sector/prices-wages-employment) spreadsheet (cites DCS)
+- [x] ToS / license: **do not scrape** DCS Weekly Retail dashboard (“All Rights Reserved”) or DCS microdata (redistribution needs written agreement). CBSL republication of headline CCPI is official public statistics — same pattern as CBSL FX
+- [x] Auth: none (spreadsheet download; URL discovered from the prices/wages page)
+- [x] Rate limit: daily via `macro-tick` (sheet updates monthly)
+- [x] Schema: `macro_series` (`source=cbsl_ccpi`, `series_id=FOOD_PRESSURE`, unit `index`)
+- [x] Flag: `DCS_FOOD_ENABLED` default `0` in app; GitHub `macro-tick` sets `1` (kill with `vars.DCS_FOOD_ENABLED=0`)
+- [x] Fail-soft: empty Food module on `/context`
+- [x] NFA: “CCPI as of …” / Δ% only — not an inflation trade tip
+- **Deferred:** DCS weekly staple basket / CBSL Daily Price Report PDF denser series — only after clearer redistribution terms
 
-### SLTDA tourism (F-097) — candidate
+### Tourism (F-097) — adapter shipped via CBSL (flagged)
 
-- [ ] Source: [Tourist arrivals from all countries](https://www.sltda.gov.lk/en/tourist-arrivals-from-all-countries) Excel/PDF (portal HTTP 200; files listed through 2026-05 in probe)
-- [ ] ToS / license: official stats publication; attribute SLTDA; confirm Excel reuse
-- [ ] Auth: none (file download)
-- [ ] Rate limit: monthly (weekly report optional later)
-- [ ] Schema: `macro_series` / tourism monthly table
-- [ ] Flag: `SLTDA_TOURISM_ENABLED` default `0`
-- [ ] Fail-soft: hide Tourism module
-- [ ] NFA: arrivals YoY + Hotels/Travel sector link only
-- **Note:** World Bank `ST.INT.ARVL` API responds but recent annual values were **null** in probe — do not use as dash truth.
+- [x] Source: CBSL [Earnings from Tourism](https://www.cbsl.gov.lk/en/statistics/statistical-tables/External-Sector) spreadsheet (SLTDA survey inputs)
+- [x] ToS / license: **do not ingest** SLTDA site Excel directly — [SLTDA Terms of Use](https://sltda.gov.lk/en/terms-of-use) limit site content to personal/non-commercial display without written consent. CBSL tourism *earnings* sheet is official public statistics
+- [x] Auth: none (spreadsheet download; URL discovered from External Sector page)
+- [x] Rate limit: daily via `macro-tick` (sheet updates monthly)
+- [x] Schema: `macro_series` (`source=cbsl_tourism`, `series_id=TOURISM_ARRIVALS`, unit `USD_mn`) — Context card labels this **Tourism earnings**
+- [x] Flag: `SLTDA_TOURISM_ENABLED` default `0` in app; GitHub `macro-tick` sets `1` (kill with `vars.SLTDA_TOURISM_ENABLED=0`)
+- [x] Fail-soft: empty Tourism module
+- [x] NFA: earnings MoM/YoY + Hotels/Travel sector link only
+- **Note:** World Bank `ST.INT.ARVL` API recent annual values were **null/stale** in probe — do not use as dash truth.
 
-### World indexes (F-096) — research panel only
+### World indexes (F-096) — research panel shipped (flagged)
 
-- [ ] Source: TBD ToS-clean EOD (avoid brittle bot-gated scrapers; Stooq challenged in probe)
-- [ ] ToS / license: treat like Tier D* until cleared; banner “research / delayed”
-- [ ] Flag: `WORLD_INDEX_RESEARCH_ENABLED` default `0`
-- [ ] Never label as CSE official
+- [x] Source: FRED public CSV (`SP500`, `NIKKEI225`, `VIXCLS`) + Yahoo chart JSON (`^FTSE`, `^NSEI`) — Stooq bot-gated (confirmed)
+- [x] ToS / license: FRED series redistributable with Fed St. Louis attribution; Yahoo unofficial → **Tier D\*** research / delayed banner only (same honesty as hybrid bars)
+- [x] Auth: none
+- [x] Rate limit: daily via `macro-tick`
+- [x] Schema: `macro_series` (`WORLD_SPX` / `WORLD_FTSE` / `WORLD_NIKKEI` / `WORLD_NSEI` / `WORLD_VIX`)
+- [x] Flag: `WORLD_INDEX_RESEARCH_ENABLED` default `0` in app; GitHub `macro-tick` sets `1` (kill with `vars.WORLD_INDEX_RESEARCH_ENABLED=0`)
+- [x] Fail-soft: empty world tiles on `/context`
+- [x] NFA: never label as CSE official; UI badge “research / delayed”
 
-### External news / social sentiment — deferred
+### External news / social sentiment — disclosure-first on Context
 
-- [ ] Prefer in-house CSE disclosures/notices + existing Gemini brief flags
+- [x] Prefer in-house CSE disclosures + `market_notices` timeline on `/context` (Postgres only)
 - [ ] No full-text scrape of EconomyNext / Daily FT / Ada Derana without written license
 - [ ] Link-out / RSS only after per-publisher ToS row
-- [ ] Skip CSEPal-style social-feed clone
+- [x] Skip CSEPal-style social-feed clone
 
 ## Broker / CDS public feeds — decision log (2026-07-18)
 
