@@ -504,11 +504,8 @@ def main(argv: list[str] | None = None) -> None:
         "financials-backfill",
         "aspi-backfill",
         "appetite-backfill",
-<<<<<<< HEAD
-        "macro-tick",
-=======
         "corporate-actions-backfill",
->>>>>>> origin/main
+        "macro-tick",
         "ml-loop-nightly",
         "ml-loop-retrain",
         "ml-loop-research",
@@ -518,12 +515,8 @@ def main(argv: list[str] | None = None) -> None:
             "--force is only valid for tick, digest, path-backfill, "
             "intraday-backfill, hybrid-backfill, sector-backfill, notices-backfill, "
             "directors-backfill, disclosures-backfill, financials-backfill, "
-<<<<<<< HEAD
-            "aspi-backfill, appetite-backfill, macro-tick, ml-forecast, ml-hpe, "
-=======
             "aspi-backfill, appetite-backfill, corporate-actions-backfill, "
-            "ml-forecast, ml-hpe, "
->>>>>>> origin/main
+            "macro-tick, ml-forecast, ml-hpe, "
             "ml-forecast-unified, ml-loop-nightly, ml-loop-retrain, "
             "ml-loop-research, or ml-ltr-ship"
         )
