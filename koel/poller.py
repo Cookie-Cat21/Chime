@@ -1118,7 +1118,7 @@ class Poller:
                 horizon_days=90,
                 limit=200,
             )
-            by_symbol: dict[str, list] = {}
+            by_symbol: dict[str, list[Any]] = {}
             for ev in upcoming:
                 by_symbol.setdefault(ev.symbol, []).append(ev)
 

@@ -863,6 +863,8 @@ def evaluate_xd_soon_rules(
         rows = events_by_symbol.get(rule.symbol) or []
         for row in rows:
             d_xd = getattr(row, "d_xd", None)
+            if not isinstance(d_xd, date_cls):
+                continue
             if not xd_within_horizon(d_xd, horizon_days=rule.threshold, today=base):
                 continue
             key = f"xd:{rule.id}:{d_xd.isoformat()}"
