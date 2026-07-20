@@ -38,9 +38,9 @@ export const HELP_TOPICS: readonly HelpTopic[] = [
           "Watchlist = symbols you follow (prices and disclosures koel keeps fresh).\n\nAlerts = active rules (price cross, daily move, disclosure, volume, and more). History = past fires that koel already sent or recorded.\n\nExample: add JKH.N0000 to Watchlist to track it; create “JKH.N0000 above 200” under Alerts to get a Telegram ping when that cross happens.",
       },
       {
-        question: "Does the dashboard call cse.lk live?",
+        question: "Does the dashboard call the CSE site live?",
         answer:
-          "No. The dash reads Postgres only. A separate poller fetches CSE JSON during market hours and writes snapshots. If data looks stale, check Health — not your browser network tab for cse.lk.",
+          "No. The dash reads Postgres only. A separate poller fetches CSE JSON during market hours and writes snapshots. If data looks stale, check Health — not your browser network tab for the exchange site.",
       },
       {
         question: "Where do I learn about a single company page?",
@@ -392,7 +392,7 @@ export const HELP_TOPICS: readonly HelpTopic[] = [
       {
         question: "What is Browse showing?",
         answer:
-          "One row per CSE symbol from the latest Postgres price snapshot (and name/sector from stocks). The dash never calls cse.lk from the browser — if the table is empty or old, check the poller / Health.",
+          "One row per CSE symbol from the latest Postgres price snapshot (and name/sector from stocks). The dash never calls the exchange site from the browser — if the table is empty or old, check the poller / Health.",
       },
       {
         question: "How do search, sector chips, and Has EPS work?",
