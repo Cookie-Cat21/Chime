@@ -6,6 +6,7 @@ import {
   AppetiteMeter,
 } from "@/components/appetite/appetite-meter";
 import { AppetiteTracker } from "@/components/appetite/appetite-tracker";
+import { AreaSpark, toneFromSeries } from "@/components/kit/area-spark";
 import { NfaInline } from "@/components/nfa-inline";
 import {
   BAND_LABEL,
@@ -29,56 +30,15 @@ function fmtDelta(d: number | null): string {
   return `${r > 0 ? "+" : ""}${r.toFixed(1)}`;
 }
 
-function MiniSpark({
-  values,
-  upIsGood = true,
-}: {
-  values: Array<number | null>;
-  upIsGood?: boolean;
-}) {
-  const series = values.filter((v): v is number => v != null && Number.isFinite(v));
-  if (series.length < 2) return null;
-  const min = Math.min(...series);
-  const max = Math.max(...series);
-  const span = max !== min ? max - min : 1;
-  const w = 120;
-  const h = 36;
-  const pad = 2;
-  const pts = series
-    .map((v, i) => {
-      const x = pad + (i / (series.length - 1)) * (w - pad * 2);
-      const y = pad + (1 - (v - min) / span) * (h - pad * 2);
-      return `${x.toFixed(1)},${y.toFixed(1)}`;
-    })
-    .join(" ");
-  const up = series[series.length - 1]! >= series[0]!;
-  const good = upIsGood ? up : !up;
-  return (
-    <svg
-      viewBox={`0 0 ${w} ${h}`}
-      className="h-9 w-full"
-      role="img"
-      aria-hidden
-    >
-      <polyline
-        fill="none"
-        stroke={good ? "oklch(0.45 0.08 185)" : "oklch(0.5 0.1 25)"}
-        strokeWidth="1.75"
-        strokeLinejoin="round"
-        strokeLinecap="round"
-        points={pts}
-      />
-    </svg>
-  );
-}
-
 function Chip({
   label,
   value,
   detail,
   delta,
   deltaTone,
+  status,
   children,
+  spark,
   className,
 }: {
   label: string;
@@ -86,24 +46,26 @@ function Chip({
   detail: string;
   delta?: string;
   deltaTone?: "up" | "down" | "flat";
+  status?: ReactNode;
   children?: ReactNode;
+  spark?: ReactNode;
   className?: string;
 }) {
   return (
     <div
       className={cn(
-        "flex min-w-0 flex-1 flex-col gap-2 rounded-md border border-border/70 bg-background/60 px-3 py-3",
+        "flex min-h-[11.5rem] min-w-0 flex-1 flex-col rounded-lg border border-border/70 bg-background px-3.5 py-3.5 shadow-[0_1px_0_oklch(0.9_0.006_250_/_0.6)]",
         className,
       )}
     >
       <div className="flex items-start justify-between gap-2">
-        <p className="text-[10px] font-semibold uppercase tracking-[0.12em] text-muted-foreground">
+        <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">
           {label}
         </p>
         {delta ? (
           <span
             className={cn(
-              "inline-flex items-center rounded-sm px-1.5 py-0.5 font-mono text-[10px] tabular-nums",
+              "inline-flex shrink-0 items-center rounded-md px-1.5 py-0.5 font-mono text-[10px] tabular-nums",
               deltaTone === "up" &&
                 "bg-emerald-100 text-emerald-800 dark:bg-emerald-950/50 dark:text-emerald-300",
               deltaTone === "down" &&
@@ -116,13 +78,25 @@ function Chip({
           </span>
         ) : null}
       </div>
-      <p className="font-mono text-2xl font-semibold tabular-nums tracking-tight">
-        {value}
-      </p>
-      <p className="font-mono text-[11px] tabular-nums text-muted-foreground">
+
+      <div className="mt-2 flex flex-wrap items-baseline gap-x-2 gap-y-1">
+        <p className="font-display text-3xl font-semibold tracking-tight tabular-nums">
+          {value}
+        </p>
+        {status}
+      </div>
+
+      <p className="mt-1 font-mono text-[11px] leading-snug tabular-nums text-muted-foreground">
         {detail}
       </p>
-      {children}
+
+      {children ? <div className="mt-3">{children}</div> : null}
+
+      {spark ? (
+        <div className="mt-auto border-t border-border/50 pt-2.5">{spark}</div>
+      ) : (
+        <div className="mt-auto" />
+      )}
     </div>
   );
 }
@@ -131,25 +105,37 @@ function BookPressureBar({ book }: { book: BookPressure }) {
   const bid = book.bid_share_pct;
   if (bid == null || !Number.isFinite(bid)) {
     return (
-      <div className="h-2 w-full overflow-hidden rounded-full bg-muted">
-        <div className="h-full w-1/2 bg-muted-foreground/30" />
+      <div className="space-y-1.5">
+        <div className="h-2.5 w-full overflow-hidden rounded-full bg-muted">
+          <div className="h-full w-1/2 bg-muted-foreground/25" />
+        </div>
+        <div className="flex justify-between font-mono text-[10px] text-muted-foreground">
+          <span>Bid —</span>
+          <span>Ask —</span>
+        </div>
       </div>
     );
   }
   const pct = Math.max(0, Math.min(100, bid));
   return (
-    <div
-      className="h-2 w-full overflow-hidden rounded-full bg-rose-200/70 dark:bg-rose-950/40"
-      role="meter"
-      aria-valuemin={0}
-      aria-valuemax={100}
-      aria-valuenow={Math.round(pct)}
-      aria-label={`Bid share ${pct.toFixed(0)} percent of sampled book`}
-    >
+    <div className="space-y-1.5">
       <div
-        className="h-full rounded-full bg-emerald-600/80 transition-[width] duration-500"
-        style={{ width: `${pct}%` }}
-      />
+        className="relative h-2.5 w-full overflow-hidden rounded-full bg-rose-200/80 dark:bg-rose-950/50"
+        role="meter"
+        aria-valuemin={0}
+        aria-valuemax={100}
+        aria-valuenow={Math.round(pct)}
+        aria-label={`Bid share ${pct.toFixed(0)} percent of sampled book`}
+      >
+        <div
+          className="h-full bg-emerald-600/85 transition-[width] duration-500 ease-out motion-reduce:transition-none"
+          style={{ width: `${pct}%` }}
+        />
+      </div>
+      <div className="flex justify-between font-mono text-[10px] tabular-nums text-muted-foreground">
+        <span>Bid {pct.toFixed(0)}%</span>
+        <span>Ask {(100 - pct).toFixed(0)}%</span>
+      </div>
     </div>
   );
 }
@@ -207,10 +193,13 @@ export function TapePulseStrip({
           ? "Balanced"
           : "—";
 
+  const appetiteScores = appetiteHistory.slice(-60).map((d) => d.score);
+  const foreignNets = foreignHistory.map((d) => d.foreign_net);
+
   return (
     <section
       className={cn(
-        "rounded-lg border border-border/80 bg-muted/15 px-3 py-4 sm:px-4",
+        "rounded-xl border border-border/80 bg-gradient-to-b from-muted/35 to-muted/10 px-3 py-4 sm:px-5 sm:py-5",
         className,
       )}
       aria-labelledby="tape-pulse-heading"
@@ -219,7 +208,7 @@ export function TapePulseStrip({
         <div>
           <p
             id="tape-pulse-heading"
-            className="text-[10px] font-semibold uppercase tracking-[0.12em] text-muted-foreground"
+            className="text-[10px] font-semibold uppercase tracking-[0.14em] text-muted-foreground"
           >
             CSE tape pulse
           </p>
@@ -254,20 +243,31 @@ export function TapePulseStrip({
                 ? "down"
                 : "flat"
           }
+          status={
+            appetiteLatest ? (
+              <AppetiteBandBadge
+                band={appetiteLatest.band}
+                className="text-xs shadow-none"
+              />
+            ) : null
+          }
+          spark={
+            appetiteLatest && appetiteScores.length >= 2 ? (
+              <AreaSpark
+                values={appetiteScores}
+                tone={toneFromSeries(appetiteScores)}
+                heightClass="h-12"
+                ariaLabel="Appetite score spark, last 60 sessions"
+              />
+            ) : null
+          }
         >
           {appetiteLatest ? (
-            <>
-              <div className="flex items-center gap-2">
-                <AppetiteBandBadge band={appetiteLatest.band} />
-              </div>
-              <AppetiteMeter
-                score={appetiteLatest.score}
-                band={appetiteLatest.band}
-                size="sm"
-                className="mt-1"
-              />
-              <MiniSpark values={appetiteHistory.slice(-60).map((d) => d.score)} />
-            </>
+            <AppetiteMeter
+              score={appetiteLatest.score}
+              band={appetiteLatest.band}
+              size="sm"
+            />
           ) : null}
         </Chip>
 
@@ -287,45 +287,54 @@ export function TapePulseStrip({
             foreignDelta != null ? fmtLkr(foreignDelta) + " Δ" : undefined
           }
           deltaTone={foreignDeltaTone}
-        >
-          <span
-            className={cn(
-              "inline-flex w-fit rounded-sm px-1.5 py-0.5 text-[10px] font-medium",
-              foreignTone === "up" &&
-                "bg-emerald-100 text-emerald-800 dark:bg-emerald-950/50 dark:text-emerald-300",
-              foreignTone === "down" &&
-                "bg-rose-100 text-rose-800 dark:bg-rose-950/50 dark:text-rose-300",
-              foreignTone === "flat" && "bg-muted text-muted-foreground",
-            )}
-          >
-            {foreignNet == null
-              ? "No session yet"
-              : foreignNet > 0
-                ? "Net buying"
-                : foreignNet < 0
-                  ? "Net selling"
-                  : "Flat"}
-          </span>
-          <MiniSpark
-            values={foreignHistory.map((d) => d.foreign_net)}
-            upIsGood
-          />
-        </Chip>
+          status={
+            <span
+              className={cn(
+                "inline-flex w-fit rounded-md px-2 py-0.5 text-xs font-medium",
+                foreignTone === "up" &&
+                  "bg-emerald-100 text-emerald-800 dark:bg-emerald-950/50 dark:text-emerald-300",
+                foreignTone === "down" &&
+                  "bg-rose-100 text-rose-800 dark:bg-rose-950/50 dark:text-rose-300",
+                foreignTone === "flat" && "bg-muted text-muted-foreground",
+              )}
+            >
+              {foreignNet == null
+                ? "No session yet"
+                : foreignNet > 0
+                  ? "Net buying"
+                  : foreignNet < 0
+                    ? "Net selling"
+                    : "Flat"}
+            </span>
+          }
+          spark={
+            foreignNets.filter((v) => v != null).length >= 2 ? (
+              <AreaSpark
+                values={foreignNets}
+                tone={toneFromSeries(foreignNets)}
+                heightClass="h-12"
+                ariaLabel="Foreign net spark"
+              />
+            ) : null
+          }
+        />
 
         <Chip
           label="Book pressure"
           value={bookValue}
           detail={bookDetail(book)}
+          spark={
+            <p className="text-[10px] leading-snug text-muted-foreground">
+              Public CSE bid/ask totals sample — not licensed L2 depth.
+            </p>
+          }
         >
           <BookPressureBar book={book} />
-          <p className="text-[10px] text-muted-foreground">
-            Public CSE bid/ask totals sample — not licensed L2 depth.
-          </p>
         </Chip>
       </div>
 
       {appetiteHistory.length > 0 ? (
-        <div className="mt-4 border-t border-border/60 pt-3">
+        <div className="mt-4 border-t border-border/60 pt-3.5">
           <AppetiteTracker historyAsc={appetiteHistory} limit={60} />
         </div>
       ) : null}

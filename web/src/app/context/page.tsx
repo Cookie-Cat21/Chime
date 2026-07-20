@@ -105,14 +105,21 @@ export default async function ContextPage() {
           }
         />
 
-        <p className="mt-8 text-sm text-muted-foreground">
-          Context modules fill when flagged adapters ingest into{" "}
-          <span className="font-mono text-xs">macro_series</span>. Empty cards
-          are honest — not fake demo numbers.
-        </p>
-        <NfaInline className="mt-2" />
+        <div className="mt-8 flex flex-wrap items-end justify-between gap-3">
+          <div>
+            <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">
+              Macro modules
+            </p>
+            <p className="mt-1 max-w-2xl text-sm text-muted-foreground">
+              Fill when flagged adapters ingest into{" "}
+              <span className="font-mono text-xs">macro_series</span>. Empty
+              cards stay empty — not fake demo numbers.
+            </p>
+          </div>
+          <NfaInline />
+        </div>
 
-        <div className="mt-6 grid gap-4 lg:grid-cols-2">
+        <div className="mt-5 grid items-stretch gap-4 sm:grid-cols-2">
           <ContextModule
             title="USD / LKR"
             subtitle="CBSL commercial bank TT mid (buy/sell average)."

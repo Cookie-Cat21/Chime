@@ -33,10 +33,15 @@ export function AppetiteMeter({
   const h = size === "lg" ? 22 : size === "sm" ? 10 : 16;
   const label = BAND_LABEL[band];
 
+  // sm: needle stays inside the bar (no clipped triangle above).
+  // md/lg: caret sits just above the spectrum.
   return (
-    <div className={cn("w-full", className)}>
+    <div className={cn("w-full", size === "sm" ? "pt-0" : "pt-1.5", className)}>
       <div
-        className="relative w-full overflow-hidden rounded-md border border-border/70"
+        className={cn(
+          "relative w-full rounded-md border border-border/70",
+          size === "sm" ? "overflow-hidden" : "overflow-visible",
+        )}
         style={{ height: h }}
         role="meter"
         aria-valuemin={0}
@@ -44,7 +49,7 @@ export function AppetiteMeter({
         aria-valuenow={Math.round(s)}
         aria-valuetext={`${Math.round(s)} — ${label}`}
       >
-        <div className="absolute inset-0 flex">
+        <div className="absolute inset-0 flex overflow-hidden rounded-[5px]">
           {ZONES.map((z) => (
             <div
               key={z.band}
@@ -52,22 +57,24 @@ export function AppetiteMeter({
               style={{
                 width: `${z.to - z.from}%`,
                 backgroundColor: BAND_ZONE_COLOR[z.band],
-                opacity: z.band === band ? 1 : 0.45,
+                opacity: z.band === band ? 1 : 0.42,
               }}
               title={BAND_LABEL[z.band]}
             />
           ))}
         </div>
         <div
-          className="absolute top-0 bottom-0 w-0.5 bg-foreground transition-[left] duration-500 ease-out motion-reduce:transition-none"
-          style={{ left: `calc(${s}% - 1px)` }}
+          className="absolute top-0 bottom-0 z-10 w-0.5 bg-foreground shadow-[0_0_0_1px_oklch(1_0_0_/_0.55)] transition-[left] duration-500 ease-out motion-reduce:transition-none"
+          style={{ left: `clamp(0px, calc(${s}% - 1px), calc(100% - 2px))` }}
           aria-hidden
         />
-        <div
-          className="absolute -top-1 h-0 w-0 border-x-[5px] border-x-transparent border-t-[6px] border-t-foreground transition-[left] duration-500 ease-out motion-reduce:transition-none"
-          style={{ left: `calc(${s}% - 5px)` }}
-          aria-hidden
-        />
+        {size !== "sm" ? (
+          <div
+            className="absolute -top-1.5 z-10 h-0 w-0 border-x-[5px] border-x-transparent border-t-[6px] border-t-foreground transition-[left] duration-500 ease-out motion-reduce:transition-none"
+            style={{ left: `clamp(0px, calc(${s}% - 5px), calc(100% - 10px))` }}
+            aria-hidden
+          />
+        ) : null}
       </div>
       {size !== "sm" ? (
         <div className="mt-2 grid grid-cols-5 gap-1 text-center font-mono text-[10px] tabular-nums text-muted-foreground">

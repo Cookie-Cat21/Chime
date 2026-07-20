@@ -4,44 +4,21 @@ import {
   AppetiteBandBadge,
   AppetiteMeter,
 } from "@/components/appetite/appetite-meter";
-import { type AppetiteDay } from "@/lib/api/appetite";
+import { AreaSpark, toneFromSeries } from "@/components/kit/area-spark";
 import { NfaInline } from "@/components/nfa-inline";
+import { type AppetiteDay } from "@/lib/api/appetite";
 import { cn } from "@/lib/utils";
 
 function AppetiteMiniSpark({ historyAsc }: { historyAsc: AppetiteDay[] }) {
-  const series = historyAsc.slice(-60);
+  const series = historyAsc.slice(-60).map((d) => d.score);
   if (series.length < 2) return null;
-  const scores = series.map((d) => d.score);
-  const min = Math.min(...scores);
-  const max = Math.max(...scores);
-  const span = max !== min ? max - min : 1;
-  const w = 180;
-  const h = 44;
-  const pad = 3;
-  const pts = series
-    .map((d, i) => {
-      const x = pad + (i / (series.length - 1)) * (w - pad * 2);
-      const y = pad + (1 - (d.score - min) / span) * (h - pad * 2);
-      return `${x.toFixed(1)},${y.toFixed(1)}`;
-    })
-    .join(" ");
-  const up = scores[scores.length - 1]! >= scores[0]!;
   return (
-    <svg
-      viewBox={`0 0 ${w} ${h}`}
-      className="h-11 w-full"
-      role="img"
-      aria-label={`Appetite spark, ${series.length} sessions`}
-    >
-      <polyline
-        fill="none"
-        stroke={up ? "oklch(0.45 0.08 185)" : "oklch(0.5 0.1 25)"}
-        strokeWidth="1.75"
-        strokeLinejoin="round"
-        strokeLinecap="round"
-        points={pts}
-      />
-    </svg>
+    <AreaSpark
+      values={series}
+      tone={toneFromSeries(series)}
+      heightClass="h-11"
+      ariaLabel={`Appetite spark, ${series.length} sessions`}
+    />
   );
 }
 

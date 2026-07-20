@@ -55,15 +55,15 @@ export function IndexStrip({
         return (
           <li
             key={item.code}
-            className="min-w-0 overflow-hidden rounded-lg border border-border/80 bg-muted/20"
+            className="min-w-0 overflow-hidden rounded-xl border border-border/80 bg-background shadow-[0_1px_0_oklch(0.9_0.006_250_/_0.55)]"
           >
-            <div className="flex flex-wrap items-end justify-between gap-2 px-3 pt-3">
+            <div className="flex flex-wrap items-end justify-between gap-2 px-3.5 pt-3.5">
               <div className="min-w-0">
-                <p className="text-xs font-medium tracking-wide text-muted-foreground uppercase">
+                <p className="text-[10px] font-semibold tracking-[0.12em] text-muted-foreground uppercase">
                   {item.name}
                 </p>
-                <div className="mt-1 flex flex-wrap items-center gap-2">
-                  <span className="font-mono text-lg font-semibold tabular-nums tracking-tight">
+                <div className="mt-1.5 flex flex-wrap items-center gap-2">
+                  <span className="font-display text-xl font-semibold tabular-nums tracking-tight">
                     {formatNumber(item.value)}
                   </span>
                   <ChangeBadge changePct={item.change_pct} />
@@ -71,18 +71,19 @@ export function IndexStrip({
               </div>
             </div>
             {hasChart ? (
-              <div className="mt-2 px-2 pb-2">
+              <div className="mt-2 px-2.5 pb-2.5">
                 <ExpandablePriceChart
                   symbol={item.code}
                   seriesKind="index"
                   points={ticks}
                   initialBars={bars.length >= 2 ? bars : null}
                   initialRange="3M"
+                  compact
                   className="w-full max-w-none"
                 />
               </div>
             ) : (
-              <p className="px-3 pb-3 pt-2 text-xs text-muted-foreground">
+              <p className="px-3.5 pb-3.5 pt-2 text-xs text-muted-foreground">
                 Path history not loaded yet for this index.
               </p>
             )}

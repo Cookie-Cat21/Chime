@@ -28,6 +28,7 @@ import {
 import { isSafeClientApiPath } from "@/lib/api/client-fetch";
 import { toFiniteNumber } from "@/lib/api/finite-number";
 import { formatCompactNumber, formatNumber, formatPct } from "@/lib/format";
+import { cn } from "@/lib/utils";
 
 type Point = { ts: string | null; price: number | null | undefined };
 
@@ -52,6 +53,11 @@ export function ExpandablePriceChart({
   initialRange = "3M",
   /** ``indexes`` uses ``/api/v1/indexes/{code}/…`` (ASPI / S&P SL20). */
   seriesKind = "symbol",
+  /**
+   * Overview / strip: shorter candles, icon expand, no redundant "Index chart"
+   * chrome — keeps ASPI/SL20 cards from looking like broken mini terminals.
+   */
+  compact = false,
 }: {
   symbol: string;
   points: Point[];
@@ -64,6 +70,7 @@ export function ExpandablePriceChart({
   initialBars?: DailyBarPoint[] | null;
   initialRange?: ChartRangeKey;
   seriesKind?: "symbol" | "index";
+  compact?: boolean;
 }) {
   const titleId = useId();
   const forecastToggleId = useId();
@@ -434,42 +441,61 @@ export function ExpandablePriceChart({
   return (
     <div className={className ?? "relative w-full"}>
       <div className="relative">
-        <div className="mb-1.5 flex flex-wrap items-center justify-between gap-2">
-          <p className="text-xs font-medium tracking-wide text-muted-foreground uppercase">
-            {seriesKind === "index" ? "Index chart" : "Price chart"}
-            {heroFrom && heroTo ? (
-              <span className="ml-2 font-mono font-normal normal-case tracking-normal tabular-nums text-muted-foreground/80">
-                {heroFrom} → {heroTo}
-              </span>
-            ) : null}
-          </p>
+        <div
+          className={cn(
+            "flex flex-wrap items-center justify-between gap-2",
+            compact ? "mb-1" : "mb-1.5",
+          )}
+        >
+          {compact ? (
+            <p className="font-mono text-[10px] tabular-nums text-muted-foreground">
+              {heroFrom && heroTo ? `${heroFrom} → ${heroTo}` : "Path"}
+            </p>
+          ) : (
+            <p className="text-xs font-medium tracking-wide text-muted-foreground uppercase">
+              {seriesKind === "index" ? "Index chart" : "Price chart"}
+              {heroFrom && heroTo ? (
+                <span className="ml-2 font-mono font-normal normal-case tracking-normal tabular-nums text-muted-foreground/80">
+                  {heroFrom} → {heroTo}
+                </span>
+              ) : null}
+            </p>
+          )}
           <button
             type="button"
             ref={triggerRef}
             data-testid="expand-chart"
-            className="inline-flex h-8 items-center gap-1.5 rounded-md border border-border/70 bg-background px-3 text-xs font-medium text-muted-foreground transition-colors hover:border-border hover:text-foreground"
+            className={
+              compact
+                ? "inline-flex size-7 items-center justify-center rounded-md border border-border/60 bg-background text-muted-foreground transition-colors hover:border-border hover:text-foreground"
+                : "inline-flex h-8 items-center gap-1.5 rounded-md border border-border/70 bg-background px-3 text-xs font-medium text-muted-foreground transition-colors hover:border-border hover:text-foreground"
+            }
             onClick={() => setOpen(true)}
             aria-haspopup="dialog"
             aria-expanded={open}
             title="Expand chart"
+            aria-label="Expand chart ranges"
           >
             <Maximize2 className="size-3.5" aria-hidden />
-            <span>Expand ranges</span>
+            {compact ? null : <span>Expand ranges</span>}
           </button>
         </div>
         {compactBars && compactBars.length >= 2 ? (
           <CandlestickChart
             bars={compactBars}
-            maxCandles={HERO_DISPLAY_CANDLES}
+            maxCandles={compact ? 56 : HERO_DISPLAY_CANDLES}
             fitWidth
-            chartHeight={220}
+            maxSlot={compact ? 9 : undefined}
+            chartHeight={compact ? 148 : 220}
             variant={seriesKind === "index" ? "close" : "auto"}
             footnote={
-              compactDaily
-                ? seriesKind === "index"
-                  ? "Close→close candles · expand for ranges · research only"
-                  : "Daily OHLC · expand for ranges · research only"
-                : "Intraday from stored ticks · research only"
+              compact
+                ? undefined
+                : compactDaily
+                  ? seriesKind === "index"
+                    ? "Close→close candles · expand for ranges · research only"
+                    : "Daily OHLC · expand for ranges · research only"
+                  : "Intraday from stored ticks · research only"
             }
           />
         ) : (
