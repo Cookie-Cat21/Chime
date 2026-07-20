@@ -1554,11 +1554,11 @@ class Storage:
             if isinstance(summary, str) and summary.strip()
             else "no summary"
         )
-        det: str | None
-        if isinstance(detail, str) and detail.strip():
-            det = detail.strip()[:512]
-        else:
-            det = None
+        det = (
+            detail.strip()[:512]
+            if isinstance(detail, str) and detail.strip()
+            else None
+        )
         async with self._pool.connection() as conn:
             await conn.execute(
                 """
