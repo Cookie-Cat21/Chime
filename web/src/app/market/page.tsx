@@ -3,9 +3,10 @@ import { redirect } from "next/navigation";
 
 import { AppNav } from "@/components/app-nav";
 import { EmptyState } from "@/components/empty-state";
-import { ChangeBadge } from "@/components/kit/change-badge";
 import { MoversBarList } from "@/components/kit/movers-bar-list";
+import { SectorHeatStrip } from "@/components/kit/sector-heat-strip";
 import { BrowseTable } from "@/components/market/browse-table";
+import { MarketingNav } from "@/components/marketing/marketing-nav";
 import { NfaFooter } from "@/components/nfa-footer";
 import { NfaInline } from "@/components/nfa-inline";
 import { PageHeader } from "@/components/page-header";
@@ -27,7 +28,7 @@ import { toNonNegativeSafeInt, toSafePositiveInt } from "@/lib/api/safe-int";
 import { serverApiGet } from "@/lib/api/server-fetch";
 import { normalizeSymbol } from "@/lib/api/symbol";
 import { toIso } from "@/lib/api/time";
-import { requirePageSession } from "@/lib/auth/page-session";
+import { optionalPageSession } from "@/lib/auth/page-session";
 
 /** Exported for regression contract — used by movers a11y copy. */
 export function changeDirectionSr(pct: number | null): string {
@@ -225,7 +226,8 @@ export default async function MarketPage({
     has_eps?: string | string[];
   }>;
 }) {
-  await requirePageSession();
+  const session = await optionalPageSession();
+  const signedIn = session != null;
   const sp = await searchParams;
   // Sanitize before any reflection (input defaultValue) or API round-trip.
   const q = normalizeMarketQuery(sp.q);
@@ -299,7 +301,7 @@ export default async function MarketPage({
 
   return (
     <div className="flex min-h-full flex-1 flex-col bg-background">
-      <AppNav active="/market" />
+      {signedIn ? <AppNav active="/market" /> : <MarketingNav />}
       <main
         id="main-content"
         tabIndex={-1}
@@ -321,6 +323,18 @@ export default async function MarketPage({
             />
           }
         />
+        {!signedIn ? (
+          <p className="mt-3 text-sm text-muted-foreground" role="status">
+            Public browse —{" "}
+            <Link
+              href="/login"
+              className="underline underline-offset-4 hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring/50 focus-visible:outline-none"
+            >
+              sign in
+            </Link>{" "}
+            to add watchlist items and alert rules.
+          </p>
+        ) : null}
 
         <form
           className="mt-6 flex flex-wrap gap-2"
@@ -416,12 +430,21 @@ export default async function MarketPage({
             </h2>
             <p className="mt-1 text-sm text-muted-foreground">
               Largest daily % moves from the latest snapshots.{" "}
-              <Link
-                href="/watchlist"
-                className="underline underline-offset-4 hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring/50 focus-visible:outline-none"
-              >
-                Add via watchlist
-              </Link>
+              {signedIn ? (
+                <Link
+                  href="/watchlist"
+                  className="underline underline-offset-4 hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring/50 focus-visible:outline-none"
+                >
+                  Add via watchlist
+                </Link>
+              ) : (
+                <Link
+                  href="/login"
+                  className="underline underline-offset-4 hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring/50 focus-visible:outline-none"
+                >
+                  Sign in to watchlist
+                </Link>
+              )}
               .
             </p>
             <div className="mt-4 flex flex-col gap-6 sm:flex-row sm:gap-10">
@@ -450,38 +473,13 @@ export default async function MarketPage({
               Sectors
             </h2>
             <p className="mt-1 text-sm text-muted-foreground">
-              CSE sector index change from the latest poll — tap a chip above to
-              filter the table.
+              CSE sector index change from the latest poll — soft heat strip,
+              not a trading terminal board. Use the chips above to filter the
+              table.
             </p>
-            {(sectorItems ?? []).length === 0 ? (
-              <p className="mt-3 text-sm text-muted-foreground" role="status">
-                No sector data yet.
-              </p>
-            ) : (
-              <ul
-                className="mt-4 divide-y divide-border/60"
-                aria-labelledby="sectors-heading"
-              >
-                {(sectorItems ?? []).map((item) => (
-                  <li
-                    key={item.sector_id}
-                    className="flex items-center justify-between gap-2 py-2"
-                  >
-                    <Link
-                      href={browseHref("", 1, { sector: item.name, hasEps })}
-                      className="min-w-0 truncate text-sm text-foreground underline-offset-4 hover:underline focus-visible:ring-2 focus-visible:ring-ring/50 focus-visible:outline-none"
-                      title={item.name}
-                    >
-                      {item.name}
-                    </Link>
-                    <ChangeBadge
-                      changePct={item.change_pct}
-                      className="shrink-0"
-                    />
-                  </li>
-                ))}
-              </ul>
-            )}
+            <div className="mt-4">
+              <SectorHeatStrip items={sectorItems} />
+            </div>
           </section>
         ) : null}
 

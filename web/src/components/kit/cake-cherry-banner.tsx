@@ -47,7 +47,9 @@ export function CakeCherryBanner() {
         <span className="font-medium text-foreground">Dash is the cake.</span>{" "}
         Browse and manage rules here.{" "}
         <span className="font-medium text-foreground">Telegram is the cherry</span>{" "}
-        — you get the ping when a rule fires, even with this tab closed.{" "}
+        — you get the ping when a rule fires, even with this tab closed. Many CSE
+        tools still keep price alerts browser-open-only; koel pushes to Telegram
+        instead.{" "}
         <Link
           href="/alerts"
           className="underline underline-offset-4 hover:text-foreground"

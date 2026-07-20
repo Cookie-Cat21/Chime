@@ -10,7 +10,10 @@ import { cn } from "@/lib/utils";
 /** Public-only chrome — not the dash AppNav. */
 export function MarketingNav() {
   const pathname = usePathname();
+  const onMarket =
+    pathname === "/market" || (pathname?.startsWith("/market/") ?? false);
   const onPricing = pathname === "/pricing";
+  const onLearn = pathname === "/learn";
   const onBlog = pathname === "/blog" || (pathname?.startsWith("/blog/") ?? false);
   const onLegal = pathname?.startsWith("/legal/") ?? false;
 
@@ -29,6 +32,16 @@ export function MarketingNav() {
           className="flex items-center gap-4 text-sm text-muted-foreground"
         >
           <Link
+            href="/market"
+            aria-current={onMarket ? "page" : undefined}
+            className={cn(
+              "hover:text-foreground",
+              onMarket && "font-medium text-foreground underline underline-offset-4",
+            )}
+          >
+            Browse
+          </Link>
+          <Link
             href="/#how-it-works"
             className={cn(
               "hidden hover:text-foreground sm:inline",
@@ -38,10 +51,20 @@ export function MarketingNav() {
             How it works
           </Link>
           <Link
+            href="/learn"
+            aria-current={onLearn ? "page" : undefined}
+            className={cn(
+              "hover:text-foreground",
+              onLearn && "font-medium text-foreground underline underline-offset-4",
+            )}
+          >
+            Learn
+          </Link>
+          <Link
             href="/pricing"
             aria-current={onPricing ? "page" : undefined}
             className={cn(
-              "hover:text-foreground",
+              "hidden hover:text-foreground sm:inline",
               onPricing && "font-medium text-foreground underline underline-offset-4",
             )}
           >

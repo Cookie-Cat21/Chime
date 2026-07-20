@@ -32,7 +32,7 @@ const FAQ = [
     id: "tracker",
     question: "Is koel a CSE Tracker Pro clone?",
     answer:
-      "No. koel is Telegram-first CSE alerting with a thin management dash. Portfolio, tax, screener, and heavy TA stay out of scope.",
+      "No. Tracker Pro covers portfolio and charts well; its price alerts are browser-open-only. koel’s wedge is Telegram push when a rule fires — plus a thin dash for watchlists and rules. Portfolio, tax, screener, and heavy TA stay out of scope.",
   },
   {
     id: "fires",
@@ -117,7 +117,7 @@ export default async function HomePage() {
                 )}
               </Button>
               <Button asChild variant="outline" size="lg">
-                <Link href="/login">Open the dash</Link>
+                <Link href="/market">Browse market</Link>
               </Button>
             </div>
           </div>

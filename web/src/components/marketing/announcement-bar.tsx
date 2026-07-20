@@ -13,7 +13,7 @@ const STORAGE_KEY = "koel_announce_dismissed_v1";
  * Market-hours / Telegram push copy (not cookie/promo chrome).
  */
 export function AnnouncementBar({
-  message = "Market hours 09:30–14:30 SLT · Telegram push even if the tab is closed.",
+  message = "Browser-tab alerts need the tab open · koel pings Telegram when a rule fires.",
   href = "/#how-it-works",
   linkLabel = "How it works",
 }: {

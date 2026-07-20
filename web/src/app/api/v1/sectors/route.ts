@@ -11,7 +11,7 @@ import { toSafePositiveInt } from "@/lib/api/safe-int";
 import { normalizeSymbol } from "@/lib/api/symbol";
 import { toIso } from "@/lib/api/time";
 import { jsonError, jsonOk } from "@/lib/auth/errors";
-import { requireSession } from "@/lib/auth/guard";
+import { optionalSession } from "@/lib/auth/guard";
 import { getPool } from "@/lib/db";
 
 export const runtime = "nodejs";
@@ -42,12 +42,12 @@ function toSafeSectorId(raw: unknown): number | null {
 
 /**
  * GET /api/v1/sectors — thin read of latest CSE sector index rows from Postgres.
- * Populated only when poller runs with SECTORS_INGEST=1. Session required;
- * CSRF not required (safe GET). No cse.lk. Not a screener / heatmap.
+ * Populated only when poller runs with SECTORS_INGEST=1. Session optional
+ * (public market data); CSRF not required (safe GET). No cse.lk.
+ * Not a screener / heatmap.
  */
 export async function GET(request: NextRequest) {
-  const gated = await requireSession(request);
-  if (!gated.ok) return gated.response;
+  await optionalSession(request);
 
   try {
     const pool = getPool();
