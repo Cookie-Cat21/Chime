@@ -1,8 +1,9 @@
 import Link from "next/link";
 import type { ReactNode } from "react";
 
-import { AreaSpark, toneFromSeries } from "@/components/kit/area-spark";
+import { AreaSpark } from "@/components/kit/area-spark";
 import type { MacroSeriesCard } from "@/lib/api/macro-context";
+import { toneFromSeries } from "@/lib/area-spark";
 import { cn } from "@/lib/utils";
 
 function fmtValue(n: number | null, digits = 2): string {
@@ -40,7 +41,11 @@ export function ContextModule({
   const tone =
     delta == null ? "flat" : delta > 0 ? "up" : delta < 0 ? "down" : "flat";
   const historyValues = card.history.map((p) => p.value);
-  const sparkTone = toneFromSeries(historyValues, true);
+  // Prefer session Δ tone so the spark matches the badge (not first→last).
+  const sparkTone =
+    tone === "up" || tone === "down"
+      ? tone
+      : toneFromSeries(historyValues, true);
 
   return (
     <section
@@ -118,15 +123,19 @@ export function ContextModule({
       </div>
 
       {latest && historyValues.length >= 2 ? (
-        <div className="border-t border-border/50 bg-muted/20 px-2 pt-2 pb-1">
+        <div className="border-t border-border/50 bg-muted/15 px-3 pt-2.5 pb-2.5">
           <AreaSpark
             values={historyValues}
-            tone={sparkTone}
-            heightClass="h-16"
+            tone={sparkTone === "flat" ? "neutral" : sparkTone}
+            heightClass="h-[4.5rem]"
             ariaLabel={`${title} history spark`}
           />
         </div>
-      ) : null}
+      ) : (
+        <div className="mt-auto border-t border-dashed border-border/50 px-4 py-3">
+          <div className="h-10 rounded-md bg-muted/40" aria-hidden />
+        </div>
+      )}
     </section>
   );
 }

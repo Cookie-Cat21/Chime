@@ -52,12 +52,16 @@ export function IndexStrip({
         const bars = barsByCode?.[item.code] ?? [];
         const ticks = ticksByCode?.[item.code] ?? [];
         const hasChart = bars.length >= 2 || ticks.length >= 2;
+        const pathFrom =
+          bars.length >= 2 ? bars[0]!.trade_date : null;
+        const pathTo =
+          bars.length >= 2 ? bars[bars.length - 1]!.trade_date : null;
         return (
           <li
             key={item.code}
             className="min-w-0 overflow-hidden rounded-xl border border-border/80 bg-background shadow-[0_1px_0_oklch(0.9_0.006_250_/_0.55)]"
           >
-            <div className="flex flex-wrap items-end justify-between gap-2 px-3.5 pt-3.5">
+            <div className="flex flex-wrap items-end justify-between gap-2 px-3.5 pt-3.5 pb-1">
               <div className="min-w-0">
                 <p className="text-[10px] font-semibold tracking-[0.12em] text-muted-foreground uppercase">
                   {item.name}
@@ -68,10 +72,15 @@ export function IndexStrip({
                   </span>
                   <ChangeBadge changePct={item.change_pct} />
                 </div>
+                {pathFrom && pathTo ? (
+                  <p className="mt-1 font-mono text-[10px] tabular-nums text-muted-foreground">
+                    {pathFrom} → {pathTo}
+                  </p>
+                ) : null}
               </div>
             </div>
             {hasChart ? (
-              <div className="mt-2 px-2.5 pb-2.5">
+              <div className="px-2 pb-2.5">
                 <ExpandablePriceChart
                   symbol={item.code}
                   seriesKind="index"

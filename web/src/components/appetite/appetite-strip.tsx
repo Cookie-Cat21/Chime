@@ -4,7 +4,7 @@ import {
   AppetiteBandBadge,
   AppetiteMeter,
 } from "@/components/appetite/appetite-meter";
-import { AreaSpark, toneFromSeries } from "@/components/kit/area-spark";
+import { AreaSpark } from "@/components/kit/area-spark";
 import { NfaInline } from "@/components/nfa-inline";
 import { type AppetiteDay } from "@/lib/api/appetite";
 import { cn } from "@/lib/utils";
@@ -15,7 +15,6 @@ function AppetiteMiniSpark({ historyAsc }: { historyAsc: AppetiteDay[] }) {
   return (
     <AreaSpark
       values={series}
-      tone={toneFromSeries(series)}
       heightClass="h-11"
       ariaLabel={`Appetite spark, ${series.length} sessions`}
     />

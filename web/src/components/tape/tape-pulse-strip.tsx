@@ -6,7 +6,7 @@ import {
   AppetiteMeter,
 } from "@/components/appetite/appetite-meter";
 import { AppetiteTracker } from "@/components/appetite/appetite-tracker";
-import { AreaSpark, toneFromSeries } from "@/components/kit/area-spark";
+import { AreaSpark } from "@/components/kit/area-spark";
 import { NfaInline } from "@/components/nfa-inline";
 import {
   BAND_LABEL,
@@ -255,8 +255,8 @@ export function TapePulseStrip({
             appetiteLatest && appetiteScores.length >= 2 ? (
               <AreaSpark
                 values={appetiteScores}
-                tone={toneFromSeries(appetiteScores)}
-                heightClass="h-12"
+                tone="neutral"
+                heightClass="h-14"
                 ariaLabel="Appetite score spark, last 60 sessions"
               />
             ) : null
@@ -311,8 +311,7 @@ export function TapePulseStrip({
             foreignNets.filter((v) => v != null).length >= 2 ? (
               <AreaSpark
                 values={foreignNets}
-                tone={toneFromSeries(foreignNets)}
-                heightClass="h-12"
+                heightClass="h-14"
                 ariaLabel="Foreign net spark"
               />
             ) : null

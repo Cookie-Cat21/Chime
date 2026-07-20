@@ -2,30 +2,30 @@
 
 import { useId } from "react";
 
+import {
+  AREA_SPARK_STROKE,
+  toneFromSeries,
+  type AreaSparkTone,
+} from "@/lib/area-spark";
 import { cn } from "@/lib/utils";
-
-export type AreaSparkTone = "up" | "down" | "flat" | "neutral";
-
-const STROKE: Record<AreaSparkTone, string> = {
-  up: "oklch(0.45 0.1 160)",
-  down: "oklch(0.52 0.12 25)",
-  flat: "oklch(0.55 0.02 250)",
-  neutral: "oklch(0.48 0.04 250)",
-};
 
 /**
  * Tremor-style area spark — gradient fill + polyline.
- * Keeps aspect ratio (no horizontal stretch) so short series don't look broken.
+ * Client-only (gradient id). Prefer computing tone via ``toneFromSeries``
+ * from ``@/lib/area-spark`` in server components.
  */
 export function AreaSpark({
   values,
-  tone = "neutral",
+  tone,
+  upIsGood = true,
   className,
   heightClass = "h-14",
   ariaLabel,
 }: {
   values: Array<number | null | undefined>;
+  /** When omitted, inferred from first→last move. */
   tone?: AreaSparkTone;
+  upIsGood?: boolean;
   className?: string;
   heightClass?: string;
   ariaLabel?: string;
@@ -49,6 +49,7 @@ export function AreaSpark({
     );
   }
 
+  const resolved = tone ?? toneFromSeries(series, upIsGood);
   const min = Math.min(...series);
   const max = Math.max(...series);
   const span = max !== min ? max - min : 1;
@@ -69,7 +70,7 @@ export function AreaSpark({
     `${coords[coords.length - 1]!.x.toFixed(1)},${(h - padY).toFixed(1)}`,
   ].join(" ");
 
-  const stroke = STROKE[tone];
+  const stroke = AREA_SPARK_STROKE[resolved];
   const last = coords[coords.length - 1]!;
 
   return (
@@ -82,7 +83,8 @@ export function AreaSpark({
     >
       <defs>
         <linearGradient id={gid} x1="0" y1="0" x2="0" y2="1">
-          <stop offset="0%" stopColor={stroke} stopOpacity="0.28" />
+          <stop offset="0%" stopColor={stroke} stopOpacity="0.38" />
+          <stop offset="55%" stopColor={stroke} stopOpacity="0.12" />
           <stop offset="100%" stopColor={stroke} stopOpacity="0" />
         </linearGradient>
       </defs>
@@ -105,19 +107,4 @@ export function AreaSpark({
       />
     </svg>
   );
-}
-
-/** Infer tone from first→last move. */
-export function toneFromSeries(
-  values: Array<number | null | undefined>,
-  upIsGood = true,
-): AreaSparkTone {
-  const series = values.filter(
-    (v): v is number => typeof v === "number" && Number.isFinite(v),
-  );
-  if (series.length < 2) return "flat";
-  const up = series[series.length - 1]! >= series[0]!;
-  if (Math.abs(series[series.length - 1]! - series[0]!) < 1e-9) return "flat";
-  const good = upIsGood ? up : !up;
-  return good ? "up" : "down";
 }
