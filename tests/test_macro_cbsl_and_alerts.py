@@ -123,3 +123,31 @@ def test_regime_skips_when_inputs_missing() -> None:
         usdlkr_change_pct=None,
     )
     assert events == []
+
+
+def test_regime_skips_non_market_and_bad_threshold() -> None:
+    bad = _rule(AlertType.APPETITE_BAND, 0, 31)
+    non_market = AlertRule(
+        id=32,
+        user_id=1,
+        telegram_id=9001,
+        symbol="JKH.N0000",
+        type=AlertType.APPETITE_BAND,
+        threshold=50,
+        active=True,
+        created_at=datetime.now(tz=UTC),
+    )
+    events = evaluate_market_regime_rules(
+        rules=[bad, non_market],
+        appetite_score=99,
+    )
+    assert events == []
+
+
+def test_book_pressure_ask_side_copy() -> None:
+    events = evaluate_market_regime_rules(
+        rules=[_rule(AlertType.BOOK_PRESSURE, 5, 41)],
+        book_imbalance_pct=-12.0,
+    )
+    assert len(events) == 1
+    assert "ask-heavy" in events[0].trigger

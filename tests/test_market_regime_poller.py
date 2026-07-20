@@ -79,6 +79,43 @@ async def test_poll_market_regime_noop_without_rules() -> None:
 
 
 @pytest.mark.asyncio
+async def test_poll_market_regime_rules_load_failure() -> None:
+    storage = MagicMock()
+    storage.active_rules_for_symbols = AsyncMock(side_effect=RuntimeError("db down"))
+    p = _poller(storage)
+    fired, ok = await p._poll_market_regime()
+    assert fired == []
+    assert ok is False
+
+
+@pytest.mark.asyncio
+async def test_poll_market_regime_full_inputs_fires_oil() -> None:
+    rule = _rule(AlertType.OIL_MOVE, 1.0, 303)
+    storage = MagicMock()
+    storage.active_rules_for_symbols = AsyncMock(return_value=[rule])
+    storage.list_market_appetite_daily = AsyncMock(return_value=[])
+    storage.list_market_daily_summary = AsyncMock(return_value=[])
+    storage.market_book_imbalance_pct = AsyncMock(return_value=None)
+    storage.latest_macro_change_pct = AsyncMock(
+        side_effect=lambda sid: 3.5 if sid == "BRENT_SPOT" else None
+    )
+    storage.market_regime_fired_keys = AsyncMock(return_value=set())
+    p = _poller(storage)
+    claimed: list[AlertEvent] = []
+
+    async def _claim(event: AlertEvent, *, disarm: bool = False) -> bool:
+        claimed.append(event)
+        return True
+
+    p._claim_and_send = _claim  # type: ignore[method-assign]
+    fired, ok = await p._poll_market_regime()
+    assert ok is True
+    assert len(fired) == 1
+    assert fired[0].type == AlertType.OIL_MOVE
+    assert len(claimed) == 1
+
+
+@pytest.mark.asyncio
 async def test_poll_market_regime_respects_fired_keys() -> None:
     rule = _rule(AlertType.FOREIGN_FLOW, 1_000_000, 202)
     day_key_prefix = f"foreign_flow:{rule.id}:"
