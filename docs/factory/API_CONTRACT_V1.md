@@ -570,6 +570,47 @@ on publish time:
 Dash `GET .../disclosures` still returns stored rows for display; gating above
 applies only to alert fire paths.
 
+### `GET /api/v1/symbols/{symbol}/dividends`
+
+Session required. Postgres only — dividend-labelled disclosures + last snapshot
+for the dash calculator. Never calls cse.lk. Does **not** persist share
+quantities (ephemeral UI input only).
+
+**Response** `200`
+
+```json
+{
+  "symbol": "JKH.N0000",
+  "name": "JOHN KEELLS HOLDINGS PLC",
+  "last_price": 22.5,
+  "last_ts": "2026-07-18T08:55:00+00:00",
+  "suggested_dps": 2.0,
+  "items": [
+    {
+      "id": 55,
+      "title": "DIVIDEND ANNOUNCEMENT",
+      "category": "CASH DIVIDEND",
+      "url": "https://www.cse.lk/…",
+      "pdf_url": "https://cdn.cse.lk/…",
+      "published_at": "2026-07-10T04:00:00+00:00",
+      "brief": "Interim dividend…",
+      "parsed": {
+        "dps": 2.0,
+        "xd": "12.Feb.2019",
+        "payment": "22.Feb.2019",
+        "dates_tbd": false
+      }
+    }
+  ]
+}
+```
+
+`suggested_dps` is the newest parseable DPS from title/category/ready brief, else
+`null`. `parsed.*` dates are best-effort strings from filing text — omit/null when
+absent; `dates_tbd` is true when CSE labelled dates to be notified.
+
+Errors: `400 invalid_symbol` · `404 not_found` · `503 degraded`.
+
 ---
 
 ## Sectors (optional ingest)
@@ -628,6 +669,7 @@ Not a sector heatmap/screener — list + performance fields only.
 | `GET` | `/api/v1/symbols/{symbol}` | Slim `last` |
 | `GET` | `/api/v1/symbols/{symbol}/snapshots` | |
 | `GET` | `/api/v1/symbols/{symbol}/disclosures` | `id` + `external_id` + brief fields (`brief_status` includes `processing`) |
+| `GET` | `/api/v1/symbols/{symbol}/dividends` | Dividend filings + `suggested_dps` + parsed XD/pay hints |
 | `GET` | `/api/v1/sectors` | Optional sector board (Postgres; needs `SECTORS_INGEST=1`) |
 
 ---
