@@ -8,7 +8,7 @@ import {
 } from "@/lib/api/appetite";
 import { cn } from "@/lib/utils";
 
-/** Tremor-style day-of-band color ticks (last N sessions). */
+/** Tremor Tracker — equal-width session ticks, no wrap (avoids broken rows). */
 export function AppetiteTracker({
   historyAsc,
   limit = 90,
@@ -27,18 +27,29 @@ export function AppetiteTracker({
     );
   }
 
+  const first = rows[0]!.trade_date;
+  const last = rows[rows.length - 1]!.trade_date;
+
   return (
-    <div className={cn("w-full space-y-2", className)}>
+    <div className={cn("w-full space-y-2.5", className)}>
+      <div className="flex items-baseline justify-between gap-2">
+        <p className="text-[10px] font-semibold uppercase tracking-[0.12em] text-muted-foreground">
+          Session bands
+        </p>
+        <p className="font-mono text-[10px] tabular-nums text-muted-foreground">
+          {first} → {last}
+        </p>
+      </div>
       <ul
-        className="flex flex-wrap gap-0.5"
+        className="flex h-3.5 w-full gap-px sm:h-4"
         aria-label={`Appetite band for last ${rows.length} sessions`}
       >
         {rows.map((d) => (
-          <li key={d.trade_date}>
+          <li key={d.trade_date} className="min-w-0 flex-1">
             <button
               type="button"
               title={`${d.trade_date}: ${Math.round(d.score)} — ${BAND_LABEL[d.band]}`}
-              className="block h-3.5 w-2 rounded-[2px] outline-none focus-visible:ring-2 focus-visible:ring-ring"
+              className="block h-full w-full rounded-[1.5px] outline-none transition-opacity hover:opacity-90 focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1"
               style={{ backgroundColor: BAND_ZONE_COLOR[d.band] }}
               aria-label={`${d.trade_date}: ${Math.round(d.score)} ${BAND_LABEL[d.band]}`}
             />
@@ -49,7 +60,7 @@ export function AppetiteTracker({
         {APPETITE_BANDS.map((b) => (
           <li key={b} className="inline-flex items-center gap-1.5">
             <span
-              className="inline-block h-2.5 w-2.5 rounded-[2px]"
+              className="inline-block size-2.5 shrink-0 rounded-[2px]"
               style={{ backgroundColor: BAND_ZONE_COLOR[b] }}
               aria-hidden
             />

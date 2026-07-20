@@ -60,6 +60,11 @@ export const ALERT_TYPES = [
   "rev_yoy_below",
   "profit_yoy_above",
   "profit_yoy_below",
+  "appetite_band",
+  "foreign_flow",
+  "book_pressure",
+  "usdlkr_move",
+  "oil_move",
 ] as const;
 
 /** Alert types that require a positive numeric threshold (parity Python). */
@@ -83,6 +88,11 @@ export const THRESHOLD_ALERT_TYPES = [
   "rev_yoy_below",
   "profit_yoy_above",
   "profit_yoy_below",
+  "appetite_band",
+  "foreign_flow",
+  "book_pressure",
+  "usdlkr_move",
+  "oil_move",
 ] as const;
 
 /** Notice-style alerts with no threshold (bid/ask need thresholds — not here). */
@@ -92,6 +102,23 @@ export const NOTICE_ALERT_TYPES = [
   "non_compliance",
   "halt",
 ] as const;
+
+/** Market-wide regime alerts — symbol forced to MARKET (parity bot). */
+export const MARKET_FORCE_ALERT_TYPES = [
+  "halt",
+  "appetite_band",
+  "foreign_flow",
+  "book_pressure",
+  "usdlkr_move",
+  "oil_move",
+] as const;
+
+export function isMarketForceAlertType(value: unknown): boolean {
+  return (
+    typeof value === "string" &&
+    (MARKET_FORCE_ALERT_TYPES as readonly string[]).includes(value)
+  );
+}
 
 /** Filing-metrics / YoY types — feature-flagged at fire time. */
 export const FILING_METRICS_ALERT_TYPES = [

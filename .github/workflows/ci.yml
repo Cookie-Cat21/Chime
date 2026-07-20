@@ -20,7 +20,7 @@ jobs:
           cache: pip
 
       - name: Install package + dev deps
-        run: pip install -e ".[dev]"
+        run: pip install -e ".[dev,macro]"
 
       # Factory loop status (E2-O03) — must exit 0; board/scoreboard smoke.
       # Keep ruff/mypy/pytest below; scripts/factory/verify.sh is the local
@@ -72,7 +72,7 @@ jobs:
           cache: pip
 
       - name: Install package + dev deps
-        run: pip install -e ".[dev]"
+        run: pip install -e ".[dev,macro]"
 
       # Applies db/migrations/*.sql in sorted order (incl. 007 briefs status,
       # 008 sectors). Presence pinned in tests/test_migrate_idempotent.py.

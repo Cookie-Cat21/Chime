@@ -52,6 +52,11 @@ export function ExpandablePriceChart({
   initialRange = "3M",
   /** ``indexes`` uses ``/api/v1/indexes/{code}/…`` (ASPI / S&P SL20). */
   seriesKind = "symbol",
+  /**
+   * Overview / strip: shorter candles, icon expand, no redundant "Index chart"
+   * chrome — keeps ASPI/SL20 cards from looking like broken mini terminals.
+   */
+  compact = false,
 }: {
   symbol: string;
   points: Point[];
@@ -64,6 +69,7 @@ export function ExpandablePriceChart({
   initialBars?: DailyBarPoint[] | null;
   initialRange?: ChartRangeKey;
   seriesKind?: "symbol" | "index";
+  compact?: boolean;
 }) {
   const titleId = useId();
   const forecastToggleId = useId();
@@ -434,42 +440,63 @@ export function ExpandablePriceChart({
   return (
     <div className={className ?? "relative w-full"}>
       <div className="relative">
-        <div className="mb-1.5 flex flex-wrap items-center justify-between gap-2">
-          <p className="text-xs font-medium tracking-wide text-muted-foreground uppercase">
-            {seriesKind === "index" ? "Index chart" : "Price chart"}
-            {heroFrom && heroTo ? (
-              <span className="ml-2 font-mono font-normal normal-case tracking-normal tabular-nums text-muted-foreground/80">
-                {heroFrom} → {heroTo}
-              </span>
-            ) : null}
-          </p>
+        {compact ? null : (
+          <div className="mb-1.5 flex flex-wrap items-center justify-between gap-2">
+            <p className="text-xs font-medium tracking-wide text-muted-foreground uppercase">
+              {seriesKind === "index" ? "Index chart" : "Price chart"}
+              {heroFrom && heroTo ? (
+                <span className="ml-2 font-mono font-normal normal-case tracking-normal tabular-nums text-muted-foreground/80">
+                  {heroFrom} → {heroTo}
+                </span>
+              ) : null}
+            </p>
+            <button
+              type="button"
+              ref={triggerRef}
+              data-testid="expand-chart"
+              className="inline-flex h-8 items-center gap-1.5 rounded-md border border-border/70 bg-background px-3 text-xs font-medium text-muted-foreground transition-colors hover:border-border hover:text-foreground"
+              onClick={() => setOpen(true)}
+              aria-haspopup="dialog"
+              aria-expanded={open}
+              title="Expand chart"
+              aria-label="Expand chart ranges"
+            >
+              <Maximize2 className="size-3.5" aria-hidden />
+              <span>Expand ranges</span>
+            </button>
+          </div>
+        )}
+        {compact ? (
           <button
             type="button"
             ref={triggerRef}
             data-testid="expand-chart"
-            className="inline-flex h-8 items-center gap-1.5 rounded-md border border-border/70 bg-background px-3 text-xs font-medium text-muted-foreground transition-colors hover:border-border hover:text-foreground"
+            className="absolute top-2 left-2 z-10 inline-flex size-7 items-center justify-center rounded-md border border-border/70 bg-background/90 text-muted-foreground shadow-sm backdrop-blur-sm transition-colors hover:border-border hover:text-foreground"
             onClick={() => setOpen(true)}
             aria-haspopup="dialog"
             aria-expanded={open}
             title="Expand chart"
+            aria-label="Expand chart ranges"
           >
             <Maximize2 className="size-3.5" aria-hidden />
-            <span>Expand ranges</span>
           </button>
-        </div>
+        ) : null}
         {compactBars && compactBars.length >= 2 ? (
           <CandlestickChart
             bars={compactBars}
-            maxCandles={HERO_DISPLAY_CANDLES}
+            maxCandles={compact ? 64 : HERO_DISPLAY_CANDLES}
             fitWidth
-            chartHeight={220}
+            chartHeight={compact ? 176 : 220}
+            minimal={compact}
             variant={seriesKind === "index" ? "close" : "auto"}
             footnote={
-              compactDaily
-                ? seriesKind === "index"
-                  ? "Close→close candles · expand for ranges · research only"
-                  : "Daily OHLC · expand for ranges · research only"
-                : "Intraday from stored ticks · research only"
+              compact
+                ? ""
+                : compactDaily
+                  ? seriesKind === "index"
+                    ? "Close→close candles · expand for ranges · research only"
+                    : "Daily OHLC · expand for ranges · research only"
+                  : "Intraday from stored ticks · research only"
             }
           />
         ) : (

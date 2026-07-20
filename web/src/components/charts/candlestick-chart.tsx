@@ -63,6 +63,11 @@ export function CandlestickChart({
    * close-only series; ``ohlc`` always draws stored candles.
    */
   variant = "auto",
+  /**
+   * Overview strip: fewer Y ticks, no last-close pill clash, no verbose
+   * footnote — charts stay readable in half-width cards.
+   */
+  minimal = false,
 }: {
   bars: DailyBarPoint[];
   className?: string;
@@ -73,9 +78,11 @@ export function CandlestickChart({
   pack?: boolean;
   maxSlot?: number;
   chartHeight?: number;
+  /** Pass ``""`` to hide the caption; omit for the default research line. */
   footnote?: string;
   maxCandles?: number;
   variant?: "auto" | "ohlc" | "close";
+  minimal?: boolean;
 }) {
   const frameRef = useRef<HTMLDivElement | null>(null);
   const [frame, setFrame] = useState({ w: 720, h: chartHeight ?? 280 });
@@ -164,11 +171,13 @@ export function CandlestickChart({
   const lineMode =
     !closeCandles && priceMax < 3 && preFlat / bars.length >= 0.4;
 
-  const padL = fitWidth ? 8 : 14;
-  const padR = fitWidth ? 52 : 56;
+  const padL = fitWidth ? (minimal ? 6 : 8) : 14;
+  // ASPI-scale labels need ~56–62px; too-tight padR clips "23,199.57".
+  const padR = fitWidth ? (minimal ? 58 : 52) : 56;
   // Tighter chrome so the OHLC band owns the frame (especially hero).
-  const padT = fitWidth ? 10 : 20;
-  const padB = fitWidth ? 28 : 40;
+  // minimal keeps extra top pad so the high label isn't clipped by the card.
+  const padT = fitWidth ? (minimal ? 16 : 10) : 20;
+  const padB = fitWidth ? (minimal ? 24 : 28) : 40;
 
   const fc =
     showForecast && forecastPrices
@@ -263,7 +272,9 @@ export function CandlestickChart({
   const aria = closeCandles
     ? `Close-to-close candles from ${first.trade_date} to ${last.trade_date}, close ${formatNumber(last.close)}`
     : `Candles from ${first.trade_date} to ${last.trade_date}, close ${formatNumber(last.close)}`;
-  const gridYs = [0, 0.25, 0.5, 0.75, 1].map((t) => padT + t * plotH);
+  const gridFracs = minimal ? [0, 0.5, 1] : [0, 0.25, 0.5, 0.75, 1];
+  const gridYs = gridFracs.map((t) => padT + t * plotH);
+  const lastCloseY = yFor(last.close);
 
   // Pre-pass direction counts — mutating during the JSX map breaks React
   // render purity (react-hooks/immutability). Same epsilon per mode.
@@ -367,30 +378,51 @@ export function CandlestickChart({
           role="img"
           aria-label={aria}
         >
-          {gridYs.map((gy, gi) => (
-            <g key={gy}>
-              <line
-                x1={drawPadL}
-                x2={w - drawPadR}
-                y1={gy}
-                y2={gy}
-                className="stroke-border/55"
-                strokeWidth={1}
-              />
-              <text
-                x={w - 12}
-                y={gy}
-                textAnchor="end"
-                dominantBaseline={
-                  gi === 0 ? "hanging" : gi === gridYs.length - 1 ? "auto" : "middle"
-                }
-                className="fill-muted-foreground"
-                fontSize={13}
-              >
-                {formatNumber(max - (gi / (gridYs.length - 1)) * span)}
-              </text>
-            </g>
-          ))}
+          {gridYs.map((gy, gi) => {
+            // Skip a grid price label that would collide with the last-close tag.
+            const labelClash =
+              minimal && Math.abs(gy - lastCloseY) < 14;
+            return (
+              <g key={gy}>
+                <line
+                  x1={drawPadL}
+                  x2={w - drawPadR}
+                  y1={gy}
+                  y2={gy}
+                  className="stroke-border/45"
+                  strokeWidth={1}
+                />
+                {labelClash ? null : (
+                  <text
+                    x={w - 10}
+                    y={
+                      gi === 0
+                        ? gy + (minimal ? 10 : 0)
+                        : gi === gridYs.length - 1
+                          ? gy - (minimal ? 2 : 0)
+                          : gy
+                    }
+                    textAnchor="end"
+                    dominantBaseline={
+                      gi === 0
+                        ? minimal
+                          ? "middle"
+                          : "hanging"
+                        : gi === gridYs.length - 1
+                          ? "auto"
+                          : "middle"
+                    }
+                    className="fill-muted-foreground"
+                    fontSize={minimal ? 11 : 13}
+                  >
+                    {formatNumber(
+                      max - (gi / (gridYs.length - 1)) * span,
+                    )}
+                  </text>
+                )}
+              </g>
+            );
+          })}
           {lineMode ? (
             <>
               <path
@@ -468,7 +500,7 @@ export function CandlestickChart({
               // height so candles stay readable after fit-width packing.
               const naturalH = Math.abs(yC - yO);
               const minBody = closeCandles
-                ? Math.max(6, slot * 0.22)
+                ? Math.max(minimal ? 3.5 : 6, slot * (minimal ? 0.14 : 0.22))
                 : 5;
               const bodyH = up || down
                 ? Math.max(naturalH, minBody)
@@ -514,49 +546,53 @@ export function CandlestickChart({
             <line
               x1={drawPadL}
               x2={w - drawPadR}
-              y1={yFor(last.close)}
-              y2={yFor(last.close)}
+              y1={lastCloseY}
+              y2={lastCloseY}
               strokeDasharray="3 3"
               strokeWidth={1}
               className={
                 last.close > candleBodyOpen(bars, n - 1)
-                  ? "stroke-emerald-600/60 dark:stroke-emerald-400/60"
+                  ? "stroke-emerald-600/55 dark:stroke-emerald-400/55"
                   : last.close < candleBodyOpen(bars, n - 1)
-                    ? "stroke-rose-600/60 dark:stroke-rose-400/60"
-                    : "stroke-muted-foreground/50"
+                    ? "stroke-rose-600/55 dark:stroke-rose-400/55"
+                    : "stroke-muted-foreground/45"
               }
             />
-            <rect
-              x={w - drawPadR + 2}
-              y={yFor(last.close) - 10}
-              width={padR - 6}
-              height={20}
-              rx={5}
-              className={
-                last.close > candleBodyOpen(bars, n - 1)
-                  ? "fill-emerald-500/15"
-                  : last.close < candleBodyOpen(bars, n - 1)
-                    ? "fill-rose-500/15"
-                    : "fill-muted"
-              }
-            />
-            <text
-              x={w - 12}
-              y={yFor(last.close)}
-              textAnchor="end"
-              dominantBaseline="middle"
-              fontSize={13}
-              fontWeight={600}
-              className={
-                last.close > candleBodyOpen(bars, n - 1)
-                  ? "fill-emerald-700 dark:fill-emerald-300"
-                  : last.close < candleBodyOpen(bars, n - 1)
-                    ? "fill-rose-700 dark:fill-rose-300"
-                    : "fill-muted-foreground"
-              }
-            >
-              {formatNumber(last.close)}
-            </text>
+            {minimal ? null : (
+              <>
+                <rect
+                  x={w - drawPadR + 2}
+                  y={lastCloseY - 10}
+                  width={padR - 6}
+                  height={20}
+                  rx={5}
+                  className={
+                    last.close > candleBodyOpen(bars, n - 1)
+                      ? "fill-emerald-500/15"
+                      : last.close < candleBodyOpen(bars, n - 1)
+                        ? "fill-rose-500/15"
+                        : "fill-muted"
+                  }
+                />
+                <text
+                  x={w - 12}
+                  y={lastCloseY}
+                  textAnchor="end"
+                  dominantBaseline="middle"
+                  fontSize={13}
+                  fontWeight={600}
+                  className={
+                    last.close > candleBodyOpen(bars, n - 1)
+                      ? "fill-emerald-700 dark:fill-emerald-300"
+                      : last.close < candleBodyOpen(bars, n - 1)
+                        ? "fill-rose-700 dark:fill-rose-300"
+                        : "fill-muted-foreground"
+                  }
+                >
+                  {formatNumber(last.close)}
+                </text>
+              </>
+            )}
           </g>
           {fc.length > 0 ? (
             <polyline
@@ -577,29 +613,31 @@ export function CandlestickChart({
           ) : null}
           <text
             x={drawPadL}
-            y={h - 14}
+            y={h - (minimal ? 10 : 14)}
             className="fill-muted-foreground"
-            fontSize={13}
+            fontSize={minimal ? 10 : 13}
           >
             {first.trade_date}
           </text>
           <text
             x={w - drawPadR}
-            y={h - 14}
+            y={h - (minimal ? 10 : 14)}
             textAnchor="end"
             className="fill-muted-foreground"
-            fontSize={13}
+            fontSize={minimal ? 10 : 13}
           >
             {last.trade_date}
           </text>
         </svg>
       </div>
-      <p className="mt-2.5 shrink-0 text-xs leading-relaxed text-muted-foreground">
-        {footnote ??
-          (closeCandles
-            ? `${rawBars.length} daily closes${aggregated ? ` → ${n} candles` : ""} · close→close (CSE has no session OHLC) · ${formatNumber(first.close)} → ${formatNumber(last.close)} · research only`
-            : `${rawBars.length} sessions${aggregated ? ` → ${n} ${lineMode ? "points" : "candles"}` : ""}${lineMode ? " · step path (tick-size name)" : ""} · close ${formatNumber(first.close)} → ${formatNumber(last.close)} · ${upN} up / ${downN} down${flatN ? ` / ${flatN} flat` : ""}${fc.length > 0 ? " · dashed = model forecast" : ""} · research only`)}
-      </p>
+      {footnote === "" || (minimal && footnote == null) ? null : (
+        <p className="mt-2.5 shrink-0 text-xs leading-relaxed text-muted-foreground">
+          {footnote ??
+            (closeCandles
+              ? `${rawBars.length} daily closes${aggregated ? ` → ${n} candles` : ""} · close→close (CSE has no session OHLC) · ${formatNumber(first.close)} → ${formatNumber(last.close)} · research only`
+              : `${rawBars.length} sessions${aggregated ? ` → ${n} ${lineMode ? "points" : "candles"}` : ""}${lineMode ? " · step path (tick-size name)" : ""} · close ${formatNumber(first.close)} → ${formatNumber(last.close)} · ${upN} up / ${downN} down${flatN ? ` / ${flatN} flat` : ""}${fc.length > 0 ? " · dashed = model forecast" : ""} · research only`)}
+        </p>
+      )}
     </div>
   );
 }

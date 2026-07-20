@@ -1302,6 +1302,189 @@ class Storage:
             ).fetchall()
         return [dict(r) for r in rows]
 
+    async def upsert_macro_series(self, rows: list[dict[str, Any]]) -> int:
+        """Upsert macro_series points. Returns rows attempted."""
+        if not rows:
+            return 0
+        n = 0
+        async with self._pool.connection() as conn:
+            for row in rows:
+                if not isinstance(row, dict):
+                    continue
+                source = row.get("source")
+                series_id = row.get("series_id")
+                ts = row.get("ts")
+                value = row.get("value")
+                if not isinstance(source, str) or not source.strip():
+                    continue
+                if not isinstance(series_id, str) or not series_id.strip():
+                    continue
+                if not isinstance(ts, datetime):
+                    continue
+                if isinstance(value, bool) or not isinstance(value, int | float):
+                    continue
+                if not math.isfinite(float(value)):
+                    continue
+                unit = row.get("unit")
+                if unit is not None and not isinstance(unit, str):
+                    unit = None
+                as_of = row.get("as_of_date")
+                if not isinstance(as_of, date):
+                    as_of = None
+                attribution = row.get("attribution")
+                if not isinstance(attribution, str):
+                    attribution = ""
+                raw_hash = row.get("raw_hash")
+                if raw_hash is not None and not isinstance(raw_hash, str):
+                    raw_hash = None
+                await conn.execute(
+                    """
+                    INSERT INTO macro_series (
+                        source, series_id, ts, value, unit, as_of_date,
+                        attribution, raw_hash
+                    ) VALUES (
+                        %(source)s, %(series_id)s, %(ts)s, %(value)s, %(unit)s,
+                        %(as_of_date)s, %(attribution)s, %(raw_hash)s
+                    )
+                    ON CONFLICT (source, series_id, ts) DO UPDATE SET
+                        value = EXCLUDED.value,
+                        unit = EXCLUDED.unit,
+                        as_of_date = EXCLUDED.as_of_date,
+                        attribution = EXCLUDED.attribution,
+                        raw_hash = EXCLUDED.raw_hash,
+                        ingested_at = now()
+                    """,
+                    {
+                        "source": source.strip(),
+                        "series_id": series_id.strip(),
+                        "ts": ts,
+                        "value": float(value),
+                        "unit": unit,
+                        "as_of_date": as_of,
+                        "attribution": attribution,
+                        "raw_hash": raw_hash,
+                    },
+                )
+                n += 1
+        return n
+
+    async def latest_macro_change_pct(self, series_id: str) -> float | None:
+        """Day-over-day % change for the two newest ``macro_series`` points.
+
+        Uses ``as_of_date`` when present else ``ts`` date. Returns None when
+        fewer than two finite points exist.
+        """
+        if not isinstance(series_id, str) or not series_id.strip():
+            return None
+        sid = series_id.strip()
+        async with self._pool.connection() as conn:
+            rows = await (
+                await conn.execute(
+                    """
+                    SELECT value, as_of_date, ts
+                    FROM macro_series
+                    WHERE series_id = %s
+                    ORDER BY COALESCE(as_of_date, (ts AT TIME ZONE 'UTC')::date) DESC,
+                             ts DESC
+                    LIMIT 2
+                    """,
+                    (sid,),
+                )
+            ).fetchall()
+        vals: list[float] = []
+        for row in _as_rows(rows):
+            raw = row.get("value")
+            if isinstance(raw, bool) or not isinstance(raw, int | float):
+                continue
+            if not math.isfinite(float(raw)):
+                continue
+            vals.append(float(raw))
+        if len(vals) < 2:
+            return None
+        newest, prior = vals[0], vals[1]
+        if prior == 0:
+            return None
+        return ((newest / prior) - 1.0) * 100.0
+
+    async def market_book_imbalance_pct(
+        self, *, lookback_minutes: int = 24 * 60
+    ) -> float | None:
+        """Market-wide public book imbalance % from recent order_book_snapshots.
+
+        Mirrors web ``queryTapePulse``: sum bids/asks across sample, then
+        ``(bids - asks) / (bids + asks) * 100``. None when no usable rows.
+        """
+        mins = lookback_minutes
+        if (
+            not isinstance(mins, int)
+            or isinstance(mins, bool)
+            or mins < 30
+        ):
+            mins = 24 * 60
+        mins = min(mins, 7 * 24 * 60)
+        async with self._pool.connection() as conn:
+            rows = await (
+                await conn.execute(
+                    """
+                    SELECT total_bids, total_asks
+                    FROM order_book_snapshots
+                    WHERE ts >= now() - (%s::text || ' minutes')::interval
+                    ORDER BY ts DESC
+                    LIMIT 500
+                    """,
+                    (str(mins),),
+                )
+            ).fetchall()
+        sum_bids = 0.0
+        sum_asks = 0.0
+        sample_n = 0
+        for row in _as_rows(rows):
+            bids = row.get("total_bids")
+            asks = row.get("total_asks")
+            if isinstance(bids, bool) or not isinstance(bids, int | float):
+                continue
+            if isinstance(asks, bool) or not isinstance(asks, int | float):
+                continue
+            if not math.isfinite(float(bids)) or not math.isfinite(float(asks)):
+                continue
+            if float(bids) <= 0 or float(asks) <= 0:
+                continue
+            sum_bids += float(bids)
+            sum_asks += float(asks)
+            sample_n += 1
+        total = sum_bids + sum_asks
+        if sample_n <= 0 or total <= 0:
+            return None
+        return ((sum_bids - sum_asks) / total) * 100.0
+
+    async def market_regime_fired_keys(self) -> set[str]:
+        """Event keys already claimed for MARKET regime day-bucket rules."""
+        async with self._pool.connection() as conn:
+            rows = await (
+                await conn.execute(
+                    """
+                    SELECT al.event_key
+                    FROM alert_log al
+                    JOIN alert_rules ar ON ar.id = al.rule_id
+                    WHERE ar.symbol = 'MARKET'
+                      AND (
+                        al.event_key LIKE 'appetite_band:%%'
+                        OR al.event_key LIKE 'foreign_flow:%%'
+                        OR al.event_key LIKE 'book_pressure:%%'
+                        OR al.event_key LIKE 'usdlkr_move:%%'
+                        OR al.event_key LIKE 'oil_move:%%'
+                      )
+                      AND al.event_key IS NOT NULL
+                    """
+                )
+            ).fetchall()
+        out: set[str] = set()
+        for row in _as_rows(rows):
+            key = row.get("event_key")
+            if isinstance(key, str) and key.strip():
+                out.add(key.strip())
+        return out
+
     async def list_symbols_missing_sector(self) -> list[str]:
         """Symbols with daily bars (or any stock) missing a sector label."""
         async with self._pool.connection() as conn:

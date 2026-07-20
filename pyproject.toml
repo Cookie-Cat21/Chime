@@ -35,6 +35,9 @@ hybrid = [
     "yfinance>=0.2",
     "pandas>=2",
 ]
+macro = [
+    "openpyxl>=3.1",
+]
 
 [project.scripts]
 chime = "chime.__main__:main"
@@ -99,6 +102,7 @@ module = [
     "telegram.*",
     "pypdf.*",
     "fitz",
+    "openpyxl",
     "sklearn.*",
     "numpy.*",
     "yfinance.*",
