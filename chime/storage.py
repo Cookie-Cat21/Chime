@@ -1368,6 +1368,123 @@ class Storage:
                 n += 1
         return n
 
+    async def latest_macro_change_pct(self, series_id: str) -> float | None:
+        """Day-over-day % change for the two newest ``macro_series`` points.
+
+        Uses ``as_of_date`` when present else ``ts`` date. Returns None when
+        fewer than two finite points exist.
+        """
+        if not isinstance(series_id, str) or not series_id.strip():
+            return None
+        sid = series_id.strip()
+        async with self._pool.connection() as conn:
+            rows = await (
+                await conn.execute(
+                    """
+                    SELECT value, as_of_date, ts
+                    FROM macro_series
+                    WHERE series_id = %s
+                    ORDER BY COALESCE(as_of_date, (ts AT TIME ZONE 'UTC')::date) DESC,
+                             ts DESC
+                    LIMIT 2
+                    """,
+                    (sid,),
+                )
+            ).fetchall()
+        vals: list[float] = []
+        for row in _as_rows(rows):
+            raw = row.get("value")
+            if isinstance(raw, bool) or not isinstance(raw, int | float):
+                continue
+            if not math.isfinite(float(raw)):
+                continue
+            vals.append(float(raw))
+        if len(vals) < 2:
+            return None
+        newest, prior = vals[0], vals[1]
+        if prior == 0:
+            return None
+        return ((newest / prior) - 1.0) * 100.0
+
+    async def market_book_imbalance_pct(
+        self, *, lookback_minutes: int = 24 * 60
+    ) -> float | None:
+        """Market-wide public book imbalance % from recent order_book_snapshots.
+
+        Mirrors web ``queryTapePulse``: sum bids/asks across sample, then
+        ``(bids - asks) / (bids + asks) * 100``. None when no usable rows.
+        """
+        mins = lookback_minutes
+        if (
+            not isinstance(mins, int)
+            or isinstance(mins, bool)
+            or mins < 30
+        ):
+            mins = 24 * 60
+        mins = min(mins, 7 * 24 * 60)
+        async with self._pool.connection() as conn:
+            rows = await (
+                await conn.execute(
+                    """
+                    SELECT total_bids, total_asks
+                    FROM order_book_snapshots
+                    WHERE ts >= now() - (%s::text || ' minutes')::interval
+                    ORDER BY ts DESC
+                    LIMIT 500
+                    """,
+                    (str(mins),),
+                )
+            ).fetchall()
+        sum_bids = 0.0
+        sum_asks = 0.0
+        sample_n = 0
+        for row in _as_rows(rows):
+            bids = row.get("total_bids")
+            asks = row.get("total_asks")
+            if isinstance(bids, bool) or not isinstance(bids, int | float):
+                continue
+            if isinstance(asks, bool) or not isinstance(asks, int | float):
+                continue
+            if not math.isfinite(float(bids)) or not math.isfinite(float(asks)):
+                continue
+            if float(bids) <= 0 or float(asks) <= 0:
+                continue
+            sum_bids += float(bids)
+            sum_asks += float(asks)
+            sample_n += 1
+        total = sum_bids + sum_asks
+        if sample_n <= 0 or total <= 0:
+            return None
+        return ((sum_bids - sum_asks) / total) * 100.0
+
+    async def market_regime_fired_keys(self) -> set[str]:
+        """Event keys already claimed for MARKET regime day-bucket rules."""
+        async with self._pool.connection() as conn:
+            rows = await (
+                await conn.execute(
+                    """
+                    SELECT al.event_key
+                    FROM alert_log al
+                    JOIN alert_rules ar ON ar.id = al.rule_id
+                    WHERE ar.symbol = 'MARKET'
+                      AND (
+                        al.event_key LIKE 'appetite_band:%%'
+                        OR al.event_key LIKE 'foreign_flow:%%'
+                        OR al.event_key LIKE 'book_pressure:%%'
+                        OR al.event_key LIKE 'usdlkr_move:%%'
+                        OR al.event_key LIKE 'oil_move:%%'
+                      )
+                      AND al.event_key IS NOT NULL
+                    """
+                )
+            ).fetchall()
+        out: set[str] = set()
+        for row in _as_rows(rows):
+            key = row.get("event_key")
+            if isinstance(key, str) and key.strip():
+                out.add(key.strip())
+        return out
+
     async def list_symbols_missing_sector(self) -> list[str]:
         """Symbols with daily bars (or any stock) missing a sector label."""
         async with self._pool.connection() as conn:

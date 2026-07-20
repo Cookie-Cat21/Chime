@@ -1,40 +1,65 @@
 "use client";
 
-import { useId } from "react";
+import { useId, useMemo } from "react";
 
+import { useChartHover } from "@/hooks/use-chart-hover";
 import {
   AREA_SPARK_STROKE,
   toneFromSeries,
   type AreaSparkTone,
 } from "@/lib/area-spark";
+import { buildChartGeometry } from "@/lib/chart-geometry";
 import { cn } from "@/lib/utils";
 
 /**
  * Tremor-style area spark — gradient fill + polyline.
- * Client-only (gradient id). Prefer computing tone via ``toneFromSeries``
- * from ``@/lib/area-spark`` in server components.
+ * Set ``interactive`` for hover crosshair, tooltip, and arrow-key scrubbing.
  */
 export function AreaSpark({
   values,
+  labels,
   tone,
   upIsGood = true,
   className,
   heightClass = "h-14",
   ariaLabel,
+  interactive = false,
+  formatValue,
 }: {
   values: Array<number | null | undefined>;
-  /** When omitted, inferred from first→last move. */
+  /** Optional per-point labels (dates) aligned to finite ``values`` after filter. */
+  labels?: Array<string | null | undefined>;
   tone?: AreaSparkTone;
   upIsGood?: boolean;
   className?: string;
   heightClass?: string;
   ariaLabel?: string;
+  interactive?: boolean;
+  formatValue?: (n: number) => string;
 }) {
   const gid = useId();
-  const series = values.filter(
-    (v): v is number => typeof v === "number" && Number.isFinite(v),
-  );
-  if (series.length < 2) {
+  // Zip value+label before dropping non-finite so hover dates stay aligned.
+  const paired = useMemo(() => {
+    const out: { value: number; label: string | null }[] = [];
+    for (let i = 0; i < values.length; i++) {
+      const v = values[i];
+      if (typeof v !== "number" || !Number.isFinite(v)) continue;
+      const lab = labels?.[i];
+      out.push({
+        value: v,
+        label: typeof lab === "string" && lab.trim() ? lab.trim() : null,
+      });
+    }
+    return out;
+  }, [values, labels]);
+  const series = useMemo(() => paired.map((p) => p.value), [paired]);
+  const alignedLabels = useMemo(() => paired.map((p) => p.label), [paired]);
+  const geo = useMemo(() => buildChartGeometry(series), [series]);
+
+  const points = geo?.points ?? [];
+  const hover = useChartHover(points, geo?.width ?? 240, interactive && points.length >= 2);
+
+  if (!geo || series.length < 2) {
     return (
       <div
         className={cn(
@@ -50,61 +75,135 @@ export function AreaSpark({
   }
 
   const resolved = tone ?? toneFromSeries(series, upIsGood);
-  const min = Math.min(...series);
-  const max = Math.max(...series);
-  const span = max !== min ? max - min : 1;
-  const w = 240;
-  const h = 64;
-  const padX = 2;
-  const padY = 4;
-
-  const coords = series.map((v, i) => {
-    const x = padX + (i / (series.length - 1)) * (w - padX * 2);
-    const y = padY + (1 - (v - min) / span) * (h - padY * 2);
-    return { x, y };
-  });
-  const linePts = coords.map((c) => `${c.x.toFixed(1)},${c.y.toFixed(1)}`).join(" ");
-  const areaPts = [
-    `${coords[0]!.x.toFixed(1)},${(h - padY).toFixed(1)}`,
-    ...coords.map((c) => `${c.x.toFixed(1)},${c.y.toFixed(1)}`),
-    `${coords[coords.length - 1]!.x.toFixed(1)},${(h - padY).toFixed(1)}`,
-  ].join(" ");
-
   const stroke = AREA_SPARK_STROKE[resolved];
-  const last = coords[coords.length - 1]!;
+  const last = geo.points[geo.points.length - 1]!;
+  const active =
+    interactive && hover.activeIndex != null
+      ? geo.points[hover.activeIndex] ?? null
+      : null;
+  const activeLabel =
+    interactive && hover.activeIndex != null
+      ? alignedLabels[hover.activeIndex] ?? null
+      : null;
+  const fmt = formatValue ?? ((n: number) => {
+    if (Math.abs(n) >= 1e6) return `${(n / 1e6).toFixed(2)}M`;
+    if (Math.abs(n) >= 1e3) return n.toLocaleString(undefined, { maximumFractionDigits: 1 });
+    return Number.isInteger(n) ? String(n) : n.toFixed(2);
+  });
+
+  const tipText = active
+    ? `${activeLabel ? `${activeLabel} · ` : ""}${fmt(active.value)}`
+    : null;
+
+  // Keep tooltip inside the viewBox (avoid clipping at edges).
+  const tipX = active
+    ? Math.min(Math.max(active.x, 36), geo.width - 36)
+    : 0;
+  const tipY = active ? Math.max(14, active.y - 10) : 0;
 
   return (
-    <svg
-      viewBox={`0 0 ${w} ${h}`}
-      preserveAspectRatio="none"
-      className={cn("w-full", heightClass, className)}
-      role="img"
-      aria-label={ariaLabel ?? `Sparkline, ${series.length} points`}
-    >
-      <defs>
-        <linearGradient id={gid} x1="0" y1="0" x2="0" y2="1">
-          <stop offset="0%" stopColor={stroke} stopOpacity="0.38" />
-          <stop offset="55%" stopColor={stroke} stopOpacity="0.12" />
-          <stop offset="100%" stopColor={stroke} stopOpacity="0" />
-        </linearGradient>
-      </defs>
-      <polygon fill={`url(#${gid})`} points={areaPts} />
-      <polyline
-        fill="none"
-        stroke={stroke}
-        strokeWidth="2"
-        strokeLinejoin="round"
-        strokeLinecap="round"
-        vectorEffect="non-scaling-stroke"
-        points={linePts}
-      />
-      <circle
-        cx={last.x}
-        cy={last.y}
-        r="2.5"
-        fill={stroke}
-        vectorEffect="non-scaling-stroke"
-      />
-    </svg>
+    <div className={cn("relative w-full", className)}>
+      <svg
+        ref={hover.svgRef}
+        viewBox={`0 0 ${geo.width} ${geo.height}`}
+        preserveAspectRatio="none"
+        className={cn(
+          "w-full outline-none",
+          heightClass,
+          interactive &&
+            "cursor-crosshair rounded-sm focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1",
+        )}
+        role="img"
+        aria-label={
+          ariaLabel ??
+          `Sparkline, ${series.length} points${
+            interactive ? ". Arrow keys scrub points." : ""
+          }`
+        }
+        tabIndex={interactive ? 0 : undefined}
+        onPointerMove={interactive ? hover.onPointerMove : undefined}
+        onPointerLeave={interactive ? hover.onPointerLeave : undefined}
+        onPointerDown={interactive ? hover.onPointerDown : undefined}
+        onKeyDown={interactive ? hover.onKeyDown : undefined}
+        onFocus={interactive ? hover.onFocus : undefined}
+        onBlur={interactive ? hover.onBlur : undefined}
+      >
+        <defs>
+          <linearGradient id={gid} x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0%" stopColor={stroke} stopOpacity="0.38" />
+            <stop offset="55%" stopColor={stroke} stopOpacity="0.12" />
+            <stop offset="100%" stopColor={stroke} stopOpacity="0" />
+          </linearGradient>
+        </defs>
+        <polygon fill={`url(#${gid})`} points={geo.areaPoints} />
+        <polyline
+          fill="none"
+          stroke={stroke}
+          strokeWidth="2"
+          strokeLinejoin="round"
+          strokeLinecap="round"
+          vectorEffect="non-scaling-stroke"
+          points={geo.linePoints}
+        />
+        <circle
+          cx={last.x}
+          cy={last.y}
+          r="2.5"
+          fill={stroke}
+          vectorEffect="non-scaling-stroke"
+          opacity={active ? 0.35 : 1}
+        />
+        {active ? (
+          <g aria-hidden>
+            <line
+              x1={active.x}
+              x2={active.x}
+              y1={geo.padY}
+              y2={geo.height - geo.padY}
+              stroke={stroke}
+              strokeWidth="1"
+              strokeDasharray="2 2"
+              vectorEffect="non-scaling-stroke"
+              opacity={0.7}
+            />
+            <circle
+              cx={active.x}
+              cy={active.y}
+              r="3.5"
+              fill={stroke}
+              stroke="oklch(1 0 0)"
+              strokeWidth="1.25"
+              vectorEffect="non-scaling-stroke"
+            />
+            <rect
+              x={tipX - 34}
+              y={tipY - 11}
+              width={68}
+              height={14}
+              rx={3}
+              fill="oklch(0.22 0.01 260 / 0.92)"
+            />
+            <text
+              x={tipX}
+              y={tipY}
+              textAnchor="middle"
+              dominantBaseline="middle"
+              fill="oklch(0.98 0.002 250)"
+              fontSize="8"
+              fontFamily="ui-monospace, monospace"
+            >
+              {tipText && tipText.length > 16
+                ? `${tipText.slice(0, 15)}…`
+                : tipText}
+            </text>
+          </g>
+        ) : null}
+      </svg>
+      {interactive ? (
+        <p className="sr-only" aria-live="polite">
+          {tipText ?? "No point selected"}
+        </p>
+      ) : null}
+    </div>
   );
 }

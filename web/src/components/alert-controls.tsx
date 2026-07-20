@@ -41,6 +41,7 @@ import {
   ALERT_TYPES,
   type AlertType,
   isAlertType,
+  isMarketForceAlertType,
   isFilingMetricsAlertType,
   isThresholdAlertType,
   normalizeSymbol,
@@ -60,6 +61,11 @@ const TYPE_OPTIONS: { value: AlertType; label: string }[] = [
   { value: "buy_in", label: "Buy-in board" },
   { value: "non_compliance", label: "Non-compliance" },
   { value: "halt", label: "Market halt (MARKET)" },
+  { value: "appetite_band", label: "Appetite score ≥ (MARKET)" },
+  { value: "foreign_flow", label: "|Foreign net| ≥ LKR (MARKET)" },
+  { value: "book_pressure", label: "|Book imbalance| ≥ % (MARKET)" },
+  { value: "usdlkr_move", label: "|USD/LKR move| ≥ % (MARKET)" },
+  { value: "oil_move", label: "|Brent move| ≥ % (MARKET)" },
   { value: "bid_heavy", label: "Bid-heavy book (×)" },
   { value: "ask_heavy", label: "Ask-heavy book (×)" },
   { value: "eps_above", label: "EPS above" },
@@ -102,6 +108,7 @@ export function AlertCreateForm({
   const [pending, setPending] = useState(false);
 
   const needsThreshold = isThresholdAlertType(type);
+  const marketForced = isMarketForceAlertType(type);
   const showCategory = type === "disclosure";
   const showFilingMetricsNote = isFilingMetricsAlertType(type);
   const thresholdLabel = thresholdFieldLabel(type);
@@ -124,7 +131,7 @@ export function AlertCreateForm({
     try {
       const next: FieldErrors = {};
       let normalized = normalizeSymbol(symbol);
-      if (type === "halt") {
+      if (isMarketForceAlertType(type)) {
         normalized = "MARKET";
         setSymbol("MARKET");
       }
@@ -263,17 +270,33 @@ export function AlertCreateForm({
                 id="alert_symbol"
                 name="symbol"
                 className="h-10 font-mono"
-                placeholder="JKH.N0000"
-                value={symbol}
+                placeholder={marketForced ? "MARKET" : "JKH.N0000"}
+                value={marketForced ? "MARKET" : symbol}
                 onChange={(e) => {
+                  if (marketForced) return;
                   setSymbol(e.target.value);
                   clearField("symbol");
                 }}
+                readOnly={marketForced}
                 autoComplete="off"
                 aria-invalid={errors.symbol ? true : undefined}
-                aria-describedby={errors.symbol ? "alert_form_error" : undefined}
+                aria-describedby={
+                  errors.symbol
+                    ? "alert_form_error"
+                    : marketForced
+                      ? "alert_symbol_market_hint"
+                      : undefined
+                }
                 required
               />
+              {marketForced ? (
+                <p
+                  id="alert_symbol_market_hint"
+                  className="text-[11px] text-muted-foreground"
+                >
+                  Market-wide rule — symbol locked to MARKET.
+                </p>
+              ) : null}
             </div>
             <div className="flex flex-col gap-1.5">
               <Label htmlFor="alert_type">Type</Label>
@@ -284,7 +307,7 @@ export function AlertCreateForm({
                   if (!isAlertType(value)) return;
                   const nextType = value;
                   setType(nextType);
-                  if (nextType === "halt") {
+                  if (isMarketForceAlertType(nextType)) {
                     setSymbol("MARKET");
                     clearField("symbol");
                   }

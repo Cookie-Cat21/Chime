@@ -126,9 +126,11 @@ export function ContextModule({
         <div className="border-t border-border/50 bg-muted/15 px-3 pt-2.5 pb-2.5">
           <AreaSpark
             values={historyValues}
+            labels={card.history.map((p) => p.as_of_date)}
             tone={sparkTone === "flat" ? "neutral" : sparkTone}
             heightClass="h-[4.5rem]"
             ariaLabel={`${title} history spark`}
+            interactive
           />
         </div>
       ) : (

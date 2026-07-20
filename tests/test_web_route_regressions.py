@@ -15,6 +15,7 @@ UNIT_SYMBOLS_MTS = Path(__file__).resolve().parent / "web_symbols_route_unit.mts
 UNIT_MOVERS_MTS = Path(__file__).resolve().parent / "web_movers_route_unit.mts"
 UNIT_DISCLOSURES_MTS = Path(__file__).resolve().parent / "web_disclosures_route_unit.mts"
 UNIT_SPARKLINE_MTS = Path(__file__).resolve().parent / "web_sparkline_finite_unit.mts"
+UNIT_CHART_GEOMETRY_MTS = Path(__file__).resolve().parent / "web_chart_geometry_unit.mts"
 UNIT_PERIOD_TECH_MTS = Path(__file__).resolve().parent / "web_period_tech_unit.mts"
 UNIT_APPETITE_MAX_MTS = Path(__file__).resolve().parent / "web_appetite_max_unit.mts"
 UNIT_GITHUB_ACTIONS_MTS = Path(__file__).resolve().parent / "web_github_actions_health_unit.mts"
@@ -806,6 +807,35 @@ def test_sparkline_finite_points_unit() -> None:
             f"stdout:\n{proc.stdout}\nstderr:\n{proc.stderr}"
         )
     assert "WEB_SPARKLINE_FINITE_UNIT_OK" in proc.stdout
+
+
+def test_chart_geometry_unit() -> None:
+    """Interactive spark primitives: geometry + nearest-index hover math."""
+    assert UNIT_CHART_GEOMETRY_MTS.is_file(), f"missing {UNIT_CHART_GEOMETRY_MTS}"
+    assert (WEB / "src" / "lib" / "chart-geometry.ts").is_file()
+    _require_web_node_modules()
+    npx = _npx()
+    staged = WEB / ".web_chart_geometry_unit.mts"
+    staged.write_text(
+        UNIT_CHART_GEOMETRY_MTS.read_text(encoding="utf-8"), encoding="utf-8"
+    )
+    try:
+        proc = subprocess.run(
+            [npx, "--yes", "tsx", str(staged.name)],
+            cwd=str(WEB),
+            capture_output=True,
+            text=True,
+            check=False,
+            timeout=120,
+        )
+    finally:
+        staged.unlink(missing_ok=True)
+    if proc.returncode != 0:
+        pytest.fail(
+            f".web_chart_geometry_unit.mts failed ({proc.returncode}):\n"
+            f"stdout:\n{proc.stdout}\nstderr:\n{proc.stderr}"
+        )
+    assert "WEB_CHART_GEOMETRY_UNIT_OK" in proc.stdout
 
 
 def test_period_tech_fundamentals_unit() -> None:

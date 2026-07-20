@@ -13,6 +13,7 @@ import asyncio
 import contextlib
 import hashlib
 import json
+import math
 import os
 import random
 import signal
@@ -39,9 +40,11 @@ from chime.briefs.worker import claim_pending_briefs
 from chime.circuit import CircuitOpenError
 from chime.config import Settings
 from chime.domain import (
+    MARKET_REGIME_ALERT_TYPES,
     MARKET_SYMBOL,
     AlertEvent,
     AlertRule,
+    AlertType,
     Disclosure,
     PriceSnapshot,
     format_alert_message,
@@ -49,6 +52,7 @@ from chime.domain import (
 )
 from chime.health import brief_queue_health_hint
 from chime.logging_setup import get_logger
+from chime.macro_alerts import evaluate_market_regime_rules
 from chime.notify import SendResult
 from chime.rules import (
     evaluate_big_print_rules,
@@ -300,6 +304,8 @@ class Poller:
             print_events, print_ok = await self._poll_big_prints()
             notice_events, notice_ok = await self._poll_market_notices()
             book_events, book_ok = await self._poll_order_books()
+            # Postgres-only MARKET tape/context regime (fail-soft).
+            regime_events, _regime_ok = await self._poll_market_regime()
             await self._poll_indexes()
             await self._poll_sectors()
             fired.extend(price_events)
@@ -307,6 +313,7 @@ class Poller:
             fired.extend(print_events)
             fired.extend(notice_events)
             fired.extend(book_events)
+            fired.extend(regime_events)
             symbols = await self.storage.watched_symbols()
             rules = await self.storage.active_rules_for_symbols(symbols) if symbols else []
             # Fail closed — non-enum rule.type used to throw on .value mid tick
@@ -935,6 +942,122 @@ class Poller:
                     fired.append(event)
         return fired, not any_failure
 
+    async def _poll_market_regime(self) -> tuple[list[AlertEvent], bool]:
+        """Evaluate MARKET tape/context regime rules from Postgres only.
+
+        Inputs: latest appetite score, foreign net, book imbalance %, USD/LKR
+        and Brent day-over-day % when ``macro_series`` is populated. Fail-soft
+        when a leg is missing — that type simply does not fire.
+        """
+        try:
+            rules = await self.storage.active_rules_for_symbols([MARKET_SYMBOL])
+        except Exception as exc:
+            log.exception("market_regime_rules_load_failed", error=str(exc))
+            return [], False
+
+        regime_type_values = {
+            t.value for t in (MARKET_REGIME_ALERT_TYPES - {AlertType.HALT})
+        }
+        regime_rules = [
+            r
+            for r in rules
+            if getattr(r.type, "value", r.type) in regime_type_values
+        ]
+        if not regime_rules:
+            return [], True
+
+        appetite_score: float | None = None
+        foreign_net: float | None = None
+        book_imbalance_pct: float | None = None
+        usdlkr_change_pct: float | None = None
+        oil_change_pct: float | None = None
+        ok = True
+
+        try:
+            appetite_rows = await self.storage.list_market_appetite_daily(
+                source="cse"
+            )
+            if appetite_rows:
+                raw = appetite_rows[-1].get("score")
+                if (
+                    not isinstance(raw, bool)
+                    and isinstance(raw, int | float)
+                    and math.isfinite(float(raw))
+                ):
+                    appetite_score = float(raw)
+        except Exception as exc:
+            ok = False
+            log.warning("market_regime_appetite_load_failed", error=str(exc))
+
+        try:
+            summary = await self.storage.list_market_daily_summary()
+            if summary:
+                raw = summary[-1].get("foreign_net")
+                if (
+                    not isinstance(raw, bool)
+                    and isinstance(raw, int | float)
+                    and math.isfinite(float(raw))
+                ):
+                    foreign_net = float(raw)
+        except Exception as exc:
+            ok = False
+            log.warning("market_regime_foreign_load_failed", error=str(exc))
+
+        try:
+            book_imbalance_pct = await self.storage.market_book_imbalance_pct()
+        except Exception as exc:
+            ok = False
+            log.warning("market_regime_book_load_failed", error=str(exc))
+
+        try:
+            usdlkr_change_pct = await self.storage.latest_macro_change_pct(
+                "USD_LKR"
+            )
+        except Exception as exc:
+            ok = False
+            log.warning("market_regime_usdlkr_load_failed", error=str(exc))
+
+        try:
+            oil_change_pct = await self.storage.latest_macro_change_pct(
+                "BRENT_SPOT"
+            )
+        except Exception as exc:
+            ok = False
+            log.warning("market_regime_oil_load_failed", error=str(exc))
+
+        try:
+            fired_keys = await self.storage.market_regime_fired_keys()
+        except Exception as exc:
+            ok = False
+            log.warning("market_regime_fired_keys_failed", error=str(exc))
+            fired_keys = set()
+
+        try:
+            events = evaluate_market_regime_rules(
+                rules=regime_rules,
+                appetite_score=appetite_score,
+                foreign_net=foreign_net,
+                book_imbalance_pct=book_imbalance_pct,
+                usdlkr_change_pct=usdlkr_change_pct,
+                oil_change_pct=oil_change_pct,
+                fired_keys=fired_keys,
+            )
+        except Exception as exc:
+            log.exception("market_regime_evaluate_failed", error=str(exc))
+            return [], False
+
+        fired: list[AlertEvent] = []
+        for event in filter_fireable(events):
+            claimed = await self._claim_and_send(event)
+            if claimed:
+                fired.append(event)
+        if fired:
+            log.info(
+                "market_regime_fired",
+                count=len(fired),
+                types=[getattr(e.type, "value", e.type) for e in fired],
+            )
+        return fired, ok
 
     async def _poll_order_books(self) -> tuple[list[AlertEvent], bool]:
         """Poll public order-book totals for bid_heavy / ask_heavy rules."""

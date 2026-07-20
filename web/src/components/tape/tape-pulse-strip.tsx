@@ -255,9 +255,11 @@ export function TapePulseStrip({
             appetiteLatest && appetiteScores.length >= 2 ? (
               <AreaSpark
                 values={appetiteScores}
+                labels={appetiteHistory.slice(-60).map((d) => d.trade_date)}
                 tone="neutral"
                 heightClass="h-14"
                 ariaLabel="Appetite score spark, last 60 sessions"
+                interactive
               />
             ) : null
           }
@@ -311,8 +313,10 @@ export function TapePulseStrip({
             foreignNets.filter((v) => v != null).length >= 2 ? (
               <AreaSpark
                 values={foreignNets}
+                labels={foreignHistory.map((d) => d.trade_date)}
                 heightClass="h-14"
                 ariaLabel="Foreign net spark"
+                interactive
               />
             ) : null
           }

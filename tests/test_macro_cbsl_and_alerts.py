@@ -92,3 +92,32 @@ def test_day_bucket_dedupe() -> None:
         rules=[rule], appetite_score=90, fired_keys=claimed
     )
     assert second == []
+
+
+def test_usdlkr_and_oil_move_thresholds() -> None:
+    rules = [
+        _rule(AlertType.USDLKR_MOVE, 1.0, 11),
+        _rule(AlertType.OIL_MOVE, 2.0, 12),
+    ]
+    events = evaluate_market_regime_rules(
+        rules=rules,
+        usdlkr_change_pct=-1.5,
+        oil_change_pct=3.25,
+    )
+    types = {e.type for e in events}
+    assert AlertType.USDLKR_MOVE in types
+    assert AlertType.OIL_MOVE in types
+
+
+def test_regime_skips_when_inputs_missing() -> None:
+    events = evaluate_market_regime_rules(
+        rules=[
+            _rule(AlertType.APPETITE_BAND, 50, 21),
+            _rule(AlertType.FOREIGN_FLOW, 1_000_000, 22),
+            _rule(AlertType.USDLKR_MOVE, 1.0, 23),
+        ],
+        appetite_score=None,
+        foreign_net=None,
+        usdlkr_change_pct=None,
+    )
+    assert events == []
