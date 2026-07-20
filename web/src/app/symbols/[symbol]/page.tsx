@@ -672,6 +672,9 @@ export default async function SymbolDetailPage({
           <Button asChild variant="outline" size="sm">
             <Link href={`/graph?symbol=${encoded}`}>Ownership map</Link>
           </Button>
+          <HelpLink topic="ownership-graph" variant="text" className="text-xs">
+            Map help
+          </HelpLink>
           <Button asChild variant="outline" size="sm">
             <Link href="/people">People</Link>
           </Button>

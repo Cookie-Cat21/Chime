@@ -47,6 +47,11 @@ export const HELP_TOPICS: readonly HelpTopic[] = [
         answer:
           "Open any symbol from Browse or Watchlist. That company page shows the quote, chart, returns, tech labels, filing metrics, Book (NAV / P/B / ROE), dividends, price compare, and disclosures.\n\nJump to Company page, Quote chrome, Charts, and the other company topics in Help for field-by-field explainers.",
       },
+      {
+        question: "What does Search / Ctrl K do?",
+        answer:
+          "The Search control (Ctrl/Cmd+K) opens a command palette that looks up CSE symbols from koel’s stocks table and jumps to the company page. Arrow keys + Enter select a result. It is symbol search — not a full-document Help search (use Help topics for that).",
+      },
     ],
   },
   {
@@ -319,6 +324,216 @@ export const HELP_TOPICS: readonly HelpTopic[] = [
       },
     ],
   },
+
+  {
+    id: "overview",
+    title: "Overview home",
+    summary: "KPIs, indexes, tape pulse, watchlist slice, recent fires.",
+    items: [
+      {
+        question: "What is Overview for?",
+        answer:
+          "Signed-in home for CSE snapshots koel already stored: market indexes, tape pulse, a slice of your watchlist and armed rules, upcoming XD on watched names, top movers, and recent Telegram fires.\n\nSet rules here; Telegram remains the push path. Research labels only — not tips.",
+      },
+      {
+        question: "What do the KPI cards mean?",
+        answer:
+          "Watching — how many symbols are on your watchlist (the preview list is capped).\n\nActive rules / Armed — how many of your alert rules are active, and how many are currently armed to fire on the next valid cross.\n\nLast Telegram fire — age of your most recent delivered (or recorded) fire.\n\nSnapshot age — freshest watchlist or index tick in Postgres. Stale home usually means the poller is idle or nothing is watched — see Health.",
+      },
+      {
+        question: "What are Market indexes and Top movers?",
+        answer:
+          "Indexes (ASPI, S&P SL20, and friends) come from poller-stored index snapshots — expand charts when daily path exists.\n\nTop gainers/losers are the latest snapshot % movers (short list). Same family of data as Browse movers — not a recommendation list.",
+      },
+      {
+        question: "What is the XD week strip?",
+        answer:
+          "Upcoming ex-dividend events on symbols you watch, within about the next week on the Colombo calendar. It is a watchlist reminder strip — not a full dividend calendar product. See Dividends for XD vs payment day.",
+      },
+    ],
+  },
+  {
+    id: "tape-pulse",
+    title: "Tape pulse",
+    summary: "Appetite · Foreign net · Book pressure chips.",
+    items: [
+      {
+        question: "What is Tape pulse?",
+        answer:
+          "A three-chip research strip on Overview and Context: session Market Appetite, Foreign net flow, and public Book pressure. Mood and tape diagnostics — not trading tips. Appetite math is under Market Appetite.",
+      },
+      {
+        question: "How is Foreign net shown?",
+        answer:
+          "Latest `foreign_net` from market daily summary (LKR). Δ is today − prior session net when both exist. Purchase / sales / turnover can show a foreign activity share when those fields are present.\n\nEmpty foreign chips mean the summary row is missing — not invented zeros.",
+      },
+      {
+        question: "What do Bid heavy / Ask heavy / Balanced mean?",
+        answer:
+          "koel sums recent order-book bid and ask sizes, then:\n\n• bid_share % = bids / (bids + asks) × 100\n• imbalance % = (bids − asks) / (bids + asks) × 100\n\nLabels: imbalance ≥ +8% → Bid heavy; ≤ −8% → Ask heavy; otherwise Balanced.\n\nExample: bids 60, asks 40 → bid share 60%, imbalance +20% → Bid heavy. Research book snapshot — not a quote to trade against.",
+      },
+    ],
+  },
+  {
+    id: "market-browse",
+    title: "Browse market",
+    summary: "Filters, Has EPS, movers, sort, pagination.",
+    items: [
+      {
+        question: "What is Browse showing?",
+        answer:
+          "One row per CSE symbol from the latest Postgres price snapshot (and name/sector from stocks). The dash never calls cse.lk from the browser — if the table is empty or old, check the poller / Health.",
+      },
+      {
+        question: "How do search, sector chips, and Has EPS work?",
+        answer:
+          "Search matches symbol or name. Sector chips filter to that exact sector string. Has EPS keeps names with a successful filing_metrics extract and a non-null basic EPS — a research extract filter, not a quality tip.\n\nWhen any of search / sector / Has EPS is on, Browse switches to a filtered table mode: Top movers and the full sector chip cloud hide so the list stays focused.",
+      },
+      {
+        question: "How is the table sorted and paginated?",
+        answer:
+          "Default sort is change % descending (gainers first). Page size is 50 symbols. An out-of-range page sends you back to page 1. Clear filters if you expected movers and only see the table.",
+      },
+    ],
+  },
+  {
+    id: "context-macros",
+    title: "Context macros",
+    summary: "USD/LKR, oil, tourism, food + sector bridges.",
+    items: [
+      {
+        question: "What is Context vs Appetite vs Overview?",
+        answer:
+          "Overview = your home tape + watchlist slice. Appetite = the 0–100 CSE mood meter. Context = official / attributed macros around the tape (CBSL FX, EIA oil, SLTDA tourism, DCS food when enabled) plus the same Tape pulse.\n\nContext is research framing — not a macro trading terminal.",
+      },
+      {
+        question: "Where do the macro cards come from?",
+        answer:
+          "Each card shows a stored series with attribution and as-of date, plus a short history spark. The % badge is change vs the prior point in that stored series.\n\nEmpty cards stay empty when ingest is flag/key gated or a source is down — koel does not fill demo numbers.",
+      },
+      {
+        question: "What are the sector bridge links?",
+        answer:
+          "Shortcuts into Browse search (`/market?q=…`) for related CSE names. Discovery helpers only — not “names to buy.” World markets / news terminals are deferred; koel stays disclosure-first on the CSE path.",
+      },
+    ],
+  },
+  {
+    id: "people-dossier",
+    title: "People & dossiers",
+    summary: "Linked influence, seats, network, leadership filter.",
+    items: [
+      {
+        question: "What does Linked influence mean?",
+        answer:
+          "A research proxy — not personal net worth. For each issuer seat, koel takes role_weight × company market_cap (equity fallback when needed), keeps the max contribution per symbol, then sums across seats.\n\nExample role weights: Chair / CEO / MD = 1.0, Deputy chair = 0.7, Executive director = 0.45, Independent / NED ≈ 0.25, Company secretary = 0.15.\n\nExample: Chair of A (mcap 10B) + NED of B (mcap 2B) → 1.0×10B + 0.25×2B = 10.5B compact LKR label.",
+      },
+      {
+        question: "What are Linked volume and turnover?",
+        answer:
+          "Sums of the latest issuer session volume / turnover across distinct companies where the person has a seat. That is company tape activity linked to their board map — not evidence of personal trading.",
+      },
+      {
+        question: "What is Leadership vs All on the map?",
+        answer:
+          "Leadership keeps Chair / CEO / MD-style roles on the people canvas; All shows a broader role set. The canvas ranks by influence and densifies the top of the graph — it is not a complete company registry.",
+      },
+      {
+        question: "What are Seats / Network / Across years?",
+        answer:
+          "Dossier tabs: Seats = issuers and roles with price/change/volume/mcap/turnover when present. Network = co-directors who share seats. Across years / filings timeline = issuer disclosures around board context.\n\nSoft-merged name variants collapse initials spelling differences; the display name stays the primary CSE string. Board data refreshes when operators run directors-backfill — not a live registry feed.",
+      },
+    ],
+  },
+  {
+    id: "ownership-graph",
+    title: "Ownership map",
+    summary: "PDF-extracted group links, hubs, focus, confidence.",
+    items: [
+      {
+        question: "Where does ownership data come from?",
+        answer:
+          "Edges parsed from public CSE annual-report PDFs — CSE has no ownership JSON API. koel keeps medium+ confidence edges; low confidence and group-mention noise are dropped. Research map, not a complete register.",
+      },
+      {
+        question: "What do relation colors and Holdings hubs mean?",
+        answer:
+          "Relations include Subsidiary, Associate, Joint venture, and Related party (legend colors on the canvas).\n\nHoldings hubs (`?hubs=1`) keeps parents of subsidiary/associate edges (and holdings-named listed nodes) plus their children — a denser group map when the full graph is noisy.",
+      },
+      {
+        question: "How does Focus / ?symbol= work?",
+        answer:
+          "Search or click a node to focus (`?symbol=` on the URL). Blank click clears focus. Company pages’ Ownership map button jumps here with that symbol when supported. Isolated listed nodes usually mean no medium+ PDF edge yet — missing data, not proof of “no subsidiaries forever.”",
+      },
+    ],
+  },
+  {
+    id: "alert-history",
+    title: "Alert history",
+    summary: "Sent, retrying, dead-lettered, filters, pages.",
+    items: [
+      {
+        question: "History vs Alerts?",
+        answer:
+          "Alerts = your active rules. History = the audit trail of fires from Postgres when rules matched (Telegram is still the push path). Re-arm-only events do not create user-facing history rows.",
+      },
+      {
+        question: "What do Sent / Delivered / Retrying / Dead-lettered mean?",
+        answer:
+          "Sent — Telegram delivery recorded.\n\nDelivered (unmarked) — Telegram accepted the message but the durable sent flag is missing.\n\nRetrying — koel is still attempting delivery (attempt count may show).\n\nDead-lettered — retries stopped; the fire will not keep trying automatically.",
+      },
+      {
+        question: "How do filters and pages work?",
+        answer:
+          "Filter by symbol; choose a page size (about 25–200). Changing the symbol filter resets you to the first page. Empty history means no fires yet — not that rules are broken.",
+      },
+    ],
+  },
+  {
+    id: "settings",
+    title: "Settings",
+    summary: "Digest, quiet hours, quota, log out vs all devices.",
+    items: [
+      {
+        question: "What does Digest mode do?",
+        answer:
+          "When digest is on, koel can batch eligible overnight activity into a digest instead of a stream of immediate pings. Actionable session fires still prefer Telegram push when outside quiet-hour hold logic. Exact batching follows your deployment’s digest support.",
+      },
+      {
+        question: "How do quiet hours work?",
+        answer:
+          "Start and end hours in Asia/Colombo. Set both, or leave both Off. Overnight windows are OK (e.g. 22 → 06). Same start and end turns quiet hours off.\n\nDuring quiet hours, pushes are held then delivered later — not silently dropped.",
+      },
+      {
+        question: "What is alert quota?",
+        answer:
+          "A read-only cap on how many active rules you can keep. Creating beyond the limit fails at the API. Cancel unused rules if you hit the ceiling.",
+      },
+      {
+        question: "Log out vs All devices?",
+        answer:
+          "Log out ends this browser session only. All devices calls logout-all and revokes every recorded dash session for your account. Use All devices if a shared or lost device still has access.",
+      },
+    ],
+  },
+  {
+    id: "watchlist",
+    title: "Watchlist",
+    summary: "Columns, refresh, unknown symbols, Telegram sync.",
+    items: [
+      {
+        question: "What does the Watchlist table show?",
+        answer:
+          "Symbols you follow with latest stored price, change %, and updated time. Unwatch removes the row. The soft refresh chip ages the freshest snapshot on the list.\n\nPushes still need alert rules — watching alone does not Telegram every tick.",
+      },
+      {
+        question: "Why can’t I add a symbol?",
+        answer:
+          "Add rejects tickers missing from the stocks table (“Unknown symbol”). Browse after a poll, use Telegram `/watch SYMBOL`, or wait until the poller has seen the name. Dash and bot share one watchlist store.",
+      },
+    ],
+  },
+
   {
     id: "alerts",
     title: "How alerts work",
@@ -347,7 +562,23 @@ export const HELP_TOPICS: readonly HelpTopic[] = [
       {
         question: "Mute, quiet hours, digest, quota?",
         answer:
-          "Mute pauses Telegram fires for one rule until a time you set. Quiet hours (Settings) hold pushes overnight in Asia/Colombo and can deliver a digest instead. Digest batches overnight activity.\n\nAlert quota caps how many active rules you can keep — Settings shows your limit. Test fire runs a dry-run style check from the dash without pretending to be a live market cross.",
+          "Mute pauses Telegram fires for one rule until a time you set. Quiet hours (Settings) hold pushes overnight in Asia/Colombo and can deliver a digest instead. Digest batches overnight activity.\n\nAlert quota caps how many active rules you can keep — Settings shows your limit. See Settings and Alert history for delivery detail.",
+      },
+
+      {
+        question: "What does Mute 24h / Clear mute do?",
+        answer:
+          "Mute 24h sets muted_until about a day ahead for that rule — Telegram fires pause until then (or until you Clear mute). The row shows a muted badge with the until time. Mute does not cancel the rule or change Armed.",
+      },
+      {
+        question: "What does Test fire do?",
+        answer:
+          "Creates a dry-run style audit check from the dash so you can confirm wiring. It does not send a live Telegram push and does not mean the market crossed your level.",
+      },
+      {
+        question: "What does Cancel do vs Armed?",
+        answer:
+          "Cancel deactivates the rule (leaves the active list). Armed / disarmed is separate: after a price cross fire the rule disarms until price re-arms on the other side. Cancelled rules do not fire; disarmed active rules still exist and can re-arm.",
       },
       {
         question: "Can I set the same alerts in Telegram?",
@@ -441,7 +672,17 @@ export const HELP_TOPICS: readonly HelpTopic[] = [
       {
         question: "Spoke vs Silent / forecast gates?",
         answer:
-          "Spoke means a selective forecast overlay cleared koel’s gates for that row. Silent means no selective forecast is shown — the research score can still appear.\n\nGates are quality filters, not buy/sell calls. Confidence bands describe model self-checks, not guaranteed outcomes.",
+          "Spoke means a selective forecast overlay cleared koel’s gates for that row. Silent means no selective forecast is shown — the research score can still appear.\n\nGates are quality filters, not buy/sell calls. Confidence bands describe model self-checks, not guaranteed outcomes. See Forecast overlay for Selective ~90% / ~73% / LTR labels.",
+      },
+      {
+        question: "What is on each Signal Board row?",
+        answer:
+          "Rank # and rank Δ, symbol, Spoke/Silent, optional gate label + confidence, reason bullets, model version · as-of · bar count · prior rank, and the score (−100…100).\n\nRank Δ needs a prior board date: ↑N / ↓N vs prior rank, new when the name was absent before, or — when Δ is unavailable.",
+      },
+      {
+        question: "What is Spoke coverage on the page?",
+        answer:
+          "A count of how many loaded rows are Spoke vs Silent (board load is capped). Selective coverage is a research filter rate — not a hit-rate promise for tomorrow. Empty board usually means path backfill / score-signals has not landed yet.",
       },
     ],
   },
@@ -468,7 +709,22 @@ export const HELP_TOPICS: readonly HelpTopic[] = [
       {
         question: "CSE vs hybrid research series?",
         answer:
-          "The Appetite page can show a CSE-truth history and a longer hybrid research series (extra history for charts). Treat hybrid as research context; headline session mood prefers CSE-backed days when available.",
+          "History chips: shorter ranges (about 3M / 1Y) prefer CSE-truth daily scores. Longer ranges (5Y / MAX) may use a Yahoo+CSE hybrid research series (often with an amber notice). Long windows can weekly/monthly average so the chart stays readable.\n\nTreat hybrid as research context; headline session mood prefers CSE-backed days when available.",
+      },
+      {
+        question: "Why was the newest thin day skipped for the headline?",
+        answer:
+          "When the newest appetite day has a tiny universe (under about 100 names with computable changes), koel can skip it for the big headline number and show the last fuller board day instead. The thin day may still appear as a hollow tip on the history chart.",
+      },
+      {
+        question: "What are Δ 1 / 5 / ~1 month and Days in band?",
+        answer:
+          "Δ values are score-point differences vs about 1 / 5 / ~22 sessions earlier — not percent moves. Days in band counts how many consecutive sessions backward share the same band label (caution, neutral, appetite, …).",
+      },
+      {
+        question: "What do Components and Band chronology show?",
+        answer:
+          "Components bars break the headline into breadth / intensity / index / participation (the same 40/25/20/15 mix). Band chronology (tracker) walks recent days’ band labels so you can see how long the meter has sat in a mood — still not a tip.",
       },
     ],
   },
@@ -523,23 +779,23 @@ export const HELP_TOPICS: readonly HelpTopic[] = [
   },
   {
     id: "people-graph",
-    title: "People & ownership graph",
-    summary: "Director / holder snapshots — not a live register.",
+    title: "People & ownership hub",
+    summary: "Where to go for dossiers vs ownership edges.",
     items: [
       {
-        question: "What is People / Graph?",
+        question: "People vs Ownership map?",
         answer:
-          "Research views over stored people and ownership links (who appears connected to which issuers). Data is a snapshot koel ingested — not a real-time company registry and not advice about following any person or stock.",
+          "People ranks directors/officers by linked influence and opens dossiers (seats, network, filings). Ownership map draws company-to-company edges from annual-report PDF extracts.\n\nSee People & dossiers and Ownership map for field-level explainers. Neither is a live company registry.",
       },
       {
         question: "How do I open ownership from a company page?",
         answer:
-          "Use Ownership map (jumps to Graph focused on that symbol when supported) or People. The company page itself does not embed a full ownership table — those buttons are the doorway into the graph/dossier views.",
+          "Use Ownership map (jumps to Graph focused on that symbol when supported) or People. The company page itself does not embed a full ownership table.",
       },
       {
         question: "Why might a person or edge be missing?",
         answer:
-          "Coverage follows what koel has stored from public CSE-adjacent sources. Incomplete filings, name-matching limits, or not-yet-ingested rows all mean gaps. Treat absences as missing data, not as “no relationship.”",
+          "Coverage follows what koel has stored from CSE companyProfile boards and PDF extracts. Incomplete filings, name-matching limits, or not-yet-ingested rows all mean gaps. Treat absences as missing data, not as “no relationship.”",
       },
     ],
   },
@@ -562,6 +818,21 @@ export const HELP_TOPICS: readonly HelpTopic[] = [
         question: "Near-realtime — how fresh is “fresh”?",
         answer:
           "koel is poll-interval near-realtime, not exchange co-lo. Expect updates on the order of the poller interval during the session, then quiet after the close until the next open (unless someone forces a tick).",
+      },
+      {
+        question: "Snapshot age vs tick age?",
+        answer:
+          "Snapshot age = last price_snapshots write in Postgres (what the dash reads). Tick age = last poller loop heartbeat via HEALTH_URL on a host that can reach the poller — often absent on Vercel-only deploys. Missing poller detail is an ops wiring gap, not proof snapshots stopped.",
+      },
+      {
+        question: "What is Data inventory / CI / ML / delivery?",
+        answer:
+          "Data inventory — Postgres counts (stocks, snapshots, disclosures, metrics, briefs, alerts, watchlist) plus migration/appetite tips.\n\nGitHub Actions — latest workflow runs and a scheduled-job checklist (informational).\n\nModel / forecast — serving champion, gated hit-rate style stats, spoke coverage, related research ops (not tips).\n\nTelegram delivery — delivered (24h) / retrying / dead-lettered from alert_log.\n\nFull ops blocks may require your Telegram id on DASH_OPS_TELEGRAM_IDS.",
+      },
+      {
+        question: "Watched missing, circuits, brief queue, retention?",
+        answer:
+          "Watched missing — watched symbols absent from the latest trade summary.\n\nCircuits — adapter breaker state after CSE failures.\n\nBrief queue — pending AI briefs / PDF enrich.\n\nRetention — SNAPSHOT_RETENTION_DAYS (0 keeps all). These are ops diagnostics for why the tape looks thin.",
       },
     ],
   },

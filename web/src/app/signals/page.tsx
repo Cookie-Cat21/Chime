@@ -226,7 +226,11 @@ export default async function SignalsPage() {
             <span className="font-medium text-foreground">
               {items.length - spokeCount} Silent
             </span>
-            . Selective emits are historical OOS-calibrated — not guarantees.
+            . Selective emits are historical OOS-calibrated — not guarantees.{" "}
+            <HelpLink topic="signals" variant="text">
+              Board help
+            </HelpLink>
+            .
           </p>
         ) : null}
 

@@ -747,12 +747,17 @@ export default async function HealthPage() {
                 className="mt-10 border-t border-border/60 pt-6"
                 aria-labelledby="data-heading"
               >
-                <h2
-                  id="data-heading"
-                  className="text-sm font-medium tracking-wide text-muted-foreground uppercase"
-                >
-                  Data inventory
-                </h2>
+                <div className="flex flex-wrap items-baseline justify-between gap-2">
+                  <h2
+                    id="data-heading"
+                    className="text-sm font-medium tracking-wide text-muted-foreground uppercase"
+                  >
+                    Data inventory
+                  </h2>
+                  <HelpLink topic="health" variant="text" className="text-xs">
+                    Health help
+                  </HelpLink>
+                </div>
                 <p className="mt-2 text-sm text-muted-foreground">
                   Counts from Postgres — what the dash can actually serve.
                 </p>
@@ -1255,12 +1260,21 @@ export default async function HealthPage() {
                 className="mt-10 border-t border-border/60 pt-6"
                 aria-labelledby="delivery-heading"
               >
-                <h2
-                  id="delivery-heading"
-                  className="text-sm font-medium tracking-wide text-muted-foreground uppercase"
-                >
-                  Telegram delivery
-                </h2>
+                <div className="flex flex-wrap items-baseline justify-between gap-2">
+                  <h2
+                    id="delivery-heading"
+                    className="text-sm font-medium tracking-wide text-muted-foreground uppercase"
+                  >
+                    Telegram delivery
+                  </h2>
+                  <HelpLink
+                    topic="alert-history"
+                    variant="text"
+                    className="text-xs"
+                  >
+                    Delivery statuses
+                  </HelpLink>
+                </div>
                 <p className="mt-2 text-sm text-muted-foreground">
                   Cherry reliability slice — fire attempts from alert_log (not
                   a send console).

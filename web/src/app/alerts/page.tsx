@@ -171,9 +171,15 @@ export default async function AlertsPage({
           <Link href="/settings" className="underline underline-offset-4">
             Settings
           </Link>
-          . Mute a rule below to pause Telegram fires. Filing EPS/YoY rules need
-          metrics flags to live-fire. Crossing vs “already above,” armed /
-          re-arm, and each type:{" "}
+          . Mute / test fire / cancel:{" "}
+          <HelpLink topic="alerts" variant="text">
+            how alerts work
+          </HelpLink>
+          . Delivery statuses:{" "}
+          <HelpLink topic="alert-history" variant="text">
+            history help
+          </HelpLink>
+          . Filing EPS/YoY rules need metrics flags to live-fire. Alert types:{" "}
           <HelpLink topic="alert-types" variant="text">
             alert types help
           </HelpLink>

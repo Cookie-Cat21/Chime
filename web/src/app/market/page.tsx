@@ -2,6 +2,7 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 
 import { AppNav } from "@/components/app-nav";
+import { HelpLink } from "@/components/help-link";
 import { EmptyState } from "@/components/empty-state";
 import { ChangeBadge } from "@/components/kit/change-badge";
 import { MoversBarList } from "@/components/kit/movers-bar-list";
@@ -310,15 +311,18 @@ export default async function MarketPage({
           title="Browse"
           description="CSE symbols from koel’s latest poller snapshots. Find names to watch — Telegram still delivers the push when your rules fire."
           action={
-            <PriceRefresh
-              lastSnapshotAt={
-                (marketItems ?? [])
-                  .map((i) => i.ts)
-                  .filter((t): t is string => typeof t === "string" && !!t)
-                  .sort()
-                  .at(-1) ?? null
-              }
-            />
+            <div className="flex flex-wrap items-center gap-2">
+              <HelpLink topic="market-browse">Browse help</HelpLink>
+              <PriceRefresh
+                lastSnapshotAt={
+                  (marketItems ?? [])
+                    .map((i) => i.ts)
+                    .filter((t): t is string => typeof t === "string" && !!t)
+                    .sort()
+                    .at(-1) ?? null
+                }
+              />
+            </div>
           }
         />
 

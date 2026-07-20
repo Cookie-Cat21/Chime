@@ -1,6 +1,7 @@
 import Link from "next/link";
 
 import { AppNav } from "@/components/app-nav";
+import { HelpLink } from "@/components/help-link";
 import { XdWeekStrip } from "@/components/dividends/xd-week-strip";
 import { TapePulseStrip } from "@/components/tape/tape-pulse-strip";
 import { EmptyState } from "@/components/empty-state";
@@ -471,6 +472,7 @@ export default async function OverviewPage() {
           description="CSE snapshots from koel’s poller. Set rules here — Telegram is the cherry that pings you when they fire."
           action={
             <div className="flex flex-wrap items-center gap-2">
+              <HelpLink topic="overview">Overview help</HelpLink>
               <MarketSessionChip />
               <PriceRefresh lastSnapshotAt={freshestTs} />
               <Button asChild size="sm">
