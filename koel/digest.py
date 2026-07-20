@@ -16,9 +16,10 @@ length with ``_clamp_telegram_message``.
 
 from __future__ import annotations
 
+from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
 from datetime import date, datetime, time
-from typing import Any, Awaitable, Callable, Protocol
+from typing import Any, Protocol
 from zoneinfo import ZoneInfo
 
 from koel.domain import _clamp_telegram_message, disclaimer
@@ -146,7 +147,10 @@ def format_digest_message(
                 xd_s = d_xd.isoformat()
             else:
                 xd_s = str(d_xd)
-            dps_s = f" Rs {dps:g}" if isinstance(dps, int | float) and not isinstance(dps, bool) else ""
+            if isinstance(dps, int | float) and not isinstance(dps, bool):
+                dps_s = f" Rs {dps:g}"
+            else:
+                dps_s = ""
             lines.append(f"• {sym} XD {xd_s}{dps_s}")
 
     lines.append("")

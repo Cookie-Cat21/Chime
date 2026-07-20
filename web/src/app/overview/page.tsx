@@ -137,6 +137,14 @@ function ageLabel(iso: string | null): string {
   return `${days}d ago`;
 }
 
+/** Request wall-clock age — kept outside the component (react-hooks/purity). */
+function snapshotAgeMs(iso: string | null): number | null {
+  if (!iso) return null;
+  const t = Date.parse(iso);
+  if (Number.isNaN(t)) return null;
+  return Math.max(0, Date.now() - t);
+}
+
 async function readJson(res: Response | null): Promise<unknown> {
   if (!res || !res.ok) return null;
   try {
@@ -467,12 +475,7 @@ export default async function OverviewPage() {
 
   /** Same thresholds as PriceRefresh — banner only while session is open. */
   const marketOpen = isMarketSessionOpen();
-  const snapshotAgeMs = (() => {
-    if (!freshestTs) return null;
-    const t = Date.parse(freshestTs);
-    if (Number.isNaN(t)) return null;
-    return Math.max(0, Date.now() - t);
-  })();
+  const ageMs = snapshotAgeMs(freshestTs);
   const pollerBanner =
     marketOpen && !freshestTs
       ? ({
@@ -482,18 +485,14 @@ export default async function OverviewPage() {
           description:
             "Overview has no watchlist or index tick age to show. During market hours the poller should write price_snapshots — check /health and that symbols are watched. Not financial advice.",
         } as const)
-      : marketOpen &&
-          snapshotAgeMs != null &&
-          snapshotAgeMs >= PRICE_DOWN_MS
+      : marketOpen && ageMs != null && ageMs >= PRICE_DOWN_MS
         ? ({
             tone: "danger" as const,
             icon: Activity,
             title: "Poller snapshot looks unreachable",
             description: `Freshest watchlist / index tick is ${ageLabel(freshestTs)}. During an open CSE session that usually means the poller is paused, HEALTH_URL is dark, or nothing watched is being written. See /health. Not financial advice.`,
           } as const)
-        : marketOpen &&
-            snapshotAgeMs != null &&
-            snapshotAgeMs >= PRICE_STALE_MS
+        : marketOpen && ageMs != null && ageMs >= PRICE_STALE_MS
           ? ({
               tone: "warning" as const,
               icon: Timer,

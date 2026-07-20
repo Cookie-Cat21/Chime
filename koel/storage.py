@@ -4579,7 +4579,10 @@ class Storage:
             return []
         if not isinstance(since, datetime):
             return []
-        lim = max(1, min(int(limit) if isinstance(limit, int) and not isinstance(limit, bool) else 20, 50))
+        if isinstance(limit, int) and not isinstance(limit, bool):
+            lim = max(1, min(limit, 50))
+        else:
+            lim = 20
         async with self._pool.connection() as conn:
             rows = await (
                 await conn.execute(
@@ -4633,7 +4636,10 @@ class Storage:
         """Watchlist symbols sorted by |change_pct| from latest poller snaps."""
         if isinstance(user_id, bool) or not isinstance(user_id, int) or user_id <= 0:
             return []
-        lim = max(1, min(int(limit) if isinstance(limit, int) and not isinstance(limit, bool) else 5, 20))
+        if isinstance(limit, int) and not isinstance(limit, bool):
+            lim = max(1, min(limit, 20))
+        else:
+            lim = 5
         async with self._pool.connection() as conn:
             rows = await (
                 await conn.execute(
