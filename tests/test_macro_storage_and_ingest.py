@@ -258,6 +258,41 @@ async def test_run_macro_tick_force_upserts() -> None:
     assert result["skipped"] == []
 
 
+@pytest.mark.asyncio
+async def test_run_macro_tick_records_feed_errors() -> None:
+    storage = MagicMock()
+    storage.upsert_macro_series = AsyncMock()
+    settings = MagicMock()
+    settings.cbsl_fx_enabled = True
+    settings.eia_oil_enabled = True
+    settings.world_index_research_enabled = True
+    settings.sltda_tourism_enabled = True
+    settings.dcs_food_enabled = True
+    boom = RuntimeError("upstream down")
+    with (
+        patch("koel.macro_ingest.fetch_cbsl_fx_rows", new=AsyncMock(side_effect=boom)),
+        patch("koel.macro_ingest.fetch_eia_oil_rows", new=AsyncMock(side_effect=boom)),
+        patch("koel.macro_ingest.fetch_tourism_rows", new=AsyncMock(side_effect=boom)),
+        patch(
+            "koel.macro_ingest.fetch_food_pressure_rows",
+            new=AsyncMock(side_effect=boom),
+        ),
+        patch(
+            "koel.macro_ingest.fetch_world_index_rows",
+            new=AsyncMock(side_effect=boom),
+        ),
+    ):
+        result = await run_macro_tick(storage, settings, force=False)
+    assert result["skipped"] == [
+        "cbsl_fx_error",
+        "eia_oil_error",
+        "cbsl_tourism_error",
+        "cbsl_ccpi_error",
+        "world_indexes_error",
+    ]
+    storage.upsert_macro_series.assert_not_called()
+
+
 def test_parse_cbsl_tourism_earnings_minimal() -> None:
     import openpyxl
 
