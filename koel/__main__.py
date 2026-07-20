@@ -389,7 +389,8 @@ def main(argv: list[str] | None = None) -> None:
             "tick: ignore market hours; "
             "digest: ignore 14:30–16:00 SLT window; "
             "path-backfill/intraday-backfill/hybrid-backfill/"
-            "sector-backfill/notices-backfill/directors-backfill: "
+            "sector-backfill/notices-backfill/directors-backfill/"
+            "corporate-actions-backfill: "
             "run even if flag off"
         ),
     )
