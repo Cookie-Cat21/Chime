@@ -542,7 +542,7 @@ export const HELP_TOPICS: readonly HelpTopic[] = [
       {
         question: "Log out vs All devices?",
         answer:
-          "Log out ends this browser session only. All devices calls logout-all and revokes every recorded dash session for your account. Use All devices if a shared or lost device still has access.",
+          "Open the account chip (your Telegram id) in the top bar for both. Log out ends this browser session only. All devices calls logout-all and revokes every recorded dash session for your account. Use All devices if a shared or lost device still has access.",
       },
     ],
   },

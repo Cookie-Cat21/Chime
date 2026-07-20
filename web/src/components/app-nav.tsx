@@ -2,42 +2,51 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { useState } from "react";
+import { useEffect, useId, useRef, useState } from "react";
 
 import { KoelWordmark } from "@/components/brand/koel-brand";
 import { CommandPalette } from "@/components/command-palette";
 import { NavSession } from "@/components/nav-session";
 import { Button } from "@/components/ui/button";
 
-/** Primary nav — Scenarios stays off primary until Phase 3 AI is live. */
-const links = [
+type NavLink = { href: string; label: string };
+
+/** Daily surface — kept in the primary bar. */
+const primaryLinks = [
   { href: "/overview", label: "Overview" },
   { href: "/market", label: "Browse" },
+  { href: "/watchlist", label: "Watchlist" },
+  { href: "/alerts", label: "Alerts" },
+  { href: "/signals", label: "Signals" },
+] as const satisfies readonly NavLink[];
+
+/** Research / ops — folded under More so the bar stays readable. */
+const moreLinks = [
   { href: "/appetite", label: "Appetite" },
   { href: "/context", label: "Context" },
-  { href: "/signals", label: "Signals" },
   { href: "/people", label: "People" },
   { href: "/graph", label: "Graph" },
-  { href: "/watchlist", label: "Watchlist" },
   { href: "/dividends", label: "Dividends" },
-  { href: "/alerts", label: "Alerts" },
   { href: "/alerts/history", label: "History" },
   { href: "/settings", label: "Settings" },
   { href: "/health", label: "Health" },
   { href: "/help", label: "Help" },
-] as const;
+] as const satisfies readonly NavLink[];
 
-/**
- * Resolve which nav href is active. Prefers the explicit `active` prop, else
- * the current pathname. Longest prefix wins so `/alerts/history` highlights
- * History (not Alerts), and `/scenarios` exact-matches Scenarios.
- */
+/** Full set for active-path resolution (primary + more). */
+const links = [...primaryLinks, ...moreLinks] as const;
+
 /**
  * Cap nav path strings — multi-MB forged ``active`` / pathname used to burn
  * CPU in prefix matching before any href could win.
  */
 export const MAX_NAV_PATH_LENGTH = 512;
 
+/**
+ * Resolve which nav href is active. Prefers the explicit `active` prop, else
+ * the current pathname. Longest prefix wins so `/alerts/history` highlights
+ * History (not Alerts), and `/scenarios` exact-matches Scenarios.
+ */
 export function resolveActiveNavHref(
   current: string | null | undefined,
 ): (typeof links)[number]["href"] | undefined {
@@ -55,6 +64,92 @@ export function resolveActiveNavHref(
     }
   }
   return best;
+}
+
+function linkClass(isActive: boolean, dense = false): string {
+  const base = dense
+    ? "block rounded-sm px-3 py-2 text-sm focus-visible:ring-2 focus-visible:ring-ring/50 focus-visible:outline-none"
+    : "rounded-sm focus-visible:ring-2 focus-visible:ring-ring/50 focus-visible:outline-none";
+  return isActive
+    ? `${base} font-medium text-foreground`
+    : `${base} text-muted-foreground transition-colors hover:text-foreground`;
+}
+
+function NavMoreMenu({
+  activeHref,
+  onNavigate,
+}: {
+  activeHref: string | undefined;
+  onNavigate?: () => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const rootRef = useRef<HTMLDivElement>(null);
+  const menuId = useId();
+  const moreActive = moreLinks.some((l) => l.href === activeHref);
+
+  useEffect(() => {
+    if (!open) return;
+    const onDoc = (e: MouseEvent) => {
+      if (!rootRef.current?.contains(e.target as Node)) setOpen(false);
+    };
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setOpen(false);
+    };
+    document.addEventListener("mousedown", onDoc);
+    document.addEventListener("keydown", onKey);
+    return () => {
+      document.removeEventListener("mousedown", onDoc);
+      document.removeEventListener("keydown", onKey);
+    };
+  }, [open]);
+
+  return (
+    <div ref={rootRef} className="relative">
+      <button
+        type="button"
+        aria-expanded={open}
+        aria-controls={menuId}
+        aria-haspopup="menu"
+        onClick={() => setOpen((v) => !v)}
+        className={
+          moreActive || open
+            ? "rounded-sm font-medium text-foreground focus-visible:ring-2 focus-visible:ring-ring/50 focus-visible:outline-none"
+            : "rounded-sm text-muted-foreground transition-colors hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring/50 focus-visible:outline-none"
+        }
+      >
+        More
+        <span className="ml-1 text-xs text-muted-foreground" aria-hidden>
+          ▾
+        </span>
+      </button>
+      {open ? (
+        <div
+          id={menuId}
+          role="menu"
+          className="absolute top-full left-0 z-50 mt-2 min-w-[11rem] rounded-md border border-border bg-background py-1 shadow-sm"
+        >
+          {moreLinks.map((link) => {
+            const isActive = activeHref === link.href;
+            return (
+              <Link
+                key={link.href}
+                href={link.href}
+                role="menuitem"
+                aria-current={isActive ? "page" : undefined}
+                className={linkClass(isActive, true)}
+                onClick={() => {
+                  setOpen(false);
+                  onNavigate?.();
+                }}
+              >
+                {link.label}
+              </Link>
+            );
+          })}
+        </div>
+      ) : null}
+    </div>
+  );
 }
 
 export function AppNav({ active }: { active?: string }) {
@@ -79,28 +174,28 @@ export function AppNav({ active }: { active?: string }) {
           />
         </Link>
 
-        {/* Desktop / tablet */}
-        <nav className="hidden items-center gap-x-5 text-sm sm:flex">
-          {links.map((link) => {
+        {/* Desktop / tablet — primary destinations + More */}
+        <nav
+          className="hidden min-w-0 items-center gap-x-4 text-sm md:flex lg:gap-x-5"
+          aria-label="Primary"
+        >
+          {primaryLinks.map((link) => {
             const isActive = activeHref === link.href;
             return (
               <Link
                 key={link.href}
                 href={link.href}
                 aria-current={isActive ? "page" : undefined}
-                className={
-                  isActive
-                    ? "rounded-sm font-medium text-foreground focus-visible:ring-2 focus-visible:ring-ring/50 focus-visible:outline-none"
-                    : "rounded-sm text-muted-foreground transition-colors hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring/50 focus-visible:outline-none"
-                }
+                className={linkClass(isActive)}
               >
                 {link.label}
               </Link>
             );
           })}
+          <NavMoreMenu activeHref={activeHref} />
         </nav>
 
-        <div className="flex items-center gap-2">
+        <div className="flex shrink-0 items-center gap-2">
           <Button
             type="button"
             variant="outline"
@@ -112,16 +207,16 @@ export function AppNav({ active }: { active?: string }) {
             aria-haspopup="dialog"
           >
             Search
-            <span className="ml-1 hidden text-xs text-muted-foreground md:inline">
+            <span className="ml-1 hidden text-xs text-muted-foreground lg:inline">
               Ctrl K
             </span>
           </Button>
           <NavSession />
 
-          {/* Mobile menu toggle */}
+          {/* Mobile / narrow menu toggle */}
           <button
             type="button"
-            className="inline-flex h-10 w-10 items-center justify-center rounded-md text-foreground focus-visible:ring-2 focus-visible:ring-ring/50 focus-visible:outline-none sm:hidden"
+            className="inline-flex h-10 w-10 items-center justify-center rounded-md text-foreground focus-visible:ring-2 focus-visible:ring-ring/50 focus-visible:outline-none md:hidden"
             aria-expanded={open}
             aria-controls="koel-mobile-nav"
             aria-label={open ? "Close menu" : "Open menu"}
@@ -146,11 +241,40 @@ export function AppNav({ active }: { active?: string }) {
       {/* Keep in DOM so aria-controls stays valid when the menu is closed. */}
       <nav
         id="koel-mobile-nav"
-        className="border-t border-border/60 px-4 py-2 sm:hidden"
+        className="border-t border-border/60 px-4 py-2 md:hidden"
         hidden={!open}
+        aria-label="Mobile"
       >
+        <p className="px-0 pt-1 pb-2 text-xs font-medium tracking-wide text-muted-foreground uppercase">
+          Main
+        </p>
         <ul className="flex flex-col">
-          {links.map((link) => {
+          {primaryLinks.map((link) => {
+            const isActive = activeHref === link.href;
+            return (
+              <li key={link.href}>
+                <Link
+                  href={link.href}
+                  aria-current={isActive ? "page" : undefined}
+                  tabIndex={open ? undefined : -1}
+                  onClick={() => setOpen(false)}
+                  className={`block rounded-sm py-3 text-base focus-visible:ring-2 focus-visible:ring-ring/50 focus-visible:outline-none ${
+                    isActive
+                      ? "font-medium text-foreground"
+                      : "text-muted-foreground"
+                  }`}
+                >
+                  {link.label}
+                </Link>
+              </li>
+            );
+          })}
+        </ul>
+        <p className="mt-2 border-t border-border/60 px-0 pt-3 pb-2 text-xs font-medium tracking-wide text-muted-foreground uppercase">
+          More
+        </p>
+        <ul className="flex flex-col">
+          {moreLinks.map((link) => {
             const isActive = activeHref === link.href;
             return (
               <li key={link.href}>

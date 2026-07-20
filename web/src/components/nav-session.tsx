@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useId, useRef, useState } from "react";
 
 import { Button } from "@/components/ui/button";
 import {
@@ -60,6 +60,9 @@ function chipLabel(me: MePayload): string {
 export function NavSession({ compact = false }: { compact?: boolean }) {
   const [me, setMe] = useState<MePayload | null>(null);
   const [pending, setPending] = useState(false);
+  const [menuOpen, setMenuOpen] = useState(false);
+  const rootRef = useRef<HTMLDivElement>(null);
+  const menuId = useId();
 
   useEffect(() => {
     let cancelled = false;
@@ -102,6 +105,22 @@ export function NavSession({ compact = false }: { compact?: boolean }) {
       clearTimeout(timer);
     };
   }, []);
+
+  useEffect(() => {
+    if (!menuOpen) return;
+    const onDoc = (e: MouseEvent) => {
+      if (!rootRef.current?.contains(e.target as Node)) setMenuOpen(false);
+    };
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setMenuOpen(false);
+    };
+    document.addEventListener("mousedown", onDoc);
+    document.addEventListener("keydown", onKey);
+    return () => {
+      document.removeEventListener("mousedown", onDoc);
+      document.removeEventListener("keydown", onKey);
+    };
+  }, [menuOpen]);
 
   async function onLogout() {
     setPending(true);
@@ -148,49 +167,105 @@ export function NavSession({ compact = false }: { compact?: boolean }) {
         className={
           compact
             ? "h-8 w-24 animate-pulse rounded-md bg-muted/60"
-            : "hidden h-8 w-28 animate-pulse rounded-md bg-muted/60 sm:block"
+            : "hidden h-8 w-20 animate-pulse rounded-md bg-muted/60 md:block"
         }
         aria-hidden
       />
     );
   }
 
+  if (compact) {
+    return (
+      <div className="flex flex-col gap-2">
+        <span
+          className="font-mono text-xs text-muted-foreground"
+          title={`Telegram ${me.telegram_id} · user ${me.id}`}
+          data-testid="nav-user-chip"
+        >
+          {chipLabel(me)}
+        </span>
+        <div className="flex flex-wrap items-center gap-2">
+          <Button
+            type="button"
+            variant="ghost"
+            size="sm"
+            disabled={pending}
+            onClick={() => void onLogoutAll()}
+            className="shrink-0"
+            title="Sign out every device"
+          >
+            All devices
+          </Button>
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            disabled={pending}
+            onClick={() => void onLogout()}
+            className="shrink-0"
+          >
+            {pending ? "Signing out…" : "Log out"}
+          </Button>
+        </div>
+      </div>
+    );
+  }
+
   return (
-    <div
-      className={
-        compact
-          ? "flex items-center justify-between gap-3"
-          : "hidden items-center gap-2 sm:flex"
-      }
-    >
-      <span
-        className="max-w-[10rem] truncate font-mono text-xs text-muted-foreground"
-        title={`Telegram ${me.telegram_id} · user ${me.id}`}
-        data-testid="nav-user-chip"
-      >
-        {chipLabel(me)}
-      </span>
+    <div ref={rootRef} className="relative hidden md:block">
       <Button
         type="button"
         variant="ghost"
         size="sm"
-        disabled={pending}
-        onClick={() => void onLogoutAll()}
-        className="shrink-0"
-        title="Sign out every device"
+        aria-expanded={menuOpen}
+        aria-controls={menuId}
+        aria-haspopup="menu"
+        onClick={() => setMenuOpen((v) => !v)}
+        className="max-w-[9rem] font-mono text-xs"
+        title={`Telegram ${me.telegram_id} · user ${me.id}`}
+        data-testid="nav-user-chip"
       >
-        All devices
+        <span className="truncate">{chipLabel(me)}</span>
+        <span className="ml-1 text-muted-foreground" aria-hidden>
+          ▾
+        </span>
       </Button>
-      <Button
-        type="button"
-        variant="outline"
-        size="sm"
-        disabled={pending}
-        onClick={() => void onLogout()}
-        className="shrink-0"
-      >
-        {pending ? "Signing out…" : "Log out"}
-      </Button>
+      {menuOpen ? (
+        <div
+          id={menuId}
+          role="menu"
+          className="absolute top-full right-0 z-50 mt-2 min-w-[12rem] rounded-md border border-border bg-background p-2 shadow-sm"
+        >
+          <p className="truncate px-2 py-1.5 font-mono text-xs text-muted-foreground">
+            Telegram {me.telegram_id}
+          </p>
+          <div className="mt-1 flex flex-col gap-1">
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              role="menuitem"
+              disabled={pending}
+              onClick={() => void onLogoutAll()}
+              className="justify-start"
+              title="Sign out every device"
+            >
+              All devices
+            </Button>
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              role="menuitem"
+              disabled={pending}
+              onClick={() => void onLogout()}
+              className="justify-start"
+            >
+              {pending ? "Signing out…" : "Log out"}
+            </Button>
+          </div>
+        </div>
+      ) : null}
     </div>
   );
 }
