@@ -8,13 +8,13 @@ import pytest
 
 from koel.bot import parse_alert_args
 from koel.corporate_actions import (
+    CorporateAction,
     adjust_factor,
     cumulative_adjust_factor,
     detect_share_split_ratio,
     detect_splits_from_closes,
     is_split_disclosure,
     parse_split_hints,
-    CorporateAction,
 )
 from koel.domain import AlertRule, AlertType, Disclosure, PreviousPriceState, PriceSnapshot
 from koel.rules import evaluate_price_rules, evaluate_share_split_disclosure_rules

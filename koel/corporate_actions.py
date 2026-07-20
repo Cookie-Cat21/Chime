@@ -14,7 +14,7 @@ from datetime import date, datetime
 from typing import Any
 from zoneinfo import ZoneInfo
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict
 
 _COLOMBO = ZoneInfo("Asia/Colombo")
 

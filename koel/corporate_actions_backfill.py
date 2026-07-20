@@ -29,7 +29,7 @@ def _as_mapping(row: object) -> dict:
     if isinstance(row, dict):
         return row
     if hasattr(row, "keys"):
-        return {k: row[k] for k in row.keys()}  # type: ignore[index]
+        return {k: row[k] for k in row}  # type: ignore[index]
     # Fallback positional (id, symbol, title, category, published_at) etc.
     return {}
 
