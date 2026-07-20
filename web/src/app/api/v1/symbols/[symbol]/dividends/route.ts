@@ -17,6 +17,7 @@ import { toIso } from "@/lib/api/time";
 import { jsonError, jsonOk } from "@/lib/auth/errors";
 import { requireSession } from "@/lib/auth/guard";
 import { getPool } from "@/lib/db";
+import { loadDividendEventsForSymbol } from "@/lib/db/dividend-events";
 import {
   isDividendDisclosure,
   mergeDividendHints,
@@ -50,16 +51,24 @@ export async function GET(_request: NextRequest, context: RouteContext) {
       return jsonError(404, "not_found", "Unknown symbol.");
     }
 
-    const snap = await pool.query<{
-      price: number;
-      ts: Date | string;
-    }>(
-      `SELECT price, ts
-       FROM price_snapshots
-       WHERE symbol = $1
-       ORDER BY ts DESC
-       LIMIT 1`,
-      [symbol],
+    const [snap, events] = await Promise.all([
+      pool.query<{
+        price: number;
+        ts: Date | string;
+      }>(
+        `SELECT price, ts
+         FROM price_snapshots
+         WHERE symbol = $1
+         ORDER BY ts DESC
+         LIMIT 1`,
+        [symbol],
+      ),
+      loadDividendEventsForSymbol(symbol),
+    ]);
+    const eventByDisclosureId = new Map(
+      events
+        .filter((event) => event.disclosure_id != null)
+        .map((event) => [event.disclosure_id as number, event]),
     );
 
     // Prefer category/title match; widen scan then filter in app so ILIKE
@@ -90,7 +99,8 @@ export async function GET(_request: NextRequest, context: RouteContext) {
       [symbol],
     );
 
-    let suggested_dps: number | null = null;
+    let suggested_dps: number | null =
+      events.find((event) => event.dps != null)?.dps ?? null;
     const items = result.rows.flatMap((row) => {
       const id = toSafePositiveInt(row.id);
       if (id == null) return [];
@@ -105,7 +115,14 @@ export async function GET(_request: NextRequest, context: RouteContext) {
 
       const brief_status = normalizeBriefStatus(row.brief_status);
       const brief = sanitizeBriefText(row.brief, brief_status);
-      const parsed = mergeDividendHints([title, category, brief]);
+      const parsedFromText = mergeDividendHints([title, category, brief]);
+      const event = eventByDisclosureId.get(id);
+      const parsed = {
+        dps: event?.dps ?? parsedFromText.dps,
+        xd: event?.d_xd ?? parsedFromText.xd,
+        payment: event?.d_pay ?? parsedFromText.payment,
+        dates_tbd: event?.dates_tbd ?? parsedFromText.dates_tbd,
+      };
       if (suggested_dps == null && parsed.dps != null) {
         suggested_dps = parsed.dps;
       }
@@ -132,6 +149,7 @@ export async function GET(_request: NextRequest, context: RouteContext) {
       last_ts: last ? toIso(last.ts) : null,
       suggested_dps,
       items,
+      events,
     });
   } catch (err) {
     console.error("GET /symbols/:symbol/dividends failed", err);

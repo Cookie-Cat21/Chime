@@ -19,6 +19,19 @@ export type DividendEventItem = {
   parsed: ParsedDividendHints;
 };
 
+export type DividendCalendarEvent = {
+  id: number;
+  disclosure_id: number | null;
+  d_ann: string | null;
+  d_xd: string | null;
+  d_pay: string | null;
+  dps: number | null;
+  kind: string | null;
+  fy: string | null;
+  dates_tbd: boolean;
+  title: string | null;
+};
+
 export type DividendSymbolPayload = {
   symbol: string;
   name: string | null;
@@ -26,6 +39,7 @@ export type DividendSymbolPayload = {
   last_ts: string | null;
   suggested_dps: number | null;
   items: DividendEventItem[];
+  events: DividendCalendarEvent[];
 };
 
 function asParsed(raw: unknown): ParsedDividendHints {
@@ -42,6 +56,18 @@ function asParsed(raw: unknown): ParsedDividendHints {
         : null,
     dates_tbd: o.dates_tbd === true,
   };
+}
+
+function asDateOnly(raw: unknown): string | null {
+  if (typeof raw !== "string") return null;
+  const trimmed = raw.trim();
+  return /^\d{4}-\d{2}-\d{2}$/.test(trimmed) ? trimmed : null;
+}
+
+function asShortText(raw: unknown, max: number): string | null {
+  if (typeof raw !== "string") return null;
+  const trimmed = raw.trim();
+  return trimmed ? trimmed.slice(0, max) : null;
 }
 
 /** Normalize API JSON; drop hostile / malformed rows. */
@@ -80,6 +106,31 @@ export function normalizeDividendPayload(
       parsed: asParsed(r.parsed),
     });
   }
+  const eventsRaw = Array.isArray(o.events) ? o.events : [];
+  const events: DividendCalendarEvent[] = [];
+  for (const row of eventsRaw.slice(0, 50)) {
+    if (!row || typeof row !== "object") continue;
+    const r = row as Record<string, unknown>;
+    const id = toFiniteNumber(r.id);
+    if (id == null || id <= 0 || !Number.isInteger(id)) continue;
+    const disclosureId =
+      r.disclosure_id == null ? null : toFiniteNumber(r.disclosure_id);
+    events.push({
+      id,
+      disclosure_id:
+        disclosureId != null && disclosureId > 0 && Number.isInteger(disclosureId)
+          ? disclosureId
+          : null,
+      d_ann: asDateOnly(r.d_ann),
+      d_xd: asDateOnly(r.d_xd),
+      d_pay: asDateOnly(r.d_pay),
+      dps: toFiniteNumber(r.dps),
+      kind: asShortText(r.kind, 64),
+      fy: asShortText(r.fy, 64),
+      dates_tbd: r.dates_tbd === true,
+      title: asShortText(r.title, 500),
+    });
+  }
   return {
     symbol,
     name,
@@ -87,6 +138,7 @@ export function normalizeDividendPayload(
     last_ts: typeof o.last_ts === "string" ? o.last_ts : null,
     suggested_dps: toFiniteNumber(o.suggested_dps),
     items,
+    events,
   };
 }
 

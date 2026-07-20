@@ -59,7 +59,7 @@ export default async function DividendsPage({
         <PageHeader
           eyebrow="Tools"
           title="Dividend calculator"
-          description="Estimate cash from DPS × shares, and see dividend filings koel has on file — announce, XD, and pay when the text includes them."
+          description="Estimate cash across session-only symbol rows from DPS × shares, optionally apply a rough WHT estimate, and review stored CSE dividend events."
         />
         <NfaInline className="mt-3" />
 
