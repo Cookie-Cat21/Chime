@@ -25,6 +25,8 @@ def test_app_nav_scenarios_not_in_primary_links() -> None:
     source = nav.read_text(encoding="utf-8")
     assert 'href: "/scenarios", label: "Scenarios"' not in source
     assert "Phase 3" in source or "primary until Phase 3" in source
+    assert "primaryLinks" in source
+    assert "moreLinks" in source
     assert "resolveActiveNavHref" in source
     assert "usePathname" in source
     assert "activeHref === link.href" in source
