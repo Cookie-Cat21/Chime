@@ -1,0 +1,317 @@
+"""Prospective live shadow forecasts written only to ``forecast_outcomes``."""
+
+from __future__ import annotations
+
+import argparse
+import asyncio
+import json
+import math
+import os
+from dataclasses import asdict, dataclass
+from datetime import UTC, date, datetime, time
+from pathlib import Path
+from zoneinfo import ZoneInfo
+
+from koel.adapters.cse import CSEClient
+from koel.domain import DailyBar, PriceSnapshot
+from koel.ml.dataset import Sample, build_samples
+from koel.ml.distributed_worker import _fit_predict_average
+from koel.ml.features import path_features
+from koel.ml.iterate import _enrich_cross_section
+from koel.ml.outcomes import OutcomeEmit, emit_outcome_rows
+from koel.ml.research_features import (
+    build_research_bar_metadata,
+    enrich_market_context,
+    enrich_research_quality,
+)
+from koel.ml.research_fundamentals import enrich_fundamentals
+from koel.ml.snapshot import LoadedSnapshot, load_bar_snapshot
+from koel.storage import Storage
+
+COLOMBO = ZoneInfo("Asia/Colombo")
+MODEL_BASE = "shadow_abs_xgb2_context_v1"
+MODEL_SELECTIVE = "shadow_abs_xgb2_context_p005_v1"
+MODEL_PRESSURE = "shadow_abs_xgb2_context_book_v1"
+
+
+@dataclass(frozen=True, slots=True)
+class LiveShadowResult:
+    issued_at: str
+    partial_session: bool
+    board_rows: int
+    eligible_symbols: int
+    base_emits: int
+    selective_emits: int
+    pressure_emits: int
+    snapshot_sha256: str
+
+
+def append_live_board(
+    series: dict[str, list[DailyBar]],
+    board: list[PriceSnapshot],
+    *,
+    trade_date: date,
+) -> dict[str, list[DailyBar]]:
+    """Return a copy with one current-session CSE bar per known symbol."""
+    out = {symbol: list(bars) for symbol, bars in series.items()}
+    for snapshot in board:
+        symbol = snapshot.symbol.strip().upper()
+        if symbol not in out or snapshot.price <= 0 or not math.isfinite(snapshot.price):
+            continue
+        bar = DailyBar(
+            symbol=symbol,
+            trade_date=trade_date,
+            price=float(snapshot.price),
+            high=snapshot.high,
+            low=snapshot.low,
+            open=snapshot.open,
+            volume=snapshot.volume,
+            source_period=5,
+            bar_ts=snapshot.ts.astimezone(UTC),
+        )
+        out[symbol] = [
+            existing for existing in out[symbol] if existing.trade_date != trade_date
+        ] + [bar]
+        out[symbol].sort(key=lambda existing: existing.trade_date)
+    return out
+
+
+def _latest_samples(
+    *,
+    series: dict[str, list[DailyBar]],
+    loaded: LoadedSnapshot,
+    trade_date: date,
+    min_history: int,
+    max_flat_fraction: float,
+) -> list[Sample]:
+    metadata = build_research_bar_metadata(series, dataset=loaded.manifest.dataset)
+    base: list[Sample] = []
+    for symbol, bars in series.items():
+        ordered = sorted(bars, key=lambda bar: bar.trade_date)
+        if (
+            len(ordered) < min_history
+            or ordered[-1].trade_date != trade_date
+            or metadata[(symbol, trade_date)].source != "cse"
+            or metadata[(symbol, trade_date)].flat_fraction_60 > max_flat_fraction
+        ):
+            continue
+        if len(ordered) > 1:
+            previous = ordered[-2].price
+            if previous <= 0 or abs((ordered[-1].price / previous) - 1.0) > 0.35:
+                continue
+        features = path_features(ordered)
+        if features is None:
+            continue
+        base.append(
+            Sample(
+                symbol=symbol,
+                as_of=trade_date,
+                x=features.values,
+                y_ret=0.0,
+                y_dir=0.0,
+                horizon=1,
+            )
+        )
+    enriched = enrich_research_quality(base, metadata)
+    enriched = enrich_fundamentals(enriched, loaded.fundamentals)
+    enriched = enrich_market_context(enriched)
+    return _enrich_cross_section(enriched)
+
+
+def _training_samples(loaded: LoadedSnapshot) -> list[Sample]:
+    metadata = build_research_bar_metadata(
+        loaded.series,
+        dataset=loaded.manifest.dataset,
+    )
+    samples = build_samples(
+        loaded.series,
+        horizon=1,
+        min_history=252,
+        max_abs_return=0.35,
+        include_flat=True,
+    )
+    samples = enrich_research_quality(samples, metadata)
+    samples = enrich_fundamentals(samples, loaded.fundamentals)
+    samples = enrich_market_context(samples)
+    return _enrich_cross_section(samples)
+
+
+async def _latest_book_imbalances(
+    storage: Storage,
+    *,
+    lookback_minutes: int = 20,
+) -> dict[str, float]:
+    async with storage._pool.connection() as conn:
+        rows = await (
+            await conn.execute(
+                """
+                SELECT DISTINCT ON (symbol)
+                       symbol, total_bids, total_asks
+                FROM order_book_snapshots
+                WHERE ts >= now() - (%s::text || ' minutes')::interval
+                ORDER BY symbol, ts DESC
+                """,
+                (str(lookback_minutes),),
+            )
+        ).fetchall()
+    out: dict[str, float] = {}
+    for raw in rows:
+        row = dict(raw)
+        bids = float(row["total_bids"])
+        asks = float(row["total_asks"])
+        denominator = bids + asks
+        if denominator > 0 and math.isfinite(denominator):
+            out[str(row["symbol"]).strip().upper()] = (bids - asks) / denominator
+    return out
+
+
+def _confidence(score: float) -> float:
+    return max(0.0, min(1.0, abs(score) * 2.0))
+
+
+async def run_live_shadow(
+    *,
+    storage: Storage,
+    cse: CSEClient,
+    snapshot_dir: Path,
+    allow_partial: bool = False,
+    min_history: int = 60,
+    max_flat_fraction: float = 0.40,
+) -> LiveShadowResult:
+    """Fit the frozen challenger and append prospective ledger rows."""
+    now = datetime.now(COLOMBO)
+    partial = now.time() < time(14, 35)
+    if partial and not allow_partial:
+        raise RuntimeError("market session is still active; refusing final shadow emit")
+
+    loaded = load_bar_snapshot(snapshot_dir)
+    board = await cse.fetch_trade_summary()
+    live_series = append_live_board(loaded.series, board, trade_date=now.date())
+    train = _training_samples(loaded)
+    latest = _latest_samples(
+        series=live_series,
+        loaded=loaded,
+        trade_date=now.date(),
+        min_history=min_history,
+        max_flat_fraction=max_flat_fraction,
+    )
+    if len(train) < 100 or not latest:
+        raise RuntimeError("insufficient training or live feature rows")
+    scores = _fit_predict_average(
+        model="xgb_two_stage",
+        train=train,
+        test=latest,
+        seeds=(0,),
+    )
+    score_by_symbol = {
+        sample.symbol: score
+        for sample, score in zip(latest, scores, strict=True)
+        if score != 0 and math.isfinite(score)
+    }
+    suffix = "_partial" if partial else ""
+    base_version = MODEL_BASE + suffix
+    selective_version = MODEL_SELECTIVE + suffix
+    pressure_version = MODEL_PRESSURE + suffix
+
+    base_rows = [
+        OutcomeEmit(
+            model_id=MODEL_BASE,
+            model_version=base_version,
+            symbol=symbol,
+            issued_at=now.date(),
+            horizon_days=1,
+            y_pred=score,
+            confidence=_confidence(score),
+            gate="shadow_partial" if partial else "shadow_all",
+            regime_tag=f"live_shadow|partial={int(partial)}",
+        )
+        for symbol, score in sorted(score_by_symbol.items())
+    ]
+    base_count = await emit_outcome_rows(storage, base_rows)
+
+    ranked = sorted(score_by_symbol.items(), key=lambda item: abs(item[1]), reverse=True)
+    selective_n = max(1, math.ceil(len(ranked) * 0.005))
+    selective_rows = [
+        OutcomeEmit(
+            model_id=MODEL_SELECTIVE,
+            model_version=selective_version,
+            symbol=symbol,
+            issued_at=now.date(),
+            horizon_days=1,
+            y_pred=score,
+            confidence=_confidence(score),
+            gate="shadow_partial_p005" if partial else "shadow_p005",
+            regime_tag=f"live_shadow|partial={int(partial)}|coverage=0.005",
+        )
+        for symbol, score in ranked[:selective_n]
+    ]
+    selective_count = await emit_outcome_rows(storage, selective_rows)
+
+    books = await _latest_book_imbalances(storage)
+    pressure_rows = []
+    for symbol, score in sorted(score_by_symbol.items()):
+        imbalance = books.get(symbol)
+        if imbalance is None:
+            continue
+        pressure_score = score + 0.05 * imbalance
+        pressure_rows.append(
+            OutcomeEmit(
+                model_id=MODEL_PRESSURE,
+                model_version=pressure_version,
+                symbol=symbol,
+                issued_at=now.date(),
+                horizon_days=1,
+                y_pred=pressure_score,
+                confidence=_confidence(pressure_score),
+                gate="shadow_partial_book" if partial else "shadow_book",
+                regime_tag=(
+                    f"live_shadow|partial={int(partial)}|book={imbalance:.4f}"
+                ),
+            )
+        )
+    pressure_count = await emit_outcome_rows(storage, pressure_rows)
+    return LiveShadowResult(
+        issued_at=now.date().isoformat(),
+        partial_session=partial,
+        board_rows=len(board),
+        eligible_symbols=len(latest),
+        base_emits=base_count,
+        selective_emits=selective_count,
+        pressure_emits=pressure_count,
+        snapshot_sha256=loaded.manifest.bars_sha256,
+    )
+
+
+async def _run(args: argparse.Namespace) -> None:
+    database_url = os.environ.get("ML_DATABASE_URL") or os.environ.get("DATABASE_URL")
+    if not database_url:
+        raise SystemExit("ML_DATABASE_URL (or DATABASE_URL) is required")
+    storage = Storage(database_url)
+    await storage.open()
+    try:
+        async with CSEClient(min_interval_seconds=0.25) as cse:
+            result = await run_live_shadow(
+                storage=storage,
+                cse=cse,
+                snapshot_dir=args.snapshot,
+                allow_partial=args.allow_partial,
+                min_history=args.min_history,
+                max_flat_fraction=args.max_flat_fraction,
+            )
+    finally:
+        await storage.close()
+    print(json.dumps(asdict(result), sort_keys=True))
+
+
+def main(argv: list[str] | None = None) -> None:
+    parser = argparse.ArgumentParser(description="Emit prospective CSE shadow rows")
+    parser.add_argument("--snapshot", type=Path, required=True)
+    parser.add_argument("--allow-partial", action="store_true")
+    parser.add_argument("--min-history", type=int, default=60)
+    parser.add_argument("--max-flat-fraction", type=float, default=0.40)
+    args = parser.parse_args(argv)
+    asyncio.run(_run(args))
+
+
+if __name__ == "__main__":
+    main()
