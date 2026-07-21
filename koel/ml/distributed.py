@@ -535,7 +535,6 @@ def evaluate_nested_ensemble(
             raise ValueError("ensemble_mode must be equal or calibration_select")
 
         selected_models: tuple[str, ...] | None = None
-        calibration: list[EnsemblePrediction] = []
         test: list[EnsemblePrediction] = []
         gate: dict[str, float | int] | None = None
         for candidate_models in candidates:
@@ -567,7 +566,6 @@ def evaluate_nested_ensemble(
             ) if gate is not None else None
             if current_rank is None or candidate_rank > current_rank:
                 selected_models = candidate_models
-                calibration = candidate_calibration
                 test = _rescore_rows(test_base, candidate_models)
                 gate = candidate_gate
         threshold = float(gate["threshold"]) if gate is not None else None
