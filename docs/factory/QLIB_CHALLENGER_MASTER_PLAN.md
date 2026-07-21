@@ -78,19 +78,26 @@ their source is not copied or distributed.
 ### Phase 1 — common data and metrics
 
 - [x] Immutable Koel bars + filings snapshot.
-- [ ] Qlib-compatible deterministic CSV/calendar/instrument export.
-- [ ] Average-rank Spearman implementation with tie handling.
-- [ ] Balanced accuracy, MCC, Brier and ECE.
-- [ ] Top/bottom spread, turnover and cost stress.
-- [ ] Unified challenger report JSON/Markdown.
+- [x] Qlib-compatible deterministic CSV/calendar/instrument export.
+- [x] Native Qlib binary conversion and provider smoke.
+- [x] Average-rank Spearman implementation with tie handling.
+- [x] Balanced accuracy, MCC, Brier and ECE.
+- [x] Top/bottom spread, turnover and cost stress.
+- [x] Unified challenger report JSON/Markdown.
 
 ### Phase 2 — CPU parity challengers
 
-- [ ] Qlib-parameter LightGBM rank/regression baseline.
+- [x] Qlib-parameter LightGBM rank/regression baseline.
+- [x] Native DoubleEnsemble concept approximation.
 - [ ] Exact Qlib LightGBM run in isolated `pyqlib==0.9.7` workflow.
 - [ ] Exact Qlib DoubleEnsemble run.
 - [ ] Compare native and Qlib outputs on identical fold keys.
 - [ ] Add new prospective policy IDs only after offline gates pass.
+
+Initial three-fold results are recorded in
+`docs/experiments/QLIB_CHALLENGER_20260721.md`. RankIC and direction metrics
+are promising, but both candidates remain blocked because the 112 bps cost
+stress is negative and the export is not yet corporate-action adjusted.
 
 ### Phase 3 — GPU sequence challengers
 
