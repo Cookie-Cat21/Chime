@@ -7,6 +7,8 @@ import asyncio
 import json
 import math
 import os
+import statistics
+from collections import defaultdict
 from dataclasses import asdict, dataclass
 from datetime import UTC, date, datetime, time
 from pathlib import Path
@@ -44,6 +46,14 @@ class LiveShadowResult:
     selective_emits: int
     pressure_emits: int
     snapshot_sha256: str
+
+
+@dataclass(frozen=True, slots=True)
+class PressureFactors:
+    book_median: float
+    book_persistence: float
+    book_slope: float
+    signed_volume_proxy: float
 
 
 def append_live_board(
@@ -136,33 +146,99 @@ def _training_samples(loaded: LoadedSnapshot) -> list[Sample]:
     return _enrich_cross_section(samples)
 
 
-async def _latest_book_imbalances(
+def summarize_pressure_factors(
+    book_rows: list[dict[str, object]],
+    price_rows: list[dict[str, object]],
+) -> dict[str, PressureFactors]:
+    """Summarize displayed book and tick-rule cumulative-volume pressure."""
+    books: dict[str, list[tuple[datetime, float]]] = defaultdict(list)
+    for row in book_rows:
+        symbol = str(row["symbol"]).strip().upper()
+        bids = float(row["total_bids"])
+        asks = float(row["total_asks"])
+        ts = row["ts"]
+        denominator = bids + asks
+        if (
+            isinstance(ts, datetime)
+            and denominator > 0
+            and math.isfinite(denominator)
+        ):
+            books[symbol].append((ts, (bids - asks) / denominator))
+
+    prices: dict[str, list[tuple[datetime, float, float]]] = defaultdict(list)
+    for row in price_rows:
+        ts = row["ts"]
+        price = float(row["price"])
+        volume = float(row["volume"] or 0)
+        if isinstance(ts, datetime) and price > 0 and math.isfinite(price):
+            prices[str(row["symbol"]).strip().upper()].append((ts, price, volume))
+
+    out: dict[str, PressureFactors] = {}
+    for symbol, observations in books.items():
+        ordered_books = sorted(observations)
+        imbalances = [value for _ts, value in ordered_books]
+        persistence = statistics.fmean(
+            1.0 if value > 0 else -1.0 if value < 0 else 0.0
+            for value in imbalances
+        )
+        slope = imbalances[-1] - imbalances[0] if len(imbalances) > 1 else 0.0
+
+        signed_volume = 0.0
+        total_volume = 0.0
+        last_sign = 0.0
+        ordered_prices = sorted(prices.get(symbol, []))
+        for previous, current in zip(ordered_prices, ordered_prices[1:]):
+            _prev_ts, previous_price, previous_volume = previous
+            _curr_ts, current_price, current_volume = current
+            delta_volume = max(0.0, current_volume - previous_volume)
+            if current_price > previous_price:
+                last_sign = 1.0
+            elif current_price < previous_price:
+                last_sign = -1.0
+            signed_volume += last_sign * delta_volume
+            total_volume += delta_volume
+        signed_proxy = signed_volume / total_volume if total_volume > 0 else 0.0
+        out[symbol] = PressureFactors(
+            book_median=statistics.median(imbalances),
+            book_persistence=persistence,
+            book_slope=max(-1.0, min(1.0, slope)),
+            signed_volume_proxy=max(-1.0, min(1.0, signed_proxy)),
+        )
+    return out
+
+
+async def _latest_pressure_factors(
     storage: Storage,
     *,
-    lookback_minutes: int = 20,
-) -> dict[str, float]:
+    lookback_minutes: int = 120,
+) -> dict[str, PressureFactors]:
     async with storage._pool.connection() as conn:
-        rows = await (
+        book_rows = await (
             await conn.execute(
                 """
-                SELECT DISTINCT ON (symbol)
-                       symbol, total_bids, total_asks
+                SELECT symbol, total_bids, total_asks, ts
                 FROM order_book_snapshots
                 WHERE ts >= now() - (%s::text || ' minutes')::interval
-                ORDER BY symbol, ts DESC
+                ORDER BY symbol, ts
                 """,
                 (str(lookback_minutes),),
             )
         ).fetchall()
-    out: dict[str, float] = {}
-    for raw in rows:
-        row = dict(raw)
-        bids = float(row["total_bids"])
-        asks = float(row["total_asks"])
-        denominator = bids + asks
-        if denominator > 0 and math.isfinite(denominator):
-            out[str(row["symbol"]).strip().upper()] = (bids - asks) / denominator
-    return out
+        price_rows = await (
+            await conn.execute(
+                """
+                SELECT symbol, price, volume, ts
+                FROM price_snapshots
+                WHERE ts >= now() - (%s::text || ' minutes')::interval
+                ORDER BY symbol, ts
+                """,
+                (str(lookback_minutes),),
+            )
+        ).fetchall()
+    return summarize_pressure_factors(
+        [dict(row) for row in book_rows],
+        [dict(row) for row in price_rows],
+    )
 
 
 def _confidence(score: float) -> float:
@@ -247,13 +323,19 @@ async def run_live_shadow(
     ]
     selective_count = await emit_outcome_rows(storage, selective_rows)
 
-    books = await _latest_book_imbalances(storage)
+    pressure = await _latest_pressure_factors(storage)
     pressure_rows = []
     for symbol, score in sorted(score_by_symbol.items()):
-        imbalance = books.get(symbol)
-        if imbalance is None:
+        factors = pressure.get(symbol)
+        if factors is None:
             continue
-        pressure_score = score + 0.05 * imbalance
+        pressure_score = (
+            score
+            + 0.03 * factors.book_median
+            + 0.02 * factors.book_persistence
+            + 0.01 * factors.book_slope
+            + 0.03 * factors.signed_volume_proxy
+        )
         pressure_rows.append(
             OutcomeEmit(
                 model_id=MODEL_PRESSURE,
@@ -265,7 +347,11 @@ async def run_live_shadow(
                 confidence=_confidence(pressure_score),
                 gate="shadow_partial_book" if partial else "shadow_book",
                 regime_tag=(
-                    f"live_shadow|partial={int(partial)}|book={imbalance:.4f}"
+                    f"live_shadow|partial={int(partial)}"
+                    f"|book={factors.book_median:.4f}"
+                    f"|persist={factors.book_persistence:.4f}"
+                    f"|slope={factors.book_slope:.4f}"
+                    f"|signed_vol={factors.signed_volume_proxy:.4f}"
                 ),
             )
         )
