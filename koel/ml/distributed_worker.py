@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import math
 import os
 from dataclasses import dataclass
 from datetime import date
@@ -18,6 +19,7 @@ from koel.ml.distributed import (
     _parse_csv_ints,
     write_prediction_artifact,
 )
+from koel.ml.features import FEATURE_NAMES
 from koel.ml.harden import _demean_by_day
 from koel.ml.iterate import _enrich_cross_section
 from koel.ml.research_features import (
@@ -28,6 +30,8 @@ from koel.ml.research_features import (
 )
 from koel.ml.research_fundamentals import enrich_fundamentals
 from koel.ml.snapshot import load_bar_snapshot
+
+SOURCE_IS_CSE_INDEX = len(FEATURE_NAMES)
 
 
 @dataclass(frozen=True, slots=True)
@@ -144,6 +148,26 @@ def _class_ratio(labels: object) -> float:
     return negatives / positives if positives else 1.0
 
 
+def _domain_weights(samples: list[Sample]) -> object:
+    """Upweight official-CSE and recent training rows without future inputs."""
+    import numpy as np
+
+    latest = max(sample.as_of for sample in samples)
+    weights: list[float] = []
+    for sample in samples:
+        age_days = max(0, (latest - sample.as_of).days)
+        recency = 2.0 ** (-age_days / 1825.0)
+        source_is_cse = (
+            len(sample.x) > SOURCE_IS_CSE_INDEX
+            and math.isfinite(sample.x[SOURCE_IS_CSE_INDEX])
+            and sample.x[SOURCE_IS_CSE_INDEX] >= 0.5
+        )
+        weights.append(recency * (20.0 if source_is_cse else 1.0))
+    values = np.asarray(weights, dtype=float)
+    mean = float(np.mean(values))
+    return values / mean if mean > 0 else values
+
+
 def _fit_predict_two_stage(
     *,
     model: str,
@@ -234,7 +258,8 @@ def _fit_predict_one(
             seed=seed,
         )
     selected = [sample for sample in train if sample.y_dir != 0]
-    if model.endswith("_lmt"):
+    domain_weighted = model.endswith("_domain")
+    if model.endswith("_lmt") or domain_weighted:
         magnitudes = np.asarray(
             [abs(sample.y_ret) for sample in selected], dtype=float
         )
@@ -266,7 +291,7 @@ def _fit_predict_one(
                 random_state=seed,
             ),
         )
-    elif model == "hgb_lmt":
+    elif model in {"hgb_lmt", "hgb_domain"}:
         from sklearn.ensemble import HistGradientBoostingClassifier
 
         classifier = HistGradientBoostingClassifier(
@@ -276,7 +301,7 @@ def _fit_predict_one(
             l2_regularization=1.0,
             random_state=seed,
         )
-    elif model == "lgb_lmt":
+    elif model in {"lgb_lmt", "lgb_domain"}:
         from lightgbm import LGBMClassifier
 
         classifier = LGBMClassifier(
@@ -297,7 +322,11 @@ def _fit_predict_one(
             seed=seed,
             positive_weight=_class_ratio(y_train),
         )
-    classifier.fit(x_train, y_train)
+    sample_weight = _domain_weights(selected) if domain_weighted else None
+    if sample_weight is None:
+        classifier.fit(x_train, y_train)
+    else:
+        classifier.fit(x_train, y_train, sample_weight=sample_weight)
     probabilities = classifier.predict_proba(x_test)[:, 1]
     return [float(probability - 0.5) for probability in probabilities]
 

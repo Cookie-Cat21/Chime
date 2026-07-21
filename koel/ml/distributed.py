@@ -22,6 +22,9 @@ ALLOWED_MODELS = (
     "hgb_lmt",
     "xgb_lmt",
     "lgb_lmt",
+    "hgb_domain",
+    "xgb_domain",
+    "lgb_domain",
     "hgb_two_stage",
     "xgb_two_stage",
 )
