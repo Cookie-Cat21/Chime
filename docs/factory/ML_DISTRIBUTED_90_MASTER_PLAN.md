@@ -1,6 +1,6 @@
 # Distributed ML 90% master plan
 
-**Status:** execution foundation + local baseline complete; target not met  
+**Status:** corrected tree/data ladder complete; strict target not met  
 **Primary goal:** selective absolute CSE direction precision, not always-on accuracy  
 **Compliance:** research signal only, always NFA
 
@@ -62,6 +62,12 @@ The old HPE serving path also trains one horizon-1 panel model and reuses its
 score for horizon 1/2/3/5 and absolute streams. It does not reproduce the
 research configuration and cannot be used as proof.
 
+Corrected iteration results are recorded in
+`docs/experiments/ML_DISTRIBUTED_ITERATIONS_20260721.md`. Absolute one- and
+five-session direction produced no qualifying 90% calibration gate. A thin
+relative pocket exceeded 90% only by concentrating on flat-price names; an
+ex-ante flat-history filter reduced it to 77.18%.
+
 ## 3. Distributed architecture
 
 ```text
@@ -93,7 +99,8 @@ locked final test -> prospective shadow -> manual promotion
 The corrected v2 matrix uses:
 
 - Three chronological development folds with official-CSE outcomes only.
-- `logistic`, `hgb_lmt`, and `xgb_lmt`.
+- Logistic, HGB, XGBoost and LightGBM baselines.
+- Large-move, CSE-domain-weighted and two-stage magnitude/direction variants.
 - Three seeds per fold/model worker.
 - A 63-session delayed-development buffer; final proof remains prospective.
 - Five-session embargo (or the horizon when larger).
@@ -119,6 +126,9 @@ not create shared GPU memory or synchronously train one giant model.
 - [x] Manual GitHub Actions workflow with no promotion or forecast writes.
 - [x] Run the original relative-label baseline and archive its exploratory failure.
 - [x] Correct target dates, flat outcomes, source metadata and CSE-only evaluation.
+- [x] Add publication-safe filings, lag features and market context.
+- [x] Add calibration-only model selection and two-stage candidates.
+- [x] Reject flat-trading concentration artifacts ex ante.
 - [ ] Create `ML_DATABASE_URL` using a SELECT-only Postgres role.
 - [ ] Reproduce the baseline through the GitHub Actions matrix.
 
@@ -135,6 +145,11 @@ not create shared GPU memory or synchronously train one giant model.
 8. Produce a versioned data-quality report for every snapshot.
 
 No deep model advances while unresolved data errors can manufacture labels.
+
+Completed in the distributed research path: source/missingness masks,
+publication-time filing joins, >35% cliff quarantine, explicit flat outcomes,
+and a trailing flat-history eligibility gate. Still open: historical corporate
+actions, ticker lineage and point-in-time universe reconstruction.
 
 ### Phase C — distributed baseline ladder
 
