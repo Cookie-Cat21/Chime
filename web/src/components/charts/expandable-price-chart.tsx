@@ -12,8 +12,11 @@ import {
 } from "react";
 
 import { CandlestickChart } from "@/components/charts/candlestick-chart";
+import { LwcPriceChart } from "@/components/charts/lwc-price-chart";
+import { TradingViewEmbed } from "@/components/charts/tradingview-embed";
 import { SparklineWithForecast } from "@/components/sparkline-with-forecast";
 import { Button } from "@/components/ui/button";
+import { toTradingViewSymbol } from "@/lib/tradingview-symbol";
 import {
   type ChartRangeKey,
   type DailyBarPoint,
@@ -75,7 +78,11 @@ export function ExpandablePriceChart({
   const titleId = useId();
   const forecastToggleId = useId();
   const [open, setOpen] = useState(Boolean(initialOpen));
+  /** koel = LWC on Postgres; tv = optional TradingView embed (power users). */
+  const [chartLayer, setChartLayer] = useState<"koel" | "tv">("koel");
   const [range, setRange] = useState<ChartRangeKey>(initialRange);
+  const tvAvailable =
+    seriesKind === "symbol" && toTradingViewSymbol(symbol) != null;
   const [bars, setBars] = useState<DailyBarPoint[] | null>(
     initialBars && initialBars.length > 0 ? initialBars : null,
   );
@@ -602,63 +609,101 @@ export function ExpandablePriceChart({
               </Button>
             </div>
 
-            {/* Toolbar — segmented range control + forecast toggle */}
+            {/* Toolbar — layer (koel / TV) + range + forecast */}
             <div className="flex shrink-0 flex-wrap items-center justify-between gap-3 border-b border-border/40 px-5 py-2.5">
-              <div
-                role="group"
-                aria-label="Chart range"
-                className="inline-flex items-center gap-0.5 rounded-lg border border-border/60 bg-muted/60 p-0.5"
-              >
-                {RANGES.map((r) => (
-                  <button
-                    key={r}
-                    type="button"
-                    onClick={() => setRange(r)}
-                    aria-pressed={range === r}
-                    className={
-                      range === r
-                        ? "rounded-md bg-background px-3 py-1.5 text-xs font-semibold text-foreground shadow-sm"
-                        : "rounded-md px-3 py-1.5 text-xs font-medium text-muted-foreground transition-colors hover:text-foreground"
-                    }
+              <div className="flex flex-wrap items-center gap-2">
+                {tvAvailable ? (
+                  <div
+                    role="group"
+                    aria-label="Chart source"
+                    className="inline-flex items-center gap-0.5 rounded-lg border border-border/60 bg-muted/60 p-0.5"
                   >
-                    {r}
-                  </button>
-                ))}
+                    <button
+                      type="button"
+                      onClick={() => setChartLayer("koel")}
+                      aria-pressed={chartLayer === "koel"}
+                      className={
+                        chartLayer === "koel"
+                          ? "rounded-md bg-background px-3 py-1.5 text-xs font-semibold text-foreground shadow-sm"
+                          : "rounded-md px-3 py-1.5 text-xs font-medium text-muted-foreground transition-colors hover:text-foreground"
+                      }
+                    >
+                      koel
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setChartLayer("tv")}
+                      aria-pressed={chartLayer === "tv"}
+                      title="External TradingView chart — drawings & indicators. Often delayed."
+                      className={
+                        chartLayer === "tv"
+                          ? "rounded-md bg-background px-3 py-1.5 text-xs font-semibold text-foreground shadow-sm"
+                          : "rounded-md px-3 py-1.5 text-xs font-medium text-muted-foreground transition-colors hover:text-foreground"
+                      }
+                    >
+                      TradingView
+                    </button>
+                  </div>
+                ) : null}
+                {chartLayer === "koel" ? (
+                  <div
+                    role="group"
+                    aria-label="Chart range"
+                    className="inline-flex items-center gap-0.5 rounded-lg border border-border/60 bg-muted/60 p-0.5"
+                  >
+                    {RANGES.map((r) => (
+                      <button
+                        key={r}
+                        type="button"
+                        onClick={() => setRange(r)}
+                        aria-pressed={range === r}
+                        className={
+                          range === r
+                            ? "rounded-md bg-background px-3 py-1.5 text-xs font-semibold text-foreground shadow-sm"
+                            : "rounded-md px-3 py-1.5 text-xs font-medium text-muted-foreground transition-colors hover:text-foreground"
+                        }
+                      >
+                        {r}
+                      </button>
+                    ))}
+                  </div>
+                ) : null}
               </div>
               <div className="flex flex-wrap items-center gap-2">
-                <button
-                  id={forecastToggleId}
-                  type="button"
-                  aria-pressed={showForecast}
-                  disabled={forecastPrices.length === 0}
-                  onClick={() => setShowForecast((v) => !v)}
-                  title={
-                    forecastPrices.length === 0
-                      ? "No stored model forecast for this symbol."
-                      : "Overlay the stored model forecast (dashed). Research only — not financial advice."
-                  }
-                  className={`inline-flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-xs font-medium transition-colors disabled:cursor-not-allowed disabled:opacity-45 ${
-                    showForecast && forecastPrices.length > 0
-                      ? "border-sky-500/40 bg-sky-500/10 text-sky-800 dark:text-sky-200"
-                      : "border-border text-muted-foreground hover:text-foreground"
-                  }`}
-                >
-                  <span
-                    className={`h-0 w-4 border-t-2 border-dashed ${
+                {chartLayer === "koel" ? (
+                  <button
+                    id={forecastToggleId}
+                    type="button"
+                    aria-pressed={showForecast}
+                    disabled={forecastPrices.length === 0}
+                    onClick={() => setShowForecast((v) => !v)}
+                    title={
+                      forecastPrices.length === 0
+                        ? "No stored model forecast for this symbol."
+                        : "Overlay the stored model forecast (dashed). Research only — not financial advice."
+                    }
+                    className={`inline-flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-xs font-medium transition-colors disabled:cursor-not-allowed disabled:opacity-45 ${
                       showForecast && forecastPrices.length > 0
-                        ? "border-sky-600 dark:border-sky-400"
-                        : "border-muted-foreground/60"
+                        ? "border-sky-500/40 bg-sky-500/10 text-sky-800 dark:text-sky-200"
+                        : "border-border text-muted-foreground hover:text-foreground"
                     }`}
-                    aria-hidden
-                  />
-                  Forecast
-                  {forecastPrices.length === 0 ? " — none" : ""}
-                </button>
+                  >
+                    <span
+                      className={`h-0 w-4 border-t-2 border-dashed ${
+                        showForecast && forecastPrices.length > 0
+                          ? "border-sky-600 dark:border-sky-400"
+                          : "border-muted-foreground/60"
+                      }`}
+                      aria-hidden
+                    />
+                    Forecast
+                    {forecastPrices.length === 0 ? " — none" : ""}
+                  </button>
+                ) : null}
               </div>
             </div>
 
-            {/* Window stats — O/H/L/C over the selected range */}
-            {windowStats ? (
+            {chartLayer === "koel" && windowStats ? (
               <dl className="flex shrink-0 flex-wrap items-baseline gap-x-6 gap-y-1 border-b border-border/40 px-5 py-2 font-mono text-xs tabular-nums">
                 {seriesKind === "index" ? (
                   <>
@@ -720,9 +765,10 @@ export function ExpandablePriceChart({
               </dl>
             ) : null}
 
-            {/* Chart area — centered aspect box so candles aren't stretched */}
             <div className="flex min-h-0 flex-1 flex-col px-5 pt-3 pb-4">
-              {loading ? (
+              {chartLayer === "tv" && tvAvailable ? (
+                <TradingViewEmbed symbol={symbol} className="min-h-0 flex-1" />
+              ) : loading ? (
                 <div
                   className="flex min-h-0 flex-1 flex-col gap-2.5"
                   role="status"
@@ -753,31 +799,25 @@ export function ExpandablePriceChart({
                   </p>
                 </div>
               ) : (
-                <CandlestickChart
-                  bars={chartBars}
-                  fill
-                  fitWidth
+                <LwcPriceChart
+                  bars={
+                    seriesKind === "index"
+                      ? chartBars.slice(
+                          -Math.min(
+                            90,
+                            sessionsForRange(range === "1D" ? "3M" : range),
+                          ),
+                        )
+                      : chartBars.slice(
+                          -(range === "1D" && oneDayUsingDaily
+                            ? 40
+                            : displayCandlesForRange(range)),
+                        )
+                  }
                   showForecast={showForecast}
                   forecastPrices={forecastPrices}
-                  variant={seriesKind === "index" ? "close" : "auto"}
-                  maxCandles={
-                    seriesKind === "index"
-                      ? // Cap so close→close aggregates stay thick on ASPI scale.
-                        Math.min(90, sessionsForRange(range === "1D" ? "3M" : range))
-                      : range === "1D" && oneDayUsingDaily
-                        ? 40
-                        : displayCandlesForRange(range)
-                  }
+                  showVolume={seriesKind !== "index"}
                   className="min-h-0 flex-1"
-                  footnote={
-                    seriesKind === "index"
-                      ? undefined
-                      : range === "1D"
-                        ? oneDayUsingDaily
-                          ? `Only ${sessionTicks.length} session tick${sessionTicks.length === 1 ? "" : "s"} — showing last ${chartBars.length} daily sessions · research only`
-                          : `${sessionTicks.length} session ticks → ${chartBars.length} intraday candles · research only`
-                        : undefined
-                  }
                 />
               )}
             </div>

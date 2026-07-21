@@ -153,7 +153,7 @@ export const HELP_TOPICS: readonly HelpTopic[] = [
       {
         question: "Candles vs sparkline?",
         answer:
-          "When koel has enough daily bars, the company hero shows daily OHLC candlesticks (expand for more ranges). If daily path history is thin (under 2 bars), it falls back to a tick sparkline from stored snapshots.\n\nEmpty chart copy about path-backfill means daily bars are not stored yet — not that the company has no price forever.",
+          "When koel has enough daily bars, the company hero shows daily OHLC candlesticks (expand for more ranges). Expand opens an interactive koel chart (Lightweight Charts — crosshair, pan, zoom) on Postgres path data. On company symbols you can also switch to an optional TradingView tab for drawings/indicators (external, often delayed — koel alerts still use koel data).\n\nIf daily path history is thin (under 2 bars), the hero falls back to a tick sparkline. Empty chart copy about path-backfill means daily bars are not stored yet — not that the company has no price forever."
       },
       {
         question: "What do 1D / 1M / 3M / 6M / 1Y mean?",

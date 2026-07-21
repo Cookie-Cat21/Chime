@@ -21,6 +21,7 @@ in §1–§2; sources inline).
 | W7 Public channel posts | ✅ scaffolded | `koel/channel_posts.py` + poller; `TELEGRAM_PUBLIC_CHANNEL_ID`; runbook `docs/runbooks/TELEGRAM_CHANNEL.md` |
 | W8 Digest-by-default offer | ✅ scaffolded | `/start` opt-in `prefs:digest_on` (consent only; default stays off) |
 | W9 Sinhala alert language | ✅ shipped | `/language si\|සිංහල`; `users.locale`; `koel/i18n.py` |
+| Charts (all segments) | ✅ layered | LWC interactive + optional TradingView — [CHART_LAYERS.md](CHART_LAYERS.md) |
 | W10+ (H2) | ⏳ next | Results-day, Telegram Login, … |
 
 **Ops still required for W1 live:** set `AI_BRIEFS_ENABLED=1` + `AI_API_KEY` per
