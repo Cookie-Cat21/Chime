@@ -5193,7 +5193,7 @@ class Storage:
         return out
 
     async def get_user_preferences(self, user_id: int) -> dict[str, Any] | None:
-        """Return digest / quiet-hours prefs for ``user_id``, or None if missing."""
+        """Return digest / quiet-hours / locale prefs for ``user_id``, or None."""
         if isinstance(user_id, bool) or not isinstance(user_id, int) or user_id <= 0:
             return None
         async with self._pool.connection() as conn:
@@ -5201,7 +5201,7 @@ class Storage:
                 await conn.execute(
                     """
                     SELECT digest_enabled, quiet_hours_start, quiet_hours_end,
-                           alert_quota_max
+                           alert_quota_max, locale
                       FROM users
                      WHERE id = %s
                     """,
@@ -5225,36 +5225,72 @@ class Storage:
         quota = r.get("alert_quota_max")
         if isinstance(quota, bool) or not isinstance(quota, int) or quota < 0:
             quota = 100
+        from koel.i18n import normalize_locale
+
         return {
             "digest_enabled": digest,
             "quiet_hours_start": _hour(r.get("quiet_hours_start")),
             "quiet_hours_end": _hour(r.get("quiet_hours_end")),
             "alert_quota_max": quota,
+            "locale": normalize_locale(r.get("locale")),
         }
+
+    async def get_user_locale(self, user_id: int) -> str:
+        """Return ``en``/``si`` for ``user_id``; missing/bad → ``en``."""
+        prefs = await self.get_user_preferences(user_id)
+        if not isinstance(prefs, dict):
+            return "en"
+        from koel.i18n import normalize_locale
+
+        return normalize_locale(prefs.get("locale"))
+
+    async def set_user_locale(self, user_id: int, locale: str) -> None:
+        """Persist locale ``en``/``si`` only; other values are ignored."""
+        from koel.i18n import parse_language_arg
+
+        parsed = parse_language_arg(locale)
+        if parsed is None:
+            return
+        await self.update_user_preferences(user_id, locale=parsed)
 
     async def update_user_preferences(
         self,
         user_id: int,
         *,
         digest_enabled: bool | None = None,
+        locale: str | None = None,
     ) -> dict[str, Any] | None:
-        """Patch user prefs. Only ``digest_enabled`` for now; returns fresh prefs."""
+        """Patch user prefs (digest / locale); returns fresh prefs."""
         if isinstance(user_id, bool) or not isinstance(user_id, int) or user_id <= 0:
             return None
-        if digest_enabled is None:
+        sets: list[str] = []
+        params: list[Any] = []
+        if digest_enabled is not None:
+            if not isinstance(digest_enabled, bool):
+                return None
+            sets.append("digest_enabled = %s")
+            params.append(digest_enabled)
+        if locale is not None:
+            from koel.i18n import parse_language_arg
+
+            parsed = parse_language_arg(locale)
+            if parsed is None:
+                return None
+            sets.append("locale = %s")
+            params.append(parsed)
+        if not sets:
             return await self.get_user_preferences(user_id)
-        if not isinstance(digest_enabled, bool):
-            return None
+        params.append(user_id)
         async with self._pool.connection() as conn:
             row = await (
                 await conn.execute(
-                    """
+                    f"""
                     UPDATE users
-                       SET digest_enabled = %s
+                       SET {", ".join(sets)}
                      WHERE id = %s
                     RETURNING id
                     """,
-                    (digest_enabled, user_id),
+                    tuple(params),
                 )
             ).fetchone()
         if row is None:

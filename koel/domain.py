@@ -737,27 +737,31 @@ def format_price_lkr(price: float) -> str:
     return f"{price:.2f}"
 
 
-def brief_budget_for_prefix(prefix_lines: list[str]) -> int:
+def brief_budget_for_prefix(
+    prefix_lines: list[str],
+    *,
+    nfa: str | None = None,
+) -> int:
     """Chars available for a brief body under Telegram's hard cap.
 
     Prefix is everything before the brief; reserves blank lines around the
     brief (when present) plus the NFA disclaimer.
     """
-    nfa = disclaimer()
+    nfa_text = nfa if isinstance(nfa, str) and nfa else disclaimer()
     # join(prefix) + "\\n\\n" + brief + "\\n\\n" + nfa
-    fixed = len("\n".join(prefix_lines)) + 2 + 2 + len(nfa)
+    fixed = len("\n".join(prefix_lines)) + 2 + 2 + len(nfa_text)
     return max(0, TELEGRAM_SAFE_MAX - 1 - fixed)
 
 
-def _clamp_telegram_message(msg: str) -> str:
+def _clamp_telegram_message(msg: str, *, nfa: str | None = None) -> str:
     """Hard cap Telegram body length while keeping the NFA suffix."""
     if len(msg) < TELEGRAM_SAFE_MAX:
         return msg
-    nfa = disclaimer()
-    suffix = "\n\n" + nfa
+    nfa_text = nfa if isinstance(nfa, str) and nfa else disclaimer()
+    suffix = "\n\n" + nfa_text
     head = msg
-    if nfa in msg:
-        head = msg[: msg.rfind(nfa)].rstrip()
+    if nfa_text in msg:
+        head = msg[: msg.rfind(nfa_text)].rstrip()
     budget = max(1, TELEGRAM_SAFE_MAX - 1 - len(suffix))
     if len(head) > budget:
         head = head[: budget - 1].rstrip() + "…"
@@ -768,6 +772,7 @@ def format_alert_message(
     event: AlertEvent,
     *,
     filing_brief: str | None = None,
+    locale: str = "en",
 ) -> str:
     """Render a Telegram alert body. Always ends with NFA.
 
@@ -779,9 +784,16 @@ def format_alert_message(
     hostile/huge LLM string cannot blow past Telegram's 4096 limit.
     Symbol / trigger are control-stripped; prices use compact formatting;
     the final body is hard-clamped under Telegram's 4096 limit.
+
+    ``locale`` selects structural labels / NFA (W9). Trigger *content* stays
+    English for v1. Unknown locales fail closed to English.
     """
     # Lazy import: adapters.cse imports domain at module load.
     from koel.adapters.cse import allowed_filing_url
+    from koel.i18n import normalize_locale, t
+
+    loc = normalize_locale(locale)
+    nfa_text = t("alert.nfa", loc)
 
     # Fail closed — non-string symbol/trigger used to throw on re.sub mid
     # Telegram alert egress (parity dead-letter / brief-followup).
@@ -790,11 +802,13 @@ def format_alert_message(
     symbol = _CTRL_RE.sub("", raw_symbol).strip() or "?"
     trigger = _CTRL_RE.sub("", raw_trigger).strip() or "alert"
     lines = [
-        f"🔔 {symbol}",
-        f"Trigger: {trigger}",
+        t("alert.header", loc, symbol=symbol),
+        t("alert.trigger", loc, trigger=trigger),
     ]
     if event.current_price is not None:
-        lines.append(f"Price: {format_price_lkr(event.current_price)} LKR")
+        lines.append(
+            t("alert.price", loc, price=format_price_lkr(event.current_price))
+        )
     if event.disclosure_title:
         title = truncate_disclosure_title(event.disclosure_title)
         if title:
@@ -815,7 +829,7 @@ def format_alert_message(
         if ctx:
             lines.append(ctx)
     brief = filing_brief if filing_brief is not None else event.filing_brief
-    budget = min(BRIEF_BODY_MAX, brief_budget_for_prefix(lines))
+    budget = min(BRIEF_BODY_MAX, brief_budget_for_prefix(lines, nfa=nfa_text))
     brief_text = sanitize_brief_body(brief, max_len=budget) if budget > 0 else None
     if brief_text:
         lines.append("")
@@ -829,12 +843,12 @@ def format_alert_message(
                 if as_of.tzinfo is not None
                 else as_of.replace(tzinfo=_COLOMBO)
             )
-            lines.append(f"As of {local.strftime('%H:%M')} SLT")
+            lines.append(t("alert.as_of", loc, time=local.strftime("%H:%M")))
         except Exception:
             pass
     lines.append("")
-    lines.append(disclaimer())
-    return _clamp_telegram_message("\n".join(lines))
+    lines.append(nfa_text)
+    return _clamp_telegram_message("\n".join(lines), nfa=nfa_text)
 
 
 def format_dead_letter_notify(symbol: str, attempts: int) -> str:

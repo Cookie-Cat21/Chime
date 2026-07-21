@@ -34,7 +34,7 @@ the same Postgres-backed watchlist, rules, and fire history.
 | Alert quota | Abuse guard | `users.alert_quota_max` caps active dashboard alert creates. |
 | Test fire | Audit-only dry run | Inserts `[dry-run]` `alert_log` row; no Telegram send. |
 | Mute | Temporary suppression | Dashboard PATCH writes `alert_rules.muted_until`; the rule engine skips future-dated mutes. |
-| User preferences | Delivery settings | Dashboard settings reads/writes `digest_enabled`, `quiet_hours_start`, and `quiet_hours_end`. |
+| User preferences | Delivery settings | Dashboard settings reads/writes `digest_enabled`, `quiet_hours_start`, and `quiet_hours_end`. Bot `/language` sets `users.locale` (`en`/`si`) for alert templates (W9); dash locale UI not required for v1. |
 
 ## Runtime notes
 

@@ -236,6 +236,8 @@ class Poller:
         # Public channel posts (W7): process-lifetime once/day Colombo dates.
         self._channel_open_sent_on: date | None = None
         self._channel_close_sent_on: date | None = None
+        # W9: per-tick user locale cache (user_id → en|si).
+        self._locale_cache: dict[int, str] = {}
 
     def pdf_enrich_health_snapshot(self) -> dict[str, int]:
         """In-memory PDF enrich queue counters for health details."""
@@ -278,8 +280,42 @@ class Poller:
                     error=str(result),
                 )
 
+    async def _locale_for_user(self, user_id: int) -> str:
+        """Resolve alert locale for ``user_id``; fail soft to ``en``; cache per tick."""
+        from koel.i18n import normalize_locale
+
+        if isinstance(user_id, bool) or not isinstance(user_id, int) or user_id <= 0:
+            return "en"
+        cached = self._locale_cache.get(user_id)
+        if cached is not None:
+            return cached
+        locale = "en"
+        try:
+            getter = getattr(self.storage, "get_user_locale", None)
+            if callable(getter):
+                raw = await getter(user_id)
+                locale = normalize_locale(raw)
+        except Exception:
+            log.exception("user_locale_lookup_failed", user_id=user_id)
+            locale = "en"
+        self._locale_cache[user_id] = locale
+        return locale
+
+    async def _format_alert(
+        self,
+        event: AlertEvent,
+        *,
+        filing_brief: str | None = None,
+    ) -> str:
+        """``format_alert_message`` with per-user locale (W9)."""
+        locale = await self._locale_for_user(event.user_id)
+        return format_alert_message(
+            event, filing_brief=filing_brief, locale=locale
+        )
+
     async def run_once(self, *, force: bool = False) -> list[AlertEvent]:
         """Single poll cycle. Returns events claimed (delivered after unlock)."""
+        self._locale_cache.clear()
         now = datetime.now(UTC)
         if not force and not is_market_open(now, self.settings):
             log.info("poll_skipped_outside_hours", now=now.isoformat())
@@ -1516,7 +1552,6 @@ class Poller:
             )
 
     async def _run_metrics_job(self, disclosure_id: int, symbol: str) -> None:
-        from koel.domain import format_alert_message
         from koel.metrics import MetricsSettings
         from koel.metrics.worker import process_disclosure_metrics
 
@@ -1542,7 +1577,7 @@ class Poller:
         if not result.events:
             return
         for event in result.events:
-            text = format_alert_message(event)
+            text = await self._format_alert(event)
             shadow_only = cfg.metrics_shadow_mode and (
                 (
                     event.type.value in ("eps_above", "eps_below")
@@ -1584,7 +1619,6 @@ class Poller:
         from koel.domain import (
             AlertEvent,
             AlertType,
-            format_alert_message,
             format_yoy_comparison_block,
         )
 
@@ -1615,7 +1649,7 @@ class Poller:
                 filing_brief=block,
                 event_key=f"yoy_append:{rule.id}:{disc.id}",
             )
-            text = format_alert_message(event)
+            text = await self._format_alert(event)
             alert_id = await self.storage.claim_alert(event, text)
             if alert_id is None:
                 continue
@@ -1810,7 +1844,7 @@ class Poller:
         present (fail-soft — missing/pending briefs do not block the push).
         """
         filing_brief = await self._ready_filing_brief_for(event)
-        message = format_alert_message(event, filing_brief=filing_brief)
+        message = await self._format_alert(event, filing_brief=filing_brief)
         if disarm:
             log_id = await self.storage.claim_and_disarm(event, message)
         else:

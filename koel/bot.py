@@ -1,7 +1,8 @@
 """Telegram bot — the only user-facing surface for v1.
 
 Commands: /start, /help, /primer, /watch, /unwatch, /alert, /cancel, /myalerts,
-/mywatchlist, /brief. Alert dispatch happens from the poller via notify.send_message.
+/mywatchlist, /brief, /language. Alert dispatch happens from the poller via
+notify.send_message.
 """
 
 from __future__ import annotations
@@ -51,6 +52,7 @@ from koel.domain import (
     sanitize_disclosure_category,
     truncate_disclosure_title,
 )
+from koel.i18n import parse_language_arg, t
 from koel.logging_setup import get_logger
 from koel.nl_alerts import (
     NLParsedAlert,
@@ -219,7 +221,7 @@ HELP_TEXT = (
     "/alert SYMBOL move PERCENT\n"
     "/alert SYMBOL disclosure [CATEGORY]\n"
     "/cancel ALERT_ID\n"
-    "/myalerts — active only · /mywatchlist · /brief SYMBOL · /primer\n"
+    "/myalerts — active only · /mywatchlist · /brief · /language · /primer\n"
     "Browse dash thin UI; scenarios disabled (Phase 3 stub).\n"
     "Disclosure alerts: new filings after the rule only "
     "(missing publish time → no fire; CATEGORY = category substring; "
@@ -1391,6 +1393,48 @@ def format_brief_lookup_reply(
     return _clamp_telegram_message("\n".join(lines))
 
 
+async def cmd_language(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """W9: set per-user alert language (en | si)."""
+    if await _rate_limited(update, context):
+        return
+    if not update.effective_message:
+        return
+    storage: Storage = context.application.bot_data["storage"]
+    user_id = await _user_id(storage, update)
+    if user_id is None:
+        return
+    args = context.args or []
+    if not args:
+        try:
+            current = await storage.get_user_locale(user_id)
+        except Exception:
+            log.exception("language_prefs_lookup_failed", user_id=user_id)
+            current = "en"
+        await update.effective_message.reply_text(
+            t("bot.language_usage", current, current=current)
+        )
+        return
+    parsed = parse_language_arg(args[0])
+    if parsed is None:
+        try:
+            current = await storage.get_user_locale(user_id)
+        except Exception:
+            current = "en"
+        await update.effective_message.reply_text(
+            t("bot.language_usage", current, current=current)
+        )
+        return
+    try:
+        await storage.set_user_locale(user_id, parsed)
+    except Exception:
+        log.exception("language_prefs_update_failed", user_id=user_id)
+        await update.effective_message.reply_text(
+            f"Couldn't update language right now. Try again later.\n{disclaimer()}"
+        )
+        return
+    await update.effective_message.reply_text(t("bot.language_set", parsed))
+
+
 async def cmd_brief(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """Read-only latest ready brief from DB — never calls an LLM."""
     if await _rate_limited(update, context):
@@ -1468,6 +1512,7 @@ def build_application(
     app.add_handler(CommandHandler("myalerts", cmd_myalerts))
     app.add_handler(CommandHandler("mywatchlist", cmd_mywatchlist))
     app.add_handler(CommandHandler("brief", cmd_brief))
+    app.add_handler(CommandHandler("language", cmd_language))
     app.add_handler(
         CallbackQueryHandler(
             on_callback_query,

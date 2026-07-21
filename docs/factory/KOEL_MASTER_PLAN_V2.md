@@ -20,7 +20,8 @@ in §1–§2; sources inline).
 | W6 Provenance + degradation | ✅ shipped | `As of HH:MM SLT`; `koel/feed_health.py`; gap annotate |
 | W7 Public channel posts | ✅ scaffolded | `koel/channel_posts.py` + poller; `TELEGRAM_PUBLIC_CHANNEL_ID`; runbook `docs/runbooks/TELEGRAM_CHANNEL.md` |
 | W8 Digest-by-default offer | ✅ scaffolded | `/start` opt-in `prefs:digest_on` (consent only; default stays off) |
-| W9+ (H2) | ⏳ next | Sinhala, results-day, Telegram Login, … |
+| W9 Sinhala alert language | ✅ shipped | `/language si\|සිංහල`; `users.locale`; `koel/i18n.py` |
+| W10+ (H2) | ⏳ next | Results-day, Telegram Login, … |
 
 **Ops still required for W1 live:** set `AI_BRIEFS_ENABLED=1` + `AI_API_KEY` per
 `docs/runbooks/AI_BRIEFS_ENABLE.md` and soak. Optional: `TELEGRAM_STATUS_CHAT_ID`
