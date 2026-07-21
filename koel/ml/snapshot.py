@@ -18,7 +18,7 @@ from typing import Any
 from koel.domain import DailyBar
 from koel.storage import Storage
 
-SNAPSHOT_SCHEMA_VERSION = 1
+SNAPSHOT_SCHEMA_VERSION = 2
 BAR_COLUMNS = (
     "symbol",
     "trade_date",
@@ -31,6 +31,34 @@ BAR_COLUMNS = (
     "source_period",
     "bar_ts",
 )
+FUNDAMENTAL_COLUMNS = (
+    "symbol",
+    "published_at",
+    "fiscal_period_end",
+    "kind",
+    "revenue",
+    "profit",
+    "eps_basic",
+    "eps_delta_pct",
+    "revenue_delta_pct",
+    "profit_delta_pct",
+    "match_quality",
+)
+
+
+@dataclass(frozen=True, slots=True)
+class FundamentalEvent:
+    symbol: str
+    published_at: datetime
+    fiscal_period_end: date | None
+    kind: str
+    revenue: float | None
+    profit: float | None
+    eps_basic: float | None
+    eps_delta_pct: float | None
+    revenue_delta_pct: float | None
+    profit_delta_pct: float | None
+    match_quality: str | None
 
 
 @dataclass(frozen=True, slots=True)
@@ -41,6 +69,10 @@ class SnapshotManifest:
     postgres_snapshot: str
     bars_file: str
     bars_sha256: str
+    fundamentals_file: str
+    fundamentals_sha256: str
+    fundamentals_rows: int
+    fundamentals_columns: tuple[str, ...]
     columns: tuple[str, ...]
     rows: int
     symbols: int
@@ -54,6 +86,7 @@ class SnapshotManifest:
 class LoadedSnapshot:
     manifest: SnapshotManifest
     series: dict[str, list[DailyBar]]
+    fundamentals: dict[str, list[FundamentalEvent]]
 
 
 def _sha256(path: Path) -> str:
@@ -83,6 +116,7 @@ async def export_bar_snapshot(
 
     output_dir.mkdir(parents=True, exist_ok=True)
     bars_path = output_dir / "bars.jsonl.gz"
+    fundamentals_path = output_dir / "fundamentals.jsonl.gz"
     manifest_path = output_dir / "manifest.json"
     if dataset == "hybrid":
         query = """
@@ -101,8 +135,29 @@ async def export_bar_snapshot(
             WHERE symbol <> 'ASPI'
             ORDER BY symbol, trade_date
         """
+    fundamentals_query = """
+        SELECT
+            fm.symbol,
+            d.published_at,
+            fm.fiscal_period_end,
+            fm.kind,
+            fm.revenue,
+            fm.profit,
+            fm.eps_basic,
+            fc.eps_delta_pct,
+            fc.revenue_delta_pct,
+            fc.profit_delta_pct,
+            fc.match_quality
+        FROM filing_metrics fm
+        JOIN disclosures d ON d.id = fm.disclosure_id
+        LEFT JOIN filing_comparisons fc ON fc.filing_metrics_id = fm.id
+        WHERE fm.extract_ok = TRUE
+          AND d.published_at IS NOT NULL
+        ORDER BY fm.symbol, d.published_at, fm.id
+    """
 
     rows = 0
+    fundamentals_rows = 0
     symbols: set[str] = set()
     first_date: date | None = None
     last_date: date | None = None
@@ -181,6 +236,61 @@ async def export_bar_snapshot(
                         else last_date
                     )
 
+            with (
+                fundamentals_path.open("wb") as fundamental_handle,
+                gzip.GzipFile(
+                    fileobj=fundamental_handle,
+                    mode="wb",
+                    mtime=0,
+                ) as fundamental_gzip,
+            ):
+                async with conn.cursor(name="ml_fundamentals_export") as cursor:
+                    await cursor.execute(fundamentals_query)
+                    async for raw in cursor:
+                        row = dict(raw)
+                        published_at = row["published_at"]
+                        if isinstance(published_at, date) and not isinstance(
+                            published_at,
+                            datetime,
+                        ):
+                            published_at = datetime(
+                                published_at.year,
+                                published_at.month,
+                                published_at.day,
+                                tzinfo=UTC,
+                            )
+                        fiscal_period_end = row.get("fiscal_period_end")
+                        payload = (
+                            str(row["symbol"]).strip().upper(),
+                            published_at.isoformat(),
+                            (
+                                fiscal_period_end.isoformat()
+                                if isinstance(fiscal_period_end, date)
+                                else None
+                            ),
+                            str(row.get("kind") or "unknown"),
+                            _optional_float(row.get("revenue")),
+                            _optional_float(row.get("profit")),
+                            _optional_float(row.get("eps_basic")),
+                            _optional_float(row.get("eps_delta_pct")),
+                            _optional_float(row.get("revenue_delta_pct")),
+                            _optional_float(row.get("profit_delta_pct")),
+                            (
+                                str(row["match_quality"])
+                                if row.get("match_quality") is not None
+                                else None
+                            ),
+                        )
+                        fundamental_gzip.write(
+                            json.dumps(
+                                payload,
+                                separators=(",", ":"),
+                                allow_nan=False,
+                            ).encode("utf-8")
+                            + b"\n"
+                        )
+                        fundamentals_rows += 1
+
     manifest = SnapshotManifest(
         schema_version=SNAPSHOT_SCHEMA_VERSION,
         dataset=dataset,
@@ -188,6 +298,10 @@ async def export_bar_snapshot(
         postgres_snapshot=postgres_snapshot,
         bars_file=bars_path.name,
         bars_sha256=_sha256(bars_path),
+        fundamentals_file=fundamentals_path.name,
+        fundamentals_sha256=_sha256(fundamentals_path),
+        fundamentals_rows=fundamentals_rows,
+        fundamentals_columns=FUNDAMENTAL_COLUMNS,
         columns=BAR_COLUMNS,
         rows=rows,
         symbols=len(symbols),
@@ -219,6 +333,10 @@ def load_bar_snapshot(snapshot_dir: Path) -> LoadedSnapshot:
         postgres_snapshot=str(raw_manifest.get("postgres_snapshot") or ""),
         bars_file=str(raw_manifest["bars_file"]),
         bars_sha256=str(raw_manifest["bars_sha256"]),
+        fundamentals_file=str(raw_manifest["fundamentals_file"]),
+        fundamentals_sha256=str(raw_manifest["fundamentals_sha256"]),
+        fundamentals_rows=int(raw_manifest["fundamentals_rows"]),
+        fundamentals_columns=tuple(raw_manifest["fundamentals_columns"]),
         columns=tuple(raw_manifest["columns"]),
         rows=int(raw_manifest["rows"]),
         symbols=int(raw_manifest["symbols"]),
@@ -238,11 +356,16 @@ def load_bar_snapshot(snapshot_dir: Path) -> LoadedSnapshot:
         )
     if manifest.columns != BAR_COLUMNS:
         raise ValueError("snapshot columns do not match the current schema")
+    if manifest.fundamentals_columns != FUNDAMENTAL_COLUMNS:
+        raise ValueError("fundamentals columns do not match the current schema")
 
     bars_path = snapshot_dir / manifest.bars_file
     actual_sha = _sha256(bars_path)
     if actual_sha != manifest.bars_sha256:
         raise ValueError("snapshot SHA-256 mismatch")
+    fundamentals_path = snapshot_dir / manifest.fundamentals_file
+    if _sha256(fundamentals_path) != manifest.fundamentals_sha256:
+        raise ValueError("fundamentals snapshot SHA-256 mismatch")
 
     series: dict[str, list[DailyBar]] = defaultdict(list)
     rows = 0
@@ -275,7 +398,52 @@ def load_bar_snapshot(snapshot_dir: Path) -> LoadedSnapshot:
         raise ValueError(
             f"snapshot symbol count mismatch: expected {manifest.symbols}, got {len(series)}"
         )
-    return LoadedSnapshot(manifest=manifest, series=dict(series))
+
+    fundamentals: dict[str, list[FundamentalEvent]] = defaultdict(list)
+    fundamental_rows = 0
+    with gzip.open(fundamentals_path, mode="rt", encoding="utf-8") as handle:
+        for line in handle:
+            values = json.loads(line)
+            if not isinstance(values, list) or len(values) != len(
+                FUNDAMENTAL_COLUMNS
+            ):
+                raise ValueError(
+                    f"invalid fundamentals row at line {fundamental_rows + 1}"
+                )
+            row = dict(zip(FUNDAMENTAL_COLUMNS, values, strict=True))
+            symbol = str(row["symbol"])
+            fundamentals[symbol].append(
+                FundamentalEvent(
+                    symbol=symbol,
+                    published_at=datetime.fromisoformat(str(row["published_at"])),
+                    fiscal_period_end=(
+                        date.fromisoformat(str(row["fiscal_period_end"]))
+                        if row["fiscal_period_end"]
+                        else None
+                    ),
+                    kind=str(row["kind"]),
+                    revenue=_optional_float(row["revenue"]),
+                    profit=_optional_float(row["profit"]),
+                    eps_basic=_optional_float(row["eps_basic"]),
+                    eps_delta_pct=_optional_float(row["eps_delta_pct"]),
+                    revenue_delta_pct=_optional_float(row["revenue_delta_pct"]),
+                    profit_delta_pct=_optional_float(row["profit_delta_pct"]),
+                    match_quality=(
+                        str(row["match_quality"]) if row["match_quality"] else None
+                    ),
+                )
+            )
+            fundamental_rows += 1
+    if fundamental_rows != manifest.fundamentals_rows:
+        raise ValueError(
+            "fundamentals row count mismatch: "
+            f"expected {manifest.fundamentals_rows}, got {fundamental_rows}"
+        )
+    return LoadedSnapshot(
+        manifest=manifest,
+        series=dict(series),
+        fundamentals=dict(fundamentals),
+    )
 
 
 async def _run_export(args: argparse.Namespace) -> None:

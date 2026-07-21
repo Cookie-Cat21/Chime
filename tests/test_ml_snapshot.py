@@ -9,7 +9,12 @@ from pathlib import Path
 
 import pytest
 
-from koel.ml.snapshot import BAR_COLUMNS, SNAPSHOT_SCHEMA_VERSION, load_bar_snapshot
+from koel.ml.snapshot import (
+    BAR_COLUMNS,
+    FUNDAMENTAL_COLUMNS,
+    SNAPSHOT_SCHEMA_VERSION,
+    load_bar_snapshot,
+)
 
 
 def _write_snapshot(path: Path) -> None:
@@ -45,6 +50,26 @@ def _write_snapshot(path: Path) -> None:
         for row in rows:
             handle.write(json.dumps(row, separators=(",", ":")) + "\n")
     digest = hashlib.sha256(bars_path.read_bytes()).hexdigest()
+    fundamental_rows = [
+        [
+            "A.N0000",
+            "2025-01-02T12:00:00+00:00",
+            "2024-12-31",
+            "quarterly",
+            1000.0,
+            100.0,
+            1.25,
+            25.0,
+            10.0,
+            12.0,
+            "exact_yoy",
+        ]
+    ]
+    fundamentals_path = path / "fundamentals.jsonl.gz"
+    with gzip.open(fundamentals_path, mode="wt", encoding="utf-8") as handle:
+        for row in fundamental_rows:
+            handle.write(json.dumps(row, separators=(",", ":")) + "\n")
+    fundamentals_digest = hashlib.sha256(fundamentals_path.read_bytes()).hexdigest()
     manifest = {
         "schema_version": SNAPSHOT_SCHEMA_VERSION,
         "dataset": "hybrid",
@@ -52,6 +77,10 @@ def _write_snapshot(path: Path) -> None:
         "postgres_snapshot": "1:2:",
         "bars_file": bars_path.name,
         "bars_sha256": digest,
+        "fundamentals_file": fundamentals_path.name,
+        "fundamentals_sha256": fundamentals_digest,
+        "fundamentals_rows": 1,
+        "fundamentals_columns": list(FUNDAMENTAL_COLUMNS),
         "columns": list(BAR_COLUMNS),
         "rows": 2,
         "symbols": 1,
@@ -77,6 +106,8 @@ def test_snapshot_load_verifies_and_reconstructs_bars(tmp_path) -> None:
     assert list(loaded.series) == ["A.N0000"]
     assert [bar.price for bar in loaded.series["A.N0000"]] == [10.0, 10.2]
     assert [bar.source_period for bar in loaded.series["A.N0000"]] == [0, 5]
+    assert len(loaded.fundamentals["A.N0000"]) == 1
+    assert loaded.fundamentals["A.N0000"][0].eps_delta_pct == 25.0
 
 
 def test_snapshot_rejects_tampering(tmp_path) -> None:

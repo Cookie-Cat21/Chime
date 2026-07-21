@@ -20,6 +20,7 @@ from koel.ml.distributed import (
 )
 from koel.ml.harden import _demean_by_day
 from koel.ml.iterate import _enrich_cross_section
+from koel.ml.research_fundamentals import enrich_fundamentals
 from koel.ml.research_features import (
     ResearchBarMetadata,
     build_research_bar_metadata,
@@ -350,6 +351,7 @@ def run_worker(
         include_flat=spec.target == "absolute",
     )
     research = enrich_research_quality(base, metadata)
+    research = enrich_fundamentals(research, loaded.fundamentals)
     if spec.target == "relative":
         research = _demean_by_day(research)
     samples = _enrich_cross_section(research)
