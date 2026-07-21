@@ -18,11 +18,15 @@ in §1–§2; sources inline).
 | W4 Button-first bot + deep links | ✅ shipped | `/start` keyboard; `?start=sym_` |
 | W5 Why-it-moved context | ✅ shipped | `koel/alert_context.py` on price fires |
 | W6 Provenance + degradation | ✅ shipped | `As of HH:MM SLT`; `koel/feed_health.py`; gap annotate |
-| W7+ (H2) | ⏳ next | public channel, digest-default, Sinhala, … |
+| W7 Public channel posts | ✅ scaffolded | `koel/channel_posts.py` + poller; `TELEGRAM_PUBLIC_CHANNEL_ID`; runbook `docs/runbooks/TELEGRAM_CHANNEL.md` |
+| W8 Digest-by-default offer | ✅ scaffolded | `/start` opt-in `prefs:digest_on` (consent only; default stays off) |
+| W9+ (H2) | ⏳ next | Sinhala, results-day, Telegram Login, … |
 
 **Ops still required for W1 live:** set `AI_BRIEFS_ENABLED=1` + `AI_API_KEY` per
 `docs/runbooks/AI_BRIEFS_ENABLE.md` and soak. Optional: `TELEGRAM_STATUS_CHAT_ID`
 for degradation broadcasts; `AI_NL_ALERTS_ENABLED=1` for NL path.
+**W7 ops:** set `TELEGRAM_PUBLIC_CHANNEL_ID` and restart poller
+(see `docs/runbooks/TELEGRAM_CHANNEL.md`).
 
 ---
 

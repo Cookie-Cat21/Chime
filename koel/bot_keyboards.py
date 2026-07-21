@@ -32,6 +32,32 @@ def start_menu_keyboard() -> InlineKeyboardMarkup:
     )
 
 
+DIGEST_OFFER_TEXT = (
+    "Want a daily close summary for your watchlist after the market closes "
+    "(~14:45 SLT)? One tap — you can turn it off anytime in settings.\n"
+    f"{disclaimer()}"
+)
+
+DIGEST_ENABLED_CONFIRM = (
+    "Daily close summary on. You'll get one Telegram digest after market close "
+    "on trading days (watchlist movers, disclosures, alerts fired).\n"
+    f"{disclaimer()}"
+)
+
+
+def digest_offer_keyboard() -> InlineKeyboardMarkup:
+    """Opt-in button for EOD digest (W8) — never force-enable without consent."""
+    return InlineKeyboardMarkup(
+        [
+            [
+                InlineKeyboardButton(
+                    "📬 Daily close summary", callback_data="prefs:digest_on"
+                )
+            ]
+        ]
+    )
+
+
 def watch_confirm_keyboard(symbol: str) -> InlineKeyboardMarkup:
     """Deep-link confirm button to add a symbol to the watchlist."""
     return InlineKeyboardMarkup(

@@ -1738,6 +1738,100 @@ class Storage:
         # for comparison against symbol ret * 100 below in score job.
         return pct
 
+    async def latest_index_snapshots(
+        self,
+        codes: Sequence[str] | None = None,
+    ) -> list[dict[str, Any]]:
+        """Latest row per index code (ASPI / SNP_SL20 by default)."""
+        default_codes = ("ASPI", "SNP_SL20")
+        if codes is None:
+            wanted = list(default_codes)
+        else:
+            wanted = []
+            for raw in codes:
+                if not isinstance(raw, str) or not raw.strip():
+                    continue
+                code = raw.strip().upper()
+                if code and code not in wanted:
+                    wanted.append(code)
+            if not wanted:
+                return []
+        async with self._pool.connection() as conn:
+            rows = await (
+                await conn.execute(
+                    """
+                    SELECT DISTINCT ON (code)
+                           code, name, value, change, change_pct, ts
+                      FROM index_snapshots
+                     WHERE code = ANY(%s)
+                     ORDER BY code ASC, ts DESC
+                    """,
+                    (wanted,),
+                )
+            ).fetchall()
+        out: list[dict[str, Any]] = []
+        for row in _as_rows(rows):
+            code = row.get("code")
+            if not isinstance(code, str) or not code.strip():
+                continue
+            value = row.get("value")
+            if isinstance(value, bool) or not isinstance(value, int | float):
+                continue
+            if not math.isfinite(float(value)):
+                continue
+            change = row.get("change")
+            change_pct = row.get("change_pct")
+            if isinstance(change, bool) or (
+                change is not None and not isinstance(change, int | float)
+            ):
+                change = None
+            if isinstance(change_pct, bool) or (
+                change_pct is not None and not isinstance(change_pct, int | float)
+            ):
+                change_pct = None
+            out.append(
+                {
+                    "code": code.strip().upper(),
+                    "name": row.get("name") if isinstance(row.get("name"), str) else None,
+                    "value": float(value),
+                    "change": float(change)
+                    if isinstance(change, int | float)
+                    and not isinstance(change, bool)
+                    and math.isfinite(float(change))
+                    else None,
+                    "change_pct": float(change_pct)
+                    if isinstance(change_pct, int | float)
+                    and not isinstance(change_pct, bool)
+                    and math.isfinite(float(change_pct))
+                    else None,
+                    "ts": row.get("ts"),
+                }
+            )
+        # Stable order: ASPI, SNP_SL20, then others alpha.
+        order = {c: i for i, c in enumerate(wanted)}
+        out.sort(key=lambda r: (order.get(str(r["code"]), 99), str(r["code"])))
+        return out
+
+    async def count_disclosures_published_since(self, since: datetime) -> int:
+        """Market-wide disclosure count with ``published_at >= since``."""
+        if not isinstance(since, datetime):
+            return 0
+        async with self._pool.connection() as conn:
+            row = await (
+                await conn.execute(
+                    """
+                    SELECT COUNT(*)::int AS n
+                      FROM disclosures
+                     WHERE published_at >= %s
+                    """,
+                    (since,),
+                )
+            ).fetchone()
+        if row is None:
+            return 0
+        counted = _pg_count(_as_row(row).get("n"))
+        return 0 if counted is None else counted
+
     async def count_notices_since(self, symbol: str, *, since: datetime) -> int:
         """Count buy-in / non-compliance / halt notices for ``symbol`` since."""
         by_type = await self.count_notices_by_type_since(symbol, since=since)
@@ -5054,6 +5148,118 @@ class Storage:
                 }
             )
         return out
+
+    async def list_market_movers(self, *, limit: int = 5) -> list[dict[str, Any]]:
+        """Market-wide symbols sorted by |change_pct| from latest poller snaps."""
+        if isinstance(limit, int) and not isinstance(limit, bool):
+            lim = max(1, min(limit, 20))
+        else:
+            lim = 5
+        async with self._pool.connection() as conn:
+            rows = await (
+                await conn.execute(
+                    """
+                    WITH latest AS (
+                        SELECT DISTINCT ON (ps.symbol)
+                               ps.symbol, ps.price, ps.change_pct, ps.ts
+                          FROM price_snapshots ps
+                         WHERE ps.source = 'poller'
+                           AND ps.symbol <> 'MARKET'
+                           AND ps.symbol NOT IN ('ASPI', 'SNP_SL20')
+                         ORDER BY ps.symbol ASC, ps.ts DESC, ps.id DESC
+                    )
+                    SELECT symbol, price, change_pct, ts
+                      FROM latest
+                     WHERE change_pct IS NOT NULL
+                     ORDER BY ABS(change_pct) DESC NULLS LAST, symbol ASC
+                     LIMIT %s
+                    """,
+                    (lim,),
+                )
+            ).fetchall()
+        out: list[dict[str, Any]] = []
+        for row in _as_rows(rows):
+            sym = row.get("symbol")
+            if not isinstance(sym, str) or not sym.strip():
+                continue
+            out.append(
+                {
+                    "symbol": sym.strip().upper(),
+                    "price": row.get("price"),
+                    "change_pct": row.get("change_pct"),
+                    "ts": row.get("ts"),
+                }
+            )
+        return out
+
+    async def get_user_preferences(self, user_id: int) -> dict[str, Any] | None:
+        """Return digest / quiet-hours prefs for ``user_id``, or None if missing."""
+        if isinstance(user_id, bool) or not isinstance(user_id, int) or user_id <= 0:
+            return None
+        async with self._pool.connection() as conn:
+            row = await (
+                await conn.execute(
+                    """
+                    SELECT digest_enabled, quiet_hours_start, quiet_hours_end,
+                           alert_quota_max
+                      FROM users
+                     WHERE id = %s
+                    """,
+                    (user_id,),
+                )
+            ).fetchone()
+        if row is None:
+            return None
+        r = _as_row(row)
+        digest = r.get("digest_enabled")
+        if not isinstance(digest, bool):
+            digest = False
+
+        def _hour(v: object) -> int | None:
+            if v is None:
+                return None
+            if isinstance(v, bool) or not isinstance(v, int):
+                return None
+            return v if 0 <= v <= 23 else None
+
+        quota = r.get("alert_quota_max")
+        if isinstance(quota, bool) or not isinstance(quota, int) or quota < 0:
+            quota = 100
+        return {
+            "digest_enabled": digest,
+            "quiet_hours_start": _hour(r.get("quiet_hours_start")),
+            "quiet_hours_end": _hour(r.get("quiet_hours_end")),
+            "alert_quota_max": quota,
+        }
+
+    async def update_user_preferences(
+        self,
+        user_id: int,
+        *,
+        digest_enabled: bool | None = None,
+    ) -> dict[str, Any] | None:
+        """Patch user prefs. Only ``digest_enabled`` for now; returns fresh prefs."""
+        if isinstance(user_id, bool) or not isinstance(user_id, int) or user_id <= 0:
+            return None
+        if digest_enabled is None:
+            return await self.get_user_preferences(user_id)
+        if not isinstance(digest_enabled, bool):
+            return None
+        async with self._pool.connection() as conn:
+            row = await (
+                await conn.execute(
+                    """
+                    UPDATE users
+                       SET digest_enabled = %s
+                     WHERE id = %s
+                    RETURNING id
+                    """,
+                    (digest_enabled, user_id),
+                )
+            ).fetchone()
+        if row is None:
+            return None
+        return await self.get_user_preferences(user_id)
 
     async def _fetch_active_rule(
         self,

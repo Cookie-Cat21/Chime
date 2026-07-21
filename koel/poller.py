@@ -19,7 +19,7 @@ import random
 import signal
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
-from datetime import UTC, datetime, time, timedelta
+from datetime import UTC, date, datetime, time, timedelta
 from pathlib import Path
 from typing import Any
 from zoneinfo import ZoneInfo
@@ -39,6 +39,7 @@ from koel.alert_context import build_price_fire_context
 from koel.bot_keyboards import fire_pause_keyboard
 from koel.briefs import briefs_enabled
 from koel.briefs.worker import claim_pending_briefs
+from koel.channel_posts import build_close_summary, build_open_pulse
 from koel.circuit import CircuitOpenError
 from koel.config import Settings
 from koel.digest import maybe_run_eod_digest
@@ -232,6 +233,9 @@ class Poller:
         # After shutdown finishes draining background work, reject new schedules
         # so a shielded late tick cannot race storage.close() (wave4).
         self._background_closed = False
+        # Public channel posts (W7): process-lifetime once/day Colombo dates.
+        self._channel_open_sent_on: date | None = None
+        self._channel_close_sent_on: date | None = None
 
     def pdf_enrich_health_snapshot(self) -> dict[str, int]:
         """In-memory PDF enrich queue counters for health details."""
@@ -298,6 +302,11 @@ class Poller:
                     )
             except Exception:
                 log.exception("eod_digest_tick_failed")
+            # Public channel close summary (W7) — same EOD window path.
+            try:
+                await self._maybe_post_channel_close(now=now)
+            except Exception:
+                log.exception("channel_close_post_failed")
             self.last_tick_at = datetime.now(UTC)
             self._schedule_brief_drain()
             return []
@@ -411,6 +420,12 @@ class Poller:
             await self._retry_unsent_with_lock()
         except Exception as exc:
             log.exception("poll_deliver_failed", error=str(exc))
+        # Public channel open pulse (W7): first successful tick past 09:35 SLT.
+        if self.last_tick_ok:
+            try:
+                await self._maybe_post_channel_open(now=now)
+            except Exception:
+                log.exception("channel_open_post_failed")
         self._schedule_pdf_enrichment(pdf_enrich)
         self._schedule_brief_drain()
         return fired
@@ -2206,13 +2221,85 @@ class Poller:
         self._background_closed = True
         log.info("poller_stopped")
 
+    def _public_channel_id(self) -> int | None:
+        """Optional ``TELEGRAM_PUBLIC_CHANNEL_ID`` (negative for channels)."""
+        raw = os.getenv("TELEGRAM_PUBLIC_CHANNEL_ID", "")
+        if not isinstance(raw, str) or not raw.strip():
+            return None
+        try:
+            chat_id = int(raw.strip())
+        except ValueError:
+            return None
+        # Telegram channels/supergroups are typically negative; allow any nonzero.
+        if chat_id == 0:
+            return None
+        return chat_id
+
+    async def _maybe_post_channel_open(self, *, now: datetime) -> None:
+        """Once/day open pulse after first successful tick past 09:35 SLT."""
+        chat_id = self._public_channel_id()
+        if chat_id is None:
+            return
+        tz = ZoneInfo(self.settings.market_tz)
+        local = now.astimezone(tz) if now.tzinfo else now.replace(tzinfo=tz)
+        if local.weekday() >= 5:
+            return
+        if local.time() < time(9, 35):
+            return
+        on_date = local.date()
+        if self._channel_open_sent_on == on_date:
+            return
+        body = await build_open_pulse(self.storage)
+        if not isinstance(body, str) or not body.strip():
+            return
+        result = _normalize_send_result(await self.send(chat_id, body))
+        if result is SendResult.OK:
+            self._channel_open_sent_on = on_date
+            log.info("channel_open_pulse_sent", chat_id=chat_id, on_date=on_date.isoformat())
+        else:
+            log.warning(
+                "channel_open_pulse_send_failed",
+                chat_id=chat_id,
+                result=str(result),
+            )
+
+    async def _maybe_post_channel_close(self, *, now: datetime) -> None:
+        """Once/day close summary after 14:30 SLT (EOD / off-hours path)."""
+        chat_id = self._public_channel_id()
+        if chat_id is None:
+            return
+        tz = ZoneInfo(self.settings.market_tz)
+        local = now.astimezone(tz) if now.tzinfo else now.replace(tzinfo=tz)
+        if local.weekday() >= 5:
+            return
+        if local.time() < time(14, 30):
+            return
+        on_date = local.date()
+        if self._channel_close_sent_on == on_date:
+            return
+        body = await build_close_summary(self.storage, now=local)
+        if not isinstance(body, str) or not body.strip():
+            return
+        result = _normalize_send_result(await self.send(chat_id, body))
+        if result is SendResult.OK:
+            self._channel_close_sent_on = on_date
+            log.info(
+                "channel_close_summary_sent",
+                chat_id=chat_id,
+                on_date=on_date.isoformat(),
+            )
+        else:
+            log.warning(
+                "channel_close_summary_send_failed",
+                chat_id=chat_id,
+                result=str(result),
+            )
+
     async def _maybe_broadcast_feed_notice(self) -> None:
         """Send degradation/recovery notices to ``TELEGRAM_STATUS_CHAT_ID`` if set.
 
         Does not fan out to every user — that belongs to the public channel (H2).
         """
-        import os
-
         from koel.feed_health import FeedState
 
         raw = os.getenv("TELEGRAM_STATUS_CHAT_ID", "")

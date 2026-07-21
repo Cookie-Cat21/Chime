@@ -26,7 +26,10 @@ from telegram.ext import (
 
 from koel.adapters.cse import CSEClient, allowed_filing_url
 from koel.bot_keyboards import (
+    DIGEST_ENABLED_CONFIRM,
+    DIGEST_OFFER_TEXT,
     WATCH_HELP_TEXT,
+    digest_offer_keyboard,
     nl_confirm_keyboard,
     start_menu_keyboard,
     watch_confirm_keyboard,
@@ -696,16 +699,42 @@ def format_mywatchlist_text(symbols: list[Any]) -> str:
     return _clamp_telegram_message("Watchlist:\n" + "\n".join(clean))
 
 
+async def _maybe_offer_digest(
+    storage: Storage,
+    user_id: int | None,
+    message: Any,
+) -> None:
+    """W8: offer daily close digest when prefs exist and digest is off (default)."""
+    if user_id is None or message is None:
+        return
+    getter = getattr(storage, "get_user_preferences", None)
+    if not callable(getter):
+        return
+    try:
+        prefs = await getter(user_id)
+    except Exception:
+        log.exception("digest_offer_prefs_lookup_failed", user_id=user_id)
+        return
+    if not isinstance(prefs, dict):
+        return
+    if prefs.get("digest_enabled") is not False:
+        return
+    await message.reply_text(
+        DIGEST_OFFER_TEXT, reply_markup=digest_offer_keyboard()
+    )
+
+
 async def cmd_start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     if await _rate_limited(update, context):
         return
     storage: Storage = context.application.bot_data["storage"]
-    await _user_id(storage, update)
+    user_id = await _user_id(storage, update)
     if not update.effective_message:
         return
     await update.effective_message.reply_text(
         START_TEXT, reply_markup=start_menu_keyboard()
     )
+    await _maybe_offer_digest(storage, user_id, update.effective_message)
     deep_symbol = parse_start_deep_link(context.args)
     if deep_symbol is not None:
         await update.effective_message.reply_text(
@@ -794,6 +823,32 @@ async def on_callback_query(update: Update, context: ContextTypes.DEFAULT_TYPE) 
             await _reply(f"That confirm link expired or was invalid.\n{disclaimer()}")
             return
         await _create_alert_from_nl(update, context, nl=nl, reply=_reply)
+        return
+    if data == "prefs:digest_on":
+        storage = context.application.bot_data["storage"]
+        user_id = await _user_id(storage, update)
+        if user_id is None:
+            return
+        updater = getattr(storage, "update_user_preferences", None)
+        if not callable(updater):
+            await _reply(
+                f"Couldn't update preferences right now. Try again later.\n{disclaimer()}"
+            )
+            return
+        try:
+            prefs = await updater(user_id, digest_enabled=True)
+        except Exception:
+            log.exception("digest_prefs_enable_failed", user_id=user_id)
+            await _reply(
+                f"Couldn't enable the daily summary. Try again later.\n{disclaimer()}"
+            )
+            return
+        if not isinstance(prefs, dict) or prefs.get("digest_enabled") is not True:
+            await _reply(
+                f"Couldn't enable the daily summary. Try again later.\n{disclaimer()}"
+            )
+            return
+        await _reply(DIGEST_ENABLED_CONFIRM)
         return
     # pause:/resume: reserved until Storage exposes mute/unmute.
 
