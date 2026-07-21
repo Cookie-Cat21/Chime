@@ -202,6 +202,13 @@ not assumed winners. A billion-parameter model is not justified by this panel.
 5. **Implemented:** score due outcomes and report standards automatically.
 6. Require the same precision, support, coverage and concentration contract.
 
+The live loop is self-learning under fixed policy identities: each completed
+session is captured, matured outcomes are scored, three predeclared candidate
+algorithms retrain on all now-available data, and new snapshot/code-bound model
+instances issue the next forecasts. Policies accumulate evidence across
+instances; changing a policy starts a new qualification epoch. No policy can
+write user-facing forecasts without separate review.
+
 ### Phase G — production integration
 
 - Persist exact model weights, preprocessors, calibrators and feature schema.

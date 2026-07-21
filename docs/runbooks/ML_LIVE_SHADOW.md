@@ -28,7 +28,8 @@ Until the scoped role is configured, the workflow falls back to the existing
    stable top-25 ordinary-share order books.
 2. Export an immutable bars + publication-safe filings snapshot.
 3. Train the frozen shadow challenger and emit:
-   - all eligible-company absolute direction;
+   - all eligible-company absolute direction from three fixed policies
+     (`xgb_two_stage`, `hgb_two_stage`, `xgb_domain`);
    - top-0.5% confidence challenger;
    - displayed-book + signed-volume pressure overlay.
 4. Score prior outcomes whose future sessions now exist.
@@ -55,6 +56,36 @@ ML_DATABASE_URL=... python3 -m koel.ml.live_shadow_report
 `live_shadow` refuses to emit a final model before 14:35 SLT. `--allow-partial`
 exists only for explicit canaries; those model versions and gates include
 `partial` and are excluded from standards.
+
+## Self-learning identity
+
+The workflow retrains each fixed algorithm policy after every completed session,
+using the newly persisted bars and filings. It is a prequential self-learning
+policy: predict the next session, score when that session matures, then include
+the matured data in later training.
+
+Every daily fit has a unique immutable `model_version` derived from:
+
+- policy ID;
+- composite bars + filings snapshot SHA;
+- issue session;
+- code revision;
+- live pressure-input SHA when applicable.
+
+`model_id` remains the stable policy ID. Standards aggregate across daily
+instances of the same fixed policy. Changing features, hyperparameters,
+eligibility, target or gate requires a new policy ID and starts a new
+qualification epoch. Prediction conflicts use `DO NOTHING`; reruns cannot
+rewrite prior evidence.
+
+Current base policies:
+
+- `shadow_policy_abs_xgb2_v1`
+- `shadow_policy_abs_hgb2_v1`
+- `shadow_policy_abs_xgb_domain_v1`
+
+The report compares policies automatically. Passing a standard only makes a
+policy review-eligible; it does not write `forecast_points` or send alerts.
 
 ## Factors and naming
 

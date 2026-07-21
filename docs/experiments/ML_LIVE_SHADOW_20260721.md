@@ -70,6 +70,25 @@ Database verification found 283 current-session `daily_bars`, all 199 final
 shadow rows unscored as expected, and **zero** matching user-facing
 `forecast_points`.
 
+## Self-learning policy canary
+
+After adding immutable prequential versioning, the same frozen close seeded the
+first instances of three automatically retrained policies:
+
+| Policy | Rows | Instance |
+|---|---:|---|
+| `shadow_policy_abs_xgb2_v1` | 176 | `...e18466e79cb7e448` |
+| `shadow_policy_abs_hgb2_v1` | 176 | `...be7755f0b32a9342` |
+| `shadow_policy_abs_xgb_domain_v1` | 176 | `...08a6befb19627459` |
+| `shadow_policy_abs_xgb2_p005_v1` | 1 | `...524cb77e0382abcd` |
+| `shadow_policy_abs_xgb2_pressure_v1` | 22 | `...154bb938822c5d71` |
+
+The composite training snapshot hash is
+`5da05d2f65714ed75d0dea58903eb03dac02f2d310312871a8013af1a8d60b32`.
+Each future session retrains the same fixed policies on all matured data but
+creates a new immutable instance. Standards aggregate by policy ID across
+instances. Database verification again found **zero** user-facing rows.
+
 ## Frozen live streams
 
 | Model version | Purpose |
