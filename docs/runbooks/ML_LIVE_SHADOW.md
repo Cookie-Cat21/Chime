@@ -1,0 +1,91 @@
+# ML live shadow runbook
+
+Prospective CSE prediction evidence without Telegram or dashboard forecasts.
+
+## Safety boundary
+
+The live shadow path writes:
+
+- normalized live inputs to existing market tables;
+- final ordinary-share closes to `daily_bars` / `hybrid_daily_bars`;
+- predictions only to `forecast_outcomes`.
+
+It never writes `forecast_points`, never evaluates alert rules, and never sends
+Telegram messages.
+
+Use a scoped `ML_SHADOW_DATABASE_URL` GitHub secret. It needs the existing
+application role's read/write access to market capture tables,
+`daily_bars`, `hybrid_daily_bars`, and `forecast_outcomes`. The read-only
+`ML_DATABASE_URL` used by distributed training is intentionally separate.
+
+## Scheduled workflow
+
+`.github/workflows/ml-live-shadow.yml` runs at 14:45 Asia/Colombo on weekdays:
+
+1. Capture and persist the final board, indexes, sectors, market summary and
+   stable top-25 ordinary-share order books.
+2. Export an immutable bars + publication-safe filings snapshot.
+3. Train the frozen shadow challenger and emit:
+   - all eligible-company absolute direction;
+   - top-0.5% confidence challenger;
+   - displayed-book + signed-volume pressure overlay.
+4. Score prior outcomes whose future sessions now exist.
+5. Write the prospective standards report and upload all run evidence.
+
+Optional pause: set repository variable `ML_LIVE_SHADOW_ENABLED=0`.
+
+## Manual commands
+
+```bash
+ML_DATABASE_URL=... python3 -m koel.ml.live_capture \
+  --cycles 1 --book-limit 25 --include-daily-summary
+
+ML_DATABASE_URL=... python3 -m koel.ml.snapshot export \
+  --dataset hybrid --output /tmp/koel-live-snapshot
+
+ML_DATABASE_URL=... python3 -m koel.ml.live_shadow \
+  --snapshot /tmp/koel-live-snapshot
+
+DATABASE_URL=... python3 -m koel ml-score-outcomes
+ML_DATABASE_URL=... python3 -m koel.ml.live_shadow_report
+```
+
+`live_shadow` refuses to emit a final model before 14:35 SLT. `--allow-partial`
+exists only for explicit canaries; those model versions and gates include
+`partial` and are excluded from standards.
+
+## Factors and naming
+
+The base challenger uses:
+
+- path and temporal return/volume/range lags;
+- market breadth and cross-sectional context;
+- source, missingness and flat-history features;
+- publication-safe filing metrics.
+
+The pressure challenger adds:
+
+- median public displayed-book imbalance;
+- imbalance sign persistence;
+- imbalance slope;
+- tick-rule signed incremental cumulative-volume proxy.
+
+These are **not executed buy pressure**. The public CSE feed does not identify
+aggressor side, and the overlay has no historical qualification yet.
+
+## Promotion standard
+
+Each frozen non-partial model version must independently reach:
+
+- precision and one-sided 95% LCB ≥90%;
+- at least 500 scored emits;
+- at least 80 symbols and 60 sessions;
+- maximum symbol and session share ≤5%.
+
+Always-on/all-company accuracy is reported separately. Sparse selective
+precision must never be described as accuracy for all listed companies.
+
+No accuracy is available on issue day. H1 first becomes scorable after the next
+official CSE session is persisted.
+
+Research only — not financial advice.
