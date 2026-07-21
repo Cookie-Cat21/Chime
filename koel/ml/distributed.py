@@ -8,11 +8,12 @@ import json
 import math
 import statistics
 from collections import Counter, defaultdict
+from collections.abc import Iterable
 from dataclasses import asdict, dataclass
 from datetime import date
 from pathlib import Path
 from statistics import NormalDist
-from typing import Any, Iterable
+from typing import Any
 
 ARTIFACT_SCHEMA_VERSION = 1
 ALLOWED_MODELS = ("logistic", "hgb_lmt", "xgb_lmt")

@@ -7,7 +7,6 @@ from datetime import date, timedelta
 import pytest
 
 from koel.ml.distributed import (
-    EnsemblePrediction,
     Prediction,
     PredictionArtifact,
     ShardSpec,
