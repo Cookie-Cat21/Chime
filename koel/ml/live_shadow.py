@@ -187,7 +187,11 @@ def summarize_pressure_factors(
         total_volume = 0.0
         last_sign = 0.0
         ordered_prices = sorted(prices.get(symbol, []))
-        for previous, current in zip(ordered_prices, ordered_prices[1:]):
+        for previous, current in zip(
+            ordered_prices,
+            ordered_prices[1:],
+            strict=False,
+        ):
             _prev_ts, previous_price, previous_volume = previous
             _curr_ts, current_price, current_volume = current
             delta_volume = max(0.0, current_volume - previous_volume)
