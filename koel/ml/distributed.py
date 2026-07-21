@@ -9,14 +9,22 @@ import math
 import statistics
 from collections import Counter, defaultdict
 from collections.abc import Iterable
-from dataclasses import asdict, dataclass
+from dataclasses import asdict, dataclass, replace
 from datetime import date
+from itertools import combinations
 from pathlib import Path
 from statistics import NormalDist
 from typing import Any
 
 ARTIFACT_SCHEMA_VERSION = 2
-ALLOWED_MODELS = ("logistic", "hgb_lmt", "xgb_lmt")
+ALLOWED_MODELS = (
+    "logistic",
+    "hgb_lmt",
+    "xgb_lmt",
+    "lgb_lmt",
+    "hgb_two_stage",
+    "xgb_two_stage",
+)
 PARTITIONS = ("calibration", "test")
 TARGETS = ("absolute", "relative")
 
@@ -82,6 +90,7 @@ class EnsemblePrediction:
     disagreement: float
     target_date: date | None = None
     domain: str = "unknown"
+    component_scores: tuple[tuple[str, float], ...] = ()
 
 
 def _parse_csv_ints(raw: str) -> tuple[int, ...]:
@@ -343,6 +352,9 @@ def ensemble_artifacts(
                 ),
                 target_date=target_date,
                 domain=domains.pop(),
+                component_scores=tuple(
+                    (model, by_model[model][1]) for model in expected_models
+                ),
             )
         )
     return out
@@ -454,10 +466,39 @@ def select_calibration_gate(
     return best
 
 
+def _ensemble_candidates(models: tuple[str, ...]) -> tuple[tuple[str, ...], ...]:
+    """Predeclared bounded search: singles, pairs, and the full ensemble."""
+    singles = [(model,) for model in models]
+    pairs = list(combinations(models, 2))
+    full = [models] if len(models) > 2 else []
+    return tuple(singles + pairs + full)
+
+
+def _rescore_rows(
+    rows: list[EnsemblePrediction],
+    models: tuple[str, ...],
+) -> list[EnsemblePrediction]:
+    rescored: list[EnsemblePrediction] = []
+    for row in rows:
+        components = dict(row.component_scores)
+        values = [components[model] for model in models]
+        rescored.append(
+            replace(
+                row,
+                score=statistics.fmean(values),
+                disagreement=(
+                    statistics.pstdev(values) if len(values) > 1 else 0.0
+                ),
+            )
+        )
+    return rescored
+
+
 def evaluate_nested_ensemble(
     rows: list[EnsemblePrediction],
     *,
     contract: SuccessContract,
+    ensemble_mode: str = "equal",
 ) -> dict[str, Any]:
     """Calibrate gates per outer fold, then score only corresponding tests."""
     group_keys = sorted({(row.outer_fold, row.horizon) for row in rows})
@@ -466,29 +507,69 @@ def evaluate_nested_ensemble(
     total_test_rows = 0
 
     for outer_fold, horizon in group_keys:
-        calibration = [
+        calibration_base = [
             row
             for row in rows
             if row.outer_fold == outer_fold
             and row.horizon == horizon
             and row.partition == "calibration"
         ]
-        test = [
+        test_base = [
             row
             for row in rows
             if row.outer_fold == outer_fold
             and row.horizon == horizon
             and row.partition == "test"
         ]
-        total_test_rows += len(test)
-        gate = select_calibration_gate(
-            calibration,
-            target_precision=contract.target_precision,
-            min_emits=contract.min_calibration_emits,
-            min_lcb=contract.min_calibration_lcb,
-            confidence_level=contract.confidence_level,
-            coverage_grid=contract.calibration_coverages,
-        )
+        total_test_rows += len(test_base)
+        component_models = tuple(
+            model for model, _score in calibration_base[0].component_scores
+        ) if calibration_base else ()
+        if not component_models:
+            candidates = ()
+        elif ensemble_mode == "equal":
+            candidates = (component_models,)
+        elif ensemble_mode == "calibration_select":
+            candidates = _ensemble_candidates(component_models)
+        else:
+            raise ValueError("ensemble_mode must be equal or calibration_select")
+
+        selected_models: tuple[str, ...] | None = None
+        calibration: list[EnsemblePrediction] = []
+        test: list[EnsemblePrediction] = []
+        gate: dict[str, float | int] | None = None
+        for candidate_models in candidates:
+            candidate_calibration = _rescore_rows(
+                calibration_base,
+                candidate_models,
+            )
+            candidate_gate = select_calibration_gate(
+                candidate_calibration,
+                target_precision=contract.target_precision,
+                min_emits=contract.min_calibration_emits,
+                min_lcb=contract.min_calibration_lcb,
+                confidence_level=contract.confidence_level,
+                coverage_grid=contract.calibration_coverages,
+            )
+            if candidate_gate is None:
+                continue
+            candidate_rank = (
+                int(candidate_gate["emits"]),
+                float(candidate_gate["precision_lcb"]),
+                float(candidate_gate["precision"]),
+                -len(candidate_models),
+            )
+            current_rank = (
+                int(gate["emits"]),
+                float(gate["precision_lcb"]),
+                float(gate["precision"]),
+                -len(selected_models or ()),
+            ) if gate is not None else None
+            if current_rank is None or candidate_rank > current_rank:
+                selected_models = candidate_models
+                calibration = candidate_calibration
+                test = _rescore_rows(test_base, candidate_models)
+                gate = candidate_gate
         threshold = float(gate["threshold"]) if gate is not None else None
         emitted = (
             [row for row in test if abs(row.score) >= threshold and row.score != 0]
@@ -502,8 +583,9 @@ def evaluate_nested_ensemble(
             {
                 "outer_fold": outer_fold,
                 "horizon": horizon,
-                "calibration_rows": len(calibration),
-                "test_rows": len(test),
+                "calibration_rows": len(calibration_base),
+                "test_rows": len(test_base),
+                "selected_models": list(selected_models or ()),
                 "threshold": threshold,
                 "calibration_gate": gate,
                 "emits": len(emitted),
@@ -554,6 +636,7 @@ def evaluate_nested_ensemble(
     }
     return {
         "schema_version": ARTIFACT_SCHEMA_VERSION,
+        "ensemble_mode": ensemble_mode,
         "contract_met": all(checks.values()),
         "checks": checks,
         "contract": asdict(contract),
@@ -644,7 +727,11 @@ def _aggregate_command(args: argparse.Namespace) -> None:
         min_symbols=args.min_symbols,
         min_coverage=args.min_coverage,
     )
-    report = evaluate_nested_ensemble(rows, contract=contract)
+    report = evaluate_nested_ensemble(
+        rows,
+        contract=contract,
+        ensemble_mode=args.ensemble_mode,
+    )
     report["target"] = artifacts[0].spec.target
     args.output_json.parent.mkdir(parents=True, exist_ok=True)
     args.output_markdown.parent.mkdir(parents=True, exist_ok=True)
@@ -675,6 +762,11 @@ def main(argv: list[str] | None = None) -> None:
     aggregate.add_argument("--min-emits", type=int, default=500)
     aggregate.add_argument("--min-symbols", type=int, default=80)
     aggregate.add_argument("--min-coverage", type=float, default=0.01)
+    aggregate.add_argument(
+        "--ensemble-mode",
+        choices=("equal", "calibration_select"),
+        default="calibration_select",
+    )
     args = parser.parse_args(argv)
 
     if args.command == "matrix":

@@ -8,7 +8,7 @@ on:
       models:
         description: Comma-separated model families
         required: true
-        default: logistic,hgb_lmt,xgb_lmt
+        default: logistic,hgb_lmt,xgb_lmt,lgb_lmt,hgb_two_stage,xgb_two_stage
         type: string
       folds:
         description: Number of nested outer folds
@@ -63,6 +63,12 @@ on:
         required: true
         default: "80"
         type: string
+      ensemble_mode:
+        description: Equal blend or calibration-only model selection
+        required: true
+        default: calibration_select
+        type: choice
+        options: [calibration_select, equal]
 
 permissions:
   contents: read
@@ -237,6 +243,7 @@ jobs:
             --min-coverage "$MIN_COVERAGE" \
             --min-emits "$MIN_EMITS" \
             --min-symbols "$MIN_SYMBOLS" \
+            --ensemble-mode "${{ inputs.ensemble_mode }}" \
             --output-json artifacts/ml-train-v2/report/result.json \
             --output-markdown artifacts/ml-train-v2/report/result.md
           cat artifacts/ml-train-v2/report/result.md >> "$GITHUB_STEP_SUMMARY"

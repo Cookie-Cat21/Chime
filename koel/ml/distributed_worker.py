@@ -94,6 +94,126 @@ def _rows_for_dates(
     ]
 
 
+def _feature_matrices(
+    train: list[Sample],
+    test: list[Sample],
+) -> tuple[object, object]:
+    import numpy as np
+
+    x_train = np.asarray([sample.x for sample in train], dtype=float)
+    x_test = np.asarray([sample.x for sample in test], dtype=float)
+    x_train[~np.isfinite(x_train)] = np.nan
+    x_test[~np.isfinite(x_test)] = np.nan
+    medians = np.nanmedian(x_train, axis=0)
+    medians = np.where(np.isfinite(medians), medians, 0.0)
+    for matrix in (x_train, x_test):
+        missing = np.where(np.isnan(matrix))
+        matrix[missing] = np.take(medians, missing[1])
+    varying = np.ptp(x_train, axis=0) > 1e-12
+    if not np.any(varying):
+        raise ValueError("training split has no varying features")
+    return x_train[:, varying], x_test[:, varying]
+
+
+def _xgb_classifier(*, seed: int, positive_weight: float) -> object:
+    from xgboost import XGBClassifier
+
+    return XGBClassifier(
+        n_estimators=300,
+        max_depth=6,
+        learning_rate=0.05,
+        subsample=0.85,
+        colsample_bytree=0.85,
+        min_child_weight=20,
+        reg_lambda=2.0,
+        scale_pos_weight=positive_weight,
+        eval_metric="logloss",
+        tree_method="hist",
+        n_jobs=max(1, int(os.environ.get("ML_WORKER_THREADS", "4"))),
+        random_state=seed,
+    )
+
+
+def _class_ratio(labels: object) -> float:
+    import numpy as np
+
+    values = np.asarray(labels, dtype=int)
+    positives = int(values.sum())
+    negatives = len(values) - positives
+    return negatives / positives if positives else 1.0
+
+
+def _fit_predict_two_stage(
+    *,
+    model: str,
+    train: list[Sample],
+    test: list[Sample],
+    seed: int,
+) -> list[float]:
+    """Predict material-move probability, then conditional direction."""
+    import numpy as np
+
+    nonflat = [sample for sample in train if sample.y_dir != 0]
+    if len(nonflat) < 100 or len(test) < 10:
+        raise ValueError("insufficient train/test samples")
+    material_cut = float(np.median([abs(sample.y_ret) for sample in nonflat]))
+    direction_rows = [
+        sample for sample in nonflat if abs(sample.y_ret) >= material_cut
+    ]
+    x_train, x_test = _feature_matrices(train, test)
+    train_index = {id(sample): index for index, sample in enumerate(train)}
+    direction_indices = [train_index[id(sample)] for sample in direction_rows]
+    y_direction = np.asarray(
+        [1 if sample.y_dir > 0 else 0 for sample in direction_rows],
+        dtype=int,
+    )
+    y_material = np.asarray(
+        [1 if abs(sample.y_ret) >= material_cut else 0 for sample in train],
+        dtype=int,
+    )
+    if len(set(y_direction.tolist())) < 2 or len(set(y_material.tolist())) < 2:
+        raise ValueError("two-stage training split contains one class")
+
+    if model == "hgb_two_stage":
+        from sklearn.ensemble import HistGradientBoostingClassifier
+
+        direction_model = HistGradientBoostingClassifier(
+            learning_rate=0.05,
+            max_depth=6,
+            max_iter=250,
+            l2_regularization=1.0,
+            random_state=seed,
+        )
+        material_model = HistGradientBoostingClassifier(
+            learning_rate=0.05,
+            max_depth=4,
+            max_iter=200,
+            l2_regularization=1.0,
+            random_state=seed + 10_000,
+        )
+    else:
+        direction_model = _xgb_classifier(
+            seed=seed,
+            positive_weight=_class_ratio(y_direction),
+        )
+        material_model = _xgb_classifier(
+            seed=seed + 10_000,
+            positive_weight=_class_ratio(y_material),
+        )
+    direction_model.fit(x_train[direction_indices], y_direction)
+    material_model.fit(x_train, y_material)
+    direction_margin = direction_model.predict_proba(x_test)[:, 1] - 0.5
+    material_probability = material_model.predict_proba(x_test)[:, 1]
+    return [
+        float(direction * magnitude)
+        for direction, magnitude in zip(
+            direction_margin,
+            material_probability,
+            strict=True,
+        )
+    ]
+
+
 def _fit_predict_one(
     *,
     model: str,
@@ -105,6 +225,13 @@ def _fit_predict_one(
 
     if model not in ALLOWED_MODELS:
         raise ValueError(f"unsupported model {model}")
+    if model.endswith("_two_stage"):
+        return _fit_predict_two_stage(
+            model=model,
+            train=train,
+            test=test,
+            seed=seed,
+        )
     selected = [sample for sample in train if sample.y_dir != 0]
     if model.endswith("_lmt"):
         magnitudes = np.asarray(
@@ -117,30 +244,13 @@ def _fit_predict_one(
     if len(selected) < 100 or len(test) < 10:
         raise ValueError("insufficient train/test samples")
 
-    x_train = np.asarray([sample.x for sample in selected], dtype=float)
-    x_test = np.asarray([sample.x for sample in test], dtype=float)
+    x_train, x_test = _feature_matrices(selected, test)
     y_train = np.asarray(
         [1 if sample.y_dir > 0 else 0 for sample in selected], dtype=int
     )
     if len(set(y_train.tolist())) < 2:
         raise ValueError("training split contains one class")
 
-    x_train[~np.isfinite(x_train)] = np.nan
-    x_test[~np.isfinite(x_test)] = np.nan
-    medians = np.nanmedian(x_train, axis=0)
-    medians = np.where(np.isfinite(medians), medians, 0.0)
-    for matrix in (x_train, x_test):
-        missing = np.where(np.isnan(matrix))
-        matrix[missing] = np.take(medians, missing[1])
-    varying = np.ptp(x_train, axis=0) > 1e-12
-    if not np.any(varying):
-        raise ValueError("training split has no varying features")
-    x_train = x_train[:, varying]
-    x_test = x_test[:, varying]
-
-    positives = int(y_train.sum())
-    negatives = len(y_train) - positives
-    positive_weight = negatives / positives if positives else 1.0
     if model == "logistic":
         from sklearn.linear_model import LogisticRegression
         from sklearn.pipeline import make_pipeline
@@ -165,22 +275,26 @@ def _fit_predict_one(
             l2_regularization=1.0,
             random_state=seed,
         )
-    else:
-        from xgboost import XGBClassifier
+    elif model == "lgb_lmt":
+        from lightgbm import LGBMClassifier
 
-        classifier = XGBClassifier(
+        classifier = LGBMClassifier(
             n_estimators=300,
-            max_depth=6,
-            learning_rate=0.05,
+            learning_rate=0.04,
+            num_leaves=31,
+            min_child_samples=80,
             subsample=0.85,
             colsample_bytree=0.85,
-            min_child_weight=20,
             reg_lambda=2.0,
-            scale_pos_weight=positive_weight,
-            eval_metric="logloss",
-            tree_method="hist",
+            class_weight="balanced",
             n_jobs=max(1, int(os.environ.get("ML_WORKER_THREADS", "4"))),
             random_state=seed,
+            verbosity=-1,
+        )
+    else:
+        classifier = _xgb_classifier(
+            seed=seed,
+            positive_weight=_class_ratio(y_train),
         )
     classifier.fit(x_train, y_train)
     probabilities = classifier.predict_proba(x_test)[:, 1]

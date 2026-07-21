@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from dataclasses import replace
 from datetime import date, timedelta
 
 import pytest
@@ -183,6 +184,54 @@ def test_ensemble_rejects_missing_model() -> None:
             [_artifact(model="logistic", fold=0)],
             expected_models=("logistic", "hgb_lmt"),
         )
+
+
+def test_calibration_only_model_selection_avoids_bad_blend() -> None:
+    logistic = _artifact(model="logistic", fold=0)
+    hgb_base = _artifact(model="hgb_lmt", fold=0)
+    hgb = replace(
+        hgb_base,
+        predictions=tuple(
+            replace(
+                prediction,
+                score=(
+                    0.05
+                    if int(prediction.symbol.removeprefix("S").split(".", 1)[0]) < 60
+                    else 0.40
+                ),
+            )
+            for prediction in hgb_base.predictions
+        ),
+    )
+    rows = ensemble_artifacts(
+        [logistic, hgb],
+        expected_models=("logistic", "hgb_lmt"),
+    )
+    contract = SuccessContract(
+        target_precision=0.90,
+        min_precision_lcb=0.50,
+        min_emits=50,
+        min_symbols=50,
+        min_coverage=0.50,
+        max_symbol_share=0.05,
+        min_calibration_emits=5,
+        min_calibration_lcb=0.50,
+        calibration_coverages=(0.60,),
+        min_emit_days=50,
+    )
+    equal = evaluate_nested_ensemble(
+        rows,
+        contract=contract,
+        ensemble_mode="equal",
+    )
+    selected = evaluate_nested_ensemble(
+        rows,
+        contract=contract,
+        ensemble_mode="calibration_select",
+    )
+    assert equal["summary"]["emits"] == 0
+    assert selected["contract_met"] is True
+    assert selected["folds"][0]["selected_models"] == ["logistic"]
 
 
 def test_outer_split_reserves_disjoint_lockbox() -> None:
