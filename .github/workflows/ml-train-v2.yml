@@ -13,9 +13,21 @@ on:
       folds:
         description: Number of nested outer folds
         required: true
-        default: "6"
+        default: "3"
         type: choice
         options: ["3", "6"]
+      target:
+        description: Prediction target
+        required: true
+        default: absolute
+        type: choice
+        options: [absolute, relative]
+      evaluation_domain:
+        description: Domain allowed in calibration and development tests
+        required: true
+        default: cse
+        type: choice
+        options: [cse, all]
       horizons:
         description: Comma-separated trading-session horizons
         required: true
@@ -112,13 +124,15 @@ jobs:
           FOLDS: ${{ inputs.folds }}
           HORIZONS: ${{ inputs.horizons }}
           SEEDS: ${{ inputs.seeds }}
+          TARGET: ${{ inputs.target }}
         run: |
           matrix="$(
             python -m koel.ml.distributed matrix \
               --models "$MODELS" \
               --folds "$FOLDS" \
               --horizons "$HORIZONS" \
-              --seeds "$SEEDS"
+              --seeds "$SEEDS" \
+              --target "$TARGET"
           )"
           echo "matrix=$matrix" >> "$GITHUB_OUTPUT"
 
@@ -170,7 +184,9 @@ jobs:
             --outer-fold "${{ matrix.outer_fold }}" \
             --outer-folds "${{ inputs.folds }}" \
             --horizon "${{ matrix.horizon }}" \
-            --seeds "${{ matrix.seeds }}"
+            --seeds "${{ matrix.seeds }}" \
+            --target "${{ matrix.target }}" \
+            --evaluation-domain "${{ inputs.evaluation_domain }}"
 
       - name: Upload shard predictions
         uses: actions/upload-artifact@v4

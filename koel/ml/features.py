@@ -185,15 +185,18 @@ def labels_at(
     *,
     index: int,
     horizon: int,
+    include_flat: bool = False,
 ) -> tuple[float, float] | None:
-    """Return (ret, dir) for horizon from ``index``; dir is -1 or +1."""
+    """Return horizon (return, direction); flat is optional and encoded as 0."""
     if horizon < 1 or index < 0 or index + horizon >= len(prices):
         return None
     p0, p1 = prices[index], prices[index + horizon]
     if p0 == 0 or not math.isfinite(p0) or not math.isfinite(p1):
         return None
     ret = (p1 / p0) - 1.0
-    if ret == 0 or not math.isfinite(ret):
+    if not math.isfinite(ret):
         return None
+    if ret == 0:
+        return (0.0, 0.0) if include_flat else None
     direction = 1.0 if ret > 0 else -1.0
     return ret, direction

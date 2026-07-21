@@ -17,7 +17,9 @@ from koel.ml.distributed import (
     load_prediction_artifact,
     write_prediction_artifact,
 )
-from koel.ml.distributed_worker import build_outer_split
+from koel.ml.dataset import Sample
+from koel.ml.distributed_worker import _rows_for_dates, build_outer_split
+from koel.ml.research_features import ResearchBarMetadata
 
 
 def test_training_matrix_is_stable_and_unique() -> None:
@@ -28,8 +30,8 @@ def test_training_matrix_is_stable_and_unique() -> None:
         seeds=(0, 1, 2),
     )
     assert len(specs) == 18
-    assert specs[0].shard_id == "h1-f00-logistic"
-    assert specs[-1].shard_id == "h1-f05-xgb_lmt"
+    assert specs[0].shard_id == "abs-h1-f00-logistic"
+    assert specs[-1].shard_id == "abs-h1-f05-xgb_lmt"
     assert len({spec.shard_id for spec in specs}) == len(specs)
 
 
@@ -136,7 +138,9 @@ def test_nested_ensemble_uses_calibration_gate_and_test_labels() -> None:
             min_symbols=50,
             min_coverage=0.50,
             max_symbol_share=0.05,
-            min_calibration_emits=50,
+            min_calibration_emits=5,
+            min_calibration_lcb=0.50,
+            calibration_coverages=(0.60,),
         ),
     )
     assert report["contract_met"] is True
@@ -163,7 +167,9 @@ def test_nested_ensemble_uses_calibration_gate_and_test_labels() -> None:
             min_symbols=50,
             min_coverage=0.50,
             max_symbol_share=0.05,
-            min_calibration_emits=50,
+            min_calibration_emits=5,
+            min_calibration_lcb=0.50,
+            calibration_coverages=(0.60,),
         ),
     )
     assert failed["contract_met"] is False
@@ -198,3 +204,24 @@ def test_outer_split_reserves_disjoint_lockbox() -> None:
     assert max(split.calibration_dates) < min(split.test_dates)
     assert max(split.test_dates) < min(split.lockbox_dates)
     assert not split.test_dates & split.lockbox_dates
+
+
+def test_partition_filter_rejects_target_crossing_boundary() -> None:
+    first = date(2025, 1, 1)
+    second = date(2025, 1, 2)
+    third = date(2025, 1, 3)
+    samples = [
+        Sample("A", first, (1.0,), 0.01, 1.0, 1, second),
+        Sample("A", second, (1.0,), 0.01, 1.0, 1, third),
+    ]
+    metadata = {
+        ("A", day): ResearchBarMetadata("cse", (1.0,))
+        for day in (first, second, third)
+    }
+    selected = _rows_for_dates(
+        samples,
+        frozenset((first, second)),
+        metadata=metadata,
+        domain="cse",
+    )
+    assert selected == [samples[0]]

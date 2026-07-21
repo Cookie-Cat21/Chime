@@ -4,6 +4,10 @@
 **Dataset:** frozen `hybrid_daily_bars` snapshot  
 **Snapshot SHA-256:** `69071c0689be1a338e90c95755e28f063aed69552cb75ee6f120d3fb3ea1a24d`
 
+> Protocol audit: this v1 run predicts cross-sectionally demeaned
+> outperformance, not absolute direction. Its repeatedly inspected folds are
+> exploratory development evidence, not confirmatory evidence.
+
 ## Dataset
 
 - 916,804 bars
@@ -51,7 +55,7 @@ Three-seed fold detail:
 
 ## Decision
 
-The honest nested result is close to 90% as a point estimate but does not
+The exploratory nested result is close to 90% as a point estimate but does not
 support a 90% claim. It fails precision, confidence bound, support, coverage,
 and concentration requirements. Seed averaging did not improve generalization.
 

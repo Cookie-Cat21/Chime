@@ -1,7 +1,7 @@
 # Distributed ML 90% master plan
 
 **Status:** execution foundation + local baseline complete; target not met  
-**Primary goal:** selective CSE direction precision, not always-on accuracy  
+**Primary goal:** selective absolute CSE direction precision, not always-on accuracy  
 **Compliance:** research signal only, always NFA
 
 ## 1. Success contract
@@ -20,14 +20,21 @@ The development gate is fixed before model search:
 | Eligible-row coverage | ≥ 1% |
 | Stable outer folds | ≥ 2/3 at precision ≥ 0.85 |
 | Largest symbol share of emits | ≤ 5% |
+| Distinct emit sessions | ≥ 60 |
+| Largest session share of emits | ≤ 5% |
 
-Calibration thresholds are selected inside each outer fold's calibration
-partition. They are then frozen and applied once to that fold's test partition.
-The final lockbox is excluded from all development folds.
+The primary label is absolute next-session close direction. Flat outcomes stay
+in evaluation and count as misses for directional emits. Market-relative
+outperformance is a separately labeled secondary experiment.
 
-The production claim requires a second independent pass on prospectively
-recorded shadow forecasts. A development pass alone is not a promise of future
-performance.
+Calibration gates are selected only from predeclared coverage levels inside
+each fold's calibration partition, with a minimum calibration confidence bound.
+The same fitted model produces calibration and test scores, and the frozen gate
+is applied once to that fold's development test partition.
+
+Repeatedly inspected folds are development evidence, not confirmation. The
+production claim requires a fixed candidate and enough append-only prospective
+shadow forecasts. A development pass alone is not a promise of future performance.
 
 ## 2. Current evidence and constraints
 
@@ -83,15 +90,17 @@ test-only contract report
 locked final test -> prospective shadow -> manual promotion
 ```
 
-The initial matrix uses:
+The corrected v2 matrix uses:
 
-- Six chronological outer folds.
+- Three chronological development folds with official-CSE outcomes only.
 - `logistic`, `hgb_lmt`, and `xgb_lmt`.
 - Three seeds per fold/model worker.
-- A 63-session final lockbox.
+- A 63-session delayed-development buffer; final proof remains prospective.
 - Five-session embargo (or the horizon when larger).
-- Price-cliff quarantine for feature/label windows crossing unresolved >50%
+- Price-cliff quarantine for feature/label windows crossing unresolved >35%
   session moves.
+- Decision and target dates must both remain inside their assigned partition.
+- Yahoo bars may train models but cannot qualify CSE precision.
 
 Many Actions provide independent experiment compute and an ensemble. They do
 not create shared GPU memory or synchronously train one giant model.
@@ -108,7 +117,8 @@ not create shared GPU memory or synchronously train one giant model.
 - [x] Test-only precision, coverage, concentration and Wilson bound.
 - [x] Reserved final lockbox.
 - [x] Manual GitHub Actions workflow with no promotion or forecast writes.
-- [x] Run the full six-fold local baseline and archive its honest failure.
+- [x] Run the original relative-label baseline and archive its exploratory failure.
+- [x] Correct target dates, flat outcomes, source metadata and CSE-only evaluation.
 - [ ] Create `ML_DATABASE_URL` using a SELECT-only Postgres role.
 - [ ] Reproduce the baseline through the GitHub Actions matrix.
 

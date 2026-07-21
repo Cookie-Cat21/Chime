@@ -22,6 +22,7 @@ class Sample:
     y_ret: float
     y_dir: float
     horizon: int
+    target_date: date | None = None
 
 
 async def load_symbol_bars(
@@ -65,6 +66,7 @@ def build_samples(
     horizon: int,
     min_history: int = 60,
     max_abs_return: float | None = None,
+    include_flat: bool = False,
 ) -> list[Sample]:
     """Build samples without copying each symbol's full history per row.
 
@@ -120,7 +122,12 @@ def build_samples(
             feats = path_features(window)
             if feats is None:
                 continue
-            lab = labels_at(prices, index=i, horizon=horizon)
+            lab = labels_at(
+                prices,
+                index=i,
+                horizon=horizon,
+                include_flat=include_flat,
+            )
             if lab is None:
                 continue
             y_ret, y_dir = lab
@@ -132,6 +139,7 @@ def build_samples(
                     y_ret=y_ret,
                     y_dir=y_dir,
                     horizon=horizon,
+                    target_date=ordered[i + horizon].trade_date,
                 )
             )
     return samples

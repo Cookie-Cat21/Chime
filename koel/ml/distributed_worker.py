@@ -14,11 +14,18 @@ from koel.ml.distributed import (
     ALLOWED_MODELS,
     Prediction,
     ShardSpec,
+    TARGETS,
     _parse_csv_ints,
     write_prediction_artifact,
 )
 from koel.ml.harden import _demean_by_day
 from koel.ml.iterate import _enrich_cross_section
+from koel.ml.research_features import (
+    ResearchBarMetadata,
+    build_research_bar_metadata,
+    enrich_research_quality,
+    sample_domain,
+)
 from koel.ml.snapshot import load_bar_snapshot
 
 
@@ -26,7 +33,6 @@ from koel.ml.snapshot import load_bar_snapshot
 class OuterSplit:
     calibration_train_dates: frozenset[date]
     calibration_dates: frozenset[date]
-    test_train_dates: frozenset[date]
     test_dates: frozenset[date]
     lockbox_dates: frozenset[date]
 
@@ -58,7 +64,6 @@ def build_outer_split(
     calibration_end = test_start - embargo_days
     calibration_start = calibration_end - calibration_days
     calibration_train_end = calibration_start - embargo_days
-    test_train_end = test_start - embargo_days
     if calibration_train_end < min_train_days:
         raise ValueError("not enough history for requested nested split")
 
@@ -67,14 +72,26 @@ def build_outer_split(
         calibration_dates=frozenset(
             unique_dates[calibration_start:calibration_end]
         ),
-        test_train_dates=frozenset(unique_dates[:test_train_end]),
         test_dates=frozenset(unique_dates[test_start:test_end]),
         lockbox_dates=frozenset(unique_dates[development_end:]),
     )
 
 
-def _rows_for_dates(samples: list[Sample], dates: frozenset[date]) -> list[Sample]:
-    return [sample for sample in samples if sample.as_of in dates]
+def _rows_for_dates(
+    samples: list[Sample],
+    dates: frozenset[date],
+    *,
+    metadata: dict[tuple[str, date], ResearchBarMetadata],
+    domain: str | None = None,
+) -> list[Sample]:
+    """Keep rows whose decision and outcome both remain inside a partition."""
+    return [
+        sample
+        for sample in samples
+        if sample.as_of in dates
+        and sample.target_date in dates
+        and (domain is None or sample_domain(sample, metadata) == domain)
+    ]
 
 
 def _fit_predict_one(
@@ -88,12 +105,14 @@ def _fit_predict_one(
 
     if model not in ALLOWED_MODELS:
         raise ValueError(f"unsupported model {model}")
-    selected = train
+    selected = [sample for sample in train if sample.y_dir != 0]
     if model.endswith("_lmt"):
-        magnitudes = np.asarray([abs(sample.y_ret) for sample in train], dtype=float)
+        magnitudes = np.asarray(
+            [abs(sample.y_ret) for sample in selected], dtype=float
+        )
         threshold = float(np.median(magnitudes))
         selected = [
-            sample for sample in train if abs(sample.y_ret) >= threshold
+            sample for sample in selected if abs(sample.y_ret) >= threshold
         ]
     if len(selected) < 100 or len(test) < 10:
         raise ValueError("insufficient train/test samples")
@@ -198,17 +217,35 @@ def run_worker(
     min_train_days: int,
     min_history: int,
     max_abs_return: float,
+    evaluation_domain: str,
 ) -> dict[str, int | str]:
     """Train calibration/test fits for one matrix shard and write predictions."""
+    if evaluation_domain not in {"all", "cse", "yahoo"}:
+        raise ValueError("evaluation_domain must be all, cse, or yahoo")
+    domain_filter = None if evaluation_domain == "all" else evaluation_domain
     loaded = load_bar_snapshot(snapshot_dir)
+    metadata = build_research_bar_metadata(
+        loaded.series,
+        dataset=loaded.manifest.dataset,
+    )
     base = build_samples(
         loaded.series,
         horizon=spec.horizon,
         min_history=min_history,
         max_abs_return=max_abs_return,
+        include_flat=spec.target == "absolute",
     )
-    samples = _enrich_cross_section(_demean_by_day(base))
-    dates = sorted({sample.as_of for sample in samples})
+    research = enrich_research_quality(base, metadata)
+    if spec.target == "relative":
+        research = _demean_by_day(research)
+    samples = _enrich_cross_section(research)
+    dates = sorted(
+        {
+            bar.trade_date
+            for symbol_bars in loaded.series.values()
+            for bar in symbol_bars
+        }
+    )
     split = build_outer_split(
         dates,
         outer_fold=spec.outer_fold,
@@ -220,22 +257,32 @@ def run_worker(
         min_train_days=min_train_days,
     )
 
-    calibration_train = _rows_for_dates(samples, split.calibration_train_dates)
-    calibration = _rows_for_dates(samples, split.calibration_dates)
-    test_train = _rows_for_dates(samples, split.test_train_dates)
-    test = _rows_for_dates(samples, split.test_dates)
-    calibration_scores = _fit_predict_average(
+    calibration_train = _rows_for_dates(
+        samples,
+        split.calibration_train_dates,
+        metadata=metadata,
+    )
+    calibration = _rows_for_dates(
+        samples,
+        split.calibration_dates,
+        metadata=metadata,
+        domain=domain_filter,
+    )
+    test = _rows_for_dates(
+        samples,
+        split.test_dates,
+        metadata=metadata,
+        domain=domain_filter,
+    )
+    evaluation_rows = calibration + test
+    evaluation_scores = _fit_predict_average(
         model=spec.model,
         train=calibration_train,
-        test=calibration,
+        test=evaluation_rows,
         seeds=spec.seeds,
     )
-    test_scores = _fit_predict_average(
-        model=spec.model,
-        train=test_train,
-        test=test,
-        seeds=spec.seeds,
-    )
+    calibration_scores = evaluation_scores[: len(calibration)]
+    test_scores = evaluation_scores[len(calibration) :]
 
     predictions = [
         Prediction(
@@ -243,8 +290,10 @@ def run_worker(
             symbol=sample.symbol,
             as_of=sample.as_of,
             horizon=sample.horizon,
-            y_dir=1 if sample.y_dir > 0 else -1,
+            y_dir=1 if sample.y_dir > 0 else -1 if sample.y_dir < 0 else 0,
             score=score,
+            target_date=sample.target_date,
+            domain=sample_domain(sample, metadata) or "unknown",
         )
         for sample, score in zip(calibration, calibration_scores, strict=True)
     ]
@@ -254,8 +303,10 @@ def run_worker(
             symbol=sample.symbol,
             as_of=sample.as_of,
             horizon=sample.horizon,
-            y_dir=1 if sample.y_dir > 0 else -1,
+            y_dir=1 if sample.y_dir > 0 else -1 if sample.y_dir < 0 else 0,
             score=score,
+            target_date=sample.target_date,
+            domain=sample_domain(sample, metadata) or "unknown",
         )
         for sample, score in zip(test, test_scores, strict=True)
     )
@@ -269,6 +320,8 @@ def run_worker(
     return {
         "shard_id": spec.shard_id,
         "model": spec.model,
+        "target": spec.target,
+        "evaluation_domain": evaluation_domain,
         "calibration_rows": len(calibration),
         "test_rows": len(test),
         "lockbox_days": len(split.lockbox_dates),
@@ -286,12 +339,18 @@ def main(argv: list[str] | None = None) -> None:
     parser.add_argument("--outer-folds", type=int, default=6)
     parser.add_argument("--horizon", type=int, default=1)
     parser.add_argument("--seeds", default="0,1,2")
+    parser.add_argument("--target", choices=TARGETS, default="absolute")
+    parser.add_argument(
+        "--evaluation-domain",
+        choices=("all", "cse", "yahoo"),
+        default="cse",
+    )
     parser.add_argument("--calibration-days", type=int, default=126)
     parser.add_argument("--test-days", type=int, default=42)
     parser.add_argument("--lockbox-days", type=int, default=63)
     parser.add_argument("--min-train-days", type=int, default=504)
     parser.add_argument("--min-history", type=int, default=252)
-    parser.add_argument("--max-abs-return", type=float, default=0.50)
+    parser.add_argument("--max-abs-return", type=float, default=0.35)
     args = parser.parse_args(argv)
     spec = ShardSpec(
         shard_id=args.shard_id,
@@ -299,6 +358,7 @@ def main(argv: list[str] | None = None) -> None:
         outer_fold=args.outer_fold,
         horizon=args.horizon,
         seeds=_parse_csv_ints(args.seeds),
+        target=args.target,
     )
     result = run_worker(
         snapshot_dir=args.snapshot,
@@ -312,6 +372,7 @@ def main(argv: list[str] | None = None) -> None:
         min_train_days=args.min_train_days,
         min_history=args.min_history,
         max_abs_return=args.max_abs_return,
+        evaluation_domain=args.evaluation_domain,
     )
     print(json.dumps(result, sort_keys=True))
 

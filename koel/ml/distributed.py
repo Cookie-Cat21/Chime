@@ -15,9 +15,10 @@ from pathlib import Path
 from statistics import NormalDist
 from typing import Any
 
-ARTIFACT_SCHEMA_VERSION = 1
+ARTIFACT_SCHEMA_VERSION = 2
 ALLOWED_MODELS = ("logistic", "hgb_lmt", "xgb_lmt")
 PARTITIONS = ("calibration", "test")
+TARGETS = ("absolute", "relative")
 
 
 @dataclass(frozen=True, slots=True)
@@ -32,6 +33,11 @@ class SuccessContract:
     min_fold_pass_fraction: float = 2 / 3
     max_symbol_share: float = 0.05
     min_calibration_emits: int = 50
+    min_calibration_lcb: float = 0.80
+    calibration_coverages: tuple[float, ...] = (0.005, 0.01, 0.02, 0.05, 0.10)
+    min_emit_days: int = 60
+    max_session_share: float = 0.05
+    min_fold_emits: int = 30
 
 
 @dataclass(frozen=True, slots=True)
@@ -41,6 +47,7 @@ class ShardSpec:
     outer_fold: int
     horizon: int
     seeds: tuple[int, ...]
+    target: str = "absolute"
 
 
 @dataclass(frozen=True, slots=True)
@@ -51,6 +58,8 @@ class Prediction:
     horizon: int
     y_dir: int
     score: float
+    target_date: date | None = None
+    domain: str = "unknown"
 
 
 @dataclass(frozen=True, slots=True)
@@ -71,6 +80,8 @@ class EnsemblePrediction:
     y_dir: int
     score: float
     disagreement: float
+    target_date: date | None = None
+    domain: str = "unknown"
 
 
 def _parse_csv_ints(raw: str) -> tuple[int, ...]:
@@ -93,6 +104,7 @@ def build_training_matrix(
     outer_folds: int = 6,
     horizons: tuple[int, ...] = (1,),
     seeds: tuple[int, ...] = (0, 1, 2),
+    target: str = "absolute",
 ) -> list[ShardSpec]:
     """Return a stable fold × model matrix; seeds stay inside each worker."""
     if outer_folds < 2:
@@ -102,6 +114,8 @@ def build_training_matrix(
         raise ValueError(f"unsupported models: {', '.join(unknown)}")
     if not models or not seeds:
         raise ValueError("models and seeds must not be empty")
+    if target not in TARGETS:
+        raise ValueError(f"target must be one of {', '.join(TARGETS)}")
     if any(horizon < 1 or horizon > 30 for horizon in horizons):
         raise ValueError("horizons must be between 1 and 30")
 
@@ -111,11 +125,14 @@ def build_training_matrix(
             for model in models:
                 specs.append(
                     ShardSpec(
-                        shard_id=f"h{horizon}-f{outer_fold:02d}-{model}",
+                        shard_id=(
+                            f"{target[:3]}-h{horizon}-f{outer_fold:02d}-{model}"
+                        ),
                         model=model,
                         outer_fold=outer_fold,
                         horizon=horizon,
                         seeds=seeds,
+                        target=target,
                     )
                 )
     return specs
@@ -130,6 +147,10 @@ def _prediction_payload(prediction: Prediction) -> dict[str, Any]:
         "horizon": prediction.horizon,
         "y_dir": prediction.y_dir,
         "score": prediction.score,
+        "target_date": (
+            prediction.target_date.isoformat() if prediction.target_date else None
+        ),
+        "domain": prediction.domain,
     }
 
 
@@ -161,8 +182,8 @@ def write_prediction_artifact(
         for prediction in predictions:
             if prediction.partition not in PARTITIONS:
                 raise ValueError(f"unsupported partition {prediction.partition!r}")
-            if prediction.y_dir not in (-1, 1):
-                raise ValueError("y_dir must be -1 or 1")
+            if prediction.y_dir not in (-1, 0, 1):
+                raise ValueError("y_dir must be -1, 0, or 1")
             if not math.isfinite(prediction.score):
                 raise ValueError("prediction score must be finite")
             compressed.write(
@@ -193,9 +214,10 @@ def load_prediction_artifact(path: Path) -> PredictionArtifact:
             outer_fold=int(raw_spec["outer_fold"]),
             horizon=int(raw_spec["horizon"]),
             seeds=tuple(int(seed) for seed in raw_spec["seeds"]),
+            target=str(raw_spec.get("target") or "relative"),
         )
         predictions: list[Prediction] = []
-        seen: set[tuple[str, str, date, int]] = set()
+        seen: set[tuple[str, str, date, int, date | None]] = set()
         for line_number, line in enumerate(handle, start=2):
             raw = json.loads(line)
             if raw.get("kind") != "prediction":
@@ -207,16 +229,25 @@ def load_prediction_artifact(path: Path) -> PredictionArtifact:
                 horizon=int(raw["horizon"]),
                 y_dir=int(raw["y_dir"]),
                 score=float(raw["score"]),
+                target_date=(
+                    date.fromisoformat(str(raw["target_date"]))
+                    if raw.get("target_date")
+                    else None
+                ),
+                domain=str(raw.get("domain") or "unknown"),
             )
             if prediction.partition not in PARTITIONS:
                 raise ValueError(f"invalid partition at {path}:{line_number}")
-            if prediction.y_dir not in (-1, 1) or not math.isfinite(prediction.score):
+            if prediction.y_dir not in (-1, 0, 1) or not math.isfinite(
+                prediction.score
+            ):
                 raise ValueError(f"invalid prediction at {path}:{line_number}")
             key = (
                 prediction.partition,
                 prediction.symbol,
                 prediction.as_of,
                 prediction.horizon,
+                prediction.target_date,
             )
             if key in seen:
                 raise ValueError(f"duplicate prediction at {path}:{line_number}")
@@ -246,14 +277,18 @@ def ensemble_artifacts(
         raise ValueError("prediction artifacts contain multiple run IDs")
     if len(snapshots) != 1:
         raise ValueError("prediction artifacts contain multiple dataset snapshots")
+    targets = {artifact.spec.target for artifact in artifacts}
+    if len(targets) != 1:
+        raise ValueError("prediction artifacts contain multiple targets")
 
-    shard_keys: set[tuple[int, int, str]] = set()
+    shard_keys: set[tuple[str, int, int, str]] = set()
     scores: dict[
-        tuple[int, str, str, date, int], dict[str, tuple[int, float]]
+        tuple[int, str, str, date, int, date | None],
+        dict[str, tuple[int, float, str]],
     ] = defaultdict(dict)
     for artifact in artifacts:
         spec = artifact.spec
-        shard_key = (spec.outer_fold, spec.horizon, spec.model)
+        shard_key = (spec.target, spec.outer_fold, spec.horizon, spec.model)
         if shard_key in shard_keys:
             raise ValueError(f"duplicate shard for fold/horizon/model {shard_key}")
         shard_keys.add(shard_key)
@@ -270,10 +305,15 @@ def ensemble_artifacts(
                 prediction.symbol,
                 prediction.as_of,
                 prediction.horizon,
+                prediction.target_date,
             )
             if spec.model in scores[key]:
                 raise ValueError(f"duplicate model prediction for {key}")
-            scores[key][spec.model] = (prediction.y_dir, prediction.score)
+            scores[key][spec.model] = (
+                prediction.y_dir,
+                prediction.score,
+                prediction.domain,
+            )
 
     expected = set(expected_models)
     out: list[EnsemblePrediction] = []
@@ -284,8 +324,11 @@ def ensemble_artifacts(
         directions = {item[0] for item in by_model.values()}
         if len(directions) != 1:
             raise ValueError(f"models disagree on ground truth for {key}")
+        domains = {item[2] for item in by_model.values()}
+        if len(domains) != 1:
+            raise ValueError(f"models disagree on domain for {key}")
         model_scores = [by_model[model][1] for model in expected_models]
-        outer_fold, partition, symbol, as_of, horizon = key
+        outer_fold, partition, symbol, as_of, horizon, target_date = key
         out.append(
             EnsemblePrediction(
                 outer_fold=outer_fold,
@@ -298,6 +341,8 @@ def ensemble_artifacts(
                 disagreement=(
                     statistics.pstdev(model_scores) if len(model_scores) > 1 else 0.0
                 ),
+                target_date=target_date,
+                domain=domains.pop(),
             )
         )
     return out
@@ -362,6 +407,53 @@ def wilson_lower_bound(
     return max(0.0, (centre - margin) / denominator)
 
 
+def select_calibration_gate(
+    rows: list[EnsemblePrediction],
+    *,
+    target_precision: float,
+    min_emits: int,
+    min_lcb: float,
+    confidence_level: float,
+    coverage_grid: tuple[float, ...],
+) -> dict[str, float | int] | None:
+    """Select only among predeclared coverage levels using calibration labels."""
+    usable = sorted(
+        (row for row in rows if row.score != 0 and math.isfinite(row.score)),
+        key=lambda row: abs(row.score),
+        reverse=True,
+    )
+    best: dict[str, float | int] | None = None
+    for requested_coverage in sorted(set(coverage_grid)):
+        if not 0 < requested_coverage <= 1:
+            raise ValueError("calibration coverage levels must be in (0, 1]")
+        requested = math.ceil(len(usable) * requested_coverage)
+        if requested < min_emits or requested > len(usable):
+            continue
+        threshold = abs(usable[requested - 1].score)
+        selected = [row for row in usable if abs(row.score) >= threshold]
+        hits = sum(1 for row in selected if _is_hit(row))
+        precision = hits / len(selected)
+        lcb = wilson_lower_bound(
+            hits,
+            len(selected),
+            confidence_level=confidence_level,
+        )
+        if precision < target_precision or lcb is None or lcb < min_lcb:
+            continue
+        candidate: dict[str, float | int] = {
+            "threshold": threshold,
+            "emits": len(selected),
+            "hits": hits,
+            "precision": precision,
+            "precision_lcb": lcb,
+            "coverage": len(selected) / len(usable),
+            "requested_coverage": requested_coverage,
+        }
+        if best is None or int(candidate["emits"]) > int(best["emits"]):
+            best = candidate
+    return best
+
+
 def evaluate_nested_ensemble(
     rows: list[EnsemblePrediction],
     *,
@@ -389,11 +481,15 @@ def evaluate_nested_ensemble(
             and row.partition == "test"
         ]
         total_test_rows += len(test)
-        threshold = select_calibration_threshold(
+        gate = select_calibration_gate(
             calibration,
             target_precision=contract.target_precision,
             min_emits=contract.min_calibration_emits,
+            min_lcb=contract.min_calibration_lcb,
+            confidence_level=contract.confidence_level,
+            coverage_grid=contract.calibration_coverages,
         )
+        threshold = float(gate["threshold"]) if gate is not None else None
         emitted = (
             [row for row in test if abs(row.score) >= threshold and row.score != 0]
             if threshold is not None
@@ -409,6 +505,7 @@ def evaluate_nested_ensemble(
                 "calibration_rows": len(calibration),
                 "test_rows": len(test),
                 "threshold": threshold,
+                "calibration_gate": gate,
                 "emits": len(emitted),
                 "hits": hits,
                 "precision": precision,
@@ -421,8 +518,14 @@ def evaluate_nested_ensemble(
     precision = hits / emits if emits else None
     coverage = emits / total_test_rows if total_test_rows else 0.0
     symbol_counts = Counter(row.symbol for row in emitted_rows)
+    session_counts = Counter(row.as_of for row in emitted_rows)
+    domain_counts = Counter(row.domain for row in emitted_rows)
     symbols = len(symbol_counts)
+    emit_days = len(session_counts)
     max_symbol_share = max(symbol_counts.values(), default=0) / emits if emits else 0.0
+    max_session_share = (
+        max(session_counts.values(), default=0) / emits if emits else 0.0
+    )
     precision_lcb = wilson_lower_bound(
         hits,
         emits,
@@ -432,6 +535,7 @@ def evaluate_nested_ensemble(
         1
         for fold in folds
         if fold["precision"] is not None
+        and int(fold["emits"]) >= contract.min_fold_emits
         and float(fold["precision"]) >= contract.min_fold_precision
     )
     fold_pass_fraction = stable_folds / len(folds) if folds else 0.0
@@ -445,6 +549,8 @@ def evaluate_nested_ensemble(
         "coverage": coverage >= contract.min_coverage,
         "fold_stability": fold_pass_fraction >= contract.min_fold_pass_fraction,
         "symbol_concentration": max_symbol_share <= contract.max_symbol_share,
+        "emit_days": emit_days >= contract.min_emit_days,
+        "session_concentration": max_session_share <= contract.max_session_share,
     }
     return {
         "schema_version": ARTIFACT_SCHEMA_VERSION,
@@ -459,7 +565,11 @@ def evaluate_nested_ensemble(
             "precision_lcb": precision_lcb,
             "coverage": coverage,
             "symbols": symbols,
+            "emit_days": emit_days,
             "max_symbol_share": max_symbol_share,
+            "max_session_share": max_session_share,
+            "domain_counts": dict(sorted(domain_counts.items())),
+            "flat_outcomes": sum(1 for row in emitted_rows if row.y_dir == 0),
             "stable_folds": stable_folds,
             "folds": len(folds),
         },
@@ -472,6 +582,8 @@ def render_report(report: dict[str, Any]) -> str:
     checks = dict(report["checks"])
     lines = [
         "# Distributed ML nested evaluation",
+        "",
+        f"**Target:** `{report.get('target', 'unknown')}`",
         "",
         f"**Contract met:** **{report['contract_met']}**",
         "",
@@ -513,6 +625,7 @@ def _matrix_payload(specs: list[ShardSpec]) -> dict[str, list[dict[str, Any]]]:
                 "outer_fold": spec.outer_fold,
                 "horizon": spec.horizon,
                 "seeds": ",".join(str(seed) for seed in spec.seeds),
+                "target": spec.target,
             }
             for spec in specs
         ]
@@ -532,6 +645,7 @@ def _aggregate_command(args: argparse.Namespace) -> None:
         min_coverage=args.min_coverage,
     )
     report = evaluate_nested_ensemble(rows, contract=contract)
+    report["target"] = artifacts[0].spec.target
     args.output_json.parent.mkdir(parents=True, exist_ok=True)
     args.output_markdown.parent.mkdir(parents=True, exist_ok=True)
     args.output_json.write_text(
@@ -550,6 +664,7 @@ def main(argv: list[str] | None = None) -> None:
     matrix.add_argument("--folds", type=int, default=6)
     matrix.add_argument("--horizons", default="1")
     matrix.add_argument("--seeds", default="0,1,2")
+    matrix.add_argument("--target", choices=TARGETS, default="absolute")
     aggregate = subparsers.add_parser("aggregate")
     aggregate.add_argument("--input-dir", type=Path, required=True)
     aggregate.add_argument("--models", default=",".join(ALLOWED_MODELS))
@@ -568,6 +683,7 @@ def main(argv: list[str] | None = None) -> None:
             outer_folds=args.folds,
             horizons=_parse_csv_ints(args.horizons),
             seeds=_parse_csv_ints(args.seeds),
+            target=args.target,
         )
         print(json.dumps(_matrix_payload(specs), separators=(",", ":")))
         return

@@ -47,6 +47,13 @@ def test_labels_horizon() -> None:
     assert direction == 1.0
     lab5 = labels_at(prices, index=0, horizon=5)
     assert lab5 is None
+    assert labels_at([10.0, 10.0], index=0, horizon=1) is None
+    assert labels_at(
+        [10.0, 10.0],
+        index=0,
+        horizon=1,
+        include_flat=True,
+    ) == (0.0, 0.0)
 
 
 def test_build_samples_no_future_in_features() -> None:
@@ -55,6 +62,7 @@ def test_build_samples_no_future_in_features() -> None:
     bars = _bars(prices)
     samples = build_samples({"TEST.N0000": bars}, horizon=1, min_history=60)
     assert samples
+    assert samples[0].target_date == bars[60].trade_date
     # Take a mid sample
     mid = samples[len(samples) // 2]
     # Rebuild with poisoned future prices after mid.as_of
@@ -95,6 +103,21 @@ def test_build_samples_quarantines_price_cliff_windows() -> None:
     assert bars[70].trade_date not in sample_dates  # features contain the cliff
     assert bars[129].trade_date not in sample_dates
     assert bars[130].trade_date in sample_dates
+
+
+def test_build_samples_can_retain_flat_outcomes() -> None:
+    bars = _bars([10.0] * 80)
+    dropped = build_samples({"TEST.N0000": bars}, horizon=1, min_history=60)
+    retained = build_samples(
+        {"TEST.N0000": bars},
+        horizon=1,
+        min_history=60,
+        include_flat=True,
+    )
+    assert dropped == []
+    assert retained
+    assert all(sample.y_dir == 0 for sample in retained)
+    assert all(sample.target_date > sample.as_of for sample in retained)
 
 
 def test_sklearn_available_helper() -> None:
