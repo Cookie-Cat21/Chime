@@ -198,14 +198,37 @@ async def _run(args: argparse.Namespace) -> None:
                 final_cycle = now >= close
                 include_market = cycle % max(1, args.market_every_cycles) == 0
                 include_books = cycle % max(1, args.book_every_cycles) == 0
-                result = await capture_live_factors(
-                    storage=storage,
-                    cse=cse,
-                    book_limit=args.book_limit if include_books else 0,
-                    include_sectors_indexes=include_market,
-                    include_daily_summary=final_cycle or args.include_daily_summary,
-                    partial_session=not final_cycle,
-                )
+                result = None
+                for attempt in range(2):
+                    try:
+                        result = await capture_live_factors(
+                            storage=storage,
+                            cse=cse,
+                            book_limit=args.book_limit if include_books else 0,
+                            include_sectors_indexes=include_market,
+                            include_daily_summary=(
+                                final_cycle or args.include_daily_summary
+                            ),
+                            partial_session=not final_cycle,
+                        )
+                        break
+                    except Exception as exc:
+                        if attempt > 0:
+                            raise
+                        print(
+                            json.dumps(
+                                {
+                                    "capture_retry": True,
+                                    "error_type": type(exc).__name__,
+                                },
+                                sort_keys=True,
+                            ),
+                            flush=True,
+                        )
+                        await storage.close()
+                        storage = Storage(database_url)
+                        await storage.open()
+                assert result is not None
                 print(json.dumps(asdict(result), sort_keys=True), flush=True)
                 cycle += 1
                 if (not args.until_close and cycle >= cycles) or (
