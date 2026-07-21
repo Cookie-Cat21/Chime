@@ -77,12 +77,7 @@ import {
   estimateDividendYieldPct,
   formatDividendDate,
 } from "@/lib/dividends";
-import {
-  formatCompactNumber,
-  formatNumber,
-  formatPct,
-  formatTs,
-} from "@/lib/format";
+import { formatNumber, formatPct, formatTs } from "@/lib/format";
 
 export const dynamic = "force-dynamic";
 
