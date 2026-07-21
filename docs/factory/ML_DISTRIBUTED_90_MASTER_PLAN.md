@@ -68,6 +68,11 @@ five-session direction produced no qualifying 90% calibration gate. A thin
 relative pocket exceeded 90% only by concentrating on flat-price names; an
 ex-ante flat-history filter reduced it to 77.18%.
 
+Prospective live capture and shadow emission started on 2026-07-21. The canary
+and isolation evidence live in `docs/experiments/ML_LIVE_SHADOW_20260721.md`.
+Partial-session rows are excluded from standards; qualifying accuracy requires
+future official sessions.
+
 ## 3. Distributed architecture
 
 ```text
@@ -193,8 +198,8 @@ not assumed winners. A billion-parameter model is not justified by this panel.
 1. Freeze code, feature schema, dataset SHA, model settings and gate.
 2. Evaluate the final lockbox exactly once.
 3. If it fails, record the failure; do not retune against it.
-4. Emit append-only shadow predictions prospectively.
-5. Score every due outcome automatically.
+4. **In progress:** emit isolated shadow predictions prospectively.
+5. **Implemented:** score due outcomes and report standards automatically.
 6. Require the same precision, support, coverage and concentration contract.
 
 ### Phase G — production integration
