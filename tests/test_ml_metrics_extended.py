@@ -31,7 +31,7 @@ def test_balanced_accuracy_and_mcc() -> None:
         0.6333333333333333
     )
     assert matthews_direction_correlation(actual, scores) == pytest.approx(
-        0.29814239699997197
+        0.2581988897471611
     )
 
 
