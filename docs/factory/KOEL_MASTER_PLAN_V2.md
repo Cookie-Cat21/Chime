@@ -6,7 +6,9 @@
 **Authority:** [CLAUDE.md](../../CLAUDE.md) · [DASH_CAKE_CHERRY.md](DASH_CAKE_CHERRY.md) ·
 [TIJORI_CSE_PLAN.md](TIJORI_CSE_PLAN.md) · [COMMIT_FACTORY.md](COMMIT_FACTORY.md)
 **Research basis:** competitive + product-practice research run 2026-07-21 (summarized
-in §1–§2; sources inline).
+in §1–§2; sources inline). International product deep-dive (Tijori / Stock Alarm /
+Robinhood / Groww / TradingView / Aktai → fence-legal koel backlog):
+[INTL_STOCK_PRODUCT_RESEARCH.md](INTL_STOCK_PRODUCT_RESEARCH.md).
 
 ### Horizon 1 execution checklist (code)
 
