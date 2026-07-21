@@ -21,3 +21,5 @@ Authority: [DASH_COMPONENT_FILTER.md](DASH_COMPONENT_FILTER.md) · [ARDENO_UI_MA
 | Watermelon UI Dashboards | MIT + Premium | Thin patterns only — no Premium dashboards |
 
 **This pass ports:** HyperUI-style filter-bar density + active filter chips on Browse; chart layer tabs already ship LWC + TradingView (not Tremor charts).
+
+**Workbench follow-up (same day):** [ARDENO_WORKBENCH_UI_PASS_2026-07-21.md](ARDENO_WORKBENCH_UI_PASS_2026-07-21.md) — HyperUI segments + shadcn Badge chips + Active strip + keyboard shortcuts on the expand chart dialog (`chart-workbench-controls.tsx`). Still reject DaisyUI / Tremor / React Bits.
