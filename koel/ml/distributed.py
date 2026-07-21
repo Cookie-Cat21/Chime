@@ -16,6 +16,13 @@ from pathlib import Path
 from statistics import NormalDist
 from typing import Any
 
+from koel.ml.metrics import (
+    balanced_direction_accuracy,
+    cost_adjusted_top_bottom_spread,
+    matthews_direction_correlation,
+    mean_daily_rank_ic,
+)
+
 ARTIFACT_SCHEMA_VERSION = 2
 ALLOWED_MODELS = (
     "logistic",
@@ -71,6 +78,7 @@ class Prediction:
     horizon: int
     y_dir: int
     score: float
+    y_ret: float | None = None
     target_date: date | None = None
     domain: str = "unknown"
 
@@ -93,6 +101,7 @@ class EnsemblePrediction:
     y_dir: int
     score: float
     disagreement: float
+    y_ret: float | None = None
     target_date: date | None = None
     domain: str = "unknown"
     component_scores: tuple[tuple[str, float], ...] = ()
@@ -161,6 +170,7 @@ def _prediction_payload(prediction: Prediction) -> dict[str, Any]:
         "horizon": prediction.horizon,
         "y_dir": prediction.y_dir,
         "score": prediction.score,
+        "y_ret": prediction.y_ret,
         "target_date": (
             prediction.target_date.isoformat() if prediction.target_date else None
         ),
@@ -243,6 +253,9 @@ def load_prediction_artifact(path: Path) -> PredictionArtifact:
                 horizon=int(raw["horizon"]),
                 y_dir=int(raw["y_dir"]),
                 score=float(raw["score"]),
+                y_ret=(
+                    float(raw["y_ret"]) if raw.get("y_ret") is not None else None
+                ),
                 target_date=(
                     date.fromisoformat(str(raw["target_date"]))
                     if raw.get("target_date")
@@ -298,7 +311,7 @@ def ensemble_artifacts(
     shard_keys: set[tuple[str, int, int, str]] = set()
     scores: dict[
         tuple[int, str, str, date, int, date | None],
-        dict[str, tuple[int, float, str]],
+        dict[str, tuple[int, float, str, float | None]],
     ] = defaultdict(dict)
     for artifact in artifacts:
         spec = artifact.spec
@@ -327,6 +340,7 @@ def ensemble_artifacts(
                 prediction.y_dir,
                 prediction.score,
                 prediction.domain,
+                prediction.y_ret,
             )
 
     expected = set(expected_models)
@@ -341,6 +355,9 @@ def ensemble_artifacts(
         domains = {item[2] for item in by_model.values()}
         if len(domains) != 1:
             raise ValueError(f"models disagree on domain for {key}")
+        returns = {item[3] for item in by_model.values()}
+        if len(returns) != 1:
+            raise ValueError(f"models disagree on realized return for {key}")
         model_scores = [by_model[model][1] for model in expected_models]
         outer_fold, partition, symbol, as_of, horizon, target_date = key
         out.append(
@@ -355,6 +372,7 @@ def ensemble_artifacts(
                 disagreement=(
                     statistics.pstdev(model_scores) if len(model_scores) > 1 else 0.0
                 ),
+                y_ret=returns.pop(),
                 target_date=target_date,
                 domain=domains.pop(),
                 component_scores=tuple(
@@ -509,6 +527,7 @@ def evaluate_nested_ensemble(
     group_keys = sorted({(row.outer_fold, row.horizon) for row in rows})
     folds: list[dict[str, Any]] = []
     emitted_rows: list[EnsemblePrediction] = []
+    all_test_rows: list[EnsemblePrediction] = []
     total_test_rows = 0
 
     for outer_fold, horizon in group_keys:
@@ -527,6 +546,7 @@ def evaluate_nested_ensemble(
             and row.partition == "test"
         ]
         total_test_rows += len(test_base)
+        all_test_rows.extend(test_base)
         component_models = tuple(
             model for model, _score in calibration_base[0].component_scores
         ) if calibration_base else ()
@@ -624,6 +644,46 @@ def evaluate_nested_ensemble(
         and float(fold["precision"]) >= contract.min_fold_precision
     )
     fold_pass_fraction = stable_folds / len(folds) if folds else 0.0
+    ranking_rows = [row for row in all_test_rows if row.y_ret is not None]
+    rank_ic, rank_ic_sessions = (
+        mean_daily_rank_ic(
+            [row.as_of for row in ranking_rows],
+            [row.score for row in ranking_rows],
+            [float(row.y_ret) for row in ranking_rows],
+            min_names=20,
+        )
+        if ranking_rows
+        else (None, 0)
+    )
+    all_balanced_accuracy = (
+        balanced_direction_accuracy(
+            [float(row.y_dir) for row in all_test_rows],
+            [row.score for row in all_test_rows],
+        )
+        if all_test_rows
+        else None
+    )
+    all_mcc = (
+        matthews_direction_correlation(
+            [float(row.y_dir) for row in all_test_rows],
+            [row.score for row in all_test_rows],
+        )
+        if all_test_rows
+        else None
+    )
+    spread = (
+        cost_adjusted_top_bottom_spread(
+            [row.as_of for row in ranking_rows],
+            [row.symbol for row in ranking_rows],
+            [row.score for row in ranking_rows],
+            [float(row.y_ret) for row in ranking_rows],
+            fraction=0.10,
+            cost_bps=112.0,
+            min_names=20,
+        )
+        if ranking_rows
+        else None
+    )
     checks = {
         "point_precision": precision is not None
         and precision >= contract.target_precision,
@@ -656,6 +716,14 @@ def evaluate_nested_ensemble(
             "max_session_share": max_session_share,
             "domain_counts": dict(sorted(domain_counts.items())),
             "flat_outcomes": sum(1 for row in emitted_rows if row.y_dir == 0),
+            "rank_ic": rank_ic,
+            "rank_ic_sessions": rank_ic_sessions,
+            "balanced_accuracy": all_balanced_accuracy,
+            "mcc": all_mcc,
+            "post_cost_mean_return": (
+                spread.mean_net_return if spread is not None else None
+            ),
+            "post_cost_sessions": spread.sessions if spread is not None else 0,
             "stable_folds": stable_folds,
             "folds": len(folds),
         },
@@ -680,6 +748,19 @@ def render_report(report: dict[str, Any]) -> str:
         (
             f"| {summary['precision']} | {summary['precision_lcb']} | "
             f"{summary['emits']} | {summary['coverage']} | {summary['symbols']} |"
+        ),
+        "",
+        "## Full-coverage challenger metrics",
+        "",
+        (
+            f"- RankIC: `{summary.get('rank_ic')}` "
+            f"over `{summary.get('rank_ic_sessions')}` sessions"
+        ),
+        f"- Balanced accuracy: `{summary.get('balanced_accuracy')}`",
+        f"- MCC: `{summary.get('mcc')}`",
+        (
+            f"- Mean post-cost top/bottom return: "
+            f"`{summary.get('post_cost_mean_return')}`"
         ),
         "",
         "## Contract checks",

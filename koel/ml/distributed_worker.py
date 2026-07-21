@@ -458,6 +458,7 @@ def run_worker(
             horizon=sample.horizon,
             y_dir=1 if sample.y_dir > 0 else -1 if sample.y_dir < 0 else 0,
             score=score,
+            y_ret=sample.y_ret,
             target_date=sample.target_date,
             domain=sample_domain(sample, metadata) or "unknown",
         )
@@ -471,6 +472,7 @@ def run_worker(
             horizon=sample.horizon,
             y_dir=1 if sample.y_dir > 0 else -1 if sample.y_dir < 0 else 0,
             score=score,
+            y_ret=sample.y_ret,
             target_date=sample.target_date,
             domain=sample_domain(sample, metadata) or "unknown",
         )
