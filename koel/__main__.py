@@ -29,6 +29,7 @@ from koel.notices_backfill import run_notices_backfill
 from koel.notify import SendResult, send_message
 from koel.path_backfill import run_path_backfill
 from koel.poller import Poller, run_poller_forever
+from koel.issuer_profile_backfill import run_issuer_profile_backfill
 from koel.sector_backfill import run_sector_backfill
 from koel.signals import run_signal_score_job
 from koel.storage import Storage
@@ -346,6 +347,7 @@ def main(argv: list[str] | None = None) -> None:
             "score-signals",
             "eval-signals",
             "sector-backfill",
+            "issuer-profile-backfill",
             "notices-backfill",
             "ml-experiment",
             "ml-forecast",
@@ -379,7 +381,8 @@ def main(argv: list[str] | None = None) -> None:
             "drain-graph | drain-people | directors-backfill | "
             "path-backfill | intraday-backfill | hybrid-backfill | "
             "score-signals | eval-signals | "
-            "sector-backfill | notices-backfill | disclosures-backfill | "
+            "sector-backfill | issuer-profile-backfill | notices-backfill | "
+            "disclosures-backfill | "
             "financials-backfill | aspi-backfill | appetite-backfill | "
             "corporate-actions-backfill | "
             "market-summary-backfill | macro-tick | "
@@ -398,8 +401,8 @@ def main(argv: list[str] | None = None) -> None:
             "tick: ignore market hours; "
             "digest: ignore 14:30–16:00 SLT window; "
             "path-backfill/intraday-backfill/hybrid-backfill/"
-            "sector-backfill/notices-backfill/directors-backfill/"
-            "corporate-actions-backfill/macro-tick: "
+            "sector-backfill/issuer-profile-backfill/notices-backfill/"
+            "directors-backfill/corporate-actions-backfill/macro-tick: "
             "run even if flag off"
         ),
     )
@@ -504,6 +507,7 @@ def main(argv: list[str] | None = None) -> None:
         "intraday-backfill",
         "hybrid-backfill",
         "sector-backfill",
+        "issuer-profile-backfill",
         "notices-backfill",
         "directors-backfill",
         "ml-forecast",
@@ -522,7 +526,8 @@ def main(argv: list[str] | None = None) -> None:
     ):
         parser.error(
             "--force is only valid for tick, digest, path-backfill, "
-            "intraday-backfill, hybrid-backfill, sector-backfill, notices-backfill, "
+            "intraday-backfill, hybrid-backfill, sector-backfill, "
+            "issuer-profile-backfill, notices-backfill, "
             "directors-backfill, disclosures-backfill, financials-backfill, "
             "aspi-backfill, appetite-backfill, corporate-actions-backfill, "
             "macro-tick, ml-forecast, ml-hpe, "
@@ -800,6 +805,54 @@ def main(argv: list[str] | None = None) -> None:
                 raise SystemExit(exit_code)
 
         asyncio.run(_sector_bf())
+        return
+
+    if args.command == "issuer-profile-backfill":
+        configure_logging()
+        settings = Settings.from_env(require_token=False)
+        limit = _cli_limit(args.limit)
+
+        async def _issuer_bf() -> None:
+            storage = Storage(settings.database_url)
+            await storage.open()
+            cse = CSEClient(
+                base_url=settings.cse_base_url,
+                timeout=settings.http_timeout_seconds,
+                fail_max=settings.circuit_fail_max,
+                reset_timeout=settings.circuit_reset_seconds,
+                min_interval_seconds=settings.cse_min_interval_seconds,
+            )
+            exit_code = 0
+            try:
+                result = await run_issuer_profile_backfill(
+                    settings=settings,
+                    storage=storage,
+                    cse=cse,
+                    limit=limit,
+                    force=args.force,
+                    only_missing=not args.all_symbols,
+                )
+                print(
+                    "issuer-profile-backfill: "
+                    f"targeted={result.symbols_targeted} "
+                    f"updated={result.symbols_updated} "
+                    f"skipped={result.symbols_skipped} "
+                    f"failed={result.symbols_failed}"
+                )
+                for issue in result.issues:
+                    print(
+                        f"issuer-profile-backfill issue: {issue}",
+                        file=sys.stderr,
+                    )
+                if result.symbols_failed > 0:
+                    exit_code = 1
+            finally:
+                await cse.aclose()
+                await storage.close()
+            if exit_code:
+                raise SystemExit(exit_code)
+
+        asyncio.run(_issuer_bf())
         return
 
     if args.command == "directors-backfill":

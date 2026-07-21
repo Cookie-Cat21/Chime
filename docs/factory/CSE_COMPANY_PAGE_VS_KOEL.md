@@ -85,15 +85,17 @@ koel’s wedge stays **alerts + research overlays**. CSE’s page is the **excha
 
 Highest leverage for “feels as informative as CSE” without becoming CSE:
 
-1. **Quote stats strip** — surface already-stored day H/L, open, turnover, trade count next to prev/volume/mcap. *UI-only; no new poller.*
-2. **Identity row** — ISIN, board type, shares issued, par value, market-cap % (persist from `companyInfoSummery` into `stocks` or a thin `company_quotes`/`issuer_profile` table).
-3. **Beta chips** — ASPI + SL20 from `reqSymbolBetaInfo` (same endpoint as quote).
-4. **Issuer profile block** — business summary, contact, auditors, secretaries, founded, FY end, website (`companyProfile` / `reqComSumInfo`). Cache politely; not every tick.
-5. **Directors / top posts strip** — thin list from `infoCompanyDirector` + `topPosts`, deep-link into koel People when matched.
-6. **Range context** — WTD/MTD/YTD/12m hi–lo (research labels, not a second trading board).
-7. **Logo** — optional `reqLogo` on symbol header (CDN URL allowlist).
-8. **Articles of association / report deep-links** — when CSE paths are stable and allowlisted.
-9. **AGM/EGM** — only if mapped cleanly onto koel Events without a second calendar product.
+1. **Quote stats strip** — ~~surface already-stored day H/L, open, turnover, trade count~~ **SHIPPED 2026-07-21** (`SessionQuoteStrip`).
+2. **Identity row** — ~~ISIN, board type, shares issued, par value, market-cap %~~ **SHIPPED** (`issuer_profiles` + chips).
+3. **Beta chips** — ~~ASPI + SL20~~ **SHIPPED**.
+4. **Issuer profile block** — ~~business summary, contact, auditors, secretaries~~ **SHIPPED** (`IssuerIdentityStrip` + `issuer-profile-backfill`).
+5. **Directors / top posts strip** — top posts **SHIPPED** (thin list); full board still deep-links via People.
+6. **Range context** — WTD/MTD/YTD/12m hi–lo (research labels, not a second trading board). *Open.*
+7. **Logo** — optional `reqLogo` on symbol header (CDN URL allowlist). *Open* (`logo_path` stored).
+8. **Articles of association / report deep-links** — when CSE paths are stable and allowlisted. *Open.*
+9. **AGM/EGM** — only if mapped cleanly onto koel Events without a second calendar product. *Open.*
+
+Ship note: [passes/CSE_SYMBOL_UI_SHIP_2026-07-21.md](passes/CSE_SYMBOL_UI_SHIP_2026-07-21.md).
 
 **Do not chase on company page:** CDS onboarding, MyCSE login, broker order entry, scraping HTML, cloning Financials/Videos/IR tabs wholesale, foreign-holdings when CSE returns null.
 

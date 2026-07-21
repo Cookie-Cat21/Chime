@@ -145,6 +145,144 @@ class Storage:
                 (symbol, name, sector, stock_id),
             )
 
+    async def list_symbols_missing_issuer_profile(self) -> list[str]:
+        """Listed stocks with daily bars but no ``issuer_profiles`` row."""
+        async with self._pool.connection() as conn:
+            rows = await (
+                await conn.execute(
+                    """
+                    SELECT DISTINCT s.symbol
+                    FROM stocks s
+                    INNER JOIN daily_bars d ON d.symbol = s.symbol
+                    LEFT JOIN issuer_profiles p ON p.symbol = s.symbol
+                    WHERE p.symbol IS NULL
+                      AND s.symbol NOT IN ('ASPI', 'SNP_SL20')
+                    ORDER BY s.symbol
+                    """
+                )
+            ).fetchall()
+        out: list[str] = []
+        for row in _as_rows(rows):
+            raw = row.get("symbol")
+            if isinstance(raw, str) and raw.strip():
+                out.append(raw.strip().upper())
+        return out
+
+    async def upsert_issuer_profile(self, row: dict[str, Any]) -> None:
+        """Upsert CSE registry fields into ``issuer_profiles``."""
+        sym_raw = row.get("symbol")
+        if not isinstance(sym_raw, str) or not sym_raw.strip():
+            return
+        symbol = sym_raw.strip().upper()
+        top_posts = row.get("top_posts")
+        if isinstance(top_posts, (dict, list)):
+            import json as _json
+
+            top_posts_json = _json.dumps(top_posts)
+        elif isinstance(top_posts, str) and top_posts.strip():
+            top_posts_json = top_posts
+        else:
+            top_posts_json = "[]"
+
+        def _text(key: str, cap: int) -> str | None:
+            val = row.get(key)
+            if isinstance(val, str) and val.strip():
+                return val.strip()[:cap]
+            return None
+
+        def _num(key: str) -> float | None:
+            val = row.get(key)
+            if isinstance(val, bool) or not isinstance(val, int | float):
+                return None
+            f = float(val)
+            return f if math.isfinite(f) else None
+
+        async with self._pool.connection() as conn:
+            await conn.execute(
+                """
+                INSERT INTO issuer_profiles (
+                    symbol, isin, board_type, founded, fin_year_end, quoted_date,
+                    website, email, phone, address, auditors, secretaries,
+                    business_summary, beta_aspi, beta_sl20, beta_period,
+                    market_cap_pct, shares_issued, par_value, foreign_pct,
+                    logo_path, top_posts, updated_at
+                ) VALUES (
+                    %s, %s, %s, %s, %s, %s,
+                    %s, %s, %s, %s, %s, %s,
+                    %s, %s, %s, %s,
+                    %s, %s, %s, %s,
+                    %s, %s::jsonb, now()
+                )
+                ON CONFLICT (symbol) DO UPDATE SET
+                    isin = COALESCE(EXCLUDED.isin, issuer_profiles.isin),
+                    board_type = COALESCE(EXCLUDED.board_type, issuer_profiles.board_type),
+                    founded = COALESCE(EXCLUDED.founded, issuer_profiles.founded),
+                    fin_year_end = COALESCE(
+                        EXCLUDED.fin_year_end, issuer_profiles.fin_year_end
+                    ),
+                    quoted_date = COALESCE(
+                        EXCLUDED.quoted_date, issuer_profiles.quoted_date
+                    ),
+                    website = COALESCE(EXCLUDED.website, issuer_profiles.website),
+                    email = COALESCE(EXCLUDED.email, issuer_profiles.email),
+                    phone = COALESCE(EXCLUDED.phone, issuer_profiles.phone),
+                    address = COALESCE(EXCLUDED.address, issuer_profiles.address),
+                    auditors = COALESCE(EXCLUDED.auditors, issuer_profiles.auditors),
+                    secretaries = COALESCE(
+                        EXCLUDED.secretaries, issuer_profiles.secretaries
+                    ),
+                    business_summary = COALESCE(
+                        EXCLUDED.business_summary, issuer_profiles.business_summary
+                    ),
+                    beta_aspi = COALESCE(EXCLUDED.beta_aspi, issuer_profiles.beta_aspi),
+                    beta_sl20 = COALESCE(EXCLUDED.beta_sl20, issuer_profiles.beta_sl20),
+                    beta_period = COALESCE(
+                        EXCLUDED.beta_period, issuer_profiles.beta_period
+                    ),
+                    market_cap_pct = COALESCE(
+                        EXCLUDED.market_cap_pct, issuer_profiles.market_cap_pct
+                    ),
+                    shares_issued = COALESCE(
+                        EXCLUDED.shares_issued, issuer_profiles.shares_issued
+                    ),
+                    par_value = COALESCE(EXCLUDED.par_value, issuer_profiles.par_value),
+                    foreign_pct = COALESCE(
+                        EXCLUDED.foreign_pct, issuer_profiles.foreign_pct
+                    ),
+                    logo_path = COALESCE(EXCLUDED.logo_path, issuer_profiles.logo_path),
+                    top_posts = CASE
+                        WHEN EXCLUDED.top_posts = '[]'::jsonb
+                        THEN issuer_profiles.top_posts
+                        ELSE EXCLUDED.top_posts
+                    END,
+                    updated_at = now()
+                """,
+                (
+                    symbol,
+                    _text("isin", 32),
+                    _text("board_type", 64),
+                    _text("founded", 32),
+                    _text("fin_year_end", 32),
+                    _text("quoted_date", 64),
+                    _text("website", 256),
+                    _text("email", 256),
+                    _text("phone", 128),
+                    _text("address", 512),
+                    _text("auditors", 256),
+                    _text("secretaries", 512),
+                    _text("business_summary", 2000),
+                    _num("beta_aspi"),
+                    _num("beta_sl20"),
+                    _text("beta_period", 32),
+                    _num("market_cap_pct"),
+                    _num("shares_issued"),
+                    _num("par_value"),
+                    _num("foreign_pct"),
+                    _text("logo_path", 512),
+                    top_posts_json,
+                ),
+            )
+
     async def list_stock_names(self) -> list[tuple[str, str]]:
         """Return ``(symbol, name)`` for stocks with a non-empty company name.
 

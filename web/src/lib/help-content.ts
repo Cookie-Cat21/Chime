@@ -143,6 +143,33 @@ export const HELP_TOPICS: readonly HelpTopic[] = [
         answer:
           "Those pages use a silent soft reload about every 60 seconds (SoftPageRefresh) with no age chip. Price-led pages show the LiveIndicator aged off the newest snapshot instead.",
       },
+      {
+        question: "What is the Session strip (day range, trades, turnover)?",
+        answer:
+          "Under the chart, koel shows a denser session board from the latest stored price snapshot: previous close, open, day high–low, share volume, trade count, turnover, and market cap when present.\n\nThese are research labels from Postgres (poller / CSE tradeSummary or companyInfoSummery) — not a live order book. Empty cells mean that field was null on the last tick.",
+      },
+    ],
+  },
+  {
+    id: "symbol-issuer",
+    title: "Issuer identity (ISIN, beta, contact)",
+    summary: "CSE companyProfile / companyInfoSummery fields koel stores.",
+    items: [
+      {
+        question: "Where do ISIN, beta, and board type come from?",
+        answer:
+          "Public CSE JSON: `companyInfoSummery` (ISIN, shares issued, par, market-cap %, beta vs ASPI / S&P SL20) and `companyProfile` (board type, founded, contact, auditors, secretaries, business summary, top posts).\n\nkoel caches them in `issuer_profiles` via `issuer-profile-backfill`. The dash never calls cse.lk directly.",
+      },
+      {
+        question: "Is beta a trading signal?",
+        answer:
+          "No. Beta chips are CSE-published research labels for the stated period — not financial advice and not a koel forecast.",
+      },
+      {
+        question: "Why is issuer empty on some symbols?",
+        answer:
+          "Backfill has not run yet, CSE returned empty (indexes like ASPI), or the symbol is new. Ops: `python3 -m koel issuer-profile-backfill --force --limit N`.",
+      },
     ],
   },
   {
