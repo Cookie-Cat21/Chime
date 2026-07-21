@@ -34,9 +34,12 @@ def test_expand_dialog_toggles_koel_overlays() -> None:
     assert "Alert lines" in src
     assert "initialDisclosures" in src
     assert "/api/v1/alerts/history" in src
+    assert "SMA 20" in src
+    assert "H-line" in src
+    assert "seriesStyle" in src
 
 
 def test_chart_layers_doc_names_koel_plus() -> None:
     src = LAYERS.read_text(encoding="utf-8")
     assert "koel-native overlays" in src
-    assert "1:1 TradingView rebuild" in src
+    assert "TV-inspired koel workbench" in src

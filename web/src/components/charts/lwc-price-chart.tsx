@@ -7,6 +7,7 @@ import {
   useState,
 } from "react";
 import {
+  AreaSeries,
   CandlestickSeries,
   ColorType,
   CrosshairMode,
@@ -31,8 +32,29 @@ import type {
   KoelChartMarker,
   KoelChartPriceLine,
 } from "@/lib/charts/koel-chart-events";
+import {
+  computeBollinger,
+  computeEma,
+  computeRsi,
+  computeSma,
+  type KoelIndicatorFlags,
+} from "@/lib/charts/koel-indicators";
 import { formatNumber } from "@/lib/format";
 import { cn } from "@/lib/utils";
+
+export type ChartSeriesStyle = "candle" | "line" | "area";
+export type ChartDrawMode = "none" | "hline" | "trend";
+
+export type KoelUserDrawing =
+  | { id: string; kind: "hline"; price: number }
+  | {
+      id: string;
+      kind: "trend";
+      t1: string;
+      p1: number;
+      t2: string;
+      p2: number;
+    };
 
 type HoverReadout = {
   time: string;
@@ -47,7 +69,6 @@ function toChartTime(tradeDate: string, index: number, total: number): Time {
   if (/^\d{4}-\d{2}-\d{2}$/.test(tradeDate)) {
     return tradeDate;
   }
-  // Intraday labels are clock strings — give LWC a monotonic unix scale.
   const base = Math.floor(Date.now() / 1000) - total * 60;
   return (base + index * 60) as UTCTimestamp;
 }
@@ -74,10 +95,13 @@ function formatHoverTime(time: Time): string {
   return "";
 }
 
+function newDrawId(): string {
+  return `d_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 7)}`;
+}
+
 /**
- * Interactive koel chart (Lightweight Charts) — crosshair, pan, zoom,
- * plus koel-native overlays TradingView won't ship: disclosure pins,
- * Telegram fire markers, armed price alert lines. Postgres bars only.
+ * Interactive koel chart — TradingView-inspired workbench on Postgres bars.
+ * Styles, MAs/BB/RSI, drawings, plus koel disclosure/fire overlays.
  */
 export function LwcPriceChart({
   bars,
@@ -87,27 +111,69 @@ export function LwcPriceChart({
   showVolume = true,
   markers = [],
   priceLines = [],
+  seriesStyle = "candle",
+  indicators,
+  drawMode = "none",
+  drawings = [],
+  onDrawingsChange,
 }: {
   bars: DailyBarPoint[];
   className?: string;
   forecastPrices?: number[];
   showForecast?: boolean;
   showVolume?: boolean;
-  /** koel event markers (disclosures / Telegram fires). */
   markers?: KoelChartMarker[];
-  /** Armed price_above / price_below thresholds. */
   priceLines?: KoelChartPriceLine[];
+  seriesStyle?: ChartSeriesStyle;
+  indicators?: KoelIndicatorFlags;
+  drawMode?: ChartDrawMode;
+  drawings?: KoelUserDrawing[];
+  onDrawingsChange?: (next: KoelUserDrawing[]) => void;
 }) {
   const hostRef = useRef<HTMLDivElement | null>(null);
   const chartRef = useRef<IChartApi | null>(null);
-  const candleRef = useRef<ISeriesApi<"Candlestick"> | null>(null);
+  const mainRef = useRef<
+    | ISeriesApi<"Candlestick">
+    | ISeriesApi<"Line">
+    | ISeriesApi<"Area">
+    | null
+  >(null);
   const volumeRef = useRef<ISeriesApi<"Histogram"> | null>(null);
   const forecastRef = useRef<ISeriesApi<"Line"> | null>(null);
+  const sma20Ref = useRef<ISeriesApi<"Line"> | null>(null);
+  const sma50Ref = useRef<ISeriesApi<"Line"> | null>(null);
+  const ema12Ref = useRef<ISeriesApi<"Line"> | null>(null);
+  const bbMidRef = useRef<ISeriesApi<"Line"> | null>(null);
+  const bbUpRef = useRef<ISeriesApi<"Line"> | null>(null);
+  const bbLoRef = useRef<ISeriesApi<"Line"> | null>(null);
+  const rsiRef = useRef<ISeriesApi<"Line"> | null>(null);
+  const trendSeriesRef = useRef<ISeriesApi<"Line">[]>([]);
   const markersApiRef = useRef<ISeriesMarkersPluginApi<Time> | null>(null);
-  const priceLinesRef = useRef<IPriceLine[]>([]);
+  const alertLinesRef = useRef<IPriceLine[]>([]);
+  const userHLinesRef = useRef<IPriceLine[]>([]);
+  const trendDraftRef = useRef<{ t: string; p: number } | null>(null);
+  const barsRef = useRef(bars);
+  const drawModeRef = useRef(drawMode);
+  const drawingsRef = useRef(drawings);
+  const onDrawingsChangeRef = useRef(onDrawingsChange);
   const [hover, setHover] = useState<HoverReadout | null>(null);
   const [ready, setReady] = useState(false);
+  const [legendExtras, setLegendExtras] = useState<string>("");
 
+  barsRef.current = bars;
+  drawModeRef.current = drawMode;
+  drawingsRef.current = drawings;
+  onDrawingsChangeRef.current = onDrawingsChange;
+
+  const ind = indicators ?? {
+    sma20: false,
+    sma50: false,
+    ema12: false,
+    bb: false,
+    rsi: false,
+  };
+
+  // Recreate chart when style / volume / RSI pane structure changes.
   useLayoutEffect(() => {
     const el = hostRef.current;
     if (!el || bars.length < 2) return;
@@ -148,20 +214,40 @@ export function LwcPriceChart({
       return;
     }
 
-    const candles = chart.addSeries(CandlestickSeries, {
-      upColor: "#059669",
-      downColor: "#e11d48",
-      borderUpColor: "#059669",
-      borderDownColor: "#e11d48",
-      wickUpColor: "#059669",
-      wickDownColor: "#e11d48",
-    });
+    let main:
+      | ISeriesApi<"Candlestick">
+      | ISeriesApi<"Line">
+      | ISeriesApi<"Area">;
+    if (seriesStyle === "line") {
+      main = chart.addSeries(LineSeries, {
+        color: "#0f766e",
+        lineWidth: 2,
+        lastValueVisible: true,
+        priceLineVisible: false,
+      });
+    } else if (seriesStyle === "area") {
+      main = chart.addSeries(AreaSeries, {
+        lineColor: "#0f766e",
+        topColor: "rgba(15, 118, 110, 0.35)",
+        bottomColor: "rgba(15, 118, 110, 0.02)",
+        lineWidth: 2,
+        lastValueVisible: true,
+        priceLineVisible: false,
+      });
+    } else {
+      main = chart.addSeries(CandlestickSeries, {
+        upColor: "#059669",
+        downColor: "#e11d48",
+        borderUpColor: "#059669",
+        borderDownColor: "#e11d48",
+        wickUpColor: "#059669",
+        wickDownColor: "#e11d48",
+      });
+    }
 
     let volume: ISeriesApi<"Histogram"> | null = null;
+    let nextPane = 1;
     if (showVolume) {
-      // Pane index 1 — LWC v5 requires paneIndex on priceScale() or the
-      // custom id is looked up on pane 0 and throws (takes down the page).
-      const volumePane = 1;
       try {
         volume = chart.addSeries(
           HistogramSeries,
@@ -169,14 +255,36 @@ export function LwcPriceChart({
             priceFormat: { type: "volume" },
             priceScaleId: "volume",
           },
-          volumePane,
+          nextPane,
         );
-        chart.priceScale("volume", volumePane).applyOptions({
+        chart.priceScale("volume", nextPane).applyOptions({
           scaleMargins: { top: 0.15, bottom: 0 },
         });
+        nextPane += 1;
       } catch {
-        // Volume pane is optional — keep candles if histogram scale fails.
         volume = null;
+      }
+    }
+
+    let rsi: ISeriesApi<"Line"> | null = null;
+    if (ind.rsi) {
+      try {
+        rsi = chart.addSeries(
+          LineSeries,
+          {
+            color: "#a855f7",
+            lineWidth: 2,
+            priceScaleId: "rsi",
+            lastValueVisible: true,
+            priceLineVisible: false,
+          },
+          nextPane,
+        );
+        chart.priceScale("rsi", nextPane).applyOptions({
+          scaleMargins: { top: 0.1, bottom: 0.1 },
+        });
+      } catch {
+        rsi = null;
       }
     }
 
@@ -189,52 +297,140 @@ export function LwcPriceChart({
       crosshairMarkerVisible: false,
     });
 
+    const mkLine = (color: string, dashed = false) =>
+      chart.addSeries(LineSeries, {
+        color,
+        lineWidth: 1,
+        lineStyle: dashed ? LineStyle.Dashed : LineStyle.Solid,
+        lastValueVisible: false,
+        priceLineVisible: false,
+        crosshairMarkerVisible: false,
+      });
+
+    const sma20 = ind.sma20 ? mkLine("#2563eb") : null;
+    const sma50 = ind.sma50 ? mkLine("#ea580c") : null;
+    const ema12 = ind.ema12 ? mkLine("#0891b2") : null;
+    const bbMid = ind.bb ? mkLine("#64748b", true) : null;
+    const bbUp = ind.bb ? mkLine("#94a3b8", true) : null;
+    const bbLo = ind.bb ? mkLine("#94a3b8", true) : null;
+
     let markersApi: ISeriesMarkersPluginApi<Time> | null = null;
     try {
-      markersApi = createSeriesMarkers(candles, []);
+      markersApi = createSeriesMarkers(main, []);
     } catch {
       markersApi = null;
     }
 
     chartRef.current = chart;
-    candleRef.current = candles;
+    mainRef.current = main;
     volumeRef.current = volume;
     forecastRef.current = forecast;
+    sma20Ref.current = sma20;
+    sma50Ref.current = sma50;
+    ema12Ref.current = ema12;
+    bbMidRef.current = bbMid;
+    bbUpRef.current = bbUp;
+    bbLoRef.current = bbLo;
+    rsiRef.current = rsi;
     markersApiRef.current = markersApi;
     setReady(true);
 
+    const onClick = (param: {
+      time?: Time;
+      point?: { x: number; y: number } | undefined;
+    }) => {
+      const mode = drawModeRef.current;
+      if (mode === "none" || !param.point || !mainRef.current) return;
+      const price = mainRef.current.coordinateToPrice(param.point.y);
+      if (price == null || !Number.isFinite(price)) return;
+
+      if (mode === "hline") {
+        const next: KoelUserDrawing[] = [
+          ...drawingsRef.current,
+          { id: newDrawId(), kind: "hline", price: Number(price) },
+        ];
+        onDrawingsChangeRef.current?.(next);
+        return;
+      }
+
+      if (mode === "trend") {
+        const barsNow = barsRef.current;
+        let t: string | null = null;
+        if (typeof param.time === "string") t = param.time;
+        else if (param.time != null) {
+          // Snap to nearest bar by coordinate index fallback
+          t = barsNow[barsNow.length - 1]?.trade_date ?? null;
+        }
+        if (!t) {
+          // Find nearest bar date from time scale
+          const idx = Math.min(
+            barsNow.length - 1,
+            Math.max(0, Math.round((param.point.x / Math.max(el.clientWidth, 1)) * (barsNow.length - 1))),
+          );
+          t = barsNow[idx]?.trade_date ?? null;
+        }
+        if (!t) return;
+        const draft = trendDraftRef.current;
+        if (!draft) {
+          trendDraftRef.current = { t, p: Number(price) };
+          return;
+        }
+        const next: KoelUserDrawing[] = [
+          ...drawingsRef.current,
+          {
+            id: newDrawId(),
+            kind: "trend",
+            t1: draft.t,
+            p1: draft.p,
+            t2: t,
+            p2: Number(price),
+          },
+        ];
+        trendDraftRef.current = null;
+        onDrawingsChangeRef.current?.(next);
+      }
+    };
+
+    chart.subscribeClick(onClick);
+
     chart.subscribeCrosshairMove((param) => {
-      if (!param.time || !param.seriesData) {
+      if (!param.time || !param.seriesData || !mainRef.current) {
         setHover(null);
         return;
       }
-      const candle = param.seriesData.get(candles) as
+      const mainSeries = mainRef.current;
+      const raw = param.seriesData.get(mainSeries) as
         | {
             open?: number;
             high?: number;
             low?: number;
             close?: number;
+            value?: number;
           }
         | undefined;
-      if (
-        !candle ||
-        candle.open == null ||
-        candle.high == null ||
-        candle.low == null ||
-        candle.close == null
-      ) {
+      if (!raw) {
         setHover(null);
         return;
       }
-      const volPoint = volume
-        ? (param.seriesData.get(volume) as { value?: number } | undefined)
+      const close = raw.close ?? raw.value;
+      if (close == null || !Number.isFinite(close)) {
+        setHover(null);
+        return;
+      }
+      const open = raw.open ?? close;
+      const high = raw.high ?? close;
+      const low = raw.low ?? close;
+      const volPoint = volumeRef.current
+        ? (param.seriesData.get(volumeRef.current) as
+            | { value?: number }
+            | undefined)
         : undefined;
       setHover({
         time: formatHoverTime(param.time),
-        open: candle.open,
-        high: candle.high,
-        low: candle.low,
-        close: candle.close,
+        open,
+        high,
+        low,
+        close,
         volume:
           volPoint?.value != null && Number.isFinite(volPoint.value)
             ? volPoint.value
@@ -243,52 +439,85 @@ export function LwcPriceChart({
     });
 
     return () => {
-      for (const line of priceLinesRef.current) {
+      chart.unsubscribeClick(onClick);
+      for (const line of alertLinesRef.current) {
         try {
-          candles.removePriceLine(line);
+          main.removePriceLine(line);
         } catch {
-          /* chart already torn down */
+          /* */
         }
       }
-      priceLinesRef.current = [];
+      alertLinesRef.current = [];
+      for (const line of userHLinesRef.current) {
+        try {
+          main.removePriceLine(line);
+        } catch {
+          /* */
+        }
+      }
+      userHLinesRef.current = [];
+      trendSeriesRef.current = [];
       markersApiRef.current = null;
       chart.remove();
       chartRef.current = null;
-      candleRef.current = null;
+      mainRef.current = null;
       volumeRef.current = null;
       forecastRef.current = null;
+      sma20Ref.current = null;
+      sma50Ref.current = null;
+      ema12Ref.current = null;
+      bbMidRef.current = null;
+      bbUpRef.current = null;
+      bbLoRef.current = null;
+      rsiRef.current = null;
       setReady(false);
     };
-    // Recreate only when volume pane preference changes — data updates below.
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- intentional
-  }, [showVolume]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- structural recreate
+  }, [
+    showVolume,
+    seriesStyle,
+    ind.sma20,
+    ind.sma50,
+    ind.ema12,
+    ind.bb,
+    ind.rsi,
+  ]);
 
+  // Bars + indicator series data
   useEffect(() => {
-    const candles = candleRef.current;
-    const volume = volumeRef.current;
-    const forecast = forecastRef.current;
+    const main = mainRef.current;
     const chart = chartRef.current;
-    if (!candles || !chart || bars.length < 2) return;
+    if (!main || !chart || bars.length < 2 || !ready) return;
 
-    const candleData = bars.map((b, i) => {
-      const open = candleBodyOpen(bars, i);
-      return {
-        time: toChartTime(b.trade_date, i, bars.length),
-        open,
-        high: b.high,
-        low: b.low,
-        close: b.close,
-      };
-    });
-    candles.setData(candleData);
+    const closes = bars.map((b) => b.close);
+    const n = bars.length;
 
-    if (volume) {
-      volume.setData(
+    if (seriesStyle === "candle") {
+      (main as ISeriesApi<"Candlestick">).setData(
+        bars.map((b, i) => ({
+          time: toChartTime(b.trade_date, i, n),
+          open: candleBodyOpen(bars, i),
+          high: b.high,
+          low: b.low,
+          close: b.close,
+        })),
+      );
+    } else {
+      (main as ISeriesApi<"Line"> | ISeriesApi<"Area">).setData(
+        bars.map((b, i) => ({
+          time: toChartTime(b.trade_date, i, n),
+          value: b.close,
+        })),
+      );
+    }
+
+    if (volumeRef.current) {
+      volumeRef.current.setData(
         bars.map((b, i) => {
           const open = candleBodyOpen(bars, i);
           const up = b.close >= open;
           return {
-            time: toChartTime(b.trade_date, i, bars.length),
+            time: toChartTime(b.trade_date, i, n),
             value: b.volume ?? 0,
             color: up
               ? "rgba(5, 150, 105, 0.35)"
@@ -298,16 +527,50 @@ export function LwcPriceChart({
       );
     }
 
+    const applyLine = (
+      series: ISeriesApi<"Line"> | null,
+      points: { index: number; value: number }[],
+    ) => {
+      if (!series) return;
+      series.setData(
+        points.map((p) => ({
+          time: toChartTime(bars[p.index]!.trade_date, p.index, n),
+          value: p.value,
+        })),
+      );
+    };
+
+    applyLine(sma20Ref.current, computeSma(closes, 20));
+    applyLine(sma50Ref.current, computeSma(closes, 50));
+    applyLine(ema12Ref.current, computeEma(closes, 12));
+
+    if (ind.bb) {
+      const bb = computeBollinger(closes, 20, 2);
+      applyLine(
+        bbMidRef.current,
+        bb.map((b) => ({ index: b.index, value: b.mid })),
+      );
+      applyLine(
+        bbUpRef.current,
+        bb.map((b) => ({ index: b.index, value: b.upper })),
+      );
+      applyLine(
+        bbLoRef.current,
+        bb.map((b) => ({ index: b.index, value: b.lower })),
+      );
+    }
+
+    if (rsiRef.current) {
+      applyLine(rsiRef.current, computeRsi(closes, 14));
+    }
+
+    const forecast = forecastRef.current;
     if (forecast && showForecast && forecastPrices && forecastPrices.length > 0) {
-      const n = Math.min(forecastPrices.length, bars.length);
-      const start = bars.length - n;
+      const fn = Math.min(forecastPrices.length, bars.length);
+      const start = bars.length - fn;
       forecast.setData(
-        forecastPrices.slice(-n).map((price, j) => ({
-          time: toChartTime(
-            bars[start + j]!.trade_date,
-            start + j,
-            bars.length,
-          ),
+        forecastPrices.slice(-fn).map((price, j) => ({
+          time: toChartTime(bars[start + j]!.trade_date, start + j, n),
           value: price,
         })),
       );
@@ -317,10 +580,18 @@ export function LwcPriceChart({
       forecast.applyOptions({ visible: false });
     }
 
-    chart.timeScale().fitContent();
-  }, [bars, forecastPrices, showForecast, ready]);
+    const bits: string[] = [];
+    if (ind.sma20) bits.push("SMA20");
+    if (ind.sma50) bits.push("SMA50");
+    if (ind.ema12) bits.push("EMA12");
+    if (ind.bb) bits.push("BB(20,2)");
+    if (ind.rsi) bits.push("RSI14");
+    setLegendExtras(bits.join(" · "));
 
-  // koel event markers — disclosures (amber ■) + Telegram fires (violet ▲)
+    chart.timeScale().fitContent();
+  }, [bars, forecastPrices, showForecast, ready, seriesStyle, ind]);
+
+  // Event markers
   useEffect(() => {
     const api = markersApiRef.current;
     if (!api || !ready) return;
@@ -339,39 +610,105 @@ export function LwcPriceChart({
     try {
       api.setMarkers(sorted);
     } catch {
-      /* ignore plugin race during teardown */
+      /* */
     }
   }, [markers, bars, ready]);
 
-  // Armed price alert thresholds — dashed lines on the candle series
+  // Armed alert lines + user h-lines
   useEffect(() => {
-    const candles = candleRef.current;
-    if (!candles || !ready) return;
-    for (const line of priceLinesRef.current) {
+    const main = mainRef.current;
+    if (!main || !ready) return;
+    for (const line of alertLinesRef.current) {
       try {
-        candles.removePriceLine(line);
+        main.removePriceLine(line);
       } catch {
-        /* ignore */
+        /* */
       }
     }
-    priceLinesRef.current = [];
+    alertLinesRef.current = [];
     for (const pl of priceLines) {
       try {
-        const line = candles.createPriceLine({
-          price: pl.price,
-          color: pl.color,
-          lineWidth: 1,
-          lineStyle:
-            pl.lineStyle === "dashed" ? LineStyle.Dashed : LineStyle.Solid,
-          axisLabelVisible: true,
-          title: pl.title,
-        });
-        priceLinesRef.current.push(line);
+        alertLinesRef.current.push(
+          main.createPriceLine({
+            price: pl.price,
+            color: pl.color,
+            lineWidth: 1,
+            lineStyle:
+              pl.lineStyle === "dashed" ? LineStyle.Dashed : LineStyle.Solid,
+            axisLabelVisible: true,
+            title: pl.title,
+          }),
+        );
       } catch {
-        /* ignore bad price */
+        /* */
       }
     }
-  }, [priceLines, ready]);
+
+    for (const line of userHLinesRef.current) {
+      try {
+        main.removePriceLine(line);
+      } catch {
+        /* */
+      }
+    }
+    userHLinesRef.current = [];
+    for (const d of drawings) {
+      if (d.kind !== "hline") continue;
+      try {
+        userHLinesRef.current.push(
+          main.createPriceLine({
+            price: d.price,
+            color: "#334155",
+            lineWidth: 1,
+            lineStyle: LineStyle.SparseDotted,
+            axisLabelVisible: true,
+            title: `H ${formatNumber(d.price)}`,
+          }),
+        );
+      } catch {
+        /* */
+      }
+    }
+  }, [priceLines, drawings, ready]);
+
+  // Trend drawings as short line series
+  useEffect(() => {
+    const chart = chartRef.current;
+    if (!chart || !ready) return;
+    for (const s of trendSeriesRef.current) {
+      try {
+        chart.removeSeries(s);
+      } catch {
+        /* */
+      }
+    }
+    trendSeriesRef.current = [];
+    const barIndex = new Map(bars.map((b, i) => [b.trade_date, i]));
+    for (const d of drawings) {
+      if (d.kind !== "trend") continue;
+      if (!barIndex.has(d.t1) || !barIndex.has(d.t2)) continue;
+      try {
+        const s = chart.addSeries(LineSeries, {
+          color: "#cbd5e1",
+          lineWidth: 2,
+          lastValueVisible: false,
+          priceLineVisible: false,
+          crosshairMarkerVisible: false,
+        });
+        const i1 = barIndex.get(d.t1)!;
+        const i2 = barIndex.get(d.t2)!;
+        const a = i1 <= i2 ? { t: d.t1, p: d.p1, i: i1 } : { t: d.t2, p: d.p2, i: i2 };
+        const b = i1 <= i2 ? { t: d.t2, p: d.p2, i: i2 } : { t: d.t1, p: d.p1, i: i1 };
+        s.setData([
+          { time: a.t as Time, value: a.p },
+          { time: b.t as Time, value: b.p },
+        ]);
+        trendSeriesRef.current.push(s);
+      } catch {
+        /* */
+      }
+    }
+  }, [drawings, bars, ready]);
 
   if (bars.length < 2) {
     return (
@@ -385,9 +722,12 @@ export function LwcPriceChart({
   const hasEvents = markers.length > 0 || priceLines.length > 0;
 
   return (
-    <div className={cn("relative flex min-h-0 flex-1 flex-col", className)}>
+    <div
+      className={cn("relative flex min-h-0 flex-1 flex-col", className)}
+      data-draw-mode={drawMode}
+    >
       <div
-        className="pointer-events-none absolute top-2 left-2 z-10 rounded-md border border-border/60 bg-background/90 px-2.5 py-1.5 font-mono text-[11px] tabular-nums shadow-sm backdrop-blur-sm"
+        className="pointer-events-none absolute top-2 left-2 z-10 max-w-[min(100%,36rem)] rounded-md border border-border/60 bg-background/90 px-2.5 py-1.5 font-mono text-[11px] tabular-nums shadow-sm backdrop-blur-sm"
         aria-live="polite"
       >
         {tip ? (
@@ -397,27 +737,36 @@ export function LwcPriceChart({
             {tip.volume != null && tip.volume > 0
               ? ` · Vol ${formatNumber(Math.round(tip.volume), 0)}`
               : ""}
+            {legendExtras ? ` · ${legendExtras}` : ""}
           </span>
         ) : (
           <span className="text-muted-foreground">
-            Hover for OHLC · scroll to zoom · drag to pan
-            {hasEvents ? " · pins = koel events" : ""}
+            {drawMode === "hline"
+              ? "Click chart to place a horizontal line"
+              : drawMode === "trend"
+                ? "Click twice to place a trend line"
+                : "Hover for OHLC · scroll zoom · drag pan"}
+            {legendExtras ? ` · ${legendExtras}` : ""}
           </span>
         )}
       </div>
       <div
         ref={hostRef}
-        className="min-h-[240px] w-full flex-1"
+        className={cn(
+          "min-h-[240px] w-full flex-1",
+          drawMode !== "none" && "cursor-crosshair",
+        )}
         data-testid="lwc-price-chart"
         role="img"
-        aria-label="Interactive price chart with koel event overlays"
+        aria-label="Interactive koel price chart workbench"
       />
       <p className="mt-1.5 text-[11px] text-muted-foreground">
-        koel data (Postgres) via Lightweight Charts
+        koel workbench (Postgres + Lightweight Charts)
         {hasEvents
           ? " · amber = disclosure · violet = Telegram fire · dashed = armed alert"
-          : ""}{" "}
-        — research only, not financial advice.
+          : ""}
+        {legendExtras ? ` · ${legendExtras}` : ""} — research only, not financial
+        advice.
       </p>
     </div>
   );

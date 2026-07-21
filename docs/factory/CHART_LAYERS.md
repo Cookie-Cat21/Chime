@@ -23,8 +23,10 @@
    *“External TradingView chart (often delayed). koel alerts still use koel’s poller data.”*  
    TV is **never** the alert/data spine — fence intact.
 
-3. **Full TA terminal inside koel** → **Do not build.**  
-   Layer B already gives drawings / indicators / Pine to that segment. Rebuilding it would violate the “not a trading terminal” fence and burn the team. Point TA users at Layer B.
+3. **TV-inspired koel workbench (Layer A expansion — user-approved)** →  
+   Reimplement UX patterns on Postgres + LWC (styles, MAs/BB/RSI, H-line/trend drawings).  
+   See [TRADINGVIEW_AUDIT_AND_KOEL_PORT.md](TRADINGVIEW_AUDIT_AND_KOEL_PORT.md).  
+   Pine / full fib suite / multi-layout / broker → stay on Layer B embed.
 
 ## UX
 
@@ -53,7 +55,8 @@ Toggles live in the expand toolbar next to Forecast. NFA on the footer. Indexes 
 ## Non-goals
 
 - TV as quote source for rules / Telegram fires  
-- Shipping RSI/MACD/drawing toolbar in koel chrome  
+- Vendoring TradingView Charting Library / Pine / branding  
 - Replacing Telegram wedge with a chart product  
-- 1:1 TradingView rebuild inside koel  
+- Broker DOM / order ticket inside koel  
+
 

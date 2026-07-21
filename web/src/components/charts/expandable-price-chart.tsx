@@ -12,7 +12,12 @@ import {
 } from "react";
 
 import { CandlestickChart } from "@/components/charts/candlestick-chart";
-import { LwcPriceChart } from "@/components/charts/lwc-price-chart";
+import {
+  LwcPriceChart,
+  type ChartDrawMode,
+  type ChartSeriesStyle,
+  type KoelUserDrawing,
+} from "@/components/charts/lwc-price-chart";
 import { TradingViewEmbed } from "@/components/charts/tradingview-embed";
 import { SparklineWithForecast } from "@/components/sparkline-with-forecast";
 import { Button } from "@/components/ui/button";
@@ -39,6 +44,10 @@ import {
   type ChartAlertThreshold,
   type ChartDisclosureEvent,
 } from "@/lib/charts/koel-chart-events";
+import {
+  DEFAULT_INDICATORS,
+  type KoelIndicatorFlags,
+} from "@/lib/charts/koel-indicators";
 import { formatCompactNumber, formatNumber, formatPct } from "@/lib/format";
 
 type Point = { ts: string | null; price: number | null | undefined };
@@ -103,6 +112,12 @@ export function ExpandablePriceChart({
   const [showAlertLines, setShowAlertLines] = useState(true);
   const [fireEvents, setFireEvents] = useState<ChartAlertFireEvent[]>([]);
   const [alertRules, setAlertRules] = useState<ChartAlertThreshold[]>([]);
+  /** TradingView-inspired workbench controls (Layer A). */
+  const [seriesStyle, setSeriesStyle] = useState<ChartSeriesStyle>("candle");
+  const [indicators, setIndicators] =
+    useState<KoelIndicatorFlags>(DEFAULT_INDICATORS);
+  const [drawMode, setDrawMode] = useState<ChartDrawMode>("none");
+  const [drawings, setDrawings] = useState<KoelUserDrawing[]>([]);
   const compactDaily = useMemo(() => {
     const src = bars ?? initialBars;
     if (!src || src.length < 2) return null;
@@ -738,8 +753,9 @@ export function ExpandablePriceChart({
               </Button>
             </div>
 
-            {/* Toolbar — layer (koel / TV) + range + forecast */}
-            <div className="flex shrink-0 flex-wrap items-center justify-between gap-3 border-b border-border/40 px-5 py-2.5">
+            {/* Toolbar — layer + TV-inspired workbench chrome */}
+            <div className="flex shrink-0 flex-col gap-2 border-b border-border/40 px-5 py-2.5">
+            <div className="flex flex-wrap items-center justify-between gap-3">
               <div className="flex flex-wrap items-center gap-2">
                 {tvAvailable ? (
                   <div
@@ -793,6 +809,35 @@ export function ExpandablePriceChart({
                         }
                       >
                         {r}
+                      </button>
+                    ))}
+                  </div>
+                ) : null}
+                {chartLayer === "koel" ? (
+                  <div
+                    role="group"
+                    aria-label="Chart style"
+                    className="inline-flex items-center gap-0.5 rounded-lg border border-border/60 bg-muted/60 p-0.5"
+                  >
+                    {(
+                      [
+                        ["candle", "Candles"],
+                        ["line", "Line"],
+                        ["area", "Area"],
+                      ] as const
+                    ).map(([key, label]) => (
+                      <button
+                        key={key}
+                        type="button"
+                        onClick={() => setSeriesStyle(key)}
+                        aria-pressed={seriesStyle === key}
+                        className={
+                          seriesStyle === key
+                            ? "rounded-md bg-background px-2.5 py-1.5 text-xs font-semibold text-foreground shadow-sm"
+                            : "rounded-md px-2.5 py-1.5 text-xs font-medium text-muted-foreground transition-colors hover:text-foreground"
+                        }
+                      >
+                        {label}
                       </button>
                     ))}
                   </div>
@@ -891,6 +936,84 @@ export function ExpandablePriceChart({
                   </button>
                 ) : null}
               </div>
+            </div>
+            {chartLayer === "koel" ? (
+              <div className="flex flex-wrap items-center gap-2">
+                <div
+                  role="group"
+                  aria-label="Drawing tools"
+                  className="inline-flex items-center gap-0.5 rounded-lg border border-border/60 bg-muted/60 p-0.5"
+                >
+                  {(
+                    [
+                      ["none", "Cursor"],
+                      ["hline", "H-line"],
+                      ["trend", "Trend"],
+                    ] as const
+                  ).map(([key, label]) => (
+                    <button
+                      key={key}
+                      type="button"
+                      onClick={() => setDrawMode(key)}
+                      aria-pressed={drawMode === key}
+                      className={
+                        drawMode === key
+                          ? "rounded-md bg-background px-2.5 py-1 text-xs font-semibold text-foreground shadow-sm"
+                          : "rounded-md px-2.5 py-1 text-xs font-medium text-muted-foreground hover:text-foreground"
+                      }
+                    >
+                      {label}
+                    </button>
+                  ))}
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setDrawings([]);
+                      setDrawMode("none");
+                    }}
+                    className="rounded-md px-2.5 py-1 text-xs font-medium text-muted-foreground hover:text-foreground"
+                    title="Clear session drawings"
+                  >
+                    Clear
+                    {drawings.length > 0 ? ` · ${drawings.length}` : ""}
+                  </button>
+                </div>
+                <div
+                  role="group"
+                  aria-label="Indicators"
+                  className="flex flex-wrap items-center gap-1"
+                >
+                  {(
+                    [
+                      ["sma20", "SMA 20"],
+                      ["sma50", "SMA 50"],
+                      ["ema12", "EMA 12"],
+                      ["bb", "BB"],
+                      ["rsi", "RSI"],
+                    ] as const
+                  ).map(([key, label]) => (
+                    <button
+                      key={key}
+                      type="button"
+                      aria-pressed={indicators[key]}
+                      onClick={() =>
+                        setIndicators((prev) => ({
+                          ...prev,
+                          [key]: !prev[key],
+                        }))
+                      }
+                      className={`rounded-md border px-2 py-1 text-xs font-medium transition-colors ${
+                        indicators[key]
+                          ? "border-foreground/30 bg-foreground/5 text-foreground"
+                          : "border-border text-muted-foreground hover:text-foreground"
+                      }`}
+                    >
+                      {label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            ) : null}
             </div>
 
             {chartLayer === "koel" && windowStats ? (
@@ -1009,6 +1132,11 @@ export function ExpandablePriceChart({
                   showVolume={seriesKind !== "index"}
                   markers={koelMarkers}
                   priceLines={koelPriceLines}
+                  seriesStyle={seriesStyle}
+                  indicators={indicators}
+                  drawMode={drawMode}
+                  drawings={drawings}
+                  onDrawingsChange={setDrawings}
                   className="min-h-0 flex-1"
                 />
               )}
