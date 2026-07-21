@@ -858,6 +858,7 @@ def evaluate_disclosure_rules(
     *,
     disclosure: Disclosure,
     rules: list[AlertRule],
+    category_prefs_by_user: dict[int, list[str]] | None = None,
 ) -> list[AlertEvent]:
     """Fire disclosure rules for newly seen announcements on watched symbols.
 
@@ -865,8 +866,12 @@ def evaluate_disclosure_rules(
     backfill never floods Telegram. Missing rule.created_at fails closed (no fire).
     Undated CSE rows (Unix-epoch published_at) and empty external_id never fire.
     Optional rule.category filters by case-insensitive substring on disclosure.category.
+    When rule.category is empty, optional per-user ``category_prefs_by_user``
+    allow-list (Tijori-style tags) gates fires; empty prefs = unrestricted.
     Weird / unconvertible timestamps fail closed (never raise).
     """
+    from koel.filing_categories import classify_filing, filing_tag_allowed
+
     events: list[AlertEvent] = []
     if not isinstance(disclosure.external_id, str) or not disclosure.external_id.strip():
         return events
@@ -876,6 +881,11 @@ def evaluate_disclosure_rules(
     # Adapter stamps missing/non-positive createdDate as Unix epoch — never fire.
     if published <= datetime(1970, 1, 1, tzinfo=UTC):
         return events
+    filing_tag = classify_filing(
+        category=disclosure.category if isinstance(disclosure.category, str) else None,
+        title=disclosure.title if isinstance(disclosure.title, str) else None,
+    )
+    prefs_map = category_prefs_by_user if isinstance(category_prefs_by_user, dict) else {}
     for rule in rules:
         if _rule_inactive_or_muted(rule, as_of=published):
             continue
@@ -893,6 +903,17 @@ def evaluate_disclosure_rules(
             continue
         if not _disclosure_category_matches(rule, disclosure):
             continue
+        # User-level category prefs only apply when the rule has no category needle.
+        rule_cat = rule.category if isinstance(rule.category, str) else None
+        if not (rule_cat and rule_cat.strip()):
+            user_prefs = prefs_map.get(rule.user_id)
+            if not filing_tag_allowed(filing_tag, user_prefs):
+                continue
+        # Results-day packaging: clearer trigger when tag is results.
+        if filing_tag == "results":
+            trigger = f"results-day filing: {disclosure.title}"
+        else:
+            trigger = f"new disclosure: {disclosure.title}"
         events.append(
             AlertEvent(
                 rule_id=rule.id,
@@ -901,7 +922,7 @@ def evaluate_disclosure_rules(
                 symbol=rule.symbol,
                 type=rule.type,
                 threshold=None,
-                trigger=f"new disclosure: {disclosure.title}",
+                trigger=trigger,
                 current_price=None,
                 disclosure_url=disclosure.url,
                 disclosure_title=disclosure.title,

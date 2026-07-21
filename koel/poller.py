@@ -924,7 +924,23 @@ class Poller:
                         error=str(exc),
                     )
                     continue
-                events = evaluate_disclosure_rules(disclosure=stored, rules=symbol_rules)
+                prefs_by_user: dict[int, list[str]] = {}
+                try:
+                    prefs_by_user = (
+                        await self.storage.disclosure_category_prefs_for_users(
+                            [r.user_id for r in symbol_rules]
+                        )
+                    )
+                except Exception as exc:
+                    log.warning(
+                        "disclosure_category_prefs_lookup_failed",
+                        error=str(exc),
+                    )
+                events = evaluate_disclosure_rules(
+                    disclosure=stored,
+                    rules=symbol_rules,
+                    category_prefs_by_user=prefs_by_user,
+                )
                 for event in filter_fireable(events):
                     claimed = await self._claim_and_send(event)
                     if claimed:
@@ -1642,7 +1658,7 @@ class Poller:
                 symbol=rule.symbol,
                 type=AlertType.DISCLOSURE,
                 threshold=None,
-                trigger=f"filing metrics YoY for {disc.title}",
+                trigger=f"results-day metrics: {disc.title}",
                 disclosure_url=disc.url or disc.pdf_url,
                 disclosure_title=disc.title,
                 disclosure_id=disc.id,

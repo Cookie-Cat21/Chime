@@ -198,7 +198,18 @@ Engine trust (freshness SLOs, circuit breakers, honest degradation) remains alwa
 
 ---
 
-## 7. One-line product north star (unchanged, internationally validated)
+## 7. Implementation status (2026-07-21)
+
+Shipped on branch (see [passes/HABIT_FEATURES_SHIP_2026-07-21.md](passes/HABIT_FEATURES_SHIP_2026-07-21.md)):
+
+- Filing category prefs + results-day trigger packaging  
+- Watchlist auto-5% · Activity timeline · Events calendar  
+- Channel preview + digest settings · TV webhook → Telegram (`dry_run=1` for tests)  
+- AI briefs remain ops-gated (`AI_BRIEFS_ENABLE.md`); local-fill path exists  
+
+Verify loop: `scripts/habit_features_loop.py` → 50/50.
+
+## 8. One-line product north star (unchanged, internationally validated)
 
 > When something you care about happens on the CSE, koel tells you first, tells you why, and is never wrong about the facts — on Telegram, without another app install.
 

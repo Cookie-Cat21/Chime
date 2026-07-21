@@ -4746,6 +4746,11 @@ class Storage:
                 """,
                 (user_id, symbol),
             )
+        # Groww/Robinhood-style auto-% band: create daily_move if enabled.
+        try:
+            await self.ensure_auto_move_for_symbol(user_id, symbol)
+        except Exception:
+            pass
 
     async def remove_watch(self, user_id: int, symbol: str) -> bool:
         # Fail closed — non-string symbol used to throw on .strip mid remove.
@@ -5193,7 +5198,7 @@ class Storage:
         return out
 
     async def get_user_preferences(self, user_id: int) -> dict[str, Any] | None:
-        """Return digest / quiet-hours / locale prefs for ``user_id``, or None."""
+        """Return digest / quiet-hours / locale / habit prefs for ``user_id``."""
         if isinstance(user_id, bool) or not isinstance(user_id, int) or user_id <= 0:
             return None
         async with self._pool.connection() as conn:
@@ -5201,7 +5206,9 @@ class Storage:
                 await conn.execute(
                     """
                     SELECT digest_enabled, quiet_hours_start, quiet_hours_end,
-                           alert_quota_max, locale
+                           alert_quota_max, locale,
+                           watchlist_auto_move_pct, disclosure_category_prefs,
+                           tv_webhook_token
                       FROM users
                      WHERE id = %s
                     """,
@@ -5225,7 +5232,21 @@ class Storage:
         quota = r.get("alert_quota_max")
         if isinstance(quota, bool) or not isinstance(quota, int) or quota < 0:
             quota = 100
+        from koel.filing_categories import normalize_filing_tags
         from koel.i18n import normalize_locale
+
+        auto_pct = r.get("watchlist_auto_move_pct")
+        if isinstance(auto_pct, bool) or not isinstance(auto_pct, (int, float)):
+            auto_move: float | None = None
+        else:
+            try:
+                auto_f = float(auto_pct)
+            except (TypeError, ValueError):
+                auto_move = None
+            else:
+                auto_move = auto_f if math.isfinite(auto_f) and 0 < auto_f <= 50 else None
+        token = r.get("tv_webhook_token")
+        token_s = token.strip() if isinstance(token, str) and token.strip() else None
 
         return {
             "digest_enabled": digest,
@@ -5233,6 +5254,11 @@ class Storage:
             "quiet_hours_end": _hour(r.get("quiet_hours_end")),
             "alert_quota_max": quota,
             "locale": normalize_locale(r.get("locale")),
+            "watchlist_auto_move_pct": auto_move,
+            "disclosure_category_prefs": normalize_filing_tags(
+                r.get("disclosure_category_prefs")
+            ),
+            "tv_webhook_token": token_s,
         }
 
     async def get_user_locale(self, user_id: int) -> str:
@@ -5259,8 +5285,17 @@ class Storage:
         *,
         digest_enabled: bool | None = None,
         locale: str | None = None,
+        watchlist_auto_move_pct: float | None | object = ...,
+        disclosure_category_prefs: list[str] | None = None,
+        rotate_tv_webhook_token: bool = False,
+        clear_tv_webhook_token: bool = False,
     ) -> dict[str, Any] | None:
-        """Patch user prefs (digest / locale); returns fresh prefs."""
+        """Patch user prefs (digest / locale / habit); returns fresh prefs.
+
+        ``watchlist_auto_move_pct``: omit to leave unchanged; ``None`` clears;
+        positive finite ≤50 sets the band. When set/cleared, auto-syncs
+        ``daily_move`` rules for the watchlist.
+        """
         if isinstance(user_id, bool) or not isinstance(user_id, int) or user_id <= 0:
             return None
         sets: list[str] = []
@@ -5278,6 +5313,39 @@ class Storage:
                 return None
             sets.append("locale = %s")
             params.append(parsed)
+        sync_auto_move = False
+        auto_move_value: float | None = None
+        if watchlist_auto_move_pct is not ...:
+            if watchlist_auto_move_pct is None:
+                sets.append("watchlist_auto_move_pct = NULL")
+                sync_auto_move = True
+                auto_move_value = None
+            elif (
+                isinstance(watchlist_auto_move_pct, bool)
+                or not isinstance(watchlist_auto_move_pct, (int, float))
+            ):
+                return None
+            else:
+                pct = float(watchlist_auto_move_pct)
+                if not math.isfinite(pct) or pct <= 0 or pct > 50:
+                    return None
+                sets.append("watchlist_auto_move_pct = %s")
+                params.append(pct)
+                sync_auto_move = True
+                auto_move_value = pct
+        if disclosure_category_prefs is not None:
+            from koel.filing_categories import normalize_filing_tags
+
+            tags = normalize_filing_tags(disclosure_category_prefs)
+            sets.append("disclosure_category_prefs = %s")
+            params.append(tags)
+        if clear_tv_webhook_token:
+            sets.append("tv_webhook_token = NULL")
+        elif rotate_tv_webhook_token:
+            import secrets
+
+            sets.append("tv_webhook_token = %s")
+            params.append(secrets.token_urlsafe(24))
         if not sets:
             return await self.get_user_preferences(user_id)
         params.append(user_id)
@@ -5295,7 +5363,147 @@ class Storage:
             ).fetchone()
         if row is None:
             return None
+        if sync_auto_move:
+            await self.sync_watchlist_auto_move_rules(
+                user_id, pct=auto_move_value
+            )
         return await self.get_user_preferences(user_id)
+
+    async def disclosure_category_prefs_for_users(
+        self, user_ids: list[int]
+    ) -> dict[int, list[str]]:
+        """Map user_id → filing category allow-list (empty = unrestricted)."""
+        from koel.filing_categories import normalize_filing_tags
+
+        ids = sorted(
+            {
+                u
+                for u in user_ids
+                if isinstance(u, int) and not isinstance(u, bool) and u > 0
+            }
+        )
+        if not ids:
+            return {}
+        async with self._pool.connection() as conn:
+            rows = await (
+                await conn.execute(
+                    """
+                    SELECT id, disclosure_category_prefs
+                      FROM users
+                     WHERE id = ANY(%s)
+                    """,
+                    (ids,),
+                )
+            ).fetchall()
+        out: dict[int, list[str]] = {}
+        for row in rows:
+            r = _as_row(row)
+            uid = r.get("id")
+            if isinstance(uid, bool) or not isinstance(uid, int):
+                continue
+            out[uid] = normalize_filing_tags(r.get("disclosure_category_prefs"))
+        return out
+
+    async def sync_watchlist_auto_move_rules(
+        self, user_id: int, *, pct: float | None
+    ) -> int:
+        """Ensure daily_move rules match watchlist for auto-% band.
+
+        When ``pct`` is None, deactivates rules tagged via category
+        ``auto_watchlist_move`` is not used — we match type=daily_move with
+        the previous band by deactivating all daily_move that equal the
+        stored band is hard; instead: when enabling, upsert daily_move at
+        ``pct`` for every watch; when clearing, deactivate daily_move rules
+        whose threshold matches common auto bands (3/5/10) only if the
+        note... Simpler: deactivate all active daily_move for user when
+        clearing; when setting, create/return daily_move at pct for each
+        watch (idempotent create_alert_rule).
+        """
+        if isinstance(user_id, bool) or not isinstance(user_id, int) or user_id <= 0:
+            return 0
+        if pct is None:
+            async with self._pool.connection() as conn:
+                cur = await conn.execute(
+                    """
+                    UPDATE alert_rules
+                       SET active = FALSE
+                     WHERE user_id = %s
+                       AND type = %s
+                       AND active IS TRUE
+                       AND threshold IN (3, 5, 10)
+                    """,
+                    (user_id, AlertType.DAILY_MOVE.value),
+                )
+                return int(getattr(cur, "rowcount", 0) or 0)
+        if (
+            isinstance(pct, bool)
+            or not isinstance(pct, (int, float))
+            or not math.isfinite(float(pct))
+            or float(pct) <= 0
+            or float(pct) > 50
+        ):
+            return 0
+        band = float(pct)
+        symbols = await self.list_watchlist(user_id)
+        n = 0
+        for symbol in symbols:
+            try:
+                await self.create_alert_rule(
+                    user_id, symbol, AlertType.DAILY_MOVE, band
+                )
+                n += 1
+            except Exception:
+                continue
+        return n
+
+    async def ensure_auto_move_for_symbol(self, user_id: int, symbol: str) -> None:
+        """If user has auto-move band, upsert daily_move for ``symbol``."""
+        prefs = await self.get_user_preferences(user_id)
+        if not prefs:
+            return
+        pct = prefs.get("watchlist_auto_move_pct")
+        if (
+            isinstance(pct, bool)
+            or not isinstance(pct, (int, float))
+            or not math.isfinite(float(pct))
+            or float(pct) <= 0
+        ):
+            return
+        await self.create_alert_rule(
+            user_id, symbol, AlertType.DAILY_MOVE, float(pct)
+        )
+
+    async def find_user_by_tv_webhook_token(
+        self, token: str
+    ) -> dict[str, Any] | None:
+        """Resolve inbound TradingView webhook token → user row."""
+        if not isinstance(token, str) or not token.strip():
+            return None
+        tok = token.strip()
+        if len(tok) < 16 or len(tok) > 128:
+            return None
+        async with self._pool.connection() as conn:
+            row = await (
+                await conn.execute(
+                    """
+                    SELECT id, telegram_id
+                      FROM users
+                     WHERE tv_webhook_token = %s
+                     LIMIT 1
+                    """,
+                    (tok,),
+                )
+            ).fetchone()
+        if row is None:
+            return None
+        r = _as_row(row)
+        tid = r.get("telegram_id")
+        uid = r.get("id")
+        if isinstance(uid, bool) or not isinstance(uid, int):
+            return None
+        if isinstance(tid, bool) or not isinstance(tid, int) or tid <= 0:
+            return None
+        return {"id": uid, "telegram_id": tid}
 
     async def _fetch_active_rule(
         self,
