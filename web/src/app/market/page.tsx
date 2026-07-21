@@ -389,9 +389,7 @@ export default async function MarketPage({
           />
         </form>
 
-        <p className="mt-3">
-          <NfaInline />
-        </p>
+        <NfaInline className="mt-3" />
 
         {!browseOnly && gainerItems !== null && loserItems !== null ? (
           <section className="mt-8" aria-labelledby="top-movers-heading">
