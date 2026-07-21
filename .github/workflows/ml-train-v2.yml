@@ -69,6 +69,11 @@ on:
         default: calibration_select
         type: choice
         options: [calibration_select, equal]
+      max_flat_fraction:
+        description: Maximum trailing 60-session flat-return fraction
+        required: true
+        default: "0.40"
+        type: string
 
 permissions:
   contents: read
@@ -192,7 +197,8 @@ jobs:
             --horizon "${{ matrix.horizon }}" \
             --seeds "${{ matrix.seeds }}" \
             --target "${{ matrix.target }}" \
-            --evaluation-domain "${{ inputs.evaluation_domain }}"
+            --evaluation-domain "${{ inputs.evaluation_domain }}" \
+            --max-flat-fraction "${{ inputs.max_flat_fraction }}"
 
       - name: Upload shard predictions
         uses: actions/upload-artifact@v4

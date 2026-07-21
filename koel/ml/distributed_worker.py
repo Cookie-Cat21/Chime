@@ -89,6 +89,7 @@ def _rows_for_dates(
     *,
     metadata: dict[tuple[str, date], ResearchBarMetadata],
     domain: str | None = None,
+    max_flat_fraction: float | None = None,
 ) -> list[Sample]:
     """Keep rows whose decision and outcome both remain inside a partition."""
     return [
@@ -97,6 +98,11 @@ def _rows_for_dates(
         if sample.as_of in dates
         and sample.target_date in dates
         and (domain is None or sample_domain(sample, metadata) == domain)
+        and (
+            max_flat_fraction is None
+            or metadata[(sample.symbol, sample.as_of)].flat_fraction_60
+            <= max_flat_fraction
+        )
     ]
 
 
@@ -363,10 +369,13 @@ def run_worker(
     min_history: int,
     max_abs_return: float,
     evaluation_domain: str,
+    max_flat_fraction: float,
 ) -> dict[str, int | str]:
     """Train calibration/test fits for one matrix shard and write predictions."""
     if evaluation_domain not in {"all", "cse", "yahoo"}:
         raise ValueError("evaluation_domain must be all, cse, or yahoo")
+    if not 0 <= max_flat_fraction <= 1:
+        raise ValueError("max_flat_fraction must be between 0 and 1")
     domain_filter = None if evaluation_domain == "all" else evaluation_domain
     loaded = load_bar_snapshot(snapshot_dir)
     metadata = build_research_bar_metadata(
@@ -414,12 +423,14 @@ def run_worker(
         split.calibration_dates,
         metadata=metadata,
         domain=domain_filter,
+        max_flat_fraction=max_flat_fraction,
     )
     test = _rows_for_dates(
         samples,
         split.test_dates,
         metadata=metadata,
         domain=domain_filter,
+        max_flat_fraction=max_flat_fraction,
     )
     evaluation_rows = calibration + test
     evaluation_scores = _fit_predict_average(
@@ -469,6 +480,7 @@ def run_worker(
         "model": spec.model,
         "target": spec.target,
         "evaluation_domain": evaluation_domain,
+        "max_flat_fraction": max_flat_fraction,
         "calibration_rows": len(calibration),
         "test_rows": len(test),
         "lockbox_days": len(split.lockbox_dates),
@@ -498,6 +510,7 @@ def main(argv: list[str] | None = None) -> None:
     parser.add_argument("--min-train-days", type=int, default=504)
     parser.add_argument("--min-history", type=int, default=252)
     parser.add_argument("--max-abs-return", type=float, default=0.35)
+    parser.add_argument("--max-flat-fraction", type=float, default=0.40)
     args = parser.parse_args(argv)
     spec = ShardSpec(
         shard_id=args.shard_id,
@@ -520,6 +533,7 @@ def main(argv: list[str] | None = None) -> None:
         min_history=args.min_history,
         max_abs_return=args.max_abs_return,
         evaluation_domain=args.evaluation_domain,
+        max_flat_fraction=args.max_flat_fraction,
     )
     print(json.dumps(result, sort_keys=True))
 

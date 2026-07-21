@@ -59,7 +59,8 @@ def test_research_metadata_tracks_source_without_future_leakage() -> None:
     assert latest.features[1] == 1.0
     assert latest.features[5] == 1.0
     assert len(latest.features) == len(RESEARCH_FEATURE_NAMES)
-    assert latest.features[9] > 0
+    lag_index = RESEARCH_FEATURE_NAMES.index("return_lag_1")
+    assert latest.features[lag_index] > 0
 
     poisoned = list(bars)
     poisoned[-1] = poisoned[-1].model_copy(update={"source_period": 0, "open": 99.0})

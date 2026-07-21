@@ -274,3 +274,21 @@ def test_partition_filter_rejects_target_crossing_boundary() -> None:
         domain="cse",
     )
     assert selected == [samples[0]]
+
+
+def test_partition_filter_rejects_flat_trading_history() -> None:
+    first = date(2025, 1, 1)
+    second = date(2025, 1, 2)
+    sample = Sample("A", first, (1.0,), 0.01, 1.0, 1, second)
+    metadata = {
+        ("A", first): ResearchBarMetadata("cse", (1.0,), flat_fraction_60=0.8),
+        ("A", second): ResearchBarMetadata("cse", (1.0,), flat_fraction_60=0.8),
+    }
+    selected = _rows_for_dates(
+        [sample],
+        frozenset((first, second)),
+        metadata=metadata,
+        domain="cse",
+        max_flat_fraction=0.4,
+    )
+    assert selected == []

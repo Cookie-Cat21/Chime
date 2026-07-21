@@ -25,6 +25,8 @@ RESEARCH_FEATURE_NAMES: tuple[str, ...] = (
     "missing_hilo_fraction_20",
     "missing_volume_fraction_20",
     "flat_price_streak",
+    "flat_return_fraction_20",
+    "flat_return_fraction_60",
 ) + tuple(f"return_lag_{lag}" for lag in range(1, RETURN_LAGS + 1)) + tuple(
     f"log_volume_lag_{lag}" for lag in range(1, VOLUME_LAGS + 1)
 ) + tuple(f"range_lag_{lag}" for lag in range(1, RANGE_LAGS + 1)) + (
@@ -47,6 +49,7 @@ MARKET_CONTEXT_NAMES: tuple[str, ...] = (
 class ResearchBarMetadata:
     source: str
     features: tuple[float, ...]
+    flat_fraction_60: float = 0.0
 
 
 def _window_fraction(prefix: list[int], *, end: int, width: int) -> float:
@@ -75,6 +78,7 @@ def build_research_bar_metadata(
         missing_open_prefix = [0]
         missing_hilo_prefix = [0]
         missing_volume_prefix = [0]
+        flat_return_prefix = [0]
         first_cse_index: int | None = None
         flat_streak = 0
         returns = [float("nan")]
@@ -129,6 +133,10 @@ def build_research_bar_metadata(
                 flat_streak += 1
             else:
                 flat_streak = 0
+            flat_return_prefix.append(
+                flat_return_prefix[-1]
+                + int(index > 0 and bar.price == ordered[index - 1].price)
+            )
 
             if first_cse_index is not None and index >= first_cse_index:
                 days_since_cse_start = min(
@@ -160,6 +168,16 @@ def build_research_bar_metadata(
             )
             weekday_angle = 2 * math.pi * bar.trade_date.weekday() / 7
             month_angle = 2 * math.pi * (bar.trade_date.month - 1) / 12
+            flat_fraction_20 = _window_fraction(
+                flat_return_prefix,
+                end=index,
+                width=20,
+            )
+            flat_fraction_60 = _window_fraction(
+                flat_return_prefix,
+                end=index,
+                width=60,
+            )
             features = (
                 float(source == "cse"),
                 _window_fraction(cse_prefix, end=index, width=20),
@@ -170,6 +188,8 @@ def build_research_bar_metadata(
                 _window_fraction(missing_hilo_prefix, end=index, width=20),
                 _window_fraction(missing_volume_prefix, end=index, width=20),
                 float(min(flat_streak, 60)),
+                flat_fraction_20,
+                flat_fraction_60,
                 *return_lags,
                 *volume_lags,
                 *range_lags,
@@ -181,6 +201,7 @@ def build_research_bar_metadata(
             out[(symbol, bar.trade_date)] = ResearchBarMetadata(
                 source=source,
                 features=features,
+                flat_fraction_60=flat_fraction_60,
             )
     return out
 
