@@ -773,6 +773,12 @@ export default async function SymbolDetailPage({
                 initialOpen={expandChart}
                 initialBars={initialDailyBars}
                 initialRange={initialChartRange}
+                initialDisclosures={discs.items.map((item) => ({
+                  id: item.id,
+                  title: item.title,
+                  published_at: item.published_at,
+                  url: item.url,
+                }))}
                 className="w-full max-w-none"
               />
             ) : snapsFailed ? (

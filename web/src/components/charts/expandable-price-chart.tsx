@@ -31,6 +31,14 @@ import {
 } from "@/lib/api/daily-bars";
 import { isSafeClientApiPath } from "@/lib/api/client-fetch";
 import { toFiniteNumber } from "@/lib/api/finite-number";
+import {
+  buildDisclosureMarkers,
+  buildFireMarkers,
+  buildThresholdLines,
+  type ChartAlertFireEvent,
+  type ChartAlertThreshold,
+  type ChartDisclosureEvent,
+} from "@/lib/charts/koel-chart-events";
 import { formatCompactNumber, formatNumber, formatPct } from "@/lib/format";
 
 type Point = { ts: string | null; price: number | null | undefined };
@@ -41,7 +49,8 @@ const REALTIME_MS = 20_000;
 /**
  * Compact candlesticks (daily path) + expand → full range dialog.
  * 1D builds OHLC from realtime ticks when available; longer ranges use
- * ``daily_bars``. Compact view prefers candles over the old sparkline.
+ * ``daily_bars``. Expand Layer A adds koel-native overlays TradingView
+ * won't: CSE disclosures, Telegram fires, armed price alert lines.
  */
 export function ExpandablePriceChart({
   symbol,
@@ -61,6 +70,8 @@ export function ExpandablePriceChart({
    * chrome — keeps ASPI/SL20 cards from looking like broken mini terminals.
    */
   compact = false,
+  /** SSR disclosures for chart pins (symbol pages). */
+  initialDisclosures = null,
 }: {
   symbol: string;
   points: Point[];
@@ -74,6 +85,7 @@ export function ExpandablePriceChart({
   initialRange?: ChartRangeKey;
   seriesKind?: "symbol" | "index";
   compact?: boolean;
+  initialDisclosures?: ChartDisclosureEvent[] | null;
 }) {
   const titleId = useId();
   const forecastToggleId = useId();
@@ -86,6 +98,11 @@ export function ExpandablePriceChart({
   const [bars, setBars] = useState<DailyBarPoint[] | null>(
     initialBars && initialBars.length > 0 ? initialBars : null,
   );
+  const [showDisclosures, setShowDisclosures] = useState(true);
+  const [showFires, setShowFires] = useState(true);
+  const [showAlertLines, setShowAlertLines] = useState(true);
+  const [fireEvents, setFireEvents] = useState<ChartAlertFireEvent[]>([]);
+  const [alertRules, setAlertRules] = useState<ChartAlertThreshold[]>([]);
   const compactDaily = useMemo(() => {
     const src = bars ?? initialBars;
     if (!src || src.length < 2) return null;
@@ -338,6 +355,89 @@ export function ExpandablePriceChart({
     };
   }, [open, range, fetchTicks, fetchDaily, initialBars]);
 
+  // Fetch Telegram fires + armed rules when expand opens (symbol only).
+  useEffect(() => {
+    if (!open || seriesKind !== "symbol") return;
+    let cancelled = false;
+    const run = async () => {
+      const histPath = `/api/v1/alerts/history?symbol=${encodeURIComponent(symbol)}&limit=40`;
+      const rulesPath = `/api/v1/alerts?symbol=${encodeURIComponent(symbol)}&active=true`;
+      if (!isSafeClientApiPath(histPath) || !isSafeClientApiPath(rulesPath)) {
+        return;
+      }
+      try {
+        const [histRes, rulesRes] = await Promise.all([
+          fetch(histPath, {
+            credentials: "same-origin",
+            headers: { Accept: "application/json" },
+          }),
+          fetch(rulesPath, {
+            credentials: "same-origin",
+            headers: { Accept: "application/json" },
+          }),
+        ]);
+        if (cancelled) return;
+        if (histRes.ok) {
+          const body: unknown = await histRes.json();
+          const raw =
+            body != null &&
+            typeof body === "object" &&
+            !Array.isArray(body) &&
+            Array.isArray((body as { events?: unknown }).events)
+              ? (body as { events: unknown[] }).events
+              : [];
+          const events: ChartAlertFireEvent[] = [];
+          for (const row of raw) {
+            if (row == null || typeof row !== "object" || Array.isArray(row)) {
+              continue;
+            }
+            const r = row as Record<string, unknown>;
+            events.push({
+              id: typeof r.id === "number" || typeof r.id === "string" ? r.id : events.length,
+              type: typeof r.type === "string" ? r.type : "alert",
+              fired_at: typeof r.fired_at === "string" ? r.fired_at : null,
+              message_text:
+                typeof r.message_text === "string" ? r.message_text : null,
+            });
+          }
+          setFireEvents(events);
+        }
+        if (rulesRes.ok) {
+          const body: unknown = await rulesRes.json();
+          const raw =
+            body != null &&
+            typeof body === "object" &&
+            !Array.isArray(body) &&
+            Array.isArray((body as { rules?: unknown }).rules)
+              ? (body as { rules: unknown[] }).rules
+              : [];
+          const rules: ChartAlertThreshold[] = [];
+          for (const row of raw) {
+            if (row == null || typeof row !== "object" || Array.isArray(row)) {
+              continue;
+            }
+            const r = row as Record<string, unknown>;
+            const thr = toFiniteNumber(r.threshold);
+            if (thr == null) continue;
+            rules.push({
+              id: typeof r.id === "number" || typeof r.id === "string" ? r.id : rules.length,
+              type: typeof r.type === "string" ? r.type : "",
+              threshold: thr,
+              active: r.active !== false,
+            });
+          }
+          setAlertRules(rules);
+        }
+      } catch {
+        /* overlays optional */
+      }
+    };
+    void run();
+    return () => {
+      cancelled = true;
+    };
+  }, [open, symbol, seriesKind]);
+
   useEffect(() => {
     if (!open || range !== "1D") return;
     let cancelled = false;
@@ -434,6 +534,35 @@ export function ExpandablePriceChart({
       sessions: chartBars.length,
     };
   }, [chartBars]);
+
+  const koelMarkers = useMemo(() => {
+    if (seriesKind !== "symbol" || !chartBars || chartBars.length < 2) {
+      return [];
+    }
+    // Event pins only on calendar daily bars — intraday tick candles lack
+    // YYYY-MM-DD keys that match disclosure / fire dates.
+    if (range === "1D" && !oneDayUsingDaily) return [];
+    const dates = chartBars.map((b) => b.trade_date);
+    const discs = showDisclosures
+      ? buildDisclosureMarkers(initialDisclosures ?? [], dates)
+      : [];
+    const fires = showFires ? buildFireMarkers(fireEvents, dates) : [];
+    return [...discs, ...fires];
+  }, [
+    seriesKind,
+    chartBars,
+    range,
+    oneDayUsingDaily,
+    showDisclosures,
+    showFires,
+    initialDisclosures,
+    fireEvents,
+  ]);
+
+  const koelPriceLines = useMemo(() => {
+    if (seriesKind !== "symbol" || !showAlertLines) return [];
+    return buildThresholdLines(alertRules);
+  }, [seriesKind, showAlertLines, alertRules]);
 
   const compactBars = compactDaily ?? compactIntraday;
   const heroFrom =
@@ -670,6 +799,67 @@ export function ExpandablePriceChart({
                 ) : null}
               </div>
               <div className="flex flex-wrap items-center gap-2">
+                {chartLayer === "koel" && seriesKind === "symbol" ? (
+                  <>
+                    <button
+                      type="button"
+                      aria-pressed={showDisclosures}
+                      onClick={() => setShowDisclosures((v) => !v)}
+                      title="CSE disclosure pins on koel path history — not on TradingView."
+                      className={`rounded-md border px-2.5 py-1.5 text-xs font-medium transition-colors ${
+                        showDisclosures
+                          ? "border-amber-500/40 bg-amber-500/10 text-amber-900"
+                          : "border-border text-muted-foreground hover:text-foreground"
+                      }`}
+                    >
+                      Disclosures
+                      {(initialDisclosures?.length ?? 0) > 0
+                        ? ` · ${initialDisclosures!.length}`
+                        : ""}
+                    </button>
+                    <button
+                      type="button"
+                      aria-pressed={showFires}
+                      onClick={() => setShowFires((v) => !v)}
+                      title="Telegram alert fires for this symbol — koel’s wedge."
+                      className={`rounded-md border px-2.5 py-1.5 text-xs font-medium transition-colors ${
+                        showFires
+                          ? "border-violet-500/40 bg-violet-500/10 text-violet-900"
+                          : "border-border text-muted-foreground hover:text-foreground"
+                      }`}
+                    >
+                      Fires
+                      {fireEvents.length > 0 ? ` · ${fireEvents.length}` : ""}
+                    </button>
+                    <button
+                      type="button"
+                      aria-pressed={showAlertLines}
+                      onClick={() => setShowAlertLines((v) => !v)}
+                      title="Armed price_above / price_below thresholds as dashed lines."
+                      className={`rounded-md border px-2.5 py-1.5 text-xs font-medium transition-colors ${
+                        showAlertLines
+                          ? "border-emerald-500/40 bg-emerald-500/10 text-emerald-900"
+                          : "border-border text-muted-foreground hover:text-foreground"
+                      }`}
+                    >
+                      Alert lines
+                      {alertRules.filter(
+                        (r) =>
+                          r.active &&
+                          (r.type === "price_above" || r.type === "price_below"),
+                      ).length > 0
+                        ? ` · ${
+                            alertRules.filter(
+                              (r) =>
+                                r.active &&
+                                (r.type === "price_above" ||
+                                  r.type === "price_below"),
+                            ).length
+                          }`
+                        : ""}
+                    </button>
+                  </>
+                ) : null}
                 {chartLayer === "koel" ? (
                   <button
                     id={forecastToggleId}
@@ -817,6 +1007,8 @@ export function ExpandablePriceChart({
                   showForecast={showForecast}
                   forecastPrices={forecastPrices}
                   showVolume={seriesKind !== "index"}
+                  markers={koelMarkers}
+                  priceLines={koelPriceLines}
                   className="min-h-0 flex-1"
                 />
               )}

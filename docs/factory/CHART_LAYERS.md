@@ -38,8 +38,22 @@ Symbol expand dialog (and optional hero):
 - Switching to TradingView lazy-loads the widget (no TV script on first paint).  
 - NFA on both; Layer B adds the external/delayed disclaimer.
 
+## koel-native overlays (Layer A — “TV plus better”, not a clone)
+
+TradingView wins at drawings / Pine. koel wins at **CSE truth + Telegram**:
+
+| Overlay | Source | Marker |
+|---|---|---|
+| Disclosure pins | `disclosures` for the symbol | Amber ■ above bar |
+| Telegram fires | `GET /api/v1/alerts/history?symbol=` | Violet ▲ below bar |
+| Armed price lines | `GET /api/v1/alerts?symbol=&active=1` (`price_above` / `price_below`) | Dashed green/red |
+
+Toggles live in the expand toolbar next to Forecast. NFA on the footer. Indexes skip event overlays.
+
 ## Non-goals
 
 - TV as quote source for rules / Telegram fires  
 - Shipping RSI/MACD/drawing toolbar in koel chrome  
 - Replacing Telegram wedge with a chart product  
+- 1:1 TradingView rebuild inside koel  
+

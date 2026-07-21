@@ -14,8 +14,11 @@ import {
   LineSeries,
   LineStyle,
   createChart,
+  createSeriesMarkers,
   type IChartApi,
+  type IPriceLine,
   type ISeriesApi,
+  type ISeriesMarkersPluginApi,
   type Time,
   type UTCTimestamp,
 } from "lightweight-charts";
@@ -24,6 +27,10 @@ import {
   candleBodyOpen,
   type DailyBarPoint,
 } from "@/lib/api/daily-bars";
+import type {
+  KoelChartMarker,
+  KoelChartPriceLine,
+} from "@/lib/charts/koel-chart-events";
 import { formatNumber } from "@/lib/format";
 import { cn } from "@/lib/utils";
 
@@ -68,8 +75,9 @@ function formatHoverTime(time: Time): string {
 }
 
 /**
- * Interactive koel chart (Lightweight Charts) — crosshair, pan, zoom.
- * Postgres bars only. Not a TradingView terminal.
+ * Interactive koel chart (Lightweight Charts) — crosshair, pan, zoom,
+ * plus koel-native overlays TradingView won't ship: disclosure pins,
+ * Telegram fire markers, armed price alert lines. Postgres bars only.
  */
 export function LwcPriceChart({
   bars,
@@ -77,18 +85,26 @@ export function LwcPriceChart({
   forecastPrices,
   showForecast = false,
   showVolume = true,
+  markers = [],
+  priceLines = [],
 }: {
   bars: DailyBarPoint[];
   className?: string;
   forecastPrices?: number[];
   showForecast?: boolean;
   showVolume?: boolean;
+  /** koel event markers (disclosures / Telegram fires). */
+  markers?: KoelChartMarker[];
+  /** Armed price_above / price_below thresholds. */
+  priceLines?: KoelChartPriceLine[];
 }) {
   const hostRef = useRef<HTMLDivElement | null>(null);
   const chartRef = useRef<IChartApi | null>(null);
   const candleRef = useRef<ISeriesApi<"Candlestick"> | null>(null);
   const volumeRef = useRef<ISeriesApi<"Histogram"> | null>(null);
   const forecastRef = useRef<ISeriesApi<"Line"> | null>(null);
+  const markersApiRef = useRef<ISeriesMarkersPluginApi<Time> | null>(null);
+  const priceLinesRef = useRef<IPriceLine[]>([]);
   const [hover, setHover] = useState<HoverReadout | null>(null);
   const [ready, setReady] = useState(false);
 
@@ -173,10 +189,18 @@ export function LwcPriceChart({
       crosshairMarkerVisible: false,
     });
 
+    let markersApi: ISeriesMarkersPluginApi<Time> | null = null;
+    try {
+      markersApi = createSeriesMarkers(candles, []);
+    } catch {
+      markersApi = null;
+    }
+
     chartRef.current = chart;
     candleRef.current = candles;
     volumeRef.current = volume;
     forecastRef.current = forecast;
+    markersApiRef.current = markersApi;
     setReady(true);
 
     chart.subscribeCrosshairMove((param) => {
@@ -219,6 +243,15 @@ export function LwcPriceChart({
     });
 
     return () => {
+      for (const line of priceLinesRef.current) {
+        try {
+          candles.removePriceLine(line);
+        } catch {
+          /* chart already torn down */
+        }
+      }
+      priceLinesRef.current = [];
+      markersApiRef.current = null;
       chart.remove();
       chartRef.current = null;
       candleRef.current = null;
@@ -287,6 +320,59 @@ export function LwcPriceChart({
     chart.timeScale().fitContent();
   }, [bars, forecastPrices, showForecast, ready]);
 
+  // koel event markers — disclosures (amber ■) + Telegram fires (violet ▲)
+  useEffect(() => {
+    const api = markersApiRef.current;
+    if (!api || !ready) return;
+    const barSet = new Set(bars.map((b) => b.trade_date));
+    const sorted = [...markers]
+      .filter((m) => barSet.has(m.time))
+      .sort((a, b) => a.time.localeCompare(b.time))
+      .map((m) => ({
+        time: m.time as Time,
+        position: m.position,
+        shape: m.shape,
+        color: m.color,
+        text: m.text,
+        size: 1.25 as const,
+      }));
+    try {
+      api.setMarkers(sorted);
+    } catch {
+      /* ignore plugin race during teardown */
+    }
+  }, [markers, bars, ready]);
+
+  // Armed price alert thresholds — dashed lines on the candle series
+  useEffect(() => {
+    const candles = candleRef.current;
+    if (!candles || !ready) return;
+    for (const line of priceLinesRef.current) {
+      try {
+        candles.removePriceLine(line);
+      } catch {
+        /* ignore */
+      }
+    }
+    priceLinesRef.current = [];
+    for (const pl of priceLines) {
+      try {
+        const line = candles.createPriceLine({
+          price: pl.price,
+          color: pl.color,
+          lineWidth: 1,
+          lineStyle:
+            pl.lineStyle === "dashed" ? LineStyle.Dashed : LineStyle.Solid,
+          axisLabelVisible: true,
+          title: pl.title,
+        });
+        priceLinesRef.current.push(line);
+      } catch {
+        /* ignore bad price */
+      }
+    }
+  }, [priceLines, ready]);
+
   if (bars.length < 2) {
     return (
       <p className="text-sm text-muted-foreground" role="status">
@@ -296,6 +382,7 @@ export function LwcPriceChart({
   }
 
   const tip = hover ?? null;
+  const hasEvents = markers.length > 0 || priceLines.length > 0;
 
   return (
     <div className={cn("relative flex min-h-0 flex-1 flex-col", className)}>
@@ -314,6 +401,7 @@ export function LwcPriceChart({
         ) : (
           <span className="text-muted-foreground">
             Hover for OHLC · scroll to zoom · drag to pan
+            {hasEvents ? " · pins = koel events" : ""}
           </span>
         )}
       </div>
@@ -322,11 +410,14 @@ export function LwcPriceChart({
         className="min-h-[240px] w-full flex-1"
         data-testid="lwc-price-chart"
         role="img"
-        aria-label="Interactive price chart"
+        aria-label="Interactive price chart with koel event overlays"
       />
       <p className="mt-1.5 text-[11px] text-muted-foreground">
-        koel data (Postgres) via Lightweight Charts — research only, not financial
-        advice.
+        koel data (Postgres) via Lightweight Charts
+        {hasEvents
+          ? " · amber = disclosure · violet = Telegram fire · dashed = armed alert"
+          : ""}{" "}
+        — research only, not financial advice.
       </p>
     </div>
   );
