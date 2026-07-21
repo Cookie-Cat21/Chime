@@ -12,9 +12,9 @@ from pathlib import Path
 from koel.ml.dataset import Sample, build_samples
 from koel.ml.distributed import (
     ALLOWED_MODELS,
+    TARGETS,
     Prediction,
     ShardSpec,
-    TARGETS,
     _parse_csv_ints,
     write_prediction_artifact,
 )

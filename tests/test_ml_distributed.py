@@ -6,6 +6,7 @@ from datetime import date, timedelta
 
 import pytest
 
+from koel.ml.dataset import Sample
 from koel.ml.distributed import (
     Prediction,
     PredictionArtifact,
@@ -17,7 +18,6 @@ from koel.ml.distributed import (
     load_prediction_artifact,
     write_prediction_artifact,
 )
-from koel.ml.dataset import Sample
 from koel.ml.distributed_worker import _rows_for_dates, build_outer_split
 from koel.ml.research_features import ResearchBarMetadata
 
