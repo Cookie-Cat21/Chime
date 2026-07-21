@@ -402,7 +402,7 @@ export const HELP_TOPICS: readonly HelpTopic[] = [
       {
         question: "How do search, sector chips, and Has EPS work?",
         answer:
-          "Search matches symbol or name. Sector chips filter to that exact sector string. Has EPS keeps names with a successful filing_metrics extract and a non-null basic EPS — a research extract filter, not a quality tip.\n\nWhen any of search / sector / Has EPS is on, Browse switches to a filtered table mode: Top movers and the full sector chip cloud hide so the list stays focused.",
+          "Search matches symbol or name. The sector dropdown filters to that exact sector string (also available by tapping a sector on the heat strip). Has EPS keeps names with a successful filing_metrics extract and a non-null basic EPS — a research extract filter, not a quality tip.\n\nWhen any of search / sector / Has EPS is on, Browse switches to a filtered table mode: Top movers and the sector strip hide so the list stays focused.",
       },
       {
         question: "How is the table sorted and paginated?",
