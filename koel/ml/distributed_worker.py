@@ -20,13 +20,13 @@ from koel.ml.distributed import (
 )
 from koel.ml.harden import _demean_by_day
 from koel.ml.iterate import _enrich_cross_section
-from koel.ml.research_fundamentals import enrich_fundamentals
 from koel.ml.research_features import (
     ResearchBarMetadata,
     build_research_bar_metadata,
     enrich_research_quality,
     sample_domain,
 )
+from koel.ml.research_fundamentals import enrich_fundamentals
 from koel.ml.snapshot import load_bar_snapshot
 
 

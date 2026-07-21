@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import math
 from datetime import UTC, date, datetime
 
 from koel.ml.dataset import Sample
@@ -74,4 +75,5 @@ def test_future_filing_does_not_change_past_feature_vector() -> None:
         [sample],
         {"A.N0000": [future]},
     )
-    assert without[0].x == with_future[0].x
+    for left, right in zip(without[0].x, with_future[0].x, strict=True):
+        assert left == right or (math.isnan(left) and math.isnan(right))
