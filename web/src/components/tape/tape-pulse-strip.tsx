@@ -1,3 +1,5 @@
+"use client";
+
 import Link from "next/link";
 import type { ReactNode } from "react";
 
@@ -93,7 +95,9 @@ function Chip({
       {children ? <div className="mt-3">{children}</div> : null}
 
       {spark ? (
-        <div className="mt-auto border-t border-border/50 pt-2.5">{spark}</div>
+        <div className="mt-auto overflow-visible border-t border-border/50 pt-2.5">
+          {spark}
+        </div>
       ) : (
         <div className="mt-auto" />
       )}
@@ -146,7 +150,8 @@ function bookDetail(book: BookPressure): string {
     book.imbalance_pct == null
       ? "—"
       : `${book.imbalance_pct > 0 ? "+" : ""}${book.imbalance_pct.toFixed(1)}%`;
-  return `${book.sample_n} symbols · imb ${imb} · public totals`;
+  // sample_n is recent snapshot rows (often multi-tick), not unique listed names.
+  return `${book.sample_n} snapshots · imb ${imb} · public totals`;
 }
 
 /**
@@ -267,6 +272,7 @@ export function TapePulseStrip({
                 heightClass="h-14"
                 ariaLabel="Appetite score spark, last 60 sessions"
                 interactive
+                formatValue={(n) => String(Math.round(n))}
               />
             ) : null
           }
@@ -324,6 +330,7 @@ export function TapePulseStrip({
                 heightClass="h-14"
                 ariaLabel="Foreign net spark"
                 interactive
+                formatValue={fmtLkr}
               />
             ) : null
           }
