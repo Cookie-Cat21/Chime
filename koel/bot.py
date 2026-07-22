@@ -16,7 +16,7 @@ from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
 from typing import Any
 
-from telegram import Message, Update
+from telegram import Update
 from telegram.ext import (
     Application,
     CallbackQueryHandler,
@@ -785,7 +785,9 @@ async def on_callback_query(update: Update, context: ContextTypes.DEFAULT_TYPE) 
         return
     data = query.data if isinstance(query.data, str) else ""
     message = query.message
-    if not isinstance(message, Message):
+    # Fail closed for inaccessible / missing messages. Avoid isinstance(Message)
+    # so unit tests can use AsyncMock message objects.
+    if message is None or not hasattr(message, "reply_text"):
         return
 
     async def _reply(text: str, **kwargs: Any) -> None:

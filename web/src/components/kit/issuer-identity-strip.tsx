@@ -220,8 +220,7 @@ export function IssuerIdentityStrip({
         ) : null}
       </dl>
       <p className="mt-3 text-[11px] text-muted-foreground">
-        From public CSE companyInfoSummery / companyProfile — not financial
-        advice.
+        From public CSE issuer JSON cached in Postgres — not financial advice.
       </p>
     </section>
   );
