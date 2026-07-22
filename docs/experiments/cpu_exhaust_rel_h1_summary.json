@@ -1,5 +1,5 @@
 {
-  "run_id": "cpu-exhaust-1784743875",
+  "run_id": "cpu-exhaust-1784744210",
   "snapshot_sha": "fc4d730527d4821f331369640f9113e8e035171ab1a04e085aed3843650e56ae",
   "target": "relative",
   "horizon": 1,
@@ -171,7 +171,96 @@
   },
   "nested_contract_met": false,
   "hyper_best_test": [
-    null
+    {
+      "fingerprint": "lgb_c34120c27d",
+      "config": {
+        "learning_rate": 0.06,
+        "max_depth": 8,
+        "num_leaves": 63,
+        "subsample": 0.9,
+        "colsample_bytree": 0.95,
+        "reg_lambda": 100.0
+      },
+      "calibration": {
+        "rank_ic": 0.2515785183390195,
+        "balanced_accuracy": 0.5888553343547887,
+        "mcc": 0.17555257840197389,
+        "n_rows": 5070,
+        "n_sessions": 37,
+        "spread_112": -0.01564500378568133,
+        "spread_30": 0.010596457455779912
+      },
+      "test": {
+        "rank_ic": 0.26399181422446283,
+        "balanced_accuracy": 0.5872345744163763,
+        "mcc": 0.17454524184617984,
+        "n_rows": 5876,
+        "n_sessions": 39,
+        "spread_112": -0.007312720914991675,
+        "spread_30": 0.019335276643005883
+      },
+      "beats_baseline": true
+    },
+    {
+      "fingerprint": "lgb_628154612f",
+      "config": {
+        "learning_rate": 0.12,
+        "max_depth": 7,
+        "num_leaves": 63,
+        "subsample": 0.9,
+        "colsample_bytree": 0.95,
+        "reg_lambda": 100.0
+      },
+      "calibration": {
+        "rank_ic": 0.2514662342178555,
+        "balanced_accuracy": 0.5805270696389383,
+        "mcc": 0.1606475449040437,
+        "n_rows": 5070,
+        "n_sessions": 37,
+        "spread_112": -0.013835442267012235,
+        "spread_30": 0.01208941665784669
+      },
+      "test": {
+        "rank_ic": 0.25603258025884146,
+        "balanced_accuracy": 0.5849207561610523,
+        "mcc": 0.16958456696590782,
+        "n_rows": 5876,
+        "n_sessions": 39,
+        "spread_112": -0.007841359591567539,
+        "spread_30": 0.018460716110508164
+      },
+      "beats_baseline": true
+    },
+    {
+      "fingerprint": "lgb_c0adfff6c1",
+      "config": {
+        "learning_rate": 0.12,
+        "max_depth": 7,
+        "num_leaves": 95,
+        "subsample": 0.9,
+        "colsample_bytree": 0.95,
+        "reg_lambda": 100.0
+      },
+      "calibration": {
+        "rank_ic": 0.2514662342178555,
+        "balanced_accuracy": 0.5805270696389383,
+        "mcc": 0.1606475449040437,
+        "n_rows": 5070,
+        "n_sessions": 37,
+        "spread_112": -0.013835442267012235,
+        "spread_30": 0.01208941665784669
+      },
+      "test": {
+        "rank_ic": 0.2585040412400951,
+        "balanced_accuracy": 0.5863835769053318,
+        "mcc": 0.17187883266461654,
+        "n_rows": 5876,
+        "n_sessions": 39,
+        "spread_112": -0.00721986230592637,
+        "spread_30": 0.019006120600056537
+      },
+      "beats_baseline": true
+    }
   ],
   "any_beats_baseline": true
 }

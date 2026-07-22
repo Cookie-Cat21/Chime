@@ -1,6 +1,6 @@
 # CPU exhaust summary
 
-- run_id: `cpu-exhaust-1784743875`
+- run_id: `cpu-exhaust-1784744210`
 - snapshot: `fc4d730527d4821f331369640f9113e8e035171ab1a04e085aed3843650e56ae`
 - target/horizon/domain: `relative` / h1 / `cse`
 - baseline RankIC (DoubleEnsemble): 0.2526
@@ -41,3 +41,6 @@
 
 ## 10k LightGBM winners (test once)
 
+- `lgb_c34120c27d` cal=0.2515785183390195 test=0.26399181422446283 beats=True config=`{'learning_rate': 0.06, 'max_depth': 8, 'num_leaves': 63, 'subsample': 0.9, 'colsample_bytree': 0.95, 'reg_lambda': 100.0}`
+- `lgb_628154612f` cal=0.2514662342178555 test=0.25603258025884146 beats=True config=`{'learning_rate': 0.12, 'max_depth': 7, 'num_leaves': 63, 'subsample': 0.9, 'colsample_bytree': 0.95, 'reg_lambda': 100.0}`
+- `lgb_c0adfff6c1` cal=0.2514662342178555 test=0.2585040412400951 beats=True config=`{'learning_rate': 0.12, 'max_depth': 7, 'num_leaves': 95, 'subsample': 0.9, 'colsample_bytree': 0.95, 'reg_lambda': 100.0}`
