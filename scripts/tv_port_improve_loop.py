@@ -15,7 +15,12 @@ CHECKS = [
     ("typecheck", ["npm", "run", "typecheck"], WEB),
     (
         "indicators_src",
-        ["rg", "-q", "computeSma|computeRsi|computeBollinger", "web/src/lib/charts/koel-indicators.ts"],
+        [
+            "rg",
+            "-q",
+            "computeSma|computeRsi|computeBollinger",
+            "web/src/lib/charts/koel-indicators.ts",
+        ],
         ROOT,
     ),
     (
@@ -44,7 +49,12 @@ CHECKS = [
     ),
     (
         "lwc_styles",
-        ["rg", "-q", "AreaSeries|CandlestickSeries|LineSeries", "web/src/components/charts/lwc-price-chart.tsx"],
+        [
+            "rg",
+            "-q",
+            "AreaSeries|CandlestickSeries|LineSeries",
+            "web/src/components/charts/lwc-price-chart.tsx",
+        ],
         ROOT,
     ),
     (
@@ -54,7 +64,12 @@ CHECKS = [
     ),
     (
         "no_tv_spine",
-        ["rg", "-q", "TV is \\*\\*never\\*\\*|never.*alert.*spine|koel alerts still use", "docs/factory"],
+        [
+            "rg",
+            "-q",
+            "TV is \\*\\*never\\*\\*|never.*alert.*spine|koel alerts still use",
+            "docs/factory",
+        ],
         ROOT,
     ),
     (
@@ -64,7 +79,12 @@ CHECKS = [
     ),
     (
         "chart_layers",
-        ["rg", "-q", "TV-inspired koel workbench|TRADINGVIEW_AUDIT", "docs/factory/CHART_LAYERS.md"],
+        [
+            "rg",
+            "-q",
+            "TV-inspired koel workbench|TRADINGVIEW_AUDIT",
+            "docs/factory/CHART_LAYERS.md",
+        ],
         ROOT,
     ),
 ]

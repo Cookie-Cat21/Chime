@@ -45,8 +45,12 @@ export function PriceRefresh({
   const [marketOpen, setMarketOpen] = useState(true);
 
   useEffect(() => {
-    setNow(Date.now());
-    setMarketOpen(isMarketSessionOpen());
+    // Defer first paint clock so we don't setState sync in the effect body
+    // (react-hooks/set-state-in-effect) while still avoiding SSR hydration skew.
+    const boot = window.setTimeout(() => {
+      setNow(Date.now());
+      setMarketOpen(isMarketSessionOpen());
+    }, 0);
     const tick = window.setInterval(() => {
       router.refresh();
       setNow(Date.now());
@@ -57,6 +61,7 @@ export function PriceRefresh({
       setMarketOpen(isMarketSessionOpen());
     }, 1_000);
     return () => {
+      window.clearTimeout(boot);
       window.clearInterval(tick);
       window.clearInterval(age);
     };

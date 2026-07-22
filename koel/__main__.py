@@ -23,13 +23,13 @@ from koel.drain import (
 )
 from koel.graph.directors_sync import run_directors_sync
 from koel.health import HealthState, brief_queue_health_hint, start_health_server
+from koel.issuer_profile_backfill import run_issuer_profile_backfill
 from koel.logging_setup import configure_logging, get_logger
 from koel.migrate import apply_migrations
 from koel.notices_backfill import run_notices_backfill
 from koel.notify import SendResult, send_message
 from koel.path_backfill import run_path_backfill
 from koel.poller import Poller, run_poller_forever
-from koel.issuer_profile_backfill import run_issuer_profile_backfill
 from koel.sector_backfill import run_sector_backfill
 from koel.signals import run_signal_score_job
 from koel.storage import Storage

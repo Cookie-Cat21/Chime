@@ -3,6 +3,7 @@
 import {
   useEffect,
   useLayoutEffect,
+  useMemo,
   useRef,
   useState,
 } from "react";
@@ -160,18 +161,24 @@ export function LwcPriceChart({
   const [ready, setReady] = useState(false);
   const [legendExtras, setLegendExtras] = useState<string>("");
 
-  barsRef.current = bars;
-  drawModeRef.current = drawMode;
-  drawingsRef.current = drawings;
-  onDrawingsChangeRef.current = onDrawingsChange;
+  useEffect(() => {
+    barsRef.current = bars;
+    drawModeRef.current = drawMode;
+    drawingsRef.current = drawings;
+    onDrawingsChangeRef.current = onDrawingsChange;
+  });
 
-  const ind = indicators ?? {
-    sma20: false,
-    sma50: false,
-    ema12: false,
-    bb: false,
-    rsi: false,
-  };
+  const ind = useMemo(
+    () =>
+      indicators ?? {
+        sma20: false,
+        sma50: false,
+        ema12: false,
+        bb: false,
+        rsi: false,
+      },
+    [indicators],
+  );
 
   // Recreate chart when style / volume / RSI pane structure changes.
   useLayoutEffect(() => {
@@ -333,7 +340,8 @@ export function LwcPriceChart({
     bbLoRef.current = bbLo;
     rsiRef.current = rsi;
     markersApiRef.current = markersApi;
-    setReady(true);
+    // Defer ready flag — avoid sync setState in layout effect body.
+    const readyTimer = window.setTimeout(() => setReady(true), 0);
 
     const onClick = (param: {
       time?: Time;
@@ -439,6 +447,7 @@ export function LwcPriceChart({
     });
 
     return () => {
+      window.clearTimeout(readyTimer);
       chart.unsubscribeClick(onClick);
       for (const line of alertLinesRef.current) {
         try {

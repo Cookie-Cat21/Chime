@@ -160,8 +160,14 @@ def _ensure_session_focus() -> bool:
 def _ensure_issuer_focus() -> bool:
     return _patch_once(
         ISSUER,
-        'className="mt-4 rounded-xl border border-border/70 bg-background px-5 py-4 sm:px-6"',
-        'className="mt-4 rounded-xl border border-border/70 bg-background px-5 py-4 transition-colors sm:px-6"',
+        (
+            'className="mt-4 rounded-xl border border-border/70 '
+            'bg-background px-5 py-4 sm:px-6"'
+        ),
+        (
+            'className="mt-4 rounded-xl border border-border/70 '
+            'bg-background px-5 py-4 transition-colors sm:px-6"'
+        ),
     )
 
 
@@ -218,7 +224,11 @@ def _ensure_nfa() -> bool:
 
 
 def _ensure_badge() -> bool:
-    return "from \"@/components/ui/badge\"" in _read(ISSUER) or "from '@/components/ui/badge'" in _read(ISSUER)
+    src = _read(ISSUER)
+    return (
+        'from "@/components/ui/badge"' in src
+        or "from '@/components/ui/badge'" in src
+    )
 
 
 def _ensure_safe_web() -> bool:
@@ -424,7 +434,8 @@ def main() -> int:
                     "# CSE symbol UI loop — 2026-07-21",
                     "",
                     "Ardeno filter: HyperUI stats-grid + shadcn Badge chips. "
-                    "Reject DaisyUI / Tremor charts / React Bits / Watermelon Premium / 21st dumps.",
+                    "Reject DaisyUI / Tremor charts / React Bits / "
+                    "Watermelon Premium / 21st dumps.",
                     "",
                     f"Result: **{pass_n}/{LOOPS}** PASS",
                     "",

@@ -62,9 +62,10 @@ class FeedHealth:
         self.consecutive_failures += 1
         if self.consecutive_failures >= self.degrade_after_failures:
             self.state = FeedState.DEGRADED
-        elif self.last_ok_at is not None and now - self.last_ok_at >= self.stale_after:
-            self.state = FeedState.STALE
-        elif self.state == FeedState.LIVE:
+        elif (
+            self.last_ok_at is not None
+            and now - self.last_ok_at >= self.stale_after
+        ) or self.state == FeedState.LIVE:
             self.state = FeedState.STALE
         return self.state
 
@@ -135,7 +136,12 @@ def gap_seconds(prev_ts: datetime | None, curr_ts: datetime | None) -> float | N
     return delta
 
 
-def annotate_move_trigger(trigger: str, *, gap_sec: float | None, gap_warn_sec: float = 1800.0) -> str:
+def annotate_move_trigger(
+    trigger: str,
+    *,
+    gap_sec: float | None,
+    gap_warn_sec: float = 1800.0,
+) -> str:
     """Append gap annotation when %-move spans a large poll gap (≥30m default)."""
     if gap_sec is None or gap_sec < gap_warn_sec:
         return trigger

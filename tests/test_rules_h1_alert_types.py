@@ -2,18 +2,24 @@
 
 from __future__ import annotations
 
-from datetime import UTC, date, datetime
+from datetime import date, datetime
 from zoneinfo import ZoneInfo
 
-from koel.domain import AlertType, DailyBar
 from koel.dividends import iso_week_key
+from koel.domain import AlertType, DailyBar
 from koel.rules import evaluate_price_rules, filter_fireable, sma, week52_range
 from tests.conftest import make_previous, make_rule, make_snapshot
 
 _COLOMBO = ZoneInfo("Asia/Colombo")
 
 
-def _bar(day: date, price: float, *, high: float | None = None, low: float | None = None) -> DailyBar:
+def _bar(
+    day: date,
+    price: float,
+    *,
+    high: float | None = None,
+    low: float | None = None,
+) -> DailyBar:
     return DailyBar(
         symbol="JKH.N0000",
         trade_date=day,

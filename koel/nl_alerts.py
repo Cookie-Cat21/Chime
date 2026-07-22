@@ -12,7 +12,7 @@ import re
 from dataclasses import dataclass
 from typing import Any
 
-from koel.domain import AlertType, MAX_ALERT_THRESHOLD, disclaimer
+from koel.domain import MAX_ALERT_THRESHOLD, AlertType, disclaimer
 from koel.logging_setup import get_logger
 
 log = get_logger(__name__)

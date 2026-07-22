@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import math
 from collections.abc import AsyncIterator, Sequence
-from contextlib import asynccontextmanager
+from contextlib import asynccontextmanager, suppress
 from datetime import date, datetime
 from time import perf_counter
 from typing import Any, cast
@@ -4885,10 +4885,8 @@ class Storage:
                 (user_id, symbol),
             )
         # Groww/Robinhood-style auto-% band: create daily_move if enabled.
-        try:
+        with suppress(Exception):
             await self.ensure_auto_move_for_symbol(user_id, symbol)
-        except Exception:
-            pass
 
     async def remove_watch(self, user_id: int, symbol: str) -> bool:
         # Fail closed — non-string symbol used to throw on .strip mid remove.
