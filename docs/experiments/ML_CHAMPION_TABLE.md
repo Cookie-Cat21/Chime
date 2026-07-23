@@ -1,6 +1,6 @@
 # ML champion table
 
-Updated: 2026-07-23 (W1 fpv1 nested complete; champions unchanged)
+Updated: 2026-07-23 (W2 liq_v1 running; CSE-only nested killed — insufficient history)
 
 Source artifacts:
 
@@ -8,6 +8,8 @@ Source artifacts:
 - `docs/experiments/cpu_exhaust_rel_h1_summary.json`
 - `docs/experiments/cpu_exhaust_rel_h1_fpv1_summary.json`
 - `docs/experiments/FEATURE_PACK_V1_NESTED_20260723.md`
+- `docs/experiments/CSE_ONLY_NESTED_20260723.md`
+- `docs/experiments/cpu_exhaust_rel_h1_cse_summary.json`
 - `docs/experiments/cpu_exhaust_abs_h1_summary.json`
 - `docs/experiments/cpu_exhaust_rel_h1_lgb_10k.json`
 - `docs/experiments/ML_COST_ENGINEERING_LOOP1_20260723.md`
@@ -105,7 +107,7 @@ cycle 0) < champion 0.2861; best net@112 −0.49%; **no pos112**. See
 | 2 | Cost/turnover engineering | **+net@112 verified (split-adjusted)** | DE `persistence_exit_10_top_bottom_05` +0.49%; xgb +0.05%; hgb −0.13% |
 | 3 | Selective gate mining | **exhausted** | 90% contract unreachable offline |
 | 4 | Ensembles/stacking | **exhausted** | best RankIC 0.2858 (−0.0003 vs champion); no net gain |
-| 5 | New features | **fpv1 nested done — no materiality** | RankIC Δ −0.0007 best; DE persist +0.53% vs +0.49% (+0.04 pp); W1 thresholds **not fired**; `liq_v1` filter run queued |
+| 5 | New features | **fpv1 nested done — no materiality** | RankIC Δ −0.0007 best; DE persist +0.53% vs +0.49% (+0.04 pp); W1 thresholds **not fired**; `liq_v1` + fp+liq nested **running** |
 | 6 | Horizons/targets | absolute/h1 done; **h5 nested started (W3)** | no `cpu_exhaust_rel_h5_summary.json` yet |
 | — | Improve-loop 6×1000 | **exhausted** | best RankIC 0.2746; no pos112 |
 
@@ -130,12 +132,20 @@ Nested relative/h1 with `--feature-pack v1` on split-adjusted snapshot
 SuccessContract **still unmet**. Next W1 slice: `universe-filter liq_v1` exhaust
 (running).
 
+## CSE-only nested (2026-07-23) — killed
+
+Relative/h1 baseline trio on Postgres CSE-only export (`dataset=cse`,
+2025-07-17 → 2026-07-22): **all models failed** family screen —
+`not enough history for requested nested split`. No RankIC, selective, or
+cost numbers. See `CSE_ONLY_NESTED_20260723.md`. Champions unchanged.
+
 ## Next concrete actions
 
 1. Loop 0: accumulate prospective receipts for wired
    `shadow_policy_rank_de_persist_v1` (DE persist, split-adjusted +0.49%
    offline); monitor `live_shadow_report` — contract unchanged.
-2. Complete W1 `liq_v1` universe-filter nested; h5 already exhausted (no unlock).
+2. Complete W2 `liq_v1` universe-filter nested (+ fp+liq combo); h5 already
+   exhausted (no unlock).
 3. Keep RankIC champion (`xgb_two_stage` 0.2861) as research score only until
    contract + post-cost gates pass without persistence-only construction.
 

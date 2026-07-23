@@ -179,3 +179,12 @@ W3 h5 nested artifacts before W5 search.
 - Verdict: h5 lever exhausted for current feature matrix without Goal A/B unlock
 - Next: Feature Pack v1 nested (running); W2 liq_v1 filter nested queued
 
+### Cycle — CSE-only nested killed (2026-07-23)
+
+- Evidence: `CSE_ONLY_NESTED_20260723.md`, `cpu_exhaust_rel_h1_cse_summary.json`
+- Snapshot: CSE-only export 2025-07-17 → 2026-07-22 (70k bars, 297 symbols)
+- Result: all baseline trio models fail screen — insufficient history for nested split
+- RankIC / selective / cost: **n/a** — no nested shards
+- Verdict: CSE-only matrix **killed** for champion comparison; retain full matrix
+- Champions unchanged; SuccessContract **still unmet**
+
