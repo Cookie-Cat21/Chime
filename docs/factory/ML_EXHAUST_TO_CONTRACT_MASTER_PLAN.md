@@ -1,10 +1,27 @@
 # ML exhaust → contract master plan
 
-**Status:** Active — same-feature matrix exhausted (2026-07-23); feature/horizon/data
-levers open; Loop 0 DE-persist shadow **wired** (`shadow_policy_rank_de_persist_v1`
-in `live_shadow.py`; awaiting prospective receipts).  
+**Status:** Active — same-matrix h1 search exhausted; W1–W4 first passes **killed or
+closed without unlock**; Goal A (selective 90%) **still unmet**; global promotion
+**blocked**. Loop 0 DE-persist shadow **wired** (`shadow_policy_rank_de_persist_v1`
+in `live_shadow.py`; partial canary only — **≥60 non-partial scored sessions still
+needed**).  
 **Authority:** [NORTH_STAR_LOOPS.md](NORTH_STAR_LOOPS.md) · [ML_DISTRIBUTED_90_MASTER_PLAN.md](ML_DISTRIBUTED_90_MASTER_PLAN.md) · [ML_CHAMPION_TABLE.md](../experiments/ML_CHAMPION_TABLE.md)  
 **Run until:** selective 90% SuccessContract met **or** exhaustion checklist (§4) all true.
+
+### Progress ledger (2026-07-23, honest)
+
+| Workstream | State | Headline |
+|---|---|---|
+| **W0** Loop 0 DE-persist shadow | **Partial** | Wired + `live_shadow_report` book-policy row; partial canary **14 legs** (`DE_PERSIST_CANARY_20260723.md`); no non-partial receipts yet |
+| **W1** feature_pack_v1 | **Killed (no materiality)** | Nested fpv1: best RankIC Δ **−0.0007** vs frozen 0.2861; selective/cost below W1 thresholds (`FEATURE_PACK_V1_NESTED_20260723.md`) |
+| **W2** liq_v1 universe filter | **Killed** | Sample collapse **−93.5%**; xgb/hgb screen fail; 0 selective emits (`UNIVERSE_FILTER_LIQ_V1_NESTED_20260723.md`) |
+| **W2+W1** fp+liq combo | **Killed** | Same 32 535-row ceiling; DE partial RankIC 0.1779; retired with liq_v1 (`FEATURE_PACK_LIQ_V1_NESTED_20260723.md`) |
+| **W3** relative/h5 | **Done — no unlock** | RankIC ~**0.17** (xgb 0.1735); selective **0** emits; cost still negative (`CPU_EXHAUST_REL_H5_20260723.md`) |
+| **W4** CSE-only ablation | **Killed** | ~1y CSE history insufficient for nested splits (`CSE_ONLY_NESTED_20260723.md`) |
+| **W5** bounded search | **Blocked** | Do not start until a new `matrix_id` shows W1/W3 materiality |
+| **In flight** | h3 nested; **liq_v2** softer filter; Goal A selective-90% chase on any matrix that improves |
+
+**Champions unchanged:** RankIC `xgb_two_stage` rel/h1 **0.2861**; cost DE persist split **+0.49%** @112; selective near-miss **0.770 / 0.681 / 74 emits**.
 
 ---
 
@@ -24,13 +41,21 @@ in `live_shadow.py`; awaiting prospective receipts).
 - Selective gate grids (`SELECTIVE_GATES_20260723.md`)
 - Cost variants on existing scores (persistence flip verified on split bars)
 
-**Not exhausted:**
+**First-pass killed (not global exhaustion — see §4):**
 
-- Feature schema (liquidity, regime, sector-relative, event hygiene)
-- Horizons (h5 primary; h3 optional challenger)
-- Data quality (corporate actions, universe membership, CSE-only ablation)
-- Universe / liquidity filters in training
-- Prospective live evidence for cost-ranked relative policy
+- W1 `feature_pack_v1` nested — no materiality (RankIC Δ −0.0007)
+- W2 `liq_v1` + fp+liq combo — 93% sample collapse; 0 selective emits
+- W3 relative/h5 — RankIC ~0.17; selective 0; cost negative
+- W4 CSE-only ablation — insufficient history (~1y CSE)
+
+**Still open (not exhausted):**
+
+- W0 prospective shadow — wired; need **≥60 non-partial scored sessions**
+- W2 **liq_v2** softer universe filter (queued)
+- W3 relative/**h3** nested (in progress)
+- W1 feature revisions beyond fpv1 if liq_v2 or h3 lands a new matrix
+- W5 bounded search — **only** after a new `matrix_id` clears materiality
+- Goal A selective-90% chase on any improving matrix
 
 **Cross-cutting rules (non-negotiable):**
 
@@ -71,7 +96,7 @@ Workstreams prioritize in this order. Lower tiers never override higher-tier kil
 
 **Definition:** prospective evidence for the split-adjusted cost champion operating slice.
 
-- Policy ID: `shadow_policy_rank_de_persist_v1` (proposed; not yet registered).
+- Policy ID: `shadow_policy_rank_de_persist_v1` (**wired** in `live_shadow.py`; partial canary only).
 - Model: `double_ensemble_native` with `persistence_exit_10_top_bottom_05` book on **relative/h1** scores.
 - Offline reference: **+0.49%** net@112bps on split-adjusted bars (`ML_SPLIT_ADJUSTED_RESCORE_20260723.md`).
 - Purpose: accumulate **honest forward receipts** while feature/horizon work continues; cost shadow does **not** substitute for selective 90%.
@@ -120,9 +145,9 @@ Each workstream produces a dated cycle note under `docs/experiments/` plus JSON 
 **Exit criteria:**
 
 - [ ] At least one non-partial shadow emit stored under `shadow_policy_rank_de_persist_v1`.
-- [ ] `live_shadow_report` includes DE-persist row with net@112 and concentration columns.
-- [ ] Runbook + champion table reference the wired policy ID (not "proposed").
-- [ ] Loop 0 daily note cites artifact paths for shadow receipts.
+- [x] `live_shadow_report` includes DE-persist row with net@112 and concentration columns.
+- [x] Runbook + champion table reference the wired policy ID (not "proposed").
+- [x] Loop 0 daily note cites artifact paths for shadow receipts (`DE_PERSIST_CANARY_20260723.md`; partial only).
 
 **Kill criteria:**
 
@@ -158,10 +183,10 @@ Each workstream produces a dated cycle note under `docs/experiments/` plus JSON 
 
 **Exit criteria:**
 
-- [ ] `feature_pack_v1` checked in with deterministic column list + SHA in snapshot manifest.
-- [ ] Nested baseline trio complete with new matrix; cycle note shows ΔRankIC, Δnet@112, Δselective best emit count vs 2026-07-23 champions.
-- [ ] At least one metric (RankIC, net@112, or selective emits at fixed coverage) improves ≥ agreed materiality: RankIC +0.005, or net@112 +0.10pp, or selective emits 2× at same calibration coverage grid.
-- [ ] If material improvement → unblock W5 for this matrix version.
+- [x] `feature_pack_v1` checked in with deterministic column list + SHA in snapshot manifest.
+- [x] Nested baseline trio complete with new matrix; cycle note shows ΔRankIC, Δnet@112, Δselective best emit count vs 2026-07-23 champions (`FEATURE_PACK_V1_NESTED_20260723.md`).
+- [ ] At least one metric (RankIC, net@112, or selective emits at fixed coverage) improves ≥ agreed materiality: RankIC +0.005, or net@112 +0.10pp, or selective emits 2× at same calibration coverage grid. **Not met** — best RankIC Δ **−0.0007**; fpv1 **killed** on materiality.
+- [ ] If material improvement → unblock W5 for this matrix version. **Blocked** — no W5 on fpv1 matrix.
 
 **Kill criteria:**
 
@@ -192,10 +217,12 @@ Each workstream produces a dated cycle note under `docs/experiments/` plus JSON 
 
 **Exit criteria:**
 
-- [ ] Filter manifest checked in with thresholds frozen before nested run.
-- [ ] Eligible row count, symbol count, and session count reported per fold.
-- [ ] Selective gate best-point improves emits ≥2× **or** precision LCB ≥0.75 at ≥100 emits **or** net@112 improves ≥0.10pp vs unfiltered champion at same model.
-- [ ] Concentration caps satisfied at best selective point.
+- [x] Filter manifest checked in with thresholds frozen before nested run (`liq_v1`; preset **retired**).
+- [x] Eligible row count, symbol count, and session count reported per fold (`UNIVERSE_FILTER_LIQ_V1_NESTED_20260723.md`: 502 908 → 32 535 rows, −93.5%).
+- [ ] Selective gate best-point improves emits ≥2× **or** precision LCB ≥0.75 at ≥100 emits **or** net@112 improves ≥0.10pp vs unfiltered champion at same model. **Not met** — **0** selective emits; **killed**.
+- [ ] Concentration caps satisfied at best selective point. **N/A** — no qualifying selective point.
+
+**Next:** `liq_v2` softer filter manifest before re-nesting.
 
 **Kill criteria:**
 
@@ -220,10 +247,12 @@ Each workstream produces a dated cycle note under `docs/experiments/` plus JSON 
 
 **Exit criteria:**
 
-- [ ] `cpu_exhaust_rel_h5_summary.json` (and markdown) checked in with same schema as h1 exhaust.
-- [ ] Selective + cost reports parallel to `SELECTIVE_GATES_20260723.md` and split cost compare.
-- [ ] If h5 beats h1 on selective LCB or net@112 at matched coverage → declare h5 challenger; new shadow policy IDs per horizon.
-- [ ] Prospective shadow stub documented if h5 wins offline (do not wire until W0 pattern replicated).
+- [x] `cpu_exhaust_rel_h5_summary.json` (and markdown) checked in with same schema as h1 exhaust (`CPU_EXHAUST_REL_H5_20260723.md`).
+- [x] Selective + cost reports parallel to `SELECTIVE_GATES_20260723.md` and split cost compare.
+- [ ] If h5 beats h1 on selective LCB or net@112 at matched coverage → declare h5 challenger; new shadow policy IDs per horizon. **Not met** — RankIC ~0.17 vs h1 0.2861; selective **0**; cost negative.
+- [ ] Prospective shadow stub documented if h5 wins offline (do not wire until W0 pattern replicated). **N/A** — h5 did not win.
+
+**In progress:** relative/**h3** nested (optional challenger; lower priority than h5 was).
 
 **Kill criteria:**
 
@@ -247,9 +276,9 @@ Each workstream produces a dated cycle note under `docs/experiments/` plus JSON 
 
 **Exit criteria:**
 
-- [ ] New bars SHA documented; nested re-score of h1 baseline trio on adjusted bars.
-- [ ] CSE-only ablation table in cycle note (RankIC, selective, net@112 vs hybrid).
-- [ ] If DE-persist +0.49% was fragile: confirm sign and magnitude after enrichment delta documented.
+- [x] New bars SHA documented; nested re-score of h1 baseline trio on adjusted bars (`ML_SPLIT_ADJUSTED_RESCORE_20260723.md`).
+- [x] CSE-only ablation table in cycle note (RankIC, selective, net@112 vs hybrid). **Killed** — insufficient history for nested splits (`CSE_ONLY_NESTED_20260723.md`; metrics n/a).
+- [x] If DE-persist +0.49% was fragile: confirm sign and magnitude after enrichment delta documented (split re-score **+0.49%** retained).
 
 **Kill criteria:**
 
@@ -335,18 +364,20 @@ Prospective shadow uses the same numeric thresholds for **standards reporting**;
 
 Exhaustion is claimed **only** when **every** item below is true. Otherwise keep running W0–W5.
 
-| # | Condition | Evidence artifact |
-|---|---|---|
-| E1 | Same-matrix h1 model search capped and failed | `CPU_EXHAUST_20260722.md`, `CPU_IMPROVE_6K_20260723.md`, W5 run on `matrix_id` if any |
-| E2 | Ensemble + selective grids failed on best nested scores | `ENSEMBLE_STACK_20260723.md`, `SELECTIVE_GATES_20260723.md` (+ h5 equivalents) |
-| E3 | Feature pack v1 (and one revision if v1 killed) tested with baseline trio | W1 cycle note(s) |
-| E4 | Universe/liquidity filters tested | W2 cycle note |
-| E5 | Relative **h5** nested complete (h3 optional) | `cpu_exhaust_rel_h5_summary.json` |
-| E6 | Data enrichment re-score complete or backlog waived in writing | W4 cycle note |
-| E7 | DE-persist shadow wired with ≥60 scored prospective sessions | W0 receipts + `live_shadow_report` |
-| E8 | No candidate meets SuccessContract offline **and** prospective precision/LCB within 10pp of offline at matched coverage | W6 comparison table |
-| E9 | No policy ID approved for `forecast_points` / Telegram / Signal Board | Loop 2 kill criteria satisfied |
-| E10 | Human-readable dossier checked in | W6 branch 6b |
+**Checklist status (2026-07-23):** 6/10 evidenced — **not truly exhausted** (E7–E8 open; h3 + liq_v2 in flight).
+
+| # | Done | Condition | Evidence artifact |
+|---|:---:|---|---|
+| E1 | [x] | Same-matrix h1 model search capped and failed | `CPU_EXHAUST_20260722.md`, `CPU_IMPROVE_6K_20260723.md`; W5 not started (no new matrix) |
+| E2 | [x] | Ensemble + selective grids failed on best nested scores | `ENSEMBLE_STACK_20260723.md`, `SELECTIVE_GATES_20260723.md`, `CPU_EXHAUST_REL_H5_20260723.md` (h5 selective 0) |
+| E3 | [x] | Feature pack v1 (and one revision if v1 killed) tested with baseline trio | `FEATURE_PACK_V1_NESTED_20260723.md` — **killed, no materiality**; revision optional via liq_v2 / fp combo |
+| E4 | [x] | Universe/liquidity filters tested | `UNIVERSE_FILTER_LIQ_V1_NESTED_20260723.md`, `FEATURE_PACK_LIQ_V1_NESTED_20260723.md` — **liq_v1 killed**; liq_v2 queued |
+| E5 | [ ] | Relative **h5** nested complete (h3 optional) | [x] h5: `cpu_exhaust_rel_h5_summary.json`; [ ] h3 nested **in progress** |
+| E6 | [x] | Data enrichment re-score complete or backlog waived in writing | Split re-score done; CSE-only ablation **killed** (`CSE_ONLY_NESTED_20260723.md`) |
+| E7 | [ ] | DE-persist shadow wired with ≥60 scored prospective sessions | Wired + partial canary 14 legs; **non-partial receipts pending** |
+| E8 | [ ] | No candidate meets SuccessContract offline **and** prospective precision/LCB within 10pp of offline at matched coverage | Offline: no contract met; prospective aggregate **insufficient** |
+| E9 | [x] | No policy ID approved for `forecast_points` / Telegram / Signal Board | Loop 2 kill criteria satisfied |
+| E10 | [ ] | Human-readable dossier checked in | W6 branch 6b **not started** |
 
 **Not required for exhaustion:** beating RankIC 0.2861; positive net@112 alone; absolute/h1 dominance.
 
@@ -422,15 +453,15 @@ Exhaustion is claimed **only** when **every** item below is true. Otherwise keep
 
 Concrete, ordered, actionable — no estimates.
 
-1. **W0 — Add `shadow_policy_rank_de_persist_v1` to `koel/ml/live_shadow.py`:** train `double_ensemble_native` on relative/h1, apply `persistence_exit_10_top_bottom_05` book, emit to `forecast_outcomes` with deterministic `model_version`; extend unit tests in `tests/test_ml_live_shadow.py`.
+1. **W0 — Non-partial shadow receipts:** run post-close `live_shadow` on full sessions until `shadow_policy_rank_de_persist_v1` has **≥60 scored non-partial** rows; tabulate in `live_shadow_report` (net@112, RankIC, concentration).
 
-2. **W0 — Wire workflow + report:** add policy to `.github/workflows/ml-live-shadow.yml`; extend `koel/ml/live_shadow_report.py` with net@112, RankIC, and concentration columns for the new policy ID.
+2. **W3 — Complete relative/h3 nested baseline trio:** mirror h5 protocol on current matrix; output `cpu_exhaust_rel_h3_summary.json` + selective/cost sidecars before declaring horizon lever closed.
 
-3. **W0 — Loop 0 packet:** create `docs/experiments/ML_SHADOW_DE_PERSIST_WIRE_YYYYMMDD.md` with policy spec, offline +0.49% reference, safety checklist; update `ML_CHAMPION_TABLE.md` row from "proposed" to "wired (prospective)".
+3. **W2 — liq_v2 softer filter manifest + nested trio:** relax ADV/flat/session thresholds to avoid >50% session loss; freeze manifest; nested relative/h1 baseline trio only (no W5 until materiality).
 
-4. **W1 — Spec `feature_pack_v1` column manifest:** PR adding liquidity/regime/sector-relative/event columns in `koel/ml/features.py` or `research_features.py` with `feature_schema_version` in snapshot export; no wide search until baseline trio completes.
+4. **Goal A — Selective 90% chase:** on any new matrix (liq_v2, h3, or fp revision) that improves RankIC, net@112, or emit count, re-run selective grid at fixed coverage before bounded search.
 
-5. **W3 — Launch relative/h5 nested baseline trio:** run nested protocol mirroring h1 exhaust (same folds, embargo, split-adjusted bars), output `cpu_exhaust_rel_h5_summary.json` + selective/cost sidecars before any h5 W5 search.
+5. **W5 — Hold:** do **not** start bounded ≤2k search until a declared new `matrix_id` clears W1/W3 materiality thresholds; fpv1, liq_v1, fp+liq, h5, and CSE-only paths are **killed**.
 
 ---
 

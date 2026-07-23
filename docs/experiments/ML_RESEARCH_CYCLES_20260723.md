@@ -209,3 +209,25 @@ W3 h5 nested artifacts before W5 search.
 - Verdict: combined matrix killed; no W5 merge; liq_v1 preset retired
 - Champions unchanged; SuccessContract **still unmet**
 
+
+## Status block — W0–W4 ledger (2026-07-23 evening)
+
+**Promotion still blocked.** Champions unchanged: RankIC `xgb_two_stage` rel/h1
+**0.2861**; cost DE persist split **+0.49%** @112; selective near-miss **0.770 /
+0.681 / 74 emits**.
+
+| Item | Verdict |
+|---|---|
+| W0 DE-persist shadow | Wired + report row; partial canary **14 legs** only — need **≥60 non-partial** sessions |
+| W1 fpv1 nested | **Killed** — RankIC Δ **−0.0007**; no W1 materiality |
+| W2 liq_v1 | **Killed** — 93% sample collapse; 0 selective emits |
+| fp+liq combo | **Killed** with liq_v1 |
+| W3 h5 | **Done, no unlock** — RankIC ~0.17; selective 0; cost negative |
+| W4 CSE-only | **Killed** — ~1y history insufficient for nested splits |
+
+**In flight / next:** h3 nested; liq_v2 softer filter; Goal A selective-90% chase on
+any improving matrix; W5 only after new `matrix_id` materiality; W6 dossier **not**
+started — **not truly exhausted** (E7–E8 open).
+
+Research only — not financial advice.
+
