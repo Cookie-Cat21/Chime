@@ -14,6 +14,7 @@ import {
   MAX_FINITE_NUMBER_STRING_LENGTH,
   toFiniteNumber,
 } from "@/lib/api/finite-number";
+import { SQL_EXCLUDE_FIXTURE_STOCKS } from "@/lib/api/fixture-stock";
 import { escapeLikePattern } from "@/lib/api/market-query";
 import { normalizeSymbol } from "@/lib/api/symbol";
 import { toIso } from "@/lib/api/time";
@@ -76,7 +77,8 @@ function browseFromWhere(opts: BrowseFilter): {
   params: unknown[];
 } {
   const params: unknown[] = [];
-  const whereParts: string[] = [];
+  // Always drop pytest fixture pollution (TEST CO / digit-root tickers).
+  const whereParts: string[] = [SQL_EXCLUDE_FIXTURE_STOCKS];
   // Fail closed — non-string q used to throw on .trim mid browse (parity
   // normalizeMarketQuery typeof / firstSearchParam guards).
   const q = typeof opts.q === "string" ? opts.q.trim() : "";
@@ -114,8 +116,7 @@ function browseFromWhere(opts: BrowseFilter): {
        ORDER BY ts DESC, id DESC
        LIMIT 1
      ) ps ON TRUE`;
-  const whereSql =
-    whereParts.length > 0 ? `WHERE ${whereParts.join(" AND ")}` : "";
+  const whereSql = `WHERE ${whereParts.join(" AND ")}`;
   return { fromSql, whereSql, params };
 }
 

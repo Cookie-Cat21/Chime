@@ -5,6 +5,7 @@ import {
   MAX_STOCK_SECTOR_LENGTH,
   sanitizeDisclosureText,
 } from "@/lib/api/disclosure-safe";
+import { isFixtureStock } from "@/lib/api/fixture-stock";
 import { toFiniteNumber } from "@/lib/api/market-browse";
 import { normalizeSymbol, normalizeSymbolParam } from "@/lib/api/symbol";
 import { toIso } from "@/lib/api/time";
@@ -30,6 +31,9 @@ export async function GET(request: NextRequest, context: RouteContext) {
   if (!symbol) {
     return jsonError(400, "invalid_symbol", "Invalid symbol.");
   }
+  if (isFixtureStock(symbol)) {
+    return jsonError(404, "not_found", "Unknown symbol.");
+  }
 
   try {
     const pool = getPool();
@@ -44,6 +48,9 @@ export async function GET(request: NextRequest, context: RouteContext) {
     }
 
     const row = stock.rows[0];
+    if (isFixtureStock(row.symbol, row.name)) {
+      return jsonError(404, "not_found", "Unknown symbol.");
+    }
     const snap = await pool.query<{
       price: number;
       change: number | null;
