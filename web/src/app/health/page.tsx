@@ -1137,45 +1137,86 @@ export default async function HealthPage() {
               </h2>
               {payload.poller == null ? (
                 <div className="mt-3 space-y-3 text-sm text-muted-foreground">
-                  <p>
-                    No live poller <em>process</em> flags. On Vercel this is
-                    expected —
-                    <code className="mx-1 font-mono text-xs">HEALTH_URL</code>
-                    only proxies loopback (
-                    <code className="font-mono text-xs">127.0.0.1</code>
-                    ). Tick age above uses the latest{" "}
-                    <code className="font-mono text-xs">poller</code> /{" "}
-                    <code className="font-mono text-xs">cse_ws</code> row in
-                    Postgres (from GitHub <code className="font-mono text-xs">market-tick</code>{" "}
-                    or a host running <code className="font-mono text-xs">koel ws</code>
-                    ).
-                  </p>
-                  {payload.writers != null ? (
-                    <dl className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-                      <Row
-                        label="Last live write age"
-                        value={formatAge(
-                          timestampAge(payload.writers.last_live_at),
-                        )}
-                      />
-                      <Row
-                        label="Order-book sample age"
-                        value={formatAge(
-                          timestampAge(payload.writers.last_order_book_at),
-                        )}
-                      />
-                    </dl>
-                  ) : null}
-                  {!opsDetail ? (
-                    <p>
-                      Telegram delivery / model blocks also need your Telegram
-                      id in{" "}
-                      <code className="font-mono text-xs">
-                        DASH_OPS_TELEGRAM_IDS
-                      </code>
-                      .
-                    </p>
-                  ) : null}
+                  {(() => {
+                    const liveAge = timestampAge(
+                      payload.writers?.last_live_at,
+                    );
+                    const bookAge = timestampAge(
+                      payload.writers?.last_order_book_at,
+                    );
+                    const writersFresh = liveAge != null && !liveAge.stale;
+                    return (
+                      <>
+                        <p
+                          className={
+                            writersFresh
+                              ? "rounded-lg border border-emerald-500/30 bg-emerald-500/5 px-3 py-2 text-foreground"
+                              : "rounded-lg border border-border/70 bg-muted/40 px-3 py-2"
+                          }
+                        >
+                          {writersFresh ? (
+                            <>
+                              <span className="font-medium text-emerald-800 dark:text-emerald-300">
+                                Writers healthy
+                              </span>
+                              {" — "}
+                              prices are updating in Postgres. Vercel has no
+                              long-running poller process (that is normal);
+                              freshness comes from GitHub{" "}
+                              <code className="font-mono text-xs">
+                                market-tick
+                              </code>{" "}
+                              and optional WebSocket ingest.
+                            </>
+                          ) : (
+                            <>
+                              No recent <code className="font-mono text-xs">poller</code>
+                              /
+                              <code className="font-mono text-xs">cse_ws</code>{" "}
+                              writes yet. Check the scheduled{" "}
+                              <code className="font-mono text-xs">
+                                market-tick
+                              </code>{" "}
+                              job above.
+                            </>
+                          )}
+                        </p>
+                        {payload.writers != null ? (
+                          <dl className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                            <Row
+                              label="Last live write age"
+                              value={formatAge(liveAge)}
+                            />
+                            <Row
+                              label="Order-book sample age"
+                              value={formatAge(bookAge)}
+                            />
+                          </dl>
+                        ) : null}
+                        {bookAge?.stale ||
+                        (bookAge &&
+                          liveAge &&
+                          bookAge.ageMs > liveAge.ageMs + 10 * 60_000) ? (
+                          <p className="text-xs">
+                            Order-book samples only come from HTTP{" "}
+                            <code className="font-mono">market-tick</code> (not
+                            the WebSocket). Age climbs between ticks (~every
+                            15m in session).
+                          </p>
+                        ) : null}
+                        {!opsDetail ? (
+                          <p className="text-xs">
+                            Optional: add your Telegram id to{" "}
+                            <code className="font-mono text-xs">
+                              DASH_OPS_TELEGRAM_IDS
+                            </code>{" "}
+                            for delivery / model blocks (not required for tape
+                            freshness).
+                          </p>
+                        ) : null}
+                      </>
+                    );
+                  })()}
                 </div>
               ) : (
                 <>
