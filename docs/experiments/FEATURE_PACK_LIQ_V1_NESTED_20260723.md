@@ -79,7 +79,7 @@ Retire liq_v1 preset unless thresholds are relaxed in a new manifest.
 | Model | Best variant | Net | Sessions |
 |---|---|---:|---:|
 | `double_ensemble_native` | `min_hold_5_top_bottom_10` | **−0.27%** | 78 |
-| `double_ensemble_native` | `persistence_exit_10_top_bottom_05` | −0.97% | 78 |
+| `double_ensemble_native` | `persistence_exit_10_top_bottom_05` | −0.66% | 78 |
 
 vs liq_v1-only best −0.40%; vs fpv1-only DE persist +0.53% — combined matrix
 strictly worse on both levers.
