@@ -29,6 +29,14 @@ LIQ_FILTER_V1 = FilterManifest(
     version="v1",
 )
 
+LIQ_FILTER_V2 = FilterManifest(
+    name="liq_v2",
+    min_adv20=100.0,
+    max_flat_fraction_60=0.50,
+    min_cse_sessions_60=10,
+    version="v2",
+)
+
 _CSE_FRACTION_60_INDEX = RESEARCH_FEATURE_NAMES.index("cse_fraction_60")
 
 
@@ -44,6 +52,21 @@ def passes_liq_filter_v1(
         bars_up_to_as_of,
         metadata_row=metadata_row,
         manifest=LIQ_FILTER_V1,
+    )
+
+
+def passes_liq_filter_v2(
+    symbol: str,
+    bars_up_to_as_of: list[DailyBar],
+    *,
+    metadata_row: ResearchBarMetadata | None = None,
+) -> bool:
+    """Return whether ``symbol`` passes LIQ_FILTER_V2 using visible bars only."""
+    return _passes_filter(
+        symbol,
+        bars_up_to_as_of,
+        metadata_row=metadata_row,
+        manifest=LIQ_FILTER_V2,
     )
 
 

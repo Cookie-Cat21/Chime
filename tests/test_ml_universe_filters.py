@@ -9,7 +9,13 @@ import pytest
 from koel.domain import DailyBar
 from koel.ml.dataset import Sample
 from koel.ml.research_features import ResearchBarMetadata
-from koel.ml.universe_filters import LIQ_FILTER_V1, filter_samples, passes_liq_filter_v1
+from koel.ml.universe_filters import (
+    LIQ_FILTER_V1,
+    LIQ_FILTER_V2,
+    filter_samples,
+    passes_liq_filter_v1,
+    passes_liq_filter_v2,
+)
 
 
 def _bars(
@@ -110,6 +116,21 @@ def test_filter_samples_does_not_count_future_volume() -> None:
     )
 
     assert filtered == [after_future_volume]
+
+
+def test_liq_filter_v2_manifest_thresholds_are_frozen() -> None:
+    assert LIQ_FILTER_V2.name == "liq_v2"
+    assert LIQ_FILTER_V2.version == "v2"
+    assert LIQ_FILTER_V2.min_adv20 == pytest.approx(100.0)
+    assert LIQ_FILTER_V2.max_flat_fraction_60 == pytest.approx(0.50)
+    assert LIQ_FILTER_V2.min_cse_sessions_60 == 10
+
+
+def test_passes_liq_filter_v2_accepts_milder_adv20_than_v1() -> None:
+    bars = _bars(count=60, volumes=[500.0] * 60)
+
+    assert passes_liq_filter_v2("TEST.N0000", bars)
+    assert not passes_liq_filter_v1("TEST.N0000", bars)
 
 
 def test_passes_liq_filter_v1_uses_optional_metadata_flat_fraction() -> None:

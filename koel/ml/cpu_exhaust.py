@@ -57,7 +57,12 @@ from koel.ml.research_features import (
 )
 from koel.ml.research_fundamentals import enrich_fundamentals
 from koel.ml.snapshot import load_bar_snapshot
-from koel.ml.universe_filters import LIQ_FILTER_V1, FilterManifest, filter_samples
+from koel.ml.universe_filters import (
+    LIQ_FILTER_V1,
+    LIQ_FILTER_V2,
+    FilterManifest,
+    filter_samples,
+)
 
 BASELINE_RANK_IC = 0.2526
 
@@ -131,7 +136,9 @@ def _resolve_universe_filter(value: str) -> FilterManifest | None:
         return None
     if normalized == LIQ_FILTER_V1.name:
         return LIQ_FILTER_V1
-    raise ValueError("universe_filter must be '' or 'liq_v1'")
+    if normalized == LIQ_FILTER_V2.name:
+        return LIQ_FILTER_V2
+    raise ValueError("universe_filter must be '', 'liq_v1', or 'liq_v2'")
 
 
 def _partition_metrics(rows: list[Sample], scores: list[float]) -> dict[str, Any]:
@@ -1048,7 +1055,7 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument(
         "--universe-filter",
         default="",
-        choices=("", "liq_v1"),
+        choices=("", "liq_v1", "liq_v2"),
         help="Optional training universe filter; default keeps frozen champion matrix",
     )
     args = parser.parse_args(argv)
