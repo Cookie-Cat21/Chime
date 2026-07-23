@@ -188,3 +188,15 @@ W3 h5 nested artifacts before W5 search.
 - Verdict: CSE-only matrix **killed** for champion comparison; retain full matrix
 - Champions unchanged; SuccessContract **still unmet**
 
+### Cycle — W2 liq_v1 universe filter killed (2026-07-23)
+
+- Evidence: `UNIVERSE_FILTER_LIQ_V1_NESTED_20260723.md`, `cpu_exhaust_rel_h1_liqv1_summary.json`
+- Filter: ADV20 ≥1000, flat60 ≤0.40, min CSE sessions 20
+- Sample collapse: 502908 → 32535 rows (−93.5%); nested sessions 117 → 78
+- xgb/hgb: screen fail (insufficient train/test samples)
+- DE partial RankIC: 0.1813 (2/3 folds) vs frozen 0.2566
+- Selective: 0 emits (vs frozen xgb 74 / 0.770 prec)
+- Cost best: DE min_hold_5 −0.40% net@112 (no persistence flip)
+- Verdict: W2 kill criteria fired; preset rejected; fp+liq combo running
+- Champions unchanged; SuccessContract **still unmet**
+
