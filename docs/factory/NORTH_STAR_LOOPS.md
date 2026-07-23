@@ -44,8 +44,13 @@ RankIC alone is not enough.
 - Post-cost spread at 112 bps must be positive for the promoted operating
   slice.
 
-Current state: **not met**. The completed CPU exhaust artifacts show
-post-cost @112 bps is still negative for completed nested survivors.
+Current state: **not met** for user promotion. Daily 10% post-cost @112 bps
+is negative for nested survivors without persistence construction. Split-adjusted
+persistence confirms +net for `double_ensemble_native`
+(`persistence_exit_10_top_bottom_05`, +0.49% @112bps —
+`ML_SPLIT_ADJUSTED_RESCORE_20260723.md`) but selective 90% contract still
+fails (`SELECTIVE_GATES_20260723.md`); ensemble blends and improve-loop
+6×1000 also exhausted (`ENSEMBLE_STACK_20260723.md`, `CPU_IMPROVE_6K_20260723.md`).
 
 ## Loop 0 - Evidence daily automated
 
@@ -109,6 +114,15 @@ Kill criteria:
   @112 bps negative.
 - Retire an approach that depends on a known artifact such as flat-price
   concentration, partition leakage, or test-time retuning.
+
+**Loop 1 status (2026-07-23): levers 1–4 resolved.** (1) split adjustment
+**done + verified** — snapshot + nested re-score complete; (2) cost/turnover
+**+net@112 verified on split-adjusted bars** (DE persist +0.49%); (3) selective
+gates **exhausted**; (4) ensembles **exhausted**; improve-loop 6×1000
+**exhausted** (best RankIC 0.2746). Proposed Loop 0 review-only shadow ID:
+`shadow_policy_rank_de_persist_v1` — not wired into `live_shadow.py`.
+Next levers: Loop 0 policy packet, then features (5) or horizons (6). Loop 0
+(evidence refresh) continues daily. See `docs/experiments/ML_CHAMPION_TABLE.md`.
 
 ## Loop 2 - Promotion
 
