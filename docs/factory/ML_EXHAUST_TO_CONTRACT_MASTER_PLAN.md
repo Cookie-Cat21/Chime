@@ -13,6 +13,7 @@ needed**).
 | Workstream | State | Headline |
 |---|---|---|
 | **W0** Loop 0 DE-persist shadow | **Partial** | Wired + `live_shadow_report` book-policy row; partial canary **14 legs** (`DE_PERSIST_CANARY_20260723.md`); no non-partial receipts yet |
+| **W0b** Loop 0 h3 weekly shadow | **Wired** | `shadow_policy_rank_de_h3_weekly_v1`; relative/h3 DE + weekly_5_sessions_top_bottom_05; no non-partial receipts yet |
 | **W1** feature_pack_v1 | **Killed (no materiality)** | Nested fpv1: best RankIC Δ **−0.0007** vs frozen 0.2861; selective/cost below W1 thresholds (`FEATURE_PACK_V1_NESTED_20260723.md`) |
 | **W2** liq_v1 universe filter | **Killed** | Sample collapse **−93.5%**; xgb/hgb screen fail; 0 selective emits (`UNIVERSE_FILTER_LIQ_V1_NESTED_20260723.md`) |
 | **W2+W1** fp+liq combo | **Killed** | Same 32 535-row ceiling; DE partial RankIC 0.1779; retired with liq_v1 (`FEATURE_PACK_LIQ_V1_NESTED_20260723.md`) |
@@ -51,7 +52,7 @@ needed**).
 
 **Still open (not exhausted):**
 
-- W0 prospective shadow — wired; need **≥60 non-partial scored sessions**
+- W0 prospective shadow — h1 DE-persist and h3 weekly wired; need **≥60 non-partial scored sessions**
 - W1 feature revisions beyond fpv1 if a new matrix lands
 - W5 bounded search — **only** after a new `matrix_id` clears materiality
 - Goal A selective-90% chase on any improving matrix
@@ -98,6 +99,13 @@ Workstreams prioritize in this order. Lower tiers never override higher-tier kil
 - Policy ID: `shadow_policy_rank_de_persist_v1` (**wired** in `live_shadow.py`; partial canary only).
 - Model: `double_ensemble_native` with `persistence_exit_10_top_bottom_05` book on **relative/h1** scores.
 - Offline reference: **+0.49%** net@112bps on split-adjusted bars (`ML_SPLIT_ADJUSTED_RESCORE_20260723.md`).
+- Secondary policy ID: `shadow_policy_rank_de_h3_weekly_v1` (**wired** in
+  `live_shadow.py`; no receipts yet).
+- Secondary model/book: `double_ensemble_native` with
+  `weekly_5_sessions_top_bottom_05` on **relative/h3** scores; rebuild when
+  `session_index % 5 == 0`, otherwise re-emit prior sides with incremented ages.
+- Secondary offline reference: **+0.27%** net@112bps on split-adjusted h3 bars
+  (`ML_H3_WEEKLY_COST_20260723.md`).
 - Purpose: accumulate **honest forward receipts** while feature/horizon work continues; cost shadow does **not** substitute for selective 90%.
 
 **Win condition:** ≥60 scored sessions, positive net@112 on shadow aggregate, concentration within contract caps, no partial-session contamination in standards.

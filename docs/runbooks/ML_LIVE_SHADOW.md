@@ -31,7 +31,8 @@ Until the scoped role is configured, the workflow falls back to the existing
    - all eligible-company absolute direction from three fixed policies
      (`xgb_two_stage`, `hgb_two_stage`, `xgb_domain`);
    - top-0.5% confidence challenger;
-   - displayed-book + signed-volume pressure overlay.
+   - displayed-book + signed-volume pressure overlay;
+   - Loop-0 rank-book evidence policies.
 4. Score prior outcomes whose future sessions now exist.
 5. Write the prospective standards report and upload all run evidence.
 
@@ -90,6 +91,12 @@ Current base policies:
   emits book legs only with gates `shadow_persist_book` /
   `shadow_partial_persist_book`; offline split-adjusted reference
   +0.49% net@112bps — not user-facing)
+- `shadow_policy_rank_de_h3_weekly_v1` (Loop 0 only: relative/h3
+  `double_ensemble_native` + `weekly_5_sessions_top_bottom_05` book;
+  emits book legs only with gates `shadow_h3_weekly_book` /
+  `shadow_partial_h3_weekly_book`; rebuilds the book when
+  `session_index % 5 == 0`, otherwise re-emits prior sides with incremented
+  ages; offline split-adjusted reference +0.27% net@112bps — not user-facing)
 
 The report compares policies automatically. Passing a standard only makes a
 policy review-eligible; it does not write `forecast_points` or send alerts.
@@ -138,5 +145,9 @@ when matured), RankIC, net@112 (`post_cost_mean_return`), and concentration
 (`contract_met`) is `null` for book policies; `rank_book_contract_met` is a
 reserved stub for a future rank-book qualification gate — not the abs-direction
 standard above.
+
+`shadow_policy_rank_de_h3_weekly_v1` uses the same report treatment. Its
+`horizon_days` is 3, and partial canaries use `shadow_partial_h3_weekly_book`;
+non-partial evidence uses `shadow_h3_weekly_book`.
 
 Research only — not financial advice.

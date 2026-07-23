@@ -179,3 +179,36 @@ def test_persist_book_gate_detected_as_book_policy() -> None:
     assert metrics.contract_met is None
     assert metrics.scored == 0
     assert metrics.precision is None
+
+
+def test_h3_weekly_book_policy_tabulated_without_success_contract() -> None:
+    rows = [
+        {
+            "model_id": "shadow_policy_rank_de_h3_weekly_v1",
+            "model_version": "shadow_policy_rank_de_h3_weekly_v1__2026-07-01__abc",
+            "symbol": "AAA.N0000",
+            "issued_at": date(2026, 1, 1),
+            "gate": "shadow_h3_weekly_book",
+            "scored": False,
+            "hit": None,
+            "y_pred": 0.2,
+            "confidence": 0.4,
+        },
+        {
+            "model_id": "shadow_policy_rank_de_h3_weekly_v1",
+            "model_version": "shadow_policy_rank_de_h3_weekly_v1__2026-07-01__abc_partial",
+            "symbol": "BBB.N0000",
+            "issued_at": date(2026, 1, 1),
+            "gate": "shadow_partial_h3_weekly_book",
+            "scored": False,
+            "hit": None,
+        },
+    ]
+
+    metrics = summarize_shadow_rows(rows)[0]
+
+    assert metrics.policy_id == "shadow_policy_rank_de_h3_weekly_v1"
+    assert metrics.book_policy is True
+    assert metrics.rows == 1
+    assert metrics.contract_met is None
+    assert metrics.rank_book_contract_met is None

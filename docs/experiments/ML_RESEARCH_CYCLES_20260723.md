@@ -274,6 +274,7 @@ Research only — not financial advice.
 - RankIC best 0.2285 < h1 champion — horizon does not beat h1 score quality
 - Selective: unmet (hgb 91/0.681/LCB 0.597)
 - Cost: DE `weekly_5_sessions_top_bottom_05` **+0.27%** net@112 (offline)
-- Proposed shadow ID (unwired): `shadow_policy_rank_de_h3_weekly_v1`
-- Next: wire h3 weekly shadow after h1 DE-persist receipts accumulate; liq_v3 in flight
+- Shadow ID wired for Loop 0 ledger only: `shadow_policy_rank_de_h3_weekly_v1`
+- Next: accumulate h1 DE-persist and h3 weekly non-partial receipts; Goal A
+  SuccessContract unchanged and still unmet
 

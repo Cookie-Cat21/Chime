@@ -22,14 +22,21 @@ from koel.ml.metrics import (
 )
 from koel.storage import Storage
 
-BOOK_POLICY_ID = "shadow_policy_rank_de_persist_v1"
+BOOK_POLICY_IDS = {
+    "shadow_policy_rank_de_persist_v1",
+    "shadow_policy_rank_de_h3_weekly_v1",
+}
 
 
 def is_book_policy(policy_id: str, model_rows: list[dict[str, Any]]) -> bool:
     """Loop-0 rank book policies use RankIC / net@112 — not the 90% hit contract."""
-    if policy_id == BOOK_POLICY_ID:
+    if policy_id in BOOK_POLICY_IDS:
         return True
-    return any("persist_book" in str(row.get("gate") or "") for row in model_rows)
+    return any(
+        "persist_book" in str(row.get("gate") or "")
+        or "h3_weekly_book" in str(row.get("gate") or "")
+        for row in model_rows
+    )
 
 
 @dataclass(frozen=True, slots=True)

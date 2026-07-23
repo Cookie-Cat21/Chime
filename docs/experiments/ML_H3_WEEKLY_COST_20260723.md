@@ -11,16 +11,19 @@ On split-adjusted nested relative/**h3** scores, portfolio construction
 This is a **different** operating slice than h1 `persistence_exit_10_top_bottom_05`
 (+0.49% offline). It does **not** meet selective 90% SuccessContract.
 
-## Proposed Loop 0 policy (review packet)
+## Wired Loop 0 policy (review packet)
 
 - ID: `shadow_policy_rank_de_h3_weekly_v1`
 - Target/horizon: relative / 3
 - Model: `double_ensemble_native`
 - Book: rebalance every 5 sessions, top/bottom 5%
-- Status: **not wired** into `live_shadow.py` yet (needs h3 sample path +
-  weekly state). Do not replace existing abs or h1 DE-persist policies.
+- Status: **wired** into `live_shadow.py` as ledger-only Goal B evidence.
+  `live_shadow` trains relative/h3 samples only on weekly rebalance sessions;
+  non-rebalance sessions re-emit prior book sides with incremented ages. Do not
+  replace existing abs or h1 DE-persist policies.
 
 ## Gates
 
 - SuccessContract: unmet
 - User surfaces: blocked
+- Forecast surface: blocked (`forecast_outcomes` only; no `forecast_points`)

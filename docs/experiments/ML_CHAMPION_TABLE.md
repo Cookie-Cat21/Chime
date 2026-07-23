@@ -106,6 +106,12 @@ cycle 0) < champion 0.2861; best net@112 −0.49%; **no pos112**. See
   `docs/factory/ML_EXHAUST_TO_CONTRACT_MASTER_PLAN.md` §W0; runbook
   `docs/runbooks/ML_LIVE_SHADOW.md`. Prospective receipts pending (≥60 scored
   sessions not yet accumulated).
+- Policy ID `shadow_policy_rank_de_h3_weekly_v1` — **wired for Loop 0 ledger**
+  in `koel/ml/live_shadow.py` (`horizon_days=3`, gates
+  `shadow_h3_weekly_book` / `shadow_partial_h3_weekly_book`). Weekly cadence:
+  rebuild when `session_index % 5 == 0`, otherwise re-emit prior book sides
+  with incremented ages. Offline h3 reference +0.27% net@112bps; still not
+  user-facing and **does not** satisfy the selective 90% SuccessContract.
 - No `forecast_points`, Signal Board, or Telegram promotion from these
   results.
 
@@ -226,7 +232,8 @@ Offline nested relative/**h3** (split snapshot): RankIC still below h1 champion
 | `double_ensemble_native` | `weekly_5_sessions_top_bottom_05` | **+0.27%** | 1.03% | 0.340 | 111 |
 | `xgb_two_stage` | same | +0.04% | 0.87% | 0.370 | 111 |
 
-Proposed review-only Loop 0 ID (not wired yet):
+Review-only Loop 0 ID now wired:
 `shadow_policy_rank_de_h3_weekly_v1` — relative/h3 DE + weekly 5-session
-top/bottom 5% book. Does **not** replace h1 DE-persist (+0.49%) or clear
-selective 90%. See `CPU_EXHAUST_REL_H3_20260723.md` / post summary.
+top/bottom 5% book. It does **not** replace h1 DE-persist (+0.49%) or clear
+selective 90%. See `CPU_EXHAUST_REL_H3_20260723.md`,
+`ML_H3_WEEKLY_COST_20260723.md`, and `docs/runbooks/ML_LIVE_SHADOW.md`.

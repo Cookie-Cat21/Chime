@@ -169,6 +169,23 @@ CHALLENGERS: tuple[ChallengerSpec, ...] = (
             "net@112bps +0.49%; not user-facing until global gates pass"
         ),
     ),
+    ChallengerSpec(
+        key="de_h3_weekly_native",
+        family="Native DoubleEnsemble + h3 weekly book",
+        repository="https://github.com/ArdenoStudio/Koel",
+        revision="50400d9bd4bf5a9e0e7945ef34d536b35ecdc8ed",
+        license=None,
+        compute="cpu",
+        target="rank_return_h3",
+        policy_id="shadow_policy_rank_de_h3_weekly_v1",
+        status="loop0_shadow_wired",
+        blocker=(
+            "Loop-0 ledger only: relative/h3 double_ensemble_native with "
+            "weekly_5_sessions_top_bottom_05; offline split-adjusted "
+            "net@112bps +0.27%; not user-facing and does not meet the "
+            "selective 90% SuccessContract"
+        ),
+    ),
 )
 
 

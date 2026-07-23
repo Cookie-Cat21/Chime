@@ -4,10 +4,15 @@ from __future__ import annotations
 
 from datetime import UTC, date, datetime
 
+import pytest
+
 from koel.domain import DailyBar, PriceSnapshot
+from koel.ml.cost_engineering import BookState
 from koel.ml.live_shadow import (
     append_live_board,
+    carry_forward_book,
     policy_instance_version,
+    should_rebuild_weekly_book,
     summarize_pressure_factors,
 )
 
@@ -97,6 +102,28 @@ def test_policy_instance_version_binds_snapshot_and_revision() -> None:
     )
 
 
+def test_weekly_book_cadence_rebuilds_every_five_sessions() -> None:
+    assert should_rebuild_weekly_book(0) is True
+    assert should_rebuild_weekly_book(1) is False
+    assert should_rebuild_weekly_book(4) is False
+    assert should_rebuild_weekly_book(5) is True
+
+    with pytest.raises(ValueError, match="session_index"):
+        should_rebuild_weekly_book(-1)
+
+
+def test_carry_forward_book_keeps_sides_and_increments_ages() -> None:
+    carried = carry_forward_book(
+        BookState(
+            weights={"AAA.N0000": 0.5, "BBB.N0000": -0.5},
+            holding_ages={"AAA.N0000": 3},
+        )
+    )
+
+    assert carried.weights == {"AAA.N0000": 0.5, "BBB.N0000": -0.5}
+    assert carried.holding_ages == {"AAA.N0000": 4, "BBB.N0000": 2}
+
+
 def test_parse_holding_age_from_regime_tag() -> None:
     from koel.ml.live_shadow import _parse_holding_age
 
@@ -170,6 +197,10 @@ def test_relative_training_samples_demean_and_drop_flats() -> None:
     )
     samples = _relative_training_samples(loaded)
     assert samples
+    assert {sample.horizon for sample in samples} == {1}
+    h3_samples = _relative_training_samples(loaded, horizon=3)
+    assert h3_samples
+    assert {sample.horizon for sample in h3_samples} == {3}
     # Relative labels should be demeaned within day => mean y_ret ~0 per day
     from collections import defaultdict
     from statistics import fmean

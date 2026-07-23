@@ -20,6 +20,7 @@ from koel.domain import DailyBar, PriceSnapshot
 from koel.ml.cost_engineering import (
     PERSIST_EXIT_10_TOP_BOTTOM_05,
     BookState,
+    PortfolioVariant,
     book_state_from_signed_scores,
     construct_session_book,
 )
@@ -53,6 +54,12 @@ POLICY_PRESSURE = "shadow_policy_abs_xgb2_pressure_v1"
 POLICY_RANK_DE_PERSIST = "shadow_policy_rank_de_persist_v1"
 POLICY_RANK_DE_MODEL = "double_ensemble_native"
 POLICY_RANK_DE_VARIANT = PERSIST_EXIT_10_TOP_BOTTOM_05
+POLICY_RANK_DE_H3_WEEKLY = "shadow_policy_rank_de_h3_weekly_v1"
+POLICY_RANK_DE_H3_WEEKLY_VARIANT = PortfolioVariant(
+    "weekly_5_sessions_top_bottom_05",
+    fraction=0.05,
+    rebalance_every=5,
+)
 
 
 @dataclass(frozen=True, slots=True)
@@ -74,6 +81,13 @@ class PressureFactors:
     book_persistence: float
     book_slope: float
     signed_volume_proxy: float
+
+
+@dataclass(frozen=True, slots=True)
+class WeeklyBookLedgerState:
+    session_index: int
+    book: BookState | None
+    signed_scores: dict[str, float]
 
 
 def append_live_board(
@@ -113,6 +127,7 @@ def _latest_samples(
     trade_date: date,
     min_history: int,
     max_flat_fraction: float,
+    horizon: int = 1,
 ) -> list[Sample]:
     metadata = build_research_bar_metadata(series, dataset=loaded.manifest.dataset)
     base: list[Sample] = []
@@ -139,7 +154,7 @@ def _latest_samples(
                 x=features.values,
                 y_ret=0.0,
                 y_dir=0.0,
-                horizon=1,
+                horizon=horizon,
             )
         )
     enriched = enrich_research_quality(base, metadata)
@@ -170,15 +185,19 @@ def _training_samples(loaded: LoadedSnapshot) -> list[Sample]:
     return _enrich_cross_section(samples)
 
 
-def _relative_training_samples(loaded: LoadedSnapshot) -> list[Sample]:
-    """Relative/h1 panel matching offline DE-persist champion training."""
+def _relative_training_samples(
+    loaded: LoadedSnapshot,
+    *,
+    horizon: int = 1,
+) -> list[Sample]:
+    """Relative panel matching offline DE book-policy training."""
     metadata = build_research_bar_metadata(
         loaded.series,
         dataset=loaded.manifest.dataset,
     )
     samples = build_samples(
         loaded.series,
-        horizon=1,
+        horizon=horizon,
         min_history=252,
         max_abs_return=0.35,
         include_flat=False,
@@ -190,6 +209,30 @@ def _relative_training_samples(loaded: LoadedSnapshot) -> list[Sample]:
     samples = enrich_fundamentals(samples, loaded.fundamentals)
     samples = enrich_market_context(samples)
     return _enrich_cross_section(samples)
+
+
+def should_rebuild_weekly_book(
+    session_index: int,
+    *,
+    rebalance_every: int = POLICY_RANK_DE_H3_WEEKLY_VARIANT.rebalance_every,
+) -> bool:
+    """Return true when the zero-based live issue session starts a new weekly book."""
+    if session_index < 0:
+        raise ValueError("session_index must be >= 0")
+    if rebalance_every < 1:
+        raise ValueError("rebalance_every must be >= 1")
+    return session_index % rebalance_every == 0
+
+
+def carry_forward_book(book: BookState) -> BookState:
+    """Re-emit the prior weekly book with unchanged weights and incremented ages."""
+    return BookState(
+        weights=dict(book.weights),
+        holding_ages={
+            symbol: book.holding_ages.get(symbol, 1) + 1
+            for symbol in book.weights
+        },
+    )
 
 
 def _parse_holding_age(regime_tag: str | None) -> int:
@@ -257,6 +300,72 @@ async def load_prior_persist_book(
     if not signed:
         return None
     return book_state_from_signed_scores(signed, previous_ages=ages)
+
+
+async def load_prior_weekly_book(
+    storage: Storage,
+    *,
+    policy_id: str,
+    before: date,
+) -> WeeklyBookLedgerState:
+    """Load the latest non-partial weekly shadow book and its cadence index."""
+    final_gate = "shadow_h3_weekly_book"
+    async with storage._pool.connection() as conn:
+        state = await (
+            await conn.execute(
+                """
+                SELECT COUNT(DISTINCT issued_at) AS session_count,
+                       MAX(issued_at) AS issued_at
+                FROM forecast_outcomes
+                WHERE model_id = %s
+                  AND issued_at < %s
+                  AND gate = %s
+                """,
+                (policy_id, before, final_gate),
+            )
+        ).fetchone()
+        session_index = (
+            int(state["session_count"])
+            if state is not None and state["session_count"] is not None
+            else 0
+        )
+        if state is None or state["issued_at"] is None:
+            return WeeklyBookLedgerState(
+                session_index=session_index,
+                book=None,
+                signed_scores={},
+            )
+        rows = await (
+            await conn.execute(
+                """
+                SELECT symbol, y_pred, regime_tag
+                FROM forecast_outcomes
+                WHERE model_id = %s
+                  AND issued_at = %s
+                  AND gate = %s
+                ORDER BY symbol
+                """,
+                (policy_id, state["issued_at"], final_gate),
+            )
+        ).fetchall()
+    signed = {
+        str(row["symbol"]).strip().upper(): float(row["y_pred"])
+        for row in rows
+        if row["y_pred"] is not None and math.isfinite(float(row["y_pred"]))
+    }
+    ages = {
+        str(row["symbol"]).strip().upper(): _parse_holding_age(
+            str(row["regime_tag"]) if row["regime_tag"] is not None else None
+        )
+        for row in rows
+    }
+    return WeeklyBookLedgerState(
+        session_index=session_index,
+        book=book_state_from_signed_scores(signed, previous_ages=ages)
+        if signed
+        else None,
+        signed_scores=signed,
+    )
 
 
 def summarize_pressure_factors(
@@ -616,6 +725,98 @@ async def run_live_shadow(
                 )
             de_persist_count = await emit_shadow_outcome_rows(storage, de_rows)
         policy_emits[POLICY_RANK_DE_PERSIST] = de_persist_count
+
+    # Loop-0 relative/h3 DE + weekly 5-session book (ledger only).
+    weekly_prior = await load_prior_weekly_book(
+        storage,
+        policy_id=POLICY_RANK_DE_H3_WEEKLY,
+        before=now.date(),
+    )
+    weekly_rebuild = (
+        should_rebuild_weekly_book(weekly_prior.session_index)
+        or weekly_prior.book is None
+    )
+    h3_weekly_count = 0
+    h3_scores_by_symbol: dict[str, float] = {}
+    h3_book: BookState | None = None
+    if weekly_rebuild:
+        h3_train = _relative_training_samples(loaded, horizon=3)
+        if len(h3_train) >= 100:
+            h3_latest = _latest_samples(
+                series=live_series,
+                loaded=loaded,
+                trade_date=now.date(),
+                min_history=min_history,
+                max_flat_fraction=max_flat_fraction,
+                horizon=3,
+            )
+            h3_scores = _fit_predict_average(
+                model=POLICY_RANK_DE_MODEL,
+                train=h3_train,
+                test=h3_latest,
+                seeds=(0,),
+            )
+            h3_scores_by_symbol = {
+                sample.symbol: score
+                for sample, score in zip(h3_latest, h3_scores, strict=True)
+                if score != 0 and math.isfinite(score)
+            }
+            h3_book = construct_session_book(
+                h3_scores_by_symbol,
+                variant=POLICY_RANK_DE_H3_WEEKLY_VARIANT,
+            )
+    elif weekly_prior.book is not None:
+        h3_book = carry_forward_book(weekly_prior.book)
+        h3_scores_by_symbol = dict(weekly_prior.signed_scores)
+
+    h3_version = policy_instance_version(
+        policy_id=POLICY_RANK_DE_H3_WEEKLY,
+        snapshot_sha256=snapshot_sha,
+        issue_session=now.date(),
+        revision=revision,
+        partial=partial,
+    )
+    instance_versions[POLICY_RANK_DE_H3_WEEKLY] = h3_version
+    if h3_book is not None and h3_book.weights:
+        h3_rows: list[OutcomeEmit] = []
+        for symbol, weight in sorted(h3_book.weights.items()):
+            raw_score = h3_scores_by_symbol.get(symbol)
+            if raw_score is None or not math.isfinite(raw_score):
+                raw_score = weight
+            y_pred = math.copysign(
+                abs(raw_score) if raw_score != 0 else abs(weight),
+                weight,
+            )
+            h3_rows.append(
+                OutcomeEmit(
+                    model_id=POLICY_RANK_DE_H3_WEEKLY,
+                    model_version=h3_version,
+                    symbol=symbol,
+                    issued_at=now.date(),
+                    horizon_days=3,
+                    y_pred=y_pred,
+                    confidence=_confidence(raw_score),
+                    gate=(
+                        "shadow_partial_h3_weekly_book"
+                        if partial
+                        else "shadow_h3_weekly_book"
+                    ),
+                    regime_tag=(
+                        f"live_shadow|policy={POLICY_RANK_DE_H3_WEEKLY}"
+                        f"|variant={POLICY_RANK_DE_H3_WEEKLY_VARIANT.name}"
+                        f"|side={'long' if weight > 0 else 'short'}"
+                        f"|age={h3_book.holding_ages.get(symbol, 1)}"
+                        f"|w={weight:.6f}"
+                        f"|raw={raw_score:.6f}"
+                        f"|rebuilt={int(weekly_rebuild)}"
+                        f"|session_index={weekly_prior.session_index}"
+                        f"|partial={int(partial)}"
+                        f"|snapshot={snapshot_sha[:12]}"
+                    ),
+                )
+            )
+        h3_weekly_count = await emit_shadow_outcome_rows(storage, h3_rows)
+    policy_emits[POLICY_RANK_DE_H3_WEEKLY] = h3_weekly_count
 
     return LiveShadowResult(
         issued_at=now.date().isoformat(),
