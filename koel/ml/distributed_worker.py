@@ -19,6 +19,7 @@ from koel.ml.distributed import (
     _parse_csv_ints,
     write_prediction_artifact,
 )
+from koel.ml.feature_pack_v1 import enrich_feature_pack_v1 as _enrich_feature_pack_v1
 from koel.ml.features import FEATURE_NAMES
 from koel.ml.harden import _demean_by_day
 from koel.ml.iterate import _enrich_cross_section
@@ -447,6 +448,7 @@ def run_worker(
     max_abs_return: float,
     evaluation_domain: str,
     max_flat_fraction: float,
+    feature_pack: str = "",
 ) -> dict[str, int | str]:
     """Train calibration/test fits for one matrix shard and write predictions."""
     if evaluation_domain not in {"all", "cse", "yahoo"}:
@@ -471,6 +473,10 @@ def run_worker(
     research = enrich_research_quality(base, metadata)
     research = enrich_fundamentals(research, loaded.fundamentals)
     research = enrich_market_context(research)
+    if feature_pack.strip().lower() in {"v1", "feature_pack_v1"}:
+        research = _enrich_feature_pack_v1(
+            research, loaded.series, loaded.fundamentals
+        )
     if spec.target == "relative":
         research = _demean_by_day(research)
     samples = _enrich_cross_section(research)
@@ -592,6 +598,12 @@ def main(argv: list[str] | None = None) -> None:
     parser.add_argument("--min-history", type=int, default=252)
     parser.add_argument("--max-abs-return", type=float, default=0.35)
     parser.add_argument("--max-flat-fraction", type=float, default=0.40)
+    parser.add_argument(
+        "--feature-pack",
+        default="",
+        choices=("", "v1", "feature_pack_v1"),
+        help="Optional research feature pack; default keeps frozen matrix",
+    )
     args = parser.parse_args(argv)
     spec = ShardSpec(
         shard_id=args.shard_id,
@@ -615,6 +627,7 @@ def main(argv: list[str] | None = None) -> None:
         max_abs_return=args.max_abs_return,
         evaluation_domain=args.evaluation_domain,
         max_flat_fraction=args.max_flat_fraction,
+        feature_pack=args.feature_pack,
     )
     print(json.dumps(result, sort_keys=True))
 

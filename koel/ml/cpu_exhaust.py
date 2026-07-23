@@ -37,6 +37,7 @@ from koel.ml.distributed_worker import (
     _rows_for_dates,
     build_outer_split,
 )
+from koel.ml.feature_pack_v1 import enrich_feature_pack_v1 as _enrich_feature_pack_v1
 from koel.ml.harden import _demean_by_day
 from koel.ml.iterate import _enrich_cross_section
 from koel.ml.metrics import (
@@ -69,6 +70,7 @@ def _prepare_samples(
     target: str,
     min_history: int = 60,
     max_abs_return: float = 0.35,
+    feature_pack: str = "",
 ) -> tuple[list[Sample], dict, list[date], str]:
     loaded = load_bar_snapshot(snapshot_dir)
     metadata = build_research_bar_metadata(
@@ -87,6 +89,9 @@ def _prepare_samples(
     research = enrich_research_quality(base, metadata)
     research = enrich_fundamentals(research, loaded.fundamentals)
     research = enrich_market_context(research)
+    if feature_pack.strip().lower() in {"v1", "feature_pack_v1"}:
+        # New matrix_id — never silently alter the frozen champion feature set.
+        research = _enrich_feature_pack_v1(research, loaded.series, loaded.fundamentals)
     if target == "relative":
         research = _demean_by_day(research)
     samples = _enrich_cross_section(research)
@@ -772,16 +777,22 @@ def run_exhaust(
     skip_hyper: bool = False,
     models: tuple[str, ...] | None = None,
     resume: bool = False,
+    feature_pack: str = "",
 ) -> dict[str, Any]:
     output_dir.mkdir(parents=True, exist_ok=True)
     run_id = f"cpu-exhaust-{int(time.time())}"
     print(f"[exhaust] loading snapshot from {snapshot_dir}", flush=True)
     samples, metadata, dates, snapshot_sha = _prepare_samples(
-        snapshot_dir, horizon=horizon, target=target
+        snapshot_dir,
+        horizon=horizon,
+        target=target,
+        feature_pack=feature_pack,
     )
+    pack_tag = feature_pack.strip() or "none"
     print(
         f"[exhaust] samples={len(samples)} dates={len(dates)} "
-        f"sha={snapshot_sha[:16]}… target={target} h={horizon}",
+        f"sha={snapshot_sha[:16]}… target={target} h={horizon} "
+        f"feature_pack={pack_tag}",
         flush=True,
     )
     chosen_models = models or CPU_EXHAUST_MODELS
@@ -998,6 +1009,12 @@ def main(argv: list[str] | None = None) -> int:
         default="",
         help="Optional comma-separated subset; default = full CPU_EXHAUST_MODELS",
     )
+    parser.add_argument(
+        "--feature-pack",
+        default="",
+        choices=("", "v1", "feature_pack_v1"),
+        help="Optional research feature pack; default keeps frozen champion matrix",
+    )
     args = parser.parse_args(argv)
     models = (
         tuple(part.strip() for part in args.models.split(",") if part.strip())
@@ -1022,6 +1039,7 @@ def main(argv: list[str] | None = None) -> int:
         skip_hyper=args.skip_hyper,
         models=models,
         resume=args.resume,
+        feature_pack=args.feature_pack,
     )
     return 0
 

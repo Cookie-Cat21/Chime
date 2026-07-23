@@ -18,8 +18,8 @@ from zoneinfo import ZoneInfo
 from koel.adapters.cse import CSEClient
 from koel.domain import DailyBar, PriceSnapshot
 from koel.ml.cost_engineering import (
-    BookState,
     PERSIST_EXIT_10_TOP_BOTTOM_05,
+    BookState,
     book_state_from_signed_scores,
     construct_session_book,
 )
@@ -145,6 +145,8 @@ def _latest_samples(
     enriched = enrich_research_quality(base, metadata)
     enriched = enrich_fundamentals(enriched, loaded.fundamentals)
     enriched = enrich_market_context(enriched)
+    # Feature Pack v1 is intentionally NOT applied here: existing Loop-0 policy
+    # IDs must keep a frozen feature matrix. New fp policies get a new ID.
     return _enrich_cross_section(enriched)
 
 

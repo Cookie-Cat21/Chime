@@ -1,7 +1,9 @@
 # Feature Pack v1 — workstream spec (W1)
 
-Status: **skeleton / research-only** — helpers stubbed; not wired into
-`snapshot`, `dataset`, `live_shadow`, or training.
+Status: **research-only behind `--feature-pack v1`** on `cpu_exhaust` /
+`distributed_worker`. **Not** applied in `live_shadow` (frozen Loop-0
+policy matrices). Market-relative only (`fp_use_sector=0.0`; sector deferred).
+New policy IDs required before any fp live emit.
 
 Parent plan: [ML_EXHAUST_TO_CONTRACT_MASTER_PLAN.md](../factory/ML_EXHAUST_TO_CONTRACT_MASTER_PLAN.md) §W1.
 
