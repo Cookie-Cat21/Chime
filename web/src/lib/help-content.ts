@@ -82,7 +82,7 @@ export const HELP_TOPICS: readonly HelpTopic[] = [
       {
         question: "Why is a quote missing or stale?",
         answer:
-          "Common causes: symbol not on any watchlist (poller only persists watched names for some paths), market closed, poller idle outside 09:30–14:30 Asia/Colombo weekdays, or a CSE fetch failure.\n\nOpen Health for poller status and snapshot age. Symbol pages also show data-quality notices when rows are empty or old — see Data quality.",
+          "The dash only re-reads Postgres — it does not stream CSE in the browser. Freshness tracks whoever writes `price_snapshots`: HTTP `koel poller`/`tick` (tradeSummary) and, when enabled, live STOMP ingest (`CSE_WS_ENABLED=1` or `python3 -m koel ws`) that records daytrade/index ticks as `source=cse_ws`.\n\nCommon causes: no live writer during the session, market closed (09:30–14:30 Asia/Colombo weekdays), CSE fetch/WS failure, or ops jobs paused. Open Health for snapshot age.",
       },
     ],
   },

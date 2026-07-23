@@ -12,6 +12,7 @@ dependencies = [
     "pydantic",
     "tenacity",
     "structlog",
+    "websocket-client>=1.8",
 ]
 
 [project.optional-dependencies]

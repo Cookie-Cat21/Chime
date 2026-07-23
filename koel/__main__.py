@@ -33,6 +33,7 @@ from koel.poller import Poller, run_poller_forever
 from koel.sector_backfill import run_sector_backfill
 from koel.signals import run_signal_score_job
 from koel.storage import Storage
+from koel.ws_ingest import run_ws_ingest
 
 log = get_logger(__name__)
 
@@ -219,8 +220,15 @@ async def _run_both(settings: Settings) -> None:
 
     stop = asyncio.Event()
     _install_stop_handler(stop)
+    ws_task: asyncio.Task[dict[str, object]] | None = None
 
     try:
+        if settings.cse_ws_enabled:
+            ws_task = asyncio.create_task(
+                run_ws_ingest(settings, storage, force=False),
+                name="cse-ws-ingest",
+            )
+            log.info("cse_ws_sidecar_started")
         await app.initialize()
         await app.start()
         assert app.updater is not None
@@ -232,6 +240,10 @@ async def _run_both(settings: Settings) -> None:
             with contextlib.suppress(TimeoutError):
                 await asyncio.wait_for(stop.wait(), timeout=10)
     finally:
+        if ws_task is not None:
+            ws_task.cancel()
+            with contextlib.suppress(asyncio.CancelledError):
+                await ws_task
         await poller.shutdown()
         if app.updater is not None:
             await app.updater.stop()
@@ -264,9 +276,20 @@ async def _run_poller(settings: Settings) -> None:
 
     health = HealthState()
     server = start_health_server(settings.health_host, settings.health_port, health)
+    ws_task: asyncio.Task[dict[str, object]] | None = None
     try:
+        if settings.cse_ws_enabled:
+            ws_task = asyncio.create_task(
+                run_ws_ingest(settings, storage, force=False),
+                name="cse-ws-ingest",
+            )
+            log.info("cse_ws_sidecar_started")
         await run_poller_forever(settings, storage, cse, send, health=health)
     finally:
+        if ws_task is not None:
+            ws_task.cancel()
+            with contextlib.suppress(asyncio.CancelledError):
+                await ws_task
         await cse.aclose()
         await storage.close()
         server.shutdown()
@@ -334,6 +357,7 @@ def main(argv: list[str] | None = None) -> None:
             "both",
             "migrate",
             "tick",
+            "ws",
             "drain-pdfs",
             "drain-briefs",
             "drain-briefs-local",
@@ -376,7 +400,7 @@ def main(argv: list[str] | None = None) -> None:
             "digest",
         ],
         help=(
-            "bot | poller | both | migrate | tick | digest | "
+            "bot | poller | both | migrate | tick | ws | digest | "
             "drain-pdfs | drain-briefs | drain-briefs-local | drain-metrics | "
             "drain-graph | drain-people | directors-backfill | "
             "path-backfill | intraday-backfill | hybrid-backfill | "
@@ -398,13 +422,19 @@ def main(argv: list[str] | None = None) -> None:
         "--force",
         action="store_true",
         help=(
-            "tick: ignore market hours; "
+            "tick/ws: ignore market hours; "
             "digest: ignore 14:30–16:00 SLT window; "
             "path-backfill/intraday-backfill/hybrid-backfill/"
             "sector-backfill/issuer-profile-backfill/notices-backfill/"
             "directors-backfill/corporate-actions-backfill/macro-tick: "
             "run even if flag off"
         ),
+    )
+    parser.add_argument(
+        "--seconds",
+        type=float,
+        default=None,
+        help="ws: run live STOMP ingest for N seconds then exit (smoke test)",
     )
     parser.add_argument(
         "--limit",
@@ -502,6 +532,7 @@ def main(argv: list[str] | None = None) -> None:
     limit: int | None = None  # CLI per-command; rebound below
     if args.force and args.command not in (
         "tick",
+        "ws",
         "digest",
         "path-backfill",
         "intraday-backfill",
@@ -525,7 +556,7 @@ def main(argv: list[str] | None = None) -> None:
         "ml-ltr-ship",
     ):
         parser.error(
-            "--force is only valid for tick, digest, path-backfill, "
+            "--force is only valid for tick, ws, digest, path-backfill, "
             "intraday-backfill, hybrid-backfill, sector-backfill, "
             "issuer-profile-backfill, notices-backfill, "
             "directors-backfill, disclosures-backfill, financials-backfill, "
@@ -534,6 +565,8 @@ def main(argv: list[str] | None = None) -> None:
             "ml-forecast-unified, ml-loop-nightly, ml-loop-retrain, "
             "ml-loop-research, or ml-ltr-ship"
         )
+    if args.seconds is not None and args.command != "ws":
+        parser.error("--seconds is only valid for ws")
     if args.period is not None and args.command != "path-backfill":
         parser.error("--period is only valid for path-backfill")
     if args.no_seed and args.command not in ("path-backfill", "intraday-backfill"):
@@ -2051,6 +2084,30 @@ def main(argv: list[str] | None = None) -> None:
         asyncio.run(_run_poller(settings))
     elif args.command == "both":
         asyncio.run(_run_both(settings))
+    elif args.command == "ws":
+
+        async def _ws() -> None:
+            storage = Storage(settings.database_url)
+            await storage.open()
+            try:
+                stats = await run_ws_ingest(
+                    settings,
+                    storage,
+                    seconds=args.seconds,
+                    force=args.force or args.seconds is not None,
+                )
+                print(
+                    "WS ingest: "
+                    f"price_rows={stats.get('price_rows')} "
+                    f"index_rows={stats.get('index_rows')} "
+                    f"batches={stats.get('batches')} "
+                    f"messages={stats.get('messages')} "
+                    f"error={stats.get('last_error')}"
+                )
+            finally:
+                await storage.close()
+
+        asyncio.run(_ws())
     elif args.command == "tick":
 
         async def _tick() -> None:

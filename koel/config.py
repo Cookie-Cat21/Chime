@@ -157,6 +157,12 @@ class Settings:
     # SECTORS_INGEST=1 — optional POST /allSectors → sectors table persist.
     # Default off (0); thin GET /api/v1/sectors reads Postgres only.
     sectors_ingest: bool = False
+    # CSE_WS_ENABLED=1 — STOMP/SockJS live board ingest (daytrade / indices)
+    # alongside HTTP tradeSummary. Default 0. CLI: ``python3 -m koel ws``.
+    cse_ws_enabled: bool = False
+    cse_ws_url: str = "https://www.cse.lk/api/ws"
+    # How often to re-SEND /app/request-* while connected.
+    cse_ws_request_interval_seconds: float = 8.0
     # PATH_BACKFILL_ENABLED=1 — allow scheduled/ops daily path ingest into
     # daily_bars via companyChartDataByStock. Default 0. CLI may --force.
     path_backfill_enabled: bool = False
@@ -217,6 +223,10 @@ class Settings:
         log_raw = _env_str("LOG_LEVEL", "INFO")
         bulk_raw = _env_str("DISCLOSURE_BULK_FEED", "0")
         sectors_raw = _env_str("SECTORS_INGEST", "0")
+        cse_ws_raw = _env_str("CSE_WS_ENABLED", "0")
+        cse_ws_url_raw = _env_str("CSE_WS_URL", "https://www.cse.lk/api/ws").strip()
+        if not cse_ws_url_raw:
+            cse_ws_url_raw = "https://www.cse.lk/api/ws"
         path_bf_raw = _env_str("PATH_BACKFILL_ENABLED", "0")
         sector_bf_raw = _env_str("SECTOR_BACKFILL_ENABLED", "0")
         issuer_bf_raw = _env_str("ISSUER_PROFILE_BACKFILL_ENABLED", "0")
@@ -273,6 +283,11 @@ class Settings:
             disclosure_bulk_feed=bulk_raw.strip() == "1",
             snapshot_retention_days=max(0, _int("SNAPSHOT_RETENTION_DAYS", 0)),
             sectors_ingest=sectors_raw.strip() == "1",
+            cse_ws_enabled=cse_ws_raw.strip() == "1",
+            cse_ws_url=cse_ws_url_raw.rstrip("/"),
+            cse_ws_request_interval_seconds=_positive_float_at_least(
+                "CSE_WS_REQUEST_INTERVAL_SECONDS", 8.0, 2.0
+            ),
             path_backfill_enabled=path_bf_raw.strip() == "1",
             path_backfill_period=path_period,
             path_backfill_sleep_seconds=_nonneg_float(
