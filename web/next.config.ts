@@ -24,6 +24,8 @@ const nextConfig: NextConfig = {
   allowedDevOrigins: [
     "*.agent.cvm.dev",
     "*.cvm.dev",
+    "127.0.0.1",
+    "localhost",
   ],
   async headers() {
     return [

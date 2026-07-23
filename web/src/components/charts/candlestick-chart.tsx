@@ -194,6 +194,9 @@ export function CandlestickChart({
   const h = fitWidth && !pack ? frame.h : chartHeight ?? (fitWidth ? 280 : 520);
   const MIN_SLOT = 5;
   const PACK_SLOT = 11;
+  // When fitWidth divides a wide card by a short series (e.g. 8 intraday
+  // ticks), candles become fat blocks. Cap pitch and center instead.
+  const MAX_COMFORT_SLOT = 12;
   const frameW = Math.max(padL + padR + 40, frame.w);
   const innerW = frameW - padL - padR;
   const slotCap =
@@ -202,22 +205,26 @@ export function CandlestickChart({
     maxSlot >= MIN_SLOT
       ? maxSlot
       : null;
+  const filledSlot = Math.max(MIN_SLOT, innerW / Math.max(1, totalSlots));
+  const autoComfort =
+    fitWidth && !pack && slotCap == null && filledSlot > MAX_COMFORT_SLOT;
   // Comfort pitch: fixed candle width (no JS measure). SVG keeps its aspect
   // ratio inside the card so wide viewports cannot fatten/stretch bodies.
-  const comfortPitch = slotCap != null && fitWidth && !pack;
+  const comfortPitch =
+    autoComfort || (slotCap != null && fitWidth && !pack);
   const slot = pack
     ? PACK_SLOT
     : comfortPitch
-      ? slotCap
+      ? (slotCap ?? MAX_COMFORT_SLOT)
       : fitWidth
-        ? Math.max(MIN_SLOT, innerW / totalSlots)
+        ? filledSlot
         : 18;
   const usedPlot = totalSlots * slot;
   const contentW = padL + padR + usedPlot;
   const drawPadL = padL;
   const drawPadR = padR;
   // Wider slots → thicker bodies so ranges fill without looking like sparse ticks.
-  const bodyRatio = pack || comfortPitch ? 0.82 : fitWidth ? 0.84 : 0.72;
+  const bodyRatio = pack || comfortPitch ? 0.72 : fitWidth ? 0.84 : 0.72;
   const bodyW = pack || fitWidth
     ? Math.max(3.5, Math.min(slot * bodyRatio, slot - 0.75))
     : 13;
@@ -334,11 +341,29 @@ export function CandlestickChart({
                 : undefined
         }
       >
+        {/* Explicit pixel box for comfort — avoids aspect-ratio SVG quirks
+            (tiny left sliver or bodies stretched across the card). */}
+        <div
+          className={
+            comfortPitch || pack
+              ? "relative mx-auto h-full max-h-full max-w-full"
+              : "contents"
+          }
+          style={
+            comfortPitch || pack
+              ? {
+                  width: Math.min(frameW, Math.max(contentW, 160)),
+                  height: displayH,
+                }
+              : undefined
+          }
+        >
         <svg
           viewBox={`0 0 ${w} ${h}`}
           data-fit={fitWidth ? "1" : "0"}
           data-max-slot={maxSlot ?? ""}
           data-comfort={comfortPitch ? "1" : "0"}
+          data-slots={totalSlots}
           preserveAspectRatio={
             pack || comfortPitch
               ? "xMidYMid meet"
@@ -347,15 +372,13 @@ export function CandlestickChart({
                 : "xMinYMid meet"
           }
           style={
-            comfortPitch
+            comfortPitch || pack
               ? {
+                  width: "100%",
                   height: "100%",
-                  width: "auto",
-                  maxWidth: "100%",
-                  aspectRatio: `${Math.max(1, w)} / ${Math.max(1, h)}`,
                   display: "block",
                 }
-              : pack || fitWidth
+              : fitWidth
                 ? {
                     width: "100%",
                     height: "100%",
@@ -369,11 +392,7 @@ export function CandlestickChart({
                   }
           }
           className={
-            comfortPitch
-              ? "max-h-full"
-              : pack || fitWidth
-                ? "h-full w-full"
-                : "max-w-none"
+            comfortPitch || pack || fitWidth ? "h-full w-full" : "max-w-none"
           }
           role="img"
           aria-label={aria}
@@ -629,6 +648,7 @@ export function CandlestickChart({
             {last.trade_date}
           </text>
         </svg>
+        </div>
       </div>
       {footnote === "" || (minimal && footnote == null) ? null : (
         <p className="mt-2.5 shrink-0 text-xs leading-relaxed text-muted-foreground">

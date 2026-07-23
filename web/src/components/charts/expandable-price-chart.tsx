@@ -690,6 +690,9 @@ export function ExpandablePriceChart({
             bars={compactBars}
             maxCandles={compact ? 64 : HERO_DISPLAY_CANDLES}
             fitWidth
+            // Cap pitch so short intraday series cannot fatten card-wide
+            // (CandlestickChart autoComfort / maxSlot).
+            maxSlot={12}
             chartHeight={compact ? 176 : 220}
             minimal={compact}
             variant={seriesKind === "index" ? "close" : "auto"}
