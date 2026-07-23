@@ -93,29 +93,29 @@ export function AreaSpark({
   const last = geo.points[geo.points.length - 1]!;
   const active =
     interactive && activeIndex != null
-      ? geo.points[activeIndex] ?? null
+      ? (geo.points[activeIndex] ?? null)
       : null;
   const activeLabel =
     interactive && activeIndex != null
-      ? alignedLabels[activeIndex] ?? null
+      ? (alignedLabels[activeIndex] ?? null)
       : null;
   const fmt =
     formatValue ??
     ((n: number) => {
-      if (Math.abs(n) >= 1e6) return `${(n / 1e6).toFixed(2)}M`;
+      if (Math.abs(n) >= 1e9) return `${(n / 1e9).toFixed(2)}B`;
+      if (Math.abs(n) >= 1e6) return `${(n / 1e6).toFixed(1)}M`;
       if (Math.abs(n) >= 1e3)
         return n.toLocaleString(undefined, { maximumFractionDigits: 1 });
       return Number.isInteger(n) ? String(n) : n.toFixed(2);
     });
 
+  const tipValue = active ? fmt(active.value) : null;
   const tipText = active
-    ? `${activeLabel ? `${activeLabel} · ` : ""}${fmt(active.value)}`
+    ? `${activeLabel ? `${activeLabel} · ` : ""}${tipValue}`
     : null;
 
-  const tipX = active
-    ? Math.min(Math.max(active.x, 36), geo.width - 36)
-    : 0;
-  const tipY = active ? Math.max(14, active.y - 10) : 0;
+  // HTML tip — SVG text was capped at ~15 chars / 68px and ate LKR values.
+  const tipLeftPct = active ? (active.x / geo.width) * 100 : 50;
 
   return (
     <div className={cn("relative w-full", className)}>
@@ -191,30 +191,27 @@ export function AreaSpark({
               strokeWidth="1.25"
               vectorEffect="non-scaling-stroke"
             />
-            <rect
-              x={tipX - 34}
-              y={tipY - 11}
-              width={68}
-              height={14}
-              rx={3}
-              fill="oklch(0.22 0.01 260 / 0.92)"
-            />
-            <text
-              x={tipX}
-              y={tipY}
-              textAnchor="middle"
-              dominantBaseline="middle"
-              fill="oklch(0.98 0.002 250)"
-              fontSize="8"
-              fontFamily="ui-monospace, monospace"
-            >
-              {tipText && tipText.length > 16
-                ? `${tipText.slice(0, 15)}…`
-                : tipText}
-            </text>
           </g>
         ) : null}
       </svg>
+      {active && tipValue ? (
+        <div
+          className="pointer-events-none absolute bottom-[calc(100%-0.15rem)] z-20 -translate-x-1/2"
+          style={{ left: `${tipLeftPct}%` }}
+          role="tooltip"
+        >
+          <div className="min-w-[7.5rem] max-w-[12rem] rounded-md border border-border/80 bg-background/95 px-2.5 py-1.5 text-center shadow-md backdrop-blur-sm">
+            {activeLabel ? (
+              <p className="font-mono text-[10px] tabular-nums text-muted-foreground">
+                {activeLabel}
+              </p>
+            ) : null}
+            <p className="font-mono text-xs font-semibold tabular-nums text-foreground">
+              {tipValue}
+            </p>
+          </div>
+        </div>
+      ) : null}
       {interactive ? (
         <p className="sr-only" aria-live="polite">
           {tipText ?? "No point selected"}
