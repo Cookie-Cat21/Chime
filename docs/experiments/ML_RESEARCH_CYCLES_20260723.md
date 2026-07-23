@@ -289,3 +289,10 @@ Research only — not financial advice.
 - Next: accumulate h1 DE-persist and h3 weekly non-partial receipts; Goal A
   SuccessContract unchanged and still unmet
 
+### Cycle — absolute/h5 nested complete (2026-07-23)
+
+- Evidence: `CPU_EXHAUST_ABS_H5_20260723.md`
+- Best RankIC 0.138; selective unmet; cost neg
+- Shadow canary2: DE-persist 22 partial legs; h3-weekly 16 partial; **0 non-partial** yet
+- Next: abs/h3 nested + W5 2k hyper on fpv1 matrix (running)
+

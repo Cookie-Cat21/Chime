@@ -371,15 +371,15 @@ Prospective shadow uses the same numeric thresholds for **standards reporting**;
 
 Exhaustion is claimed **only** when **every** item below is true. Otherwise keep running W0–W5.
 
-**Checklist status (2026-07-23):** 6/10 evidenced — **not truly exhausted** (E7–E8 open; h3 + liq_v2 in flight).
+**Checklist status (2026-07-23):** 7/10 evidenced — **not truly exhausted** (E7–E8 open: need ≥60 non-partial shadow sessions; E10 dossier pending). abs/h5 done; W5 fpv1-2k + abs/h3 in flight.
 
 | # | Done | Condition | Evidence artifact |
 |---|:---:|---|---|
 | E1 | [x] | Same-matrix h1 model search capped and failed | `CPU_EXHAUST_20260722.md`, `CPU_IMPROVE_6K_20260723.md`; W5 not started (no new matrix) |
 | E2 | [x] | Ensemble + selective grids failed on best nested scores | `ENSEMBLE_STACK_20260723.md`, `SELECTIVE_GATES_20260723.md`, `CPU_EXHAUST_REL_H5_20260723.md` (h5 selective 0) |
 | E3 | [x] | Feature pack v1 (and one revision if v1 killed) tested with baseline trio | `FEATURE_PACK_V1_NESTED_20260723.md` — **killed, no materiality**; revision optional via liq_v2 / fp combo |
-| E4 | [x] | Universe/liquidity filters tested | `UNIVERSE_FILTER_LIQ_V1_NESTED_20260723.md`, `FEATURE_PACK_LIQ_V1_NESTED_20260723.md` — **liq_v1 killed**; liq_v2 queued |
-| E5 | [ ] | Relative **h5** nested complete (h3 optional) | [x] h5: `cpu_exhaust_rel_h5_summary.json`; [ ] h3 nested **in progress** |
+| E4 | [x] | Universe/liquidity filters tested | `UNIVERSE_FILTER_LIQ_V1_NESTED_20260723.md`, `FEATURE_PACK_LIQ_V1_NESTED_20260723.md` — **liq_v1 killed**; liq_v1–v3 **killed** (flat collapse) |
+| E5 | [ ] | Relative **h5** nested complete (h3 optional) | [x] h5: `cpu_exhaust_rel_h5_summary.json`; [x] h3 nested complete (`CPU_EXHAUST_REL_H3_*`) |
 | E6 | [x] | Data enrichment re-score complete or backlog waived in writing | Split re-score done; CSE-only ablation **killed** (`CSE_ONLY_NESTED_20260723.md`) |
 | E7 | [ ] | DE-persist shadow wired with ≥60 scored prospective sessions | Wired + partial canary 14 legs; **non-partial receipts pending** |
 | E8 | [ ] | No candidate meets SuccessContract offline **and** prospective precision/LCB within 10pp of offline at matched coverage | Offline: no contract met; prospective aggregate **insufficient** |

@@ -243,3 +243,7 @@ Review-only Loop 0 ID now wired:
 top/bottom 5% book. It does **not** replace h1 DE-persist (+0.49%) or clear
 selective 90%. See `CPU_EXHAUST_REL_H3_20260723.md`,
 `ML_H3_WEEKLY_COST_20260723.md`, and `docs/runbooks/ML_LIVE_SHADOW.md`.
+
+## Absolute/h5 (2026-07-23)
+
+Best RankIC `hgb_bagged` **0.1380** (≪ abs/h1 0.2546). Selective 0 emits. Best cost −0.29% net@112. Horizon lever exhausted for absolute too.
