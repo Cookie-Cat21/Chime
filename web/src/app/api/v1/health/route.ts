@@ -70,6 +70,15 @@ type PollerHealth = {
   [key: string]: unknown;
 };
 
+/** DB-side writer freshness when HEALTH_URL poller proxy is unavailable (Vercel). */
+export type WriterFreshness = {
+  last_poller_at: string | null;
+  last_cse_ws_at: string | null;
+  /** max(poller, cse_ws) — best “tick” signal without a live process. */
+  last_live_at: string | null;
+  last_order_book_at: string | null;
+};
+
 /** Cap hostile HEALTH_URL strings so ops UI / JSON cannot balloon. */
 export const HEALTH_STRING_MAX = 512;
 export const HEALTH_WATCHED_MISSING_MAX = 64;
@@ -454,6 +463,7 @@ export async function GET(request: NextRequest) {
   let lastSnapshotAt: string | null = null;
   let startedAt = PROCESS_STARTED_AT;
   let poller: PollerHealth | null = null;
+  let writers: WriterFreshness | null = null;
   let delivery = {
     delivered_24h: 0,
     retrying: 0,
@@ -469,6 +479,40 @@ export async function GET(request: NextRequest) {
       `SELECT MAX(ts) AS max_ts FROM price_snapshots`,
     );
     lastSnapshotAt = toIso(snap.rows[0]?.max_ts ?? null);
+    try {
+      const writerRow = await pool.query<{
+        last_poller_at: Date | string | null;
+        last_cse_ws_at: Date | string | null;
+        last_live_at: Date | string | null;
+      }>(
+        `SELECT
+           MAX(ts) FILTER (WHERE source = 'poller') AS last_poller_at,
+           MAX(ts) FILTER (WHERE source = 'cse_ws') AS last_cse_ws_at,
+           MAX(ts) FILTER (WHERE source IN ('poller', 'cse_ws')) AS last_live_at
+         FROM price_snapshots`,
+      );
+      const wr = writerRow.rows[0];
+      let lastOrderBookAt: string | null = null;
+      try {
+        const ob = await pool.query<{ max_ts: Date | string | null }>(
+          `SELECT MAX(ts) AS max_ts
+             FROM order_book_snapshots
+            WHERE total_bids > 0 AND total_asks > 0`,
+        );
+        lastOrderBookAt = toIso(ob.rows[0]?.max_ts ?? null);
+      } catch (err) {
+        console.error("GET /health order-book tip failed", err);
+      }
+      writers = {
+        last_poller_at: toIso(wr?.last_poller_at ?? null),
+        last_cse_ws_at: toIso(wr?.last_cse_ws_at ?? null),
+        last_live_at: toIso(wr?.last_live_at ?? null),
+        last_order_book_at: lastOrderBookAt,
+      };
+    } catch (err) {
+      console.error("GET /health writers tip failed", err);
+      writers = null;
+    }
     try {
       dataInventory = await queryDataInventory(pool);
     } catch (err) {
@@ -524,16 +568,19 @@ export async function GET(request: NextRequest) {
   }
 
   // Non-ops: product health only — no delivery / retention / poller proxy (S-05).
+  // Still expose dash process start + DB writer tips so Tick age is not blank
+  // on Vercel (no HEALTH_URL loopback).
   if (!opsDetail) {
     const status = dbOk ? "ok" : "degraded";
     const payload: Record<string, unknown> = {
       status,
       db_ok: dbOk,
-      started_at: null,
+      started_at: PROCESS_STARTED_AT,
       last_snapshot_at: lastSnapshotAt,
       poller: null,
       detail: false,
     };
+    if (writers != null) payload.writers = writers;
     if (dataInventory != null) payload.data = dataInventory;
     if (ci != null) payload.ci = ci;
     return jsonOk(payload, dbOk ? 200 : 503);
@@ -659,6 +706,9 @@ export async function GET(request: NextRequest) {
     payload.poller = poller;
   } else {
     payload.poller = null;
+  }
+  if (writers != null) {
+    payload.writers = writers;
   }
   if (ml != null) {
     payload.ml = ml;
