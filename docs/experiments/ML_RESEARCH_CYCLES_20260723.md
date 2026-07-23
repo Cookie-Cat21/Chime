@@ -230,6 +230,18 @@ W3 h5 nested artifacts before W5 search.
 - Verdict: h3 lever **exhausted** (like h5); no Goal A/B unlock
 - Champions unchanged; SuccessContract **still unmet**
 
+### Cycle — W2 liq_v3 universe filter exhausted (2026-07-23)
+
+- Evidence: `UNIVERSE_FILTER_LIQ_V3_NESTED_20260723.md`,
+  `cpu_exhaust_rel_h1_liqv3_summary.json`
+- Filter: no ADV floor, flat60 <=0.40, min CSE sessions 5
+- Sample collapse: 636455 -> 35377 rows; **below 100k floor**
+- RankIC best: xgb 0.2227 vs frozen 0.2861
+- Selective: 0 emits; best daily net@112 xgb -1.49%
+- Verdict: W2 universe-filter lever **exhausted/killed** for this snapshot —
+  flat_fraction alone collapses hybrid history
+- Champions unchanged; SuccessContract **still unmet**
+
 
 ## Status block — W0–W4 ledger (2026-07-23 evening)
 
@@ -243,14 +255,14 @@ W3 h5 nested artifacts before W5 search.
 | W1 fpv1 nested | **Killed** — RankIC Δ **−0.0007**; no W1 materiality |
 | W2 liq_v1 | **Killed** — 93% sample collapse; 0 selective emits |
 | W2 liq_v2 | **Killed** — 94% sample collapse (35k rows); 0 selective emits |
-| W2 liq_v3 | **In flight** — flat-only filter, no ADV floor |
+| W2 liq_v3 | **Killed / exhausted** — flat-only still 35k rows; 0 selective emits |
 | fp+liq combo | **Killed** with liq_v1 |
 | W3 h5 | **Done, no unlock** — RankIC ~0.17; selective 0; cost negative |
 | W3 h3 | **Done, no unlock** — RankIC 0.2285; selective 0; h3 cost +0.27% non-transferable |
 | W4 CSE-only | **Killed** — ~1y history insufficient for nested splits |
 
-**In flight / next:** liq_v3 nested; Goal A selective-90% chase on any improving
-matrix; W5 only after new `matrix_id` materiality; W6 dossier **not** started —
+**In flight / next:** Goal A selective-90% chase on any improving matrix; W5
+only after new `matrix_id` materiality; W6 dossier **not** started —
 **not truly exhausted** (E7–E8 open).
 
 Research only — not financial advice.

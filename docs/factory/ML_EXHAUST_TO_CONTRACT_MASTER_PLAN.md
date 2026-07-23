@@ -19,7 +19,8 @@ needed**).
 | **W3** relative/h5 | **Done — no unlock** | RankIC ~**0.17** (xgb 0.1735); selective **0** emits; cost still negative (`CPU_EXHAUST_REL_H5_20260723.md`) |
 | **W4** CSE-only ablation | **Killed** | ~1y CSE history insufficient for nested splits (`CSE_ONLY_NESTED_20260723.md`) |
 | **W5** bounded search | **Blocked** | Do not start until a new `matrix_id` shows W1/W3 materiality |
-| **In flight** | h3 nested; **liq_v2** softer filter; Goal A selective-90% chase on any matrix that improves |
+| **W2** liq_v3 flat-only universe filter | **Killed / exhausted** | 35,377 samples (<100k), best RankIC 0.2227, 0 selective emits; flat_fraction alone collapses hybrid history (`UNIVERSE_FILTER_LIQ_V3_NESTED_20260723.md`) |
+| **In flight** | Goal A selective-90% chase on any matrix that improves |
 
 **Champions unchanged:** RankIC `xgb_two_stage` rel/h1 **0.2861**; cost DE persist split **+0.49%** @112; selective near-miss **0.770 / 0.681 / 74 emits**.
 
@@ -51,9 +52,7 @@ needed**).
 **Still open (not exhausted):**
 
 - W0 prospective shadow — wired; need **≥60 non-partial scored sessions**
-- W2 **liq_v2** softer universe filter (queued)
-- W3 relative/**h3** nested (in progress)
-- W1 feature revisions beyond fpv1 if liq_v2 or h3 lands a new matrix
+- W1 feature revisions beyond fpv1 if a new matrix lands
 - W5 bounded search — **only** after a new `matrix_id` clears materiality
 - Goal A selective-90% chase on any improving matrix
 
