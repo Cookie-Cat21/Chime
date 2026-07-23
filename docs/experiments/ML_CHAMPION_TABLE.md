@@ -1,11 +1,13 @@
 # ML champion table
 
-Updated: 2026-07-23 (Loop 1 verification complete; W0 DE-persist wired)
+Updated: 2026-07-23 (W1 fpv1 nested complete; champions unchanged)
 
 Source artifacts:
 
 - `docs/experiments/CPU_EXHAUST_20260722.md`
 - `docs/experiments/cpu_exhaust_rel_h1_summary.json`
+- `docs/experiments/cpu_exhaust_rel_h1_fpv1_summary.json`
+- `docs/experiments/FEATURE_PACK_V1_NESTED_20260723.md`
 - `docs/experiments/cpu_exhaust_abs_h1_summary.json`
 - `docs/experiments/cpu_exhaust_rel_h1_lgb_10k.json`
 - `docs/experiments/ML_COST_ENGINEERING_LOOP1_20260723.md`
@@ -103,17 +105,37 @@ cycle 0) < champion 0.2861; best net@112 −0.49%; **no pos112**. See
 | 2 | Cost/turnover engineering | **+net@112 verified (split-adjusted)** | DE `persistence_exit_10_top_bottom_05` +0.49%; xgb +0.05%; hgb −0.13% |
 | 3 | Selective gate mining | **exhausted** | 90% contract unreachable offline |
 | 4 | Ensembles/stacking | **exhausted** | best RankIC 0.2858 (−0.0003 vs champion); no net gain |
-| 5 | New features | **started (W1 skeleton)** | `feature_pack_v1` spec + stub helpers; not in snapshot/train yet |
+| 5 | New features | **fpv1 nested done — no materiality** | RankIC Δ −0.0007 best; DE persist +0.53% vs +0.49% (+0.04 pp); W1 thresholds **not fired**; `liq_v1` filter run queued |
 | 6 | Horizons/targets | absolute/h1 done; **h5 nested started (W3)** | no `cpu_exhaust_rel_h5_summary.json` yet |
 | — | Improve-loop 6×1000 | **exhausted** | best RankIC 0.2746; no pos112 |
+
+## Research cycle — W1 feature pack v1 (2026-07-23)
+
+Nested relative/h1 with `--feature-pack v1` on split-adjusted snapshot
+(`FEATURE_PACK_V1_NESTED_20260723.md`, `cpu_exhaust_rel_h1_fpv1_summary.json`).
+
+| Model | Frozen RankIC | fpv1 RankIC | Δ | Frozen DE-persist net@112 | fpv1 best net@112 |
+|---|---:|---:|---:|---:|---:|
+| `xgb_two_stage` | 0.2861 | 0.2854 | −0.0007 | — | −0.06% |
+| `hgb_two_stage` | 0.2816 | 0.2809 | −0.0007 | — | −0.07% |
+| `double_ensemble_native` | 0.2566 | 0.2510 | −0.0056 | +0.49% | +0.53% |
+
+**W1 materiality (master plan): all NOT fired.**
+
+- RankIC +0.005: best Δ **−0.0007** (xgb).
+- net@112 +0.10 pp: best Δ **+0.04 pp** (DE persist vs frozen +0.49%).
+- Selective emits 2×: xgb **94 vs 74** (1.27×), hgb **94 vs 86** (1.09×).
+
+**Champions retained:** RankIC `xgb_two_stage` 0.2861; cost DE persist +0.49%.
+SuccessContract **still unmet**. Next W1 slice: `universe-filter liq_v1` exhaust
+(running).
 
 ## Next concrete actions
 
 1. Loop 0: accumulate prospective receipts for wired
    `shadow_policy_rank_de_persist_v1` (DE persist, split-adjusted +0.49%
    offline); monitor `live_shadow_report` — contract unchanged.
-2. W1 feature pack + W3 h5 nested (parallel): only offline paths left toward
-   global promotion gates — selective 90% still not met.
+2. Complete W1 `liq_v1` universe-filter nested; h5 already exhausted (no unlock).
 3. Keep RankIC champion (`xgb_two_stage` 0.2861) as research score only until
    contract + post-cost gates pass without persistence-only construction.
 
