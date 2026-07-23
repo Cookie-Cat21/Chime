@@ -1,6 +1,7 @@
 import type { NextRequest } from "next/server";
 
 import { sanitizeDisclosureCategory } from "@/lib/api/disclosure-safe";
+import { isFixtureStock } from "@/lib/api/fixture-stock";
 import { toFiniteNumber } from "@/lib/api/market-browse";
 import {
   cappedAlertThreshold,
@@ -110,6 +111,8 @@ export async function GET(request: NextRequest) {
       // Fail closed — only CSE SYMBOL_RE rows (not sanitize "?" fallback).
       const symbol = normalizeSymbol(row.symbol);
       if (!symbol) return [];
+      // Hide pytest fixture pollution (digit-root / TEST CO style).
+      if (isFixtureStock(symbol)) return [];
       // Finite + abs cap — upper-bound-only used to egress -1e308.
       const threshold = cappedAlertThreshold(toFiniteNumber(row.threshold));
       const refPrice = cappedAlertThreshold(toFiniteNumber(row.ref_price));
@@ -273,6 +276,9 @@ export async function POST(request: NextRequest) {
   try {
     const stock = await getStock(symbol);
     if (!stock) {
+      return jsonError(404, "not_found", "Unknown symbol.");
+    }
+    if (isFixtureStock(stock.symbol, stock.name)) {
       return jsonError(404, "not_found", "Unknown symbol.");
     }
 

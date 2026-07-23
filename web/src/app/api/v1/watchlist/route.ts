@@ -5,6 +5,7 @@ import {
   MAX_STOCK_SECTOR_LENGTH,
   sanitizeDisclosureText,
 } from "@/lib/api/disclosure-safe";
+import { isFixtureStock } from "@/lib/api/fixture-stock";
 import { toFiniteNumber } from "@/lib/api/market-browse";
 import { readJsonBody } from "@/lib/api/read-json-body";
 import { toIso } from "@/lib/api/time";
@@ -64,11 +65,14 @@ export async function GET(request: NextRequest) {
       // Fail closed — only CSE SYMBOL_RE rows (not sanitize-only junk).
       const symbol = normalizeSymbol(row.symbol);
       if (!symbol) return [];
+      const name = sanitizeDisclosureText(row.name, MAX_STOCK_NAME_LENGTH);
+      // Hide pytest fixture pollution leaked into shared Postgres.
+      if (isFixtureStock(symbol, name)) return [];
       return [
         {
           symbol,
           // Strip C0/C1 + cap — hostile stock name/sector must not balloon JSON.
-          name: sanitizeDisclosureText(row.name, MAX_STOCK_NAME_LENGTH),
+          name,
           sector: sanitizeDisclosureText(row.sector, MAX_STOCK_SECTOR_LENGTH),
           // Finite-only egress (parity with movers/browse) — NaN/±Inf → null.
           price: toFiniteNumber(row.price),
@@ -119,6 +123,13 @@ export async function POST(request: NextRequest) {
         404,
         "not_found",
         "Unknown symbol. The dashboard only accepts symbols already seeded in Postgres; wait for a poller tick or seed it from Telegram with /watch SYMBOL.",
+      );
+    }
+    if (isFixtureStock(stock.symbol, stock.name)) {
+      return jsonError(
+        404,
+        "not_found",
+        "Unknown symbol. Synthetic test fixtures are not listed CSE companies.",
       );
     }
 
