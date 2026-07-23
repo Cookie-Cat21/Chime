@@ -200,3 +200,12 @@ W3 h5 nested artifacts before W5 search.
 - Verdict: W2 kill criteria fired; preset rejected; fp+liq combo running
 - Champions unchanged; SuccessContract **still unmet**
 
+### Cycle — W1+W2 fp+liq combo killed (2026-07-23)
+
+- Evidence: `FEATURE_PACK_LIQ_V1_NESTED_20260723.md`, `cpu_exhaust_rel_h1_fp_liq_summary.json`
+- Matrix: feature_pack v1 + liq_v1 (same 32535-row universe)
+- xgb/hgb: screen fail; DE partial RankIC 0.1779 (worse than liq_v1-only 0.1813)
+- Selective: 0 emits; cost best DE min_hold_5 −0.27% net@112
+- Verdict: combined matrix killed; no W5 merge; liq_v1 preset retired
+- Champions unchanged; SuccessContract **still unmet**
+
