@@ -42,6 +42,7 @@ from koel.ml.distributed_worker import (
     build_outer_split,
 )
 from koel.ml.feature_pack_v1 import enrich_feature_pack_v1 as _enrich_feature_pack_v1
+from koel.ml.feature_pack_v2 import load_sector_map_for_v2
 from koel.ml.harden import _demean_by_day
 from koel.ml.iterate import _enrich_cross_section
 from koel.ml.metrics import (
@@ -104,6 +105,19 @@ def _prepare_samples(
     if feature_pack.strip().lower() in {"v1", "feature_pack_v1"}:
         # New matrix_id — never silently alter the frozen champion feature set.
         research = _enrich_feature_pack_v1(research, loaded.series, loaded.fundamentals)
+    elif feature_pack.strip().lower() in {"v2", "feature_pack_v2"}:
+        sector_map = load_sector_map_for_v2()
+        if sector_map is None:
+            raise ValueError(
+                "feature_pack v2 requires a sector map: set KOEL_SECTOR_MAP or place "
+                "/tmp/koel-sector-map.json"
+            )
+        research = _enrich_feature_pack_v1(
+            research,
+            loaded.series,
+            loaded.fundamentals,
+            sector_map=sector_map,
+        )
     manifest = _resolve_universe_filter(universe_filter)
     if manifest is not None:
         research = filter_samples(research, loaded.series, metadata, manifest)
@@ -1052,7 +1066,7 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument(
         "--feature-pack",
         default="",
-        choices=("", "v1", "feature_pack_v1"),
+        choices=("", "v1", "feature_pack_v1", "v2", "feature_pack_v2"),
         help="Optional research feature pack; default keeps frozen champion matrix",
     )
     parser.add_argument(

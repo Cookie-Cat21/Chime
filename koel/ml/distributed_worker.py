@@ -20,6 +20,7 @@ from koel.ml.distributed import (
     write_prediction_artifact,
 )
 from koel.ml.feature_pack_v1 import enrich_feature_pack_v1 as _enrich_feature_pack_v1
+from koel.ml.feature_pack_v2 import load_sector_map_for_v2
 from koel.ml.features import FEATURE_NAMES
 from koel.ml.harden import _demean_by_day
 from koel.ml.iterate import _enrich_cross_section
@@ -477,6 +478,19 @@ def run_worker(
         research = _enrich_feature_pack_v1(
             research, loaded.series, loaded.fundamentals
         )
+    elif feature_pack.strip().lower() in {"v2", "feature_pack_v2"}:
+        sector_map = load_sector_map_for_v2()
+        if sector_map is None:
+            raise ValueError(
+                "feature_pack v2 requires a sector map: set KOEL_SECTOR_MAP or place "
+                "/tmp/koel-sector-map.json"
+            )
+        research = _enrich_feature_pack_v1(
+            research,
+            loaded.series,
+            loaded.fundamentals,
+            sector_map=sector_map,
+        )
     if spec.target == "relative":
         research = _demean_by_day(research)
     samples = _enrich_cross_section(research)
@@ -601,7 +615,7 @@ def main(argv: list[str] | None = None) -> None:
     parser.add_argument(
         "--feature-pack",
         default="",
-        choices=("", "v1", "feature_pack_v1"),
+        choices=("", "v1", "feature_pack_v1", "v2", "feature_pack_v2"),
         help="Optional research feature pack; default keeps frozen matrix",
     )
     args = parser.parse_args(argv)

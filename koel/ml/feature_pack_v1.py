@@ -7,10 +7,12 @@ See ``docs/experiments/FEATURE_PACK_V1_SPEC.md``.
 
 from __future__ import annotations
 
+import json
 import math
 import statistics
 from collections import defaultdict
 from datetime import date
+from pathlib import Path
 
 from koel.domain import DailyBar
 from koel.ml.dataset import Sample
@@ -141,6 +143,41 @@ def _finite_median(values: list[float]) -> float:
     return statistics.median(finite) if finite else float("nan")
 
 
+def load_sector_map_from_json(path: str | Path) -> dict[str, str]:
+    """Load ``symbol -> sector`` labels from a JSON object file."""
+    payload = json.loads(Path(path).read_text(encoding="utf-8"))
+    if not isinstance(payload, dict):
+        raise ValueError("sector map JSON must be an object")
+    return {
+        str(symbol).strip().upper(): str(sector)
+        for symbol, sector in payload.items()
+        if str(symbol).strip() and str(sector).strip()
+    }
+
+
+def _sector_medians_for_day(
+    day_samples: list[Sample],
+    base_rows: dict[int, tuple[float, ...]],
+    sector_map: dict[str, str],
+) -> dict[str, tuple[float, float]]:
+    by_sector: dict[str, list[tuple[float, float]]] = defaultdict(list)
+    for sample in day_samples:
+        sector = sector_map.get(sample.symbol.strip().upper())
+        if not sector:
+            continue
+        ret_1d, ret_5d = base_rows[id(sample)][8], base_rows[id(sample)][9]
+        by_sector[sector].append((ret_1d, ret_5d))
+    medians: dict[str, tuple[float, float]] = {}
+    for sector, pairs in by_sector.items():
+        ret_1d_values = [ret_1d for ret_1d, _ in pairs if math.isfinite(ret_1d)]
+        ret_5d_values = [ret_5d for _, ret_5d in pairs if math.isfinite(ret_5d)]
+        medians[sector] = (
+            _finite_median(ret_1d_values),
+            _finite_median(ret_5d_values),
+        )
+    return medians
+
+
 def _z_scores(values: list[float]) -> list[float]:
     finite = [value for value in values if math.isfinite(value)]
     if not finite:
@@ -229,9 +266,16 @@ def enrich_feature_pack_v1(
     samples: list[Sample],
     series: dict[str, list[DailyBar]],
     fundamentals: dict[str, list[FundamentalEvent]] | None = None,
+    *,
+    sector_map: dict[str, str] | None = None,
 ) -> list[Sample]:
     """Append Feature Pack v1 columns in ``FEATURE_PACK_V1_NAMES`` order."""
     fundamentals = fundamentals or {}
+    normalized_sector_map = (
+        {symbol.strip().upper(): sector for symbol, sector in sector_map.items()}
+        if sector_map
+        else None
+    )
     series_by_symbol = {symbol.strip().upper(): bars for symbol, bars in series.items()}
     fundamentals_by_symbol = {
         symbol.strip().upper(): events for symbol, events in fundamentals.items()
@@ -252,6 +296,11 @@ def enrich_feature_pack_v1(
         median_1d = _finite_median(ret_1d_values)
         median_5d = _finite_median(ret_5d_values)
         z_values = _z_scores(vol_regime_values)
+        sector_medians = (
+            _sector_medians_for_day(day_samples, base_rows, normalized_sector_map)
+            if normalized_sector_map
+            else {}
+        )
 
         for sample, vol_regime_z in zip(day_samples, z_values, strict=True):
             (
@@ -276,6 +325,27 @@ def enrich_feature_pack_v1(
                 if math.isfinite(ret_5d) and math.isfinite(median_5d)
                 else float("nan")
             )
+            sector = (
+                normalized_sector_map.get(sample.symbol.strip().upper())
+                if normalized_sector_map
+                else None
+            )
+            use_sector = 1.0 if sector else 0.0
+            if sector and sector in sector_medians:
+                sector_median_1d, sector_median_5d = sector_medians[sector]
+                rel_1d = (
+                    ret_1d - sector_median_1d
+                    if math.isfinite(ret_1d) and math.isfinite(sector_median_1d)
+                    else float("nan")
+                )
+                rel_5d = (
+                    ret_5d - sector_median_5d
+                    if math.isfinite(ret_5d) and math.isfinite(sector_median_5d)
+                    else float("nan")
+                )
+            else:
+                rel_1d = rel_1d_market
+                rel_5d = rel_5d_market
             filing = _filing_features(
                 symbol=sample.symbol.strip().upper(),
                 as_of=sample.as_of,
@@ -292,11 +362,11 @@ def enrich_feature_pack_v1(
                 vol_regime,
                 vol_regime_z,
                 ret_1d,
+                rel_1d,
+                rel_5d,
                 rel_1d_market,
                 rel_5d_market,
-                rel_1d_market,
-                rel_5d_market,
-                0.0,
+                use_sector,
                 *filing,
             )
             out.append(
