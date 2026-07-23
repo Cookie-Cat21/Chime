@@ -168,3 +168,14 @@ Decision:
 
 Next: Loop 0 daily receipts for DE-persist shadow; complete W1 integration +
 W3 h5 nested artifacts before W5 search.
+
+
+### Cycle — W3 relative/h5 nested complete (2026-07-23)
+
+- Evidence: `CPU_EXHAUST_REL_H5_20260723.md`, `cpu_exhaust_rel_h5_summary.json`
+- RankIC best: xgb_two_stage 0.1735; DE 0.1364; all daily L/S net@112 negative
+- Selective: 0 calibration-safe emits (contract unmet)
+- Cost best: DE persistence_exit_15 −0.56% net@112
+- Verdict: h5 lever exhausted for current feature matrix without Goal A/B unlock
+- Next: Feature Pack v1 nested (running); W2 liq_v1 filter nested queued
+

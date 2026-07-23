@@ -3,6 +3,10 @@
 Selection for the 10k LightGBM grid uses **calibration RankIC only**.
 Held-out test metrics are computed once for the shortlisted winners.
 Never writes live policies / forecast_points / Telegram.
+
+Sample matrix order: base samples → research quality/fundamentals/market enrich
+→ optional feature pack → optional universe filter → relative demean
+→ cross-section enrich.
 """
 
 from __future__ import annotations
@@ -53,6 +57,7 @@ from koel.ml.research_features import (
 )
 from koel.ml.research_fundamentals import enrich_fundamentals
 from koel.ml.snapshot import load_bar_snapshot
+from koel.ml.universe_filters import LIQ_FILTER_V1, FilterManifest, filter_samples
 
 BASELINE_RANK_IC = 0.2526
 
@@ -71,6 +76,7 @@ def _prepare_samples(
     min_history: int = 60,
     max_abs_return: float = 0.35,
     feature_pack: str = "",
+    universe_filter: str = "",
 ) -> tuple[list[Sample], dict, list[date], str]:
     loaded = load_bar_snapshot(snapshot_dir)
     metadata = build_research_bar_metadata(
@@ -92,6 +98,9 @@ def _prepare_samples(
     if feature_pack.strip().lower() in {"v1", "feature_pack_v1"}:
         # New matrix_id — never silently alter the frozen champion feature set.
         research = _enrich_feature_pack_v1(research, loaded.series, loaded.fundamentals)
+    manifest = _resolve_universe_filter(universe_filter)
+    if manifest is not None:
+        research = filter_samples(research, loaded.series, metadata, manifest)
     if target == "relative":
         research = _demean_by_day(research)
     samples = _enrich_cross_section(research)
@@ -106,9 +115,23 @@ def _prepare_samples(
         (
             loaded.manifest.bars_sha256
             + (loaded.manifest.fundamentals_sha256 or "")
+            + (
+                ""
+                if manifest is None
+                else f"|universe_filter={manifest.name}:{manifest.version}"
+            )
         ).encode("utf-8")
     ).hexdigest()
     return samples, metadata, dates, composite
+
+
+def _resolve_universe_filter(value: str) -> FilterManifest | None:
+    normalized = value.strip().lower()
+    if normalized == "":
+        return None
+    if normalized == LIQ_FILTER_V1.name:
+        return LIQ_FILTER_V1
+    raise ValueError("universe_filter must be '' or 'liq_v1'")
 
 
 def _partition_metrics(rows: list[Sample], scores: list[float]) -> dict[str, Any]:
@@ -778,6 +801,7 @@ def run_exhaust(
     models: tuple[str, ...] | None = None,
     resume: bool = False,
     feature_pack: str = "",
+    universe_filter: str = "",
 ) -> dict[str, Any]:
     output_dir.mkdir(parents=True, exist_ok=True)
     run_id = f"cpu-exhaust-{int(time.time())}"
@@ -787,12 +811,14 @@ def run_exhaust(
         horizon=horizon,
         target=target,
         feature_pack=feature_pack,
+        universe_filter=universe_filter,
     )
     pack_tag = feature_pack.strip() or "none"
+    universe_tag = universe_filter.strip() or "none"
     print(
         f"[exhaust] samples={len(samples)} dates={len(dates)} "
         f"sha={snapshot_sha[:16]}… target={target} h={horizon} "
-        f"feature_pack={pack_tag}",
+        f"feature_pack={pack_tag} universe_filter={universe_tag}",
         flush=True,
     )
     chosen_models = models or CPU_EXHAUST_MODELS
@@ -889,6 +915,8 @@ def run_exhaust(
         "target": target,
         "horizon": horizon,
         "evaluation_domain": evaluation_domain,
+        "feature_pack": feature_pack,
+        "universe_filter": universe_filter,
         "baseline_rank_ic": BASELINE_RANK_IC,
         "screen_top": [
             {
@@ -935,6 +963,8 @@ def _write_markdown(summary: dict[str, Any], path: Path) -> None:
             f"h{summary['horizon']} / `{summary['evaluation_domain']}`"
         ),
         f"- baseline RankIC (DoubleEnsemble): {summary['baseline_rank_ic']}",
+        f"- feature_pack: `{summary.get('feature_pack') or 'none'}`",
+        f"- universe_filter: `{summary.get('universe_filter') or 'none'}`",
         f"- any_beats_baseline: **{summary['any_beats_baseline']}**",
         f"- nested contract_met: `{summary.get('nested_contract_met')}`",
         "",
@@ -1015,6 +1045,12 @@ def main(argv: list[str] | None = None) -> int:
         choices=("", "v1", "feature_pack_v1"),
         help="Optional research feature pack; default keeps frozen champion matrix",
     )
+    parser.add_argument(
+        "--universe-filter",
+        default="",
+        choices=("", "liq_v1"),
+        help="Optional training universe filter; default keeps frozen champion matrix",
+    )
     args = parser.parse_args(argv)
     models = (
         tuple(part.strip() for part in args.models.split(",") if part.strip())
@@ -1040,6 +1076,7 @@ def main(argv: list[str] | None = None) -> int:
         models=models,
         resume=args.resume,
         feature_pack=args.feature_pack,
+        universe_filter=args.universe_filter,
     )
     return 0
 

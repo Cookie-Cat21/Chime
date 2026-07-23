@@ -116,3 +116,11 @@ cycle 0) < champion 0.2861; best net@112 −0.49%; **no pos112**. See
    global promotion gates — selective 90% still not met.
 3. Keep RankIC champion (`xgb_two_stage` 0.2861) as research score only until
    contract + post-cost gates pass without persistence-only construction.
+
+
+## Horizon h5 (2026-07-23)
+
+Relative/h5 nested on split snapshot: RankIC champ `xgb_two_stage` **0.1735**
+(well below h1 0.2861). Selective gates: **0 emits**. Best cost variant still
+**negative** net@112 (−0.56% DE persist_exit_15). Horizon lever does not unlock
+Goal A/B on this matrix. See `CPU_EXHAUST_REL_H5_20260723.md`.

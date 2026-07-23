@@ -22,6 +22,15 @@ from koel.ml.metrics import (
 )
 from koel.storage import Storage
 
+BOOK_POLICY_ID = "shadow_policy_rank_de_persist_v1"
+
+
+def is_book_policy(policy_id: str, model_rows: list[dict[str, Any]]) -> bool:
+    """Loop-0 rank book policies use RankIC / net@112 — not the 90% hit contract."""
+    if policy_id == BOOK_POLICY_ID:
+        return True
+    return any("persist_book" in str(row.get("gate") or "") for row in model_rows)
+
 
 @dataclass(frozen=True, slots=True)
 class ShadowModelMetrics:
@@ -46,7 +55,9 @@ class ShadowModelMetrics:
     ece: float | None
     post_cost_mean_return: float | None
     post_cost_sessions: int
-    contract_met: bool
+    book_policy: bool
+    contract_met: bool | None
+    rank_book_contract_met: bool | None
 
 
 def summarize_shadow_rows(rows: list[dict[str, Any]]) -> list[ShadowModelMetrics]:
@@ -144,19 +155,25 @@ def summarize_shadow_rows(rows: list[dict[str, Any]]) -> list[ShadowModelMetrics
         policy_sessions = {row.get("issued_at") for row in model_rows}
         eligible = sum(eligible_by_session.get(session, 0) for session in policy_sessions)
         coverage = len(model_rows) / eligible if eligible > 0 else None
-        contract_met = (
-            precision is not None
-            and precision >= 0.90
-            and lcb is not None
-            and lcb >= 0.90
-            and len(scored) >= 500
-            and len(symbol_counts) >= 80
-            and len(session_counts) >= 60
-            and coverage is not None
-            and coverage >= 0.01
-            and max_symbol_share <= 0.05
-            and max_session_share <= 0.05
-        )
+        book_policy = is_book_policy(policy_id, model_rows)
+        if book_policy:
+            contract_met: bool | None = None
+            rank_book_contract_met: bool | None = None
+        else:
+            contract_met = (
+                precision is not None
+                and precision >= 0.90
+                and lcb is not None
+                and lcb >= 0.90
+                and len(scored) >= 500
+                and len(symbol_counts) >= 80
+                and len(session_counts) >= 60
+                and coverage is not None
+                and coverage >= 0.01
+                and max_symbol_share <= 0.05
+                and max_session_share <= 0.05
+            )
+            rank_book_contract_met = None
         out.append(
             ShadowModelMetrics(
                 policy_id=policy_id,
@@ -186,7 +203,9 @@ def summarize_shadow_rows(rows: list[dict[str, Any]]) -> list[ShadowModelMetrics
                     spread.mean_net_return if spread is not None else None
                 ),
                 post_cost_sessions=spread.sessions if spread is not None else 0,
+                book_policy=book_policy,
                 contract_met=contract_met,
+                rank_book_contract_met=rank_book_contract_met,
             )
         )
     return out

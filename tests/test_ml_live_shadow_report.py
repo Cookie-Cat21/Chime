@@ -117,3 +117,65 @@ def test_shadow_report_includes_rank_calibration_and_cost_metrics() -> None:
     assert metrics.brier == 0.0
     assert metrics.ece == 0.0
     assert metrics.post_cost_sessions == 1
+
+
+def test_de_persist_book_policy_tabulated_without_success_contract() -> None:
+    rows = [
+        {
+            "model_id": "shadow_policy_rank_de_persist_v1",
+            "model_version": "shadow_policy_rank_de_persist_v1__2026-07-01__abc",
+            "symbol": f"S{index:02d}",
+            "issued_at": date(2026, 1, 1),
+            "gate": "shadow_persist_book",
+            "scored": True,
+            "hit": index % 3 == 0,
+            "y_pred": float(index - 10),
+            "y_real": float(index - 10) / 100,
+            "confidence": 0.8,
+        }
+        for index in range(20)
+    ]
+    rows.append(
+        {
+            "model_id": "shadow_policy_rank_de_persist_v1",
+            "model_version": "shadow_policy_rank_de_persist_v1__2026-07-01__abc_partial",
+            "symbol": "CANARY",
+            "issued_at": date(2026, 1, 1),
+            "gate": "shadow_partial_persist_book",
+            "scored": True,
+            "hit": True,
+        }
+    )
+    report = summarize_shadow_rows(rows)
+    assert len(report) == 1
+    metrics = report[0]
+    assert metrics.policy_id == "shadow_policy_rank_de_persist_v1"
+    assert metrics.book_policy is True
+    assert metrics.rows == 20
+    assert metrics.scored == 20
+    assert metrics.correct == 7
+    assert metrics.precision == 0.35
+    assert metrics.rank_ic == 1.0
+    assert metrics.rank_ic_sessions == 1
+    assert metrics.post_cost_sessions == 1
+    assert metrics.contract_met is None
+    assert metrics.rank_book_contract_met is None
+
+
+def test_persist_book_gate_detected_as_book_policy() -> None:
+    rows = [
+        {
+            "model_id": "custom_rank_book",
+            "model_version": "custom-v1",
+            "symbol": "A",
+            "issued_at": date(2026, 1, 1),
+            "gate": "shadow_persist_book",
+            "scored": False,
+            "hit": None,
+        }
+    ]
+    metrics = summarize_shadow_rows(rows)[0]
+    assert metrics.book_policy is True
+    assert metrics.contract_met is None
+    assert metrics.scored == 0
+    assert metrics.precision is None

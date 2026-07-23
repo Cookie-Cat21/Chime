@@ -128,4 +128,15 @@ precision must never be described as accuracy for all listed companies.
 No accuracy is available on issue day. H1 first becomes scorable after the next
 official CSE session is persisted.
 
+### DE-persist report columns
+
+Loop-0 `shadow_policy_rank_de_persist_v1` rows (gates `shadow_persist_book` /
+`shadow_partial_persist_book`) appear in `standards.json` with `book_policy=true`.
+They report emit counts (`rows`), scored counts, direction hit-rate (`precision`
+when matured), RankIC, net@112 (`post_cost_mean_return`), and concentration
+(`max_symbol_share`, `max_session_share`). The selective 90% SuccessContract
+(`contract_met`) is `null` for book policies; `rank_book_contract_met` is a
+reserved stub for a future rank-book qualification gate — not the abs-direction
+standard above.
+
 Research only — not financial advice.
