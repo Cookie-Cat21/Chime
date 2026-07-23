@@ -56,6 +56,7 @@ import {
   safeFilingHref,
   sanitizeDisclosureCategory,
 } from "@/lib/api/disclosure-safe";
+import { isFixtureStock } from "@/lib/api/fixture-stock";
 import { toFiniteNumber } from "@/lib/api/finite-number";
 import { serverApiGet } from "@/lib/api/server-fetch";
 import { normalizeSymbol, normalizeSymbolParam } from "@/lib/api/symbol";
@@ -275,6 +276,10 @@ export default async function SymbolDetailPage({
   if (!symbol) {
     notFound();
   }
+  // Digit-root fixtures (pytest `_uniq`) — hide before heavy loads.
+  if (isFixtureStock(symbol)) {
+    notFound();
+  }
   const categoryRaw = Array.isArray(sp.category)
     ? sp.category[0]
     : sp.category;
@@ -339,6 +344,14 @@ export default async function SymbolDetailPage({
   const metricsFailed = !metricsResult.ok;
 
   if (!stockLoadFailed && stockResult.ok && stockResult.row == null) {
+    notFound();
+  }
+  // Name-based fixtures (TEST CO / ROOT CO) even when the ticker looks real.
+  if (
+    stockResult.ok &&
+    stockResult.row &&
+    isFixtureStock(stockResult.row.symbol, stockResult.row.name)
+  ) {
     notFound();
   }
   if (stockLoadFailed || !stockResult.ok || !stockResult.row) {

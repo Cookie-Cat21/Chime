@@ -82,7 +82,7 @@ export const HELP_TOPICS: readonly HelpTopic[] = [
       {
         question: "Why is a quote missing or stale?",
         answer:
-          "The dash only re-reads Postgres — it does not stream CSE in the browser. Freshness tracks whoever writes `price_snapshots`: HTTP `koel poller`/`tick` (tradeSummary) and, when enabled, live STOMP ingest (`CSE_WS_ENABLED=1` or `python3 -m koel ws`) that records daytrade/index ticks as `source=cse_ws`.\n\nCommon causes: no live writer during the session, market closed (09:30–14:30 Asia/Colombo weekdays), CSE fetch/WS failure, or ops jobs paused. Open Health for snapshot age.",
+          "The dash only re-reads Postgres — it does not stream CSE in the browser. Freshness tracks whoever writes `price_snapshots`: HTTP `koel poller`/`tick` (tradeSummary) and, when enabled, live STOMP ingest (`CSE_WS_ENABLED=1` or `python3 -m koel ws`) that records daytrade/index ticks as `source=cse_ws`. The soft-refresh chip can say Stale Xm while the market badge still says open if nothing has written recently.\n\nCommon causes: no live writer during the session, market closed (09:30–14:30 Asia/Colombo weekdays), CSE fetch/WS failure, or ops jobs paused. Scheduled GitHub `market-tick` is an after-close catch-up, not an intraday tape. Open Health for snapshot age. Symbol pages also show data-quality notices — see Data quality.",
       },
     ],
   },
@@ -175,12 +175,17 @@ export const HELP_TOPICS: readonly HelpTopic[] = [
   {
     id: "symbol-charts",
     title: "Charts & ranges",
-    summary: "Candles vs sparkline, 1D–1Y, window OHLCV, Live.",
+    summary: "Candles vs step path vs sparkline, 1D–1Y, window OHLCV, Live.",
     items: [
       {
         question: "Candles vs sparkline?",
         answer:
           "When koel has enough daily bars, the company hero shows daily OHLC candlesticks (expand for more ranges). Expand opens an interactive koel chart (Lightweight Charts — crosshair, pan, zoom) on Postgres path data. On company symbols you can also switch to an optional TradingView tab for drawings/indicators (external, often delayed — koel alerts still use koel data).\n\nIf daily path history is thin (under 2 bars), the hero falls back to a tick sparkline. Empty chart copy about path-backfill means daily bars are not stored yet — not that the company has no price forever."
+      },
+      {
+        question: "Why a step line instead of candles on some names?",
+        answer:
+          "On low-priced CSE tickers (about under LKR 3) where most daily bars are flat dojis, the hero switches to a step close path with up/down markers. Tiny 0.10-style candles look like noise there — the footnote says so when it happens. Expand still opens real OHLC candles.\n\nExamples today include names like SEMB, TESS, ASPH, CITW, MULL when they sit in that penny/flat band."
       },
       {
         question: "What do 1D / 1M / 3M / 6M / 1Y mean?",
