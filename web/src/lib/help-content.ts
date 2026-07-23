@@ -82,7 +82,7 @@ export const HELP_TOPICS: readonly HelpTopic[] = [
       {
         question: "Why is a quote missing or stale?",
         answer:
-          "The dash only re-reads Postgres — it does not stream CSE. Freshness tracks whoever writes `price_snapshots` (a long-running `koel poller` / `both`, or a `tick`). The browser soft-refresh chip can say Stale Xm while the market badge still says open if nothing has written recently.\n\nCommon causes: no live poller during the session, market closed (09:30–14:30 Asia/Colombo weekdays), CSE fetch failure, or ops jobs paused. Scheduled GitHub `market-tick` is an after-close catch-up, not an intraday tape. Open Health for snapshot age. Symbol pages also show data-quality notices — see Data quality.",
+          "The dash only re-reads Postgres — it does not stream CSE in the browser. Freshness tracks whoever writes `price_snapshots`: HTTP `koel poller`/`tick` (tradeSummary) and, when enabled, live STOMP ingest (`CSE_WS_ENABLED=1` or `python3 -m koel ws`) that records daytrade/index ticks as `source=cse_ws`. The soft-refresh chip can say Stale Xm while the market badge still says open if nothing has written recently.\n\nCommon causes: no live writer during the session, market closed (09:30–14:30 Asia/Colombo weekdays), CSE fetch/WS failure, or ops jobs paused. Scheduled GitHub `market-tick` is an after-close catch-up, not an intraday tape. Open Health for snapshot age. Symbol pages also show data-quality notices — see Data quality.",
       },
     ],
   },

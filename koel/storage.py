@@ -319,11 +319,19 @@ class Storage:
             raise ValueError(f"invalid snapshot symbol: {snap.symbol!r}")
         return stored[0]
 
-    async def persist_market_snapshots(self, snaps: list[PriceSnapshot]) -> list[PriceSnapshot]:
+    async def persist_market_snapshots(
+        self,
+        snaps: list[PriceSnapshot],
+        *,
+        source: str = "poller",
+    ) -> list[PriceSnapshot]:
         """Upsert stocks + insert price_snapshots for a full tradeSummary board.
 
         Used by the poller to keep a market-wide browse layer in Postgres while
         rule evaluation stays watchlist-scoped. Empty input is a no-op.
+
+        ``source`` is ``poller`` (HTTP tradeSummary) or ``cse_ws`` (STOMP live
+        ticks). Chart backfill stays on ``persist_intraday_snapshots``.
 
         Duplicate symbols in one board collapse to last-wins (one snapshot row
         per symbol) so rule eval cannot use an intra-tick sibling as
@@ -332,6 +340,8 @@ class Storage:
         """
         if not snaps:
             return []
+        if source not in {"poller", "cse_ws"}:
+            raise ValueError(f"unsupported price_snapshots source: {source!r}")
 
         # Last-wins per normalized symbol; skip blanks (invalid CSE rows)
         # and non-finite prices (NaN/±Inf must not poison price_snapshots).
@@ -406,7 +416,7 @@ class Storage:
                     SELECT
                         symbol, price, change, change_pct, previous_close,
                         volume, trade_count, turnover, crossing_volume,
-                        high, low, open, market_cap, ts, 'poller'
+                        high, low, open, market_cap, ts, %s
                     FROM UNNEST(
                         %s::text[],
                         %s::double precision[],
@@ -440,11 +450,12 @@ class Storage:
                         low = EXCLUDED.low,
                         open = EXCLUDED.open,
                         market_cap = EXCLUDED.market_cap,
-                        source = 'poller',
+                        source = EXCLUDED.source,
                         ingested_at = now()
                     RETURNING id
                     """,
                     (
+                        source,
                         snap_symbols,
                         snap_prices,
                         snap_changes,
@@ -1315,7 +1326,7 @@ class Storage:
                     """
                     SELECT DISTINCT ON (symbol) *
                     FROM price_snapshots
-                    WHERE source = 'poller'
+                    WHERE source IN ('poller', 'cse_ws')
                       AND symbol <> 'MARKET'
                     ORDER BY symbol ASC, ts DESC, id DESC
                     """
@@ -2365,7 +2376,7 @@ class Storage:
                     SELECT * FROM price_snapshots
                     WHERE symbol = %s
                       AND id < %s
-                      AND source = 'poller'
+                      AND source IN ('poller', 'cse_ws')
                     ORDER BY id DESC
                     LIMIT 1
                     """,
@@ -2433,7 +2444,7 @@ class Storage:
                         FROM price_snapshots ps
                         WHERE ps.symbol = %s
                           AND ps.id < %s
-                          AND ps.source = 'poller'
+                          AND ps.source IN ('poller', 'cse_ws')
                           AND (ps.ts AT TIME ZONE 'Asia/Colombo')::date
                               < (now() AT TIME ZONE 'Asia/Colombo')::date
                         GROUP BY 1
@@ -5263,7 +5274,7 @@ class Storage:
                           JOIN watchlist_items w
                             ON w.symbol = ps.symbol
                          WHERE w.user_id = %s
-                           AND ps.source = 'poller'
+                           AND ps.source IN ('poller', 'cse_ws')
                            AND ps.symbol <> 'MARKET'
                          ORDER BY ps.symbol ASC, ps.ts DESC, ps.id DESC
                     )
@@ -5292,7 +5303,7 @@ class Storage:
         return out
 
     async def list_market_movers(self, *, limit: int = 5) -> list[dict[str, Any]]:
-        """Market-wide symbols sorted by |change_pct| from latest poller snaps."""
+        """Market-wide symbols sorted by |change_pct| from latest live snaps."""
         if isinstance(limit, int) and not isinstance(limit, bool):
             lim = max(1, min(limit, 20))
         else:
@@ -5305,7 +5316,7 @@ class Storage:
                         SELECT DISTINCT ON (ps.symbol)
                                ps.symbol, ps.price, ps.change_pct, ps.ts
                           FROM price_snapshots ps
-                         WHERE ps.source = 'poller'
+                         WHERE ps.source IN ('poller', 'cse_ws')
                            AND ps.symbol <> 'MARKET'
                            AND ps.symbol NOT IN ('ASPI', 'SNP_SL20')
                          ORDER BY ps.symbol ASC, ps.ts DESC, ps.id DESC
