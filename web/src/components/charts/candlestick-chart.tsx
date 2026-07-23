@@ -341,11 +341,29 @@ export function CandlestickChart({
                 : undefined
         }
       >
+        {/* Explicit pixel box for comfort — avoids aspect-ratio SVG quirks
+            (tiny left sliver or bodies stretched across the card). */}
+        <div
+          className={
+            comfortPitch || pack
+              ? "relative mx-auto h-full max-h-full max-w-full"
+              : "contents"
+          }
+          style={
+            comfortPitch || pack
+              ? {
+                  width: Math.min(frameW, Math.max(contentW, 160)),
+                  height: displayH,
+                }
+              : undefined
+          }
+        >
         <svg
           viewBox={`0 0 ${w} ${h}`}
           data-fit={fitWidth ? "1" : "0"}
           data-max-slot={maxSlot ?? ""}
           data-comfort={comfortPitch ? "1" : "0"}
+          data-slots={totalSlots}
           preserveAspectRatio={
             pack || comfortPitch
               ? "xMidYMid meet"
@@ -354,15 +372,13 @@ export function CandlestickChart({
                 : "xMinYMid meet"
           }
           style={
-            comfortPitch
+            comfortPitch || pack
               ? {
+                  width: "100%",
                   height: "100%",
-                  width: "auto",
-                  maxWidth: "100%",
-                  aspectRatio: `${Math.max(1, w)} / ${Math.max(1, h)}`,
                   display: "block",
                 }
-              : pack || fitWidth
+              : fitWidth
                 ? {
                     width: "100%",
                     height: "100%",
@@ -376,11 +392,7 @@ export function CandlestickChart({
                   }
           }
           className={
-            comfortPitch
-              ? "max-h-full"
-              : pack || fitWidth
-                ? "h-full w-full"
-                : "max-w-none"
+            comfortPitch || pack || fitWidth ? "h-full w-full" : "max-w-none"
           }
           role="img"
           aria-label={aria}
@@ -636,6 +648,7 @@ export function CandlestickChart({
             {last.trade_date}
           </text>
         </svg>
+        </div>
       </div>
       {footnote === "" || (minimal && footnote == null) ? null : (
         <p className="mt-2.5 shrink-0 text-xs leading-relaxed text-muted-foreground">
