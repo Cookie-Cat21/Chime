@@ -185,12 +185,21 @@ type CiHealthBlock = {
   error?: string;
 };
 
+type WriterFreshness = {
+  last_poller_at: string | null;
+  last_cse_ws_at: string | null;
+  last_live_at: string | null;
+  last_order_book_at: string | null;
+};
+
 type HealthPayload = {
   status: "ok" | "degraded";
   db_ok: boolean;
   started_at: string | null;
   last_snapshot_at: string | null;
   detail?: boolean;
+  /** DB writer tips — fills Tick age when HEALTH_URL poller is absent. */
+  writers?: WriterFreshness | null;
   poller: {
     last_tick_at?: string | null;
     last_tick_ok?: boolean;
@@ -345,12 +354,29 @@ function parseHealthPayload(body: unknown): HealthPayload | null {
     poller = null;
   }
 
+  let writers: WriterFreshness | null = null;
+  if (r.writers != null && typeof r.writers === "object" && !Array.isArray(r.writers)) {
+    const w = r.writers as Record<string, unknown>;
+    writers = {
+      last_poller_at:
+        w.last_poller_at === null ? null : healthTs(w.last_poller_at),
+      last_cse_ws_at:
+        w.last_cse_ws_at === null ? null : healthTs(w.last_cse_ws_at),
+      last_live_at: w.last_live_at === null ? null : healthTs(w.last_live_at),
+      last_order_book_at:
+        w.last_order_book_at === null ? null : healthTs(w.last_order_book_at),
+    };
+  } else if (r.writers === null) {
+    writers = null;
+  }
+
   return {
     status,
     db_ok: r.db_ok,
     started_at: healthTs(r.started_at),
     last_snapshot_at: healthTs(r.last_snapshot_at),
     detail: typeof r.detail === "boolean" ? r.detail : undefined,
+    writers,
     poller,
     delivery: parseDelivery(r.delivery),
     retention: parseRetention(r.retention),
@@ -649,7 +675,11 @@ export default async function HealthPage() {
   const ci = payload?.ci ?? null;
   const opsDetail = payload?.detail === true;
   const snapshotAge = timestampAge(payload?.last_snapshot_at);
-  const tickAge = timestampAge(payload?.poller?.last_tick_at);
+  const processTickAt = payload?.poller?.last_tick_at ?? null;
+  const writerTickAt = payload?.writers?.last_live_at ?? null;
+  const tickAt = processTickAt ?? writerTickAt;
+  const tickAge = timestampAge(tickAt);
+  const tickFromWriters = processTickAt == null && writerTickAt != null;
   const pollerUnreachable =
     payload?.poller?.last_error === "health_url_unreachable";
   const pollerDegraded =
@@ -668,7 +698,7 @@ export default async function HealthPage() {
         <PageHeader
           eyebrow="Ops"
           title="Health"
-          description="Read-only — Postgres freshness, data inventory, and GitHub Actions. Poller tick detail needs HEALTH_URL on a host that can reach the poller loopback. No deploy controls here."
+          description="Read-only — Postgres writer freshness, data inventory, and GitHub Actions. Live process flags need HEALTH_URL on a host with a long-running poller; on Vercel, Tick age uses the latest poller/cse_ws snapshot instead. No deploy controls here."
           action={
             <div className="flex flex-wrap items-center gap-2">
               <HelpLink topic="health">Poller help</HelpLink>
@@ -742,28 +772,57 @@ export default async function HealthPage() {
               <StatCard
                 label="Database"
                 value={payload.db_ok ? "ok" : "down"}
+                hint={
+                  payload.db_ok
+                    ? "Postgres ping succeeded"
+                    : "Could not SELECT 1 — check DATABASE_URL"
+                }
                 icon={Database}
               />
               <StatCard
                 label="Status"
                 value={statusLabel}
+                hint={
+                  pollerUnreachable
+                    ? "HEALTH_URL set but poller process unreachable"
+                    : pollerDegraded
+                      ? "DB up; poller reported a failed check"
+                      : payload.poller != null
+                        ? "DB + live poller process healthy"
+                        : "DB healthy · no live poller process (Vercel / no HEALTH_URL)"
+                }
                 icon={Activity}
               />
               <StatCard
                 label="Snapshot age"
                 value={formatAge(snapshotAge)}
+                hint={
+                  snapshotAge
+                    ? `Newest price_snapshots row · ${formatTs(payload.last_snapshot_at)}`
+                    : "No price_snapshots rows yet"
+                }
                 icon={Timer}
               />
               <StatCard
                 label="Tick age"
                 value={formatAge(tickAge)}
+                hint={
+                  tickFromWriters
+                    ? `From latest poller/cse_ws write · ${formatTs(writerTickAt)}`
+                    : processTickAt
+                      ? `From live poller HEALTH_URL · ${formatTs(processTickAt)}`
+                      : "No poller/cse_ws writes yet — run market-tick or koel ws"
+                }
                 icon={Radio}
               />
             </div>
 
             <dl className="mt-8 grid grid-cols-1 gap-5 sm:grid-cols-2">
               <Row label="Database" value={payload.db_ok ? "ok" : "down"} />
-              <Row label="Started" value={formatTs(payload.started_at)} />
+              <Row
+                label="Dash process started"
+                value={formatTs(payload.started_at)}
+              />
               <Row
                 label="Last snapshot"
                 value={formatTs(payload.last_snapshot_at)}
@@ -771,6 +830,18 @@ export default async function HealthPage() {
               <Row
                 label="Last snapshot age"
                 value={formatAge(snapshotAge)}
+              />
+              <Row
+                label="Last HTTP poller write"
+                value={formatTs(payload.writers?.last_poller_at ?? null)}
+              />
+              <Row
+                label="Last WebSocket write"
+                value={formatTs(payload.writers?.last_cse_ws_at ?? null)}
+              />
+              <Row
+                label="Last order-book sample"
+                value={formatTs(payload.writers?.last_order_book_at ?? null)}
               />
             </dl>
 
@@ -1065,18 +1136,40 @@ export default async function HealthPage() {
                 Poller
               </h2>
               {payload.poller == null ? (
-                <div className="mt-3 space-y-2 text-sm text-muted-foreground">
+                <div className="mt-3 space-y-3 text-sm text-muted-foreground">
                   <p>
-                    No live poller tick detail. On Vercel this is expected —
+                    No live poller <em>process</em> flags. On Vercel this is
+                    expected —
                     <code className="mx-1 font-mono text-xs">HEALTH_URL</code>
                     only proxies loopback (
                     <code className="font-mono text-xs">127.0.0.1</code>
-                    ). Snapshot age above is the DB-side freshness signal.
+                    ). Tick age above uses the latest{" "}
+                    <code className="font-mono text-xs">poller</code> /{" "}
+                    <code className="font-mono text-xs">cse_ws</code> row in
+                    Postgres (from GitHub <code className="font-mono text-xs">market-tick</code>{" "}
+                    or a host running <code className="font-mono text-xs">koel ws</code>
+                    ).
                   </p>
+                  {payload.writers != null ? (
+                    <dl className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                      <Row
+                        label="Last live write age"
+                        value={formatAge(
+                          timestampAge(payload.writers.last_live_at),
+                        )}
+                      />
+                      <Row
+                        label="Order-book sample age"
+                        value={formatAge(
+                          timestampAge(payload.writers.last_order_book_at),
+                        )}
+                      />
+                    </dl>
+                  ) : null}
                   {!opsDetail ? (
                     <p>
-                      Full poller / Telegram delivery / model blocks also need
-                      your Telegram id in{" "}
+                      Telegram delivery / model blocks also need your Telegram
+                      id in{" "}
                       <code className="font-mono text-xs">
                         DASH_OPS_TELEGRAM_IDS
                       </code>
@@ -1128,8 +1221,12 @@ export default async function HealthPage() {
               )}
               {tickAge?.stale ? (
                 <StaleOpsNotice
-                  title="Poller tick age is stale"
-                  copy={`Last poller tick is ${formatAge(tickAge)} old. Ops: check HEALTH_URL, the poller process, and recent poller logs before trusting green DB liveness.`}
+                  title="Writer / tick age is stale"
+                  copy={
+                    tickFromWriters
+                      ? `Last poller/cse_ws write is ${formatAge(tickAge)} old. Ops: confirm GitHub market-tick (or a host koel ws / poller) is writing price_snapshots.`
+                      : `Last poller tick is ${formatAge(tickAge)} old. Ops: check HEALTH_URL, the poller process, and recent poller logs before trusting green DB liveness.`
+                  }
                 />
               ) : null}
             </section>
