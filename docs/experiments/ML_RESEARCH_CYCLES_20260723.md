@@ -377,3 +377,44 @@ Interventions:
 
 - advw load max **3.83**; watchdog OK; single `cpu_exhaust` only.
 
+## Cycle — abs/h1 split + absolute selective denser (2026-07-24)
+
+Status: **exhausted** — 0 selective emits; champions unchanged.
+
+Evidence: `CPU_EXHAUST_ABS_H1_SPLIT_20260724.md`, `cpu_exhaust_abs_h1_split_summary.json`
+
+Decision:
+
+- Split shards restored: hgb_bagged RankIC **0.2500** vs frozen **0.2546**.
+- Denser selective (0.001–0.10 coverage): **0 emits** all models.
+- Absolute selective 90% lever **exhausted**.
+
+## Cycle — fpv2+adv20 combo nested (2026-07-24)
+
+Status: **exhausted** — no W1 materiality; contract false.
+
+Evidence: `FEATURE_PACK_V2_ADV20_NESTED_20260724.md`, `cpu_exhaust_rel_h1_fpv2_advw_summary.json`
+
+Decision:
+
+- xgb RankIC **0.2867** vs frozen **0.2861** (+0.0006) — below +0.005.
+- Selective xgb 104 / LCB 0.685 — contract **still false**.
+- DE persist +0.59% vs frozen +0.49% (+0.10 pp borderline) — no Goal A unlock.
+- Serial steps **a–c complete**. E7 non-partial blocked until ≥14:35 Colombo.
+
+Remaining blockers: **E7** (≥60 non-partial shadow sessions), **E8** (prospective
+aggregate insufficient), **E10** (exhaustion dossier pending).
+
+## Cycle — E7 partial shadow smoke (2026-07-24 ~11:15 Colombo)
+
+Status: **partial canary OK** — non-partial deferred until ≥14:35 SLT.
+
+Evidence: `live_shadow --allow-partial` on split snapshot (2026-07-24 issue date)
+
+Result:
+
+- `shadow_policy_rank_de_persist_v1`: **16** partial legs
+- `shadow_policy_rank_de_h3_weekly_v1`: **16** partial legs
+- `partial_session=true`; excluded from E7/E8 qualification counts
+- Non-partial post-close run required after 14:35 Asia/Colombo
+
