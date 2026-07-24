@@ -303,9 +303,9 @@ Status: **complete** (all steps + recovery).
 Evidence:
 
 - Snapshot export: hybrid split, 917 087 rows, 292 symbols (`/tmp/koel-live-final-snapshot-split`)
-- Step 2 fpv2 rel/h1: **failed** (missing ML deps at start; pip install mid-queue)
+- Step 2 fpv2 rel/h1: **done** (recovery) — `FEATURE_PACK_V2_NESTED_20260724.md`
 - Step 3 abs/h3: `CPU_EXHAUST_ABS_H3_20260724.md`, `cpu_exhaust_abs_h3_summary.json`
-- Step 4 W5 2k hyper fpv2: `/tmp/cpu-w5-fpv2-2k` (running)
+- Step 4 W5 2k hyper fpv2: **done** — `CPU_W5_FPV2_2K_20260724.md`
 
 Decision (abs/h3):
 
