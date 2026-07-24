@@ -5,4 +5,6 @@
 - nest RankIC: {'hgb_bagged': 0.2878729184243386, 'xgb_lmt': 0.27190216803868505, 'xgb_two_stage': 0.27862451285202644, 'double_ensemble_native': 0.26564968843583103}
 
 ANY_CONTRACT_MET=False
+## Milestone
 
+First Goal A selective with **point precision ≥ 0.90**: `hgb_bagged` prec=0.9039 LCB=0.8670 emits=229. Still short of LCB≥0.90 and emits≥500.
