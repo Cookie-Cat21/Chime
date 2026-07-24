@@ -145,6 +145,7 @@ cycle 0) < champion 0.2861; best net@112 −0.49%; **no pos112**. See
 | 5l | Feature pack v3 | **exhausted** | best `xgb_two_stage` 0.2843 (−0.0018); emits 92; no materiality (`FEATURE_PACK_V3_NESTED_20260724.md`) |
 | 5m | Universe filter liq_v4 | **exhausted** | 439k samples retained; best RankIC 0.2842 (−0.0019); emits 97; cost +0.54% (`UNIVERSE_FILTER_LIQ_V4_NESTED_20260724.md`) |
 | 5n | fpv2+liq_v4 combo | **material (cost)** | RankIC 0.2835; emits 106; **net@112 +0.60% (+0.11pp)** → W5 unblocked (`FEATURE_PACK_V2_LIQ_V4_NESTED_20260724.md`) |
+| 5o | W5 ≤2k on fpv2+liq_v4 | **exhausted** | best hyper test RankIC **0.2695** (<0.2861); no contract (`CPU_W5_FPV2_LIQV4_2K_20260724.md`) |
 | 5d | Selective denser + disagreement (fpv2) | **exhausted** | best 0.779/0.693/77 emits; contract **false** |
 | 5b | Universe filter W2 | **exhausted/killed — universe collapse** | v1 −93.5%; v2 35,328 rows; v3 35,377 rows; 0 selective emits; flat-only filter still <100k |
 | 6 | Horizons/targets | absolute/h1 done; abs/h1 split selective **exhausted (0 emits)**; rel/h3 + abs/h3 + h5 exhausted | rel/h3 0.2285; **abs/h3 0.2061**; h5 0.1735; no Goal A/B unlock |
@@ -345,4 +346,10 @@ W1 materiality **not fired**. Selective 90% contract **still unmet** (honest).
 - Materiality **fired on cost only**: DE persist net **+0.60%** vs frozen **+0.49%** (+0.11 pp).
 - RankIC still below champion; selective contract unmet.
 - Action: capped ≤2k hyper search on this matrix (`cpu_w5_fpv2_liqv4_2k`).
+
+## Cycle — 2026-07-24 W5 fpv2+liq_v4 2k
+
+- 2000 LGB configs screened; best test RankIC **0.2695**.
+- No RankIC beat of frozen 0.2861; SuccessContract **NOT MET**.
+- Cost materiality on matrix retained; live_shadow policies unchanged.
 
