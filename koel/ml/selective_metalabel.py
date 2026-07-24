@@ -29,6 +29,7 @@ from koel.ml.distributed import (
     load_prediction_artifact,
     wilson_lower_bound,
 )
+from koel.ml.features import FEATURE_NAMES, path_features
 from koel.ml.selective_gates import (
     DEFAULT_CONTRACT,
     SelectiveRow,
@@ -36,6 +37,20 @@ from koel.ml.selective_gates import (
     _is_hit,
     _parse_float_csv,
     _rows_from_artifacts,
+)
+from koel.ml.snapshot import load_bar_snapshot
+
+# PIT path-feature dims appended when --snapshot is supplied.
+RICH_FEATURE_NAMES: tuple[str, ...] = (
+    "vol_20d",
+    "range_20d",
+    "log_price",
+    "ret_20d",
+    "liquidity_20d",
+    "dist_20d_high",
+)
+_RICH_FEATURE_IDX: tuple[int, ...] = tuple(
+    FEATURE_NAMES.index(name) for name in RICH_FEATURE_NAMES
 )
 
 DEFAULT_COVERAGE_GRID: tuple[float, ...] = (
@@ -85,10 +100,46 @@ def _day_ranks(rows: Sequence[SelectiveRow]) -> dict[tuple[Any, Any], float]:
     return out
 
 
+def build_rich_feature_lookup(
+    snapshot_dir: Path,
+    keys: Sequence[tuple[str, Any]],
+) -> dict[tuple[str, Any], tuple[float, ...]]:
+    """Point-in-time path features for ``(symbol, as_of)`` keys from a snapshot."""
+    needed = {(str(symbol).strip().upper(), as_of) for symbol, as_of in keys}
+    if not needed:
+        return {}
+    loaded = load_bar_snapshot(snapshot_dir)
+    by_symbol: dict[str, set[Any]] = defaultdict(set)
+    for symbol, as_of in needed:
+        by_symbol[symbol].add(as_of)
+    out: dict[tuple[str, Any], tuple[float, ...]] = {}
+    for symbol, as_ofs in by_symbol.items():
+        bars = loaded.series.get(symbol) or []
+        if not bars:
+            continue
+        ordered = sorted(bars, key=lambda bar: bar.trade_date)
+        # Index by trade_date for O(1) end lookups.
+        index_by_date = {bar.trade_date: i for i, bar in enumerate(ordered)}
+        for as_of in as_ofs:
+            end = index_by_date.get(as_of)
+            if end is None:
+                continue
+            feats = path_features(ordered[: end + 1])
+            if feats is None:
+                continue
+            values = []
+            for idx in _RICH_FEATURE_IDX:
+                raw = feats.values[idx]
+                values.append(0.0 if not math.isfinite(raw) else float(raw))
+            out[(symbol, as_of)] = tuple(values)
+    return out
+
+
 def _design_matrix(
     rows: Sequence[SelectiveRow],
     *,
     universe: Sequence[SelectiveRow],
+    feature_lookup: dict[tuple[str, Any], tuple[float, ...]] | None = None,
 ) -> np.ndarray:
     ranks = _day_ranks(universe)
     day_scores: dict[Any, list[float]] = defaultdict(list)
@@ -99,17 +150,21 @@ def _design_matrix(
         day: float(np.std(vals)) if len(vals) > 1 else 0.0
         for day, vals in day_scores.items()
     }
+    n_rich = len(RICH_FEATURE_NAMES) if feature_lookup is not None else 0
+    zero_rich = tuple(0.0 for _ in range(n_rich))
     xs: list[list[float]] = []
     for row in rows:
-        xs.append(
-            [
-                abs(row.score),
-                row.score,
-                1.0 if row.score > 0 else 0.0,
-                ranks.get((row.symbol, row.as_of), 0.0),
-                day_disp.get(row.as_of, 0.0),
-            ]
-        )
+        base = [
+            abs(row.score),
+            row.score,
+            1.0 if row.score > 0 else 0.0,
+            ranks.get((row.symbol, row.as_of), 0.0),
+            day_disp.get(row.as_of, 0.0),
+        ]
+        if feature_lookup is not None:
+            rich = feature_lookup.get((row.symbol, row.as_of), zero_rich)
+            base.extend(rich)
+        xs.append(base)
     return np.asarray(xs, dtype=float)
 
 
@@ -117,6 +172,7 @@ def _fit_meta(
     calibration: Sequence[SelectiveRow],
     *,
     coverage: float,
+    feature_lookup: dict[tuple[str, Any], tuple[float, ...]] | None = None,
 ) -> tuple[LogisticRegression, float] | None:
     candidates = _candidate_slice(calibration, coverage=coverage)
     if len(candidates) < 40:
@@ -124,7 +180,11 @@ def _fit_meta(
     y = np.asarray([1 if _is_hit(row) else 0 for row in candidates], dtype=int)
     if y.min() == y.max():
         return None
-    x = _design_matrix(candidates, universe=calibration)
+    x = _design_matrix(
+        candidates,
+        universe=calibration,
+        feature_lookup=feature_lookup,
+    )
     model = LogisticRegression(max_iter=500, class_weight="balanced")
     model.fit(x, y)
     return model, coverage
@@ -137,11 +197,16 @@ def _apply_meta(
     model: LogisticRegression,
     coverage: float,
     proba_floor: float,
+    feature_lookup: dict[tuple[str, Any], tuple[float, ...]] | None = None,
 ) -> list[SelectiveRow]:
     candidates = _candidate_slice(rows, coverage=coverage)
     if not candidates:
         return []
-    x = _design_matrix(candidates, universe=universe)
+    x = _design_matrix(
+        candidates,
+        universe=universe,
+        feature_lookup=feature_lookup,
+    )
     proba = model.predict_proba(x)[:, 1]
     return [
         row
@@ -156,11 +221,16 @@ def select_meta_gate(
     contract: SuccessContract,
     coverage_grid: tuple[float, ...],
     proba_grid: tuple[float, ...],
+    feature_lookup: dict[tuple[str, Any], tuple[float, ...]] | None = None,
 ) -> dict[str, Any] | None:
     """Pick coverage + probability floor on calibration labels only."""
     best: dict[str, Any] | None = None
     for coverage in coverage_grid:
-        fitted = _fit_meta(calibration, coverage=coverage)
+        fitted = _fit_meta(
+            calibration,
+            coverage=coverage,
+            feature_lookup=feature_lookup,
+        )
         if fitted is None:
             continue
         model, _ = fitted
@@ -171,6 +241,7 @@ def select_meta_gate(
                 model=model,
                 coverage=coverage,
                 proba_floor=proba_floor,
+                feature_lookup=feature_lookup,
             )
             emits = len(selected)
             if emits < contract.min_calibration_emits:
@@ -207,6 +278,7 @@ def evaluate_selective_metalabel(
     contract: SuccessContract = DEFAULT_CONTRACT,
     coverage_grid: tuple[float, ...] = DEFAULT_COVERAGE_GRID,
     proba_grid: tuple[float, ...] = DEFAULT_PROBA_GRID,
+    feature_lookup: dict[tuple[str, Any], tuple[float, ...]] | None = None,
 ) -> dict[str, Any]:
     if not artifacts:
         raise ValueError("at least one artifact is required")
@@ -239,6 +311,7 @@ def evaluate_selective_metalabel(
             contract=contract,
             coverage_grid=coverage_grid,
             proba_grid=proba_grid,
+            feature_lookup=feature_lookup,
         )
         if gate is None:
             folds.append(
@@ -257,6 +330,7 @@ def evaluate_selective_metalabel(
             model=gate["model"],
             coverage=float(gate["coverage"]),
             proba_floor=float(gate["proba_floor"]),
+            feature_lookup=feature_lookup,
         )
         hits = sum(1 for row in selected if _is_hit(row))
         emits = len(selected)
@@ -286,7 +360,12 @@ def evaluate_selective_metalabel(
     )
     return {
         "model": model_name,
-        "method": "selective_metalabel",
+        "method": (
+            "selective_metalabel_rich"
+            if feature_lookup is not None
+            else "selective_metalabel"
+        ),
+        "rich_features": list(RICH_FEATURE_NAMES) if feature_lookup is not None else [],
         "contract": asdict(contract),
         "contract_met": all(checks.values()),
         "checks": checks,
@@ -322,6 +401,12 @@ def main(argv: Sequence[str] | None = None) -> int:
         "--proba-grid",
         default=",".join(str(value) for value in DEFAULT_PROBA_GRID),
     )
+    parser.add_argument(
+        "--snapshot",
+        type=Path,
+        default=None,
+        help="Optional bar snapshot for PIT rich meta-label features",
+    )
     args = parser.parse_args(argv)
     artifacts = [
         artifact
@@ -330,13 +415,34 @@ def main(argv: Sequence[str] | None = None) -> int:
     ]
     if not artifacts:
         raise SystemExit(f"no artifacts for model {args.model}")
+    feature_lookup = None
+    if args.snapshot is not None:
+        rows = _rows_from_artifacts(artifacts)
+        keys = [(row.symbol, row.as_of) for row in rows]
+        feature_lookup = build_rich_feature_lookup(args.snapshot, keys)
+        print(
+            json.dumps(
+                {
+                    "rich_feature_keys": len(keys),
+                    "rich_feature_hits": len(feature_lookup),
+                    "rich_features": list(RICH_FEATURE_NAMES),
+                },
+                sort_keys=True,
+            ),
+            flush=True,
+        )
     report = evaluate_selective_metalabel(
         artifacts,
         coverage_grid=_parse_float_csv(args.coverage_grid),
         proba_grid=_parse_float_csv(args.proba_grid),
+        feature_lookup=feature_lookup,
     )
     args.output_dir.mkdir(parents=True, exist_ok=True)
-    stem = f"{args.model}.selective_metalabel"
+    stem = (
+        f"{args.model}.selective_metalabel_rich"
+        if feature_lookup is not None
+        else f"{args.model}.selective_metalabel"
+    )
     json_path = args.output_dir / f"{stem}.json"
     md_path = args.output_dir / f"{stem}.md"
     # Drop non-serializable fold model objects (already stripped).

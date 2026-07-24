@@ -115,6 +115,29 @@ else
   log "horizon agree skipped — missing nests"
 fi
 
+# ---- 4) rich meta-label on skip-day + prior fpv2+liq_v4 nests ----
+mkdir -p /tmp/cpu-metalabel-rich
+for nest_model in \
+  "/tmp/cpu-exhaust-rel-skip1-fpv2-liqv4/nested:xgb_two_stage" \
+  "/tmp/cpu-exhaust-rel-skip1-fpv2-liqv4/nested:xgb_lmt" \
+  "/tmp/cpu-exhaust-rel-h1-fpv2-liqv4-nearmiss/nested:xgb_lmt" \
+  "/tmp/cpu-exhaust-rel-h1-fpv2-liqv4/nested:xgb_two_stage"
+do
+  nested=${nest_model%%:*}
+  model=${nest_model##*:}
+  shopt -s nullglob
+  files=("$nested"/*-${model}.predictions.jsonl.gz)
+  if [ ${#files[@]} -eq 0 ]; then
+    continue
+  fi
+  log "rich metalabel nest=$nested model=$model"
+  nice -n 10 python3 -m koel.ml.selective_metalabel "${files[@]}" \
+    --model "$model" \
+    --snapshot "$SNAP" \
+    --output-dir /tmp/cpu-metalabel-rich \
+    2>&1 | tee -a /tmp/metalabel-rich.log || true
+done
+
 # ---- harvest ----
 python3 - <<'PY'
 import json
@@ -144,6 +167,7 @@ roots=[
     Path('/tmp/cpu-post-skip1-fpv2-liqv4/selective'),
     Path('/tmp/cpu-sel-ultradense-h3-fpv2-liqv4'),
     Path('/tmp/cpu-horizon-agree-fpv2-liqv4'),
+    Path('/tmp/cpu-metalabel-rich'),
     Path('/tmp/goal-a-continue-harvest.md'),
 ]
 lines=[f"# Goal A wave2 harvest — {datetime.now(timezone.utc).isoformat()}", ""]
