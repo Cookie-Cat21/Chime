@@ -53,6 +53,20 @@ ML_DATABASE_URL=... python3 -m koel.ml.live_shadow \
 # Prefer shadow-first scoring so older non-shadow rows cannot starve E7/E8.
 DATABASE_URL=... python3 -m koel ml-score-outcomes --model-prefix shadow --limit 20000
 ML_DATABASE_URL=... python3 -m koel.ml.live_shadow_report
+
+### One-shot daily wrapper (preferred for E7 accumulation)
+
+```bash
+# After close:
+bash scripts/ml_daily_shadow.sh
+
+# Or sleep until next weekday 14:40 Asia/Colombo then run:
+bash scripts/ml_daily_shadow.sh --wait
+```
+
+The wrapper exports the split hybrid snapshot, emits `live_shadow`, force
+path-backfills recent CSE bars, scores `--model-prefix shadow`, then prints
+`live_shadow_report`. Logs land under `/tmp/koel-daily-shadow/`.
 ```
 
 `live_shadow` refuses to emit a final model before 14:35 SLT. `--allow-partial`
