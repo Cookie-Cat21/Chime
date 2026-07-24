@@ -19,6 +19,7 @@ Best near-misses (relative/h1 unless noted):
 | fpv2 extra xgb_lmt | 0.891 / 0.793 / 46 | high point prec; emits ≪500 |
 | fpv2 extra hgb_lmt | 0.852 / 0.776 / 81 | still ≪0.90 LCB floor |
 | Ranking lgb_lambdarank | 0 emits | RankIC 0.2647 (−0.021 vs champion) |
+| DE blends blend_de_lgb | 0 emits | RankIC 0.2557; net +0.58% cost only |
 | adv20 weights | xgb 0 emits selective | RankIC flat |
 | fpv2+adv20 | 0.76-ish / 0.685 / 104 | no unlock |
 | Absolute denser | 0 emits | |
@@ -37,7 +38,7 @@ E7 requires ≥60 **non-partial scored** sessions — scheduled final emit after
 
 ## Levers exhausted offline
 
-Same-matrix hypers, ensembles, selective grids, fpv1/v2, fpv2 extra (bagged/LMT/deep), ranking models (LTR), liq filters v1–v3, horizons h3/h5, CSE-only short history, ADV sample weights, disagreement selective.
+Same-matrix hypers, ensembles, selective grids, fpv1/v2, fpv2 extra (bagged/LMT/deep), ranking models (LTR), DE blends, liq filters v1–v3, horizons h3/h5, CSE-only short history, ADV sample weights, disagreement selective.
 
 ## Still open
 

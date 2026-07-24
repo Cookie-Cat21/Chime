@@ -454,3 +454,18 @@ Decision:
 
 Next (serial): DE blends → E7 non-partial shadow after 14:35 SLT.
 
+## Cycle — DE blend models nested complete (2026-07-24)
+
+Status: **exhausted** — 0 selective emits; RankIC below champion; retained.
+
+Evidence: `BLEND_MODELS_NESTED_20260724.md`, `cpu_exhaust_rel_h1_blends_summary.json`
+
+Decision:
+
+- Best `blend_de_lgb` RankIC **0.2557** vs frozen **0.2861** (−0.0304).
+- Cost net +0.58% (borderline vs DE persist +0.49%) but **0 selective emits**.
+- Lever **exhausted**; frozen champions retained.
+
+All serial offline exhaust for 2026-07-24 **complete**. E7 non-partial shadow
+scheduled ~14:35 Asia/Colombo.
+

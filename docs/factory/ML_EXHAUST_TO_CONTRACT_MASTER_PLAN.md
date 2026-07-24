@@ -373,7 +373,7 @@ Prospective shadow uses the same numeric thresholds for **standards reporting**;
 
 Exhaustion is claimed **only** when **every** item below is true. Otherwise keep running W0–W5.
 
-**Checklist status (2026-07-24):** 7/10 evidenced — **not truly exhausted** (E7–E8 open: need ≥60 non-partial shadow sessions; E10 dossier pending). adv20 + selective denser/disagreement + fpv2 extra **killed**; rankers + blends + E7 non-partial in flight.
+**Checklist status (2026-07-24):** 7/10 evidenced — **not truly exhausted** (E7–E8 open). All offline serial levers for session **complete** (fpv2 extra, rankers, blends killed); E7 non-partial shadow scheduled 14:35 SLT; E10 dossier pending.
 
 | # | Done | Condition | Evidence artifact |
 |---|:---:|---|---|
