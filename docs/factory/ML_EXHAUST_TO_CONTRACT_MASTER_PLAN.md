@@ -378,7 +378,7 @@ Prospective shadow uses the same numeric thresholds for **standards reporting**;
 
 Exhaustion is claimed **only** when **every** item below is true. Otherwise keep running W0–W5.
 
-**Checklist status (2026-07-24):** 7/10 evidenced — **not truly exhausted** (E7 1/60 sessions; E8 scored_legs 0; E10 dossier pending). All offline serial levers **complete**; first non-partial shadow receipt logged.
+**Checklist status (2026-07-24):** 7/10 evidenced — **not truly exhausted** (E7 1/60 non-partial sessions; E8 DE non-partial scored 0; E10 living draft only). Offline serial levers including fpv2 full family sweep + **fpv3** + disagreement **complete without unlock**; Mon 2026-07-27 non-partial shadow scheduled.
 
 | # | Done | Condition | Evidence artifact |
 |---|:---:|---|---|
