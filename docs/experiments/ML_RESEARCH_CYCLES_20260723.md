@@ -370,7 +370,7 @@ Decision:
 - Denser selective + disagreement on fpv2 already tried — contract **still false**.
 - Lever **exhausted**; frozen champions retained.
 
-Next (serial): abs/h1 split nested → absolute selective denser grids →
+Next (serial): ~~abs/h1 split nested → absolute selective denser grids~~ **done (exhausted)** →
 fpv2+adv20 combo nested → E7 non-partial shadow after 14:35 Asia/Colombo.
 
 Interventions:

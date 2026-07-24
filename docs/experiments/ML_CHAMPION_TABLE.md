@@ -135,9 +135,11 @@ cycle 0) < champion 0.2861; best net@112 −0.49%; **no pos112**. See
 | 4 | Ensembles/stacking | **exhausted** | best RankIC 0.2858 (−0.0003 vs champion); no net gain |
 | 5 | New features | **fpv1 + fpv2 nested done — no materiality** | fpv1 Δ −0.0007; fpv2 xgb +0.0004; W1 thresholds **not fired** |
 | 5c | Sample weight adv20 | **exhausted** | xgb +0.0001 RankIC; selective regresses (xgb 0 emits); DE +0.45% vs +0.49% |
+| 5e | fpv2 + adv20 combo | **exhausted** | xgb +0.0006 RankIC; selective LCB 0.685; DE +0.59% borderline (`FEATURE_PACK_V2_ADV20_NESTED_20260724.md`) |
 | 5d | Selective denser + disagreement (fpv2) | **exhausted** | best 0.779/0.693/77 emits; contract **false** |
 | 5b | Universe filter W2 | **exhausted/killed — universe collapse** | v1 −93.5%; v2 35,328 rows; v3 35,377 rows; 0 selective emits; flat-only filter still <100k |
-| 6 | Horizons/targets | absolute/h1 done; rel/h3 + abs/h3 + h5 exhausted | rel/h3 0.2285; **abs/h3 0.2061**; h5 0.1735; no Goal A/B unlock |
+| 6 | Horizons/targets | absolute/h1 done; abs/h1 split selective **exhausted (0 emits)**; rel/h3 + abs/h3 + h5 exhausted | rel/h3 0.2285; **abs/h3 0.2061**; h5 0.1735; no Goal A/B unlock |
+| 6b | abs/h1 split selective denser | **exhausted** | 0 emits all models; denser grid 0.001–0.10 (`CPU_EXHAUST_ABS_H1_SPLIT_20260724.md`) |
 | — | Improve-loop 6×1000 | **exhausted** | best RankIC 0.2746; no pos112 |
 
 ## Research cycle — W1 feature pack v1 (2026-07-23)

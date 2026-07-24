@@ -23,7 +23,7 @@ needed**).
 | **W2** liq_v3 flat-only universe filter | **Killed / exhausted** | 35,377 samples (<100k), best RankIC 0.2227, 0 selective emits; flat_fraction alone collapses hybrid history (`UNIVERSE_FILTER_LIQ_V3_NESTED_20260723.md`) |
 | **W1b** adv20 sample-weight | **Killed (no materiality)** | Nested xgb +0.0001 RankIC; selective regresses; DE +0.45% vs +0.49% (`SAMPLE_WEIGHT_ADV20_NESTED_20260724.md`) |
 | **Goal A** selective denser + disagreement (fpv2) | **Killed** | Best 0.779/0.693/77 emits; contract false (`SELECTIVE_DISAGREEMENT_20260724.md`, `SELECTIVE_DENSE_FPV2_20260724.md`) |
-| **In flight** | abs/h1 split nested; fpv2+adv20 combo; E7 shadow after 14:35 Colombo |
+| **In flight** | E7 non-partial shadow after 14:35 Colombo (partial smoke attempted) |
 
 **Champions unchanged:** RankIC `xgb_two_stage` rel/h1 **0.2861**; cost DE persist split **+0.49%** @112; selective near-miss **0.770 / 0.681 / 74 emits**.
 
