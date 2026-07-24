@@ -29,3 +29,7 @@ This is a **new label policy / matrix** — not a silent rewrite of the frozen h
 
 ## Verdict
 RankIC unlocked for W5; selective Goal A still open. No promotion.
+
+## W5 ≤2k
+
+Best hyper test RankIC **~0.3057** (cal best ~0.265). Confirms RankIC unlock; SuccessContract still unmet after dense/disagreement/rich-metalabel (best ~0.83/0.77/109–232 emits).
