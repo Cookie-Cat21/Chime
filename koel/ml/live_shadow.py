@@ -52,6 +52,9 @@ POLICY_MODELS = {
 POLICY_SELECTIVE = "shadow_policy_abs_xgb2_p005_v1"
 POLICY_PRESSURE = "shadow_policy_abs_xgb2_pressure_v1"
 POLICY_RANK_DE_PERSIST = "shadow_policy_rank_de_persist_v1"
+# Point-in-time historical replay — research/cost evidence only.
+# Does NOT count toward E7 (prospective non-partial sessions).
+POLICY_RANK_DE_PERSIST_HIST = "shadow_policy_rank_de_persist_hist_v1"
 POLICY_RANK_DE_MODEL = "double_ensemble_native"
 POLICY_RANK_DE_VARIANT = PERSIST_EXIT_10_TOP_BOTTOM_05
 POLICY_RANK_DE_H3_WEEKLY = "shadow_policy_rank_de_h3_weekly_v1"
@@ -88,6 +91,20 @@ class WeeklyBookLedgerState:
     session_index: int
     book: BookState | None
     signed_scores: dict[str, float]
+
+
+def truncate_series_as_of(
+    series: dict[str, list[DailyBar]],
+    *,
+    as_of: date,
+) -> dict[str, list[DailyBar]]:
+    """Keep only bars with ``trade_date <= as_of`` (point-in-time replay)."""
+    out: dict[str, list[DailyBar]] = {}
+    for symbol, bars in series.items():
+        kept = [bar for bar in bars if bar.trade_date <= as_of]
+        if kept:
+            out[symbol] = kept
+    return out
 
 
 def append_live_board(
@@ -831,6 +848,127 @@ async def run_live_shadow(
     )
 
 
+async def run_historical_de_persist_shadow(
+    *,
+    storage: Storage,
+    snapshot_dir: Path,
+    as_of: date,
+    min_history: int = 60,
+    max_flat_fraction: float = 0.40,
+) -> LiveShadowResult:
+    """Point-in-time DE-persist book emit for research (not E7 prospective).
+
+    Uses only bars ``<= as_of`` from the snapshot (no live CSE board). Writes
+    under ``POLICY_RANK_DE_PERSIST_HIST`` with gate ``shadow_hist_persist_book``.
+    Never writes ``forecast_points`` / Telegram.
+    """
+    loaded = load_bar_snapshot(snapshot_dir)
+    truncated_series = truncate_series_as_of(loaded.series, as_of=as_of)
+    if not truncated_series:
+        raise RuntimeError(f"no bars on/before {as_of.isoformat()}")
+    # Rebuild a shallow LoadedSnapshot-compatible view for sample builders.
+    loaded_as_of = LoadedSnapshot(
+        manifest=loaded.manifest,
+        series=truncated_series,
+        fundamentals=loaded.fundamentals,
+        corporate_actions=loaded.corporate_actions,
+    )
+    train = _relative_training_samples(loaded_as_of, horizon=1)
+    latest = _latest_samples(
+        series=truncated_series,
+        loaded=loaded_as_of,
+        trade_date=as_of,
+        min_history=min_history,
+        max_flat_fraction=max_flat_fraction,
+        horizon=1,
+    )
+    if len(train) < 100 or not latest:
+        raise RuntimeError(
+            f"insufficient PIT rows for {as_of.isoformat()}: "
+            f"train={len(train)} latest={len(latest)}"
+        )
+    snapshot_sha = composite_snapshot_sha(loaded.manifest)
+    revision = (
+        os.environ.get("GITHUB_SHA")
+        or os.environ.get("KOEL_MODEL_REVISION")
+        or "local"
+    )
+    relative_scores = _fit_predict_average(
+        model=POLICY_RANK_DE_MODEL,
+        train=train,
+        test=latest,
+        seeds=(0,),
+    )
+    relative_by_symbol = {
+        sample.symbol: score
+        for sample, score in zip(latest, relative_scores, strict=True)
+        if score != 0 and math.isfinite(score)
+    }
+    previous_book = await load_prior_persist_book(
+        storage,
+        policy_id=POLICY_RANK_DE_PERSIST_HIST,
+        before=as_of,
+    )
+    book = construct_session_book(
+        relative_by_symbol,
+        variant=POLICY_RANK_DE_VARIANT,
+        previous=previous_book,
+    )
+    de_version = policy_instance_version(
+        policy_id=POLICY_RANK_DE_PERSIST_HIST,
+        snapshot_sha256=snapshot_sha,
+        issue_session=as_of,
+        revision=f"{revision}|hist",
+        partial=False,
+    )
+    de_persist_count = 0
+    if book is not None and book.weights:
+        de_rows: list[OutcomeEmit] = []
+        for symbol, weight in sorted(book.weights.items()):
+            if symbol not in relative_by_symbol:
+                continue
+            raw_score = relative_by_symbol[symbol]
+            y_pred = math.copysign(
+                abs(raw_score) if raw_score != 0 else abs(weight),
+                weight,
+            )
+            de_rows.append(
+                OutcomeEmit(
+                    model_id=POLICY_RANK_DE_PERSIST_HIST,
+                    model_version=de_version,
+                    symbol=symbol,
+                    issued_at=as_of,
+                    horizon_days=1,
+                    y_pred=y_pred,
+                    confidence=_confidence(raw_score),
+                    gate="shadow_hist_persist_book",
+                    regime_tag=(
+                        f"historical_shadow|policy={POLICY_RANK_DE_PERSIST_HIST}"
+                        f"|variant={POLICY_RANK_DE_VARIANT.name}"
+                        f"|side={'long' if weight > 0 else 'short'}"
+                        f"|age={book.holding_ages.get(symbol, 1)}"
+                        f"|w={weight:.6f}"
+                        f"|raw={raw_score:.6f}"
+                        f"|as_of={as_of.isoformat()}"
+                        f"|snapshot={snapshot_sha[:12]}"
+                        f"|e7_eligible=0"
+                    ),
+                )
+            )
+        de_persist_count = await emit_shadow_outcome_rows(storage, de_rows)
+    return LiveShadowResult(
+        issued_at=as_of.isoformat(),
+        partial_session=False,
+        board_rows=0,
+        eligible_symbols=len(latest),
+        policy_emits={POLICY_RANK_DE_PERSIST_HIST: de_persist_count},
+        selective_emits=0,
+        pressure_emits=0,
+        snapshot_sha256=snapshot_sha,
+        instance_versions={POLICY_RANK_DE_PERSIST_HIST: de_version},
+    )
+
+
 async def _run(args: argparse.Namespace) -> None:
     database_url = os.environ.get("ML_DATABASE_URL") or os.environ.get("DATABASE_URL")
     if not database_url:
@@ -838,15 +976,24 @@ async def _run(args: argparse.Namespace) -> None:
     storage = Storage(database_url)
     await storage.open()
     try:
-        async with CSEClient(min_interval_seconds=0.25) as cse:
-            result = await run_live_shadow(
+        if args.as_of is not None:
+            result = await run_historical_de_persist_shadow(
                 storage=storage,
-                cse=cse,
                 snapshot_dir=args.snapshot,
-                allow_partial=args.allow_partial,
+                as_of=args.as_of,
                 min_history=args.min_history,
                 max_flat_fraction=args.max_flat_fraction,
             )
+        else:
+            async with CSEClient(min_interval_seconds=0.25) as cse:
+                result = await run_live_shadow(
+                    storage=storage,
+                    cse=cse,
+                    snapshot_dir=args.snapshot,
+                    allow_partial=args.allow_partial,
+                    min_history=args.min_history,
+                    max_flat_fraction=args.max_flat_fraction,
+                )
     finally:
         await storage.close()
     print(json.dumps(asdict(result), sort_keys=True))
@@ -858,7 +1005,18 @@ def main(argv: list[str] | None = None) -> None:
     parser.add_argument("--allow-partial", action="store_true")
     parser.add_argument("--min-history", type=int, default=60)
     parser.add_argument("--max-flat-fraction", type=float, default=0.40)
+    parser.add_argument(
+        "--as-of",
+        type=date.fromisoformat,
+        default=None,
+        help=(
+            "Research-only point-in-time DE-persist replay for YYYY-MM-DD. "
+            "Writes shadow_policy_rank_de_persist_hist_v1 (NOT E7-eligible)."
+        ),
+    )
     args = parser.parse_args(argv)
+    if args.as_of is not None and args.allow_partial:
+        parser.error("--as-of cannot be combined with --allow-partial")
     asyncio.run(_run(args))
 
 

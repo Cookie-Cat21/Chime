@@ -50,9 +50,17 @@ ML_DATABASE_URL=... python3 -m koel.ml.snapshot export \
 ML_DATABASE_URL=... python3 -m koel.ml.live_shadow \
   --snapshot /tmp/koel-live-snapshot
 
+# Research-only point-in-time DE-persist replay (NOT E7-eligible):
+# writes shadow_policy_rank_de_persist_hist_v1 / shadow_hist_persist_book
+ML_DATABASE_URL=... python3 -m koel.ml.live_shadow \
+  --snapshot /tmp/koel-hist-snapshot-split \
+  --as-of 2026-07-22
+# or: bash scripts/ml_hist_de_persist.sh --snapshot /tmp/koel-hist-snapshot-split --days 20
+
 # Prefer shadow-first scoring so older non-shadow rows cannot starve E7/E8.
 DATABASE_URL=... python3 -m koel ml-score-outcomes --model-prefix shadow --limit 20000
 ML_DATABASE_URL=... python3 -m koel.ml.live_shadow_report
+```
 
 ### One-shot / multi-day wrapper (preferred for E7 accumulation)
 
@@ -71,7 +79,6 @@ The wrapper exports the split hybrid snapshot, emits `live_shadow`, force
 path-backfills recent CSE bars, scores `--model-prefix shadow`, prints
 `live_shadow_report`, and logs `E7_STATUS non_partial_sessions=…/60`. Logs land
 under `/tmp/koel-daily-shadow/`.
-```
 
 `live_shadow` refuses to emit a final model before 14:35 SLT. `--allow-partial`
 exists only for explicit canaries; those model versions and gates include

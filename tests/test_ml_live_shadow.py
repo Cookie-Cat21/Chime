@@ -14,7 +14,40 @@ from koel.ml.live_shadow import (
     policy_instance_version,
     should_rebuild_weekly_book,
     summarize_pressure_factors,
+    truncate_series_as_of,
 )
+
+
+def test_truncate_series_as_of_drops_future_bars() -> None:
+    series = {
+        "A.N0000": [
+            DailyBar(
+                symbol="A.N0000",
+                trade_date=date(2026, 7, 20),
+                price=10.0,
+                high=10.0,
+                low=10.0,
+                open=10.0,
+                volume=100.0,
+                source_period=5,
+                bar_ts=datetime(2026, 7, 20, tzinfo=UTC),
+            ),
+            DailyBar(
+                symbol="A.N0000",
+                trade_date=date(2026, 7, 21),
+                price=11.0,
+                high=11.0,
+                low=11.0,
+                open=11.0,
+                volume=100.0,
+                source_period=5,
+                bar_ts=datetime(2026, 7, 21, tzinfo=UTC),
+            ),
+        ]
+    }
+    truncated = truncate_series_as_of(series, as_of=date(2026, 7, 20))
+    assert list(truncated) == ["A.N0000"]
+    assert [bar.trade_date for bar in truncated["A.N0000"]] == [date(2026, 7, 20)]
 
 
 def test_append_live_board_replaces_session_and_ignores_unknown_symbols() -> None:
