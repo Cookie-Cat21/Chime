@@ -8,3 +8,12 @@
 
 ANY_CONTRACT_MET=False
 
+## Best selective (wave5)
+
+| Method | Prec | LCB | Emits |
+|---|---:|---:|---:|
+| rich metalabel `xgb_lmt` | 0.8825 | 0.8494 | 315 |
+| selective gates `hgb_bagged` | 0.8882 | 0.8391 | 152 |
+
+Closest Goal A approach yet; SuccessContract still NOT MET.
+
