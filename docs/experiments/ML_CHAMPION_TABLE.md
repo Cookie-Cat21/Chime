@@ -142,7 +142,7 @@ cycle 0) < champion 0.2861; best net@112 −0.49%; **no pos112**. See
 | 5i | Simple models (ridge/logit/reg) | **exhausted** | best `xgb_regressor` 0.2625 (−0.0236); selective 0; cost +0.51% (`SIMPLE_MODELS_NESTED_20260724.md`) |
 | 5j | Remaining families (domain/LGB/weighted) | **exhausted** | best `lgb_lmt` 0.2814 (−0.0047); selective best 0.738/0.636/61 (`REMAINING_FAMILIES_NESTED_20260724.md`) |
 | 5k | Near-miss disagreement trio | **exhausted** | best 0.883/0.798/60 emits; contract false (`NEARMISS_DISAGREEMENT_20260724.md`) |
-| 5l | Feature pack v3 | **in flight** | sector ranks + mom/amihud append (`FEATURE_PACK_V3_SPEC.md`) |
+| 5l | Feature pack v3 | **exhausted** | best `xgb_two_stage` 0.2843 (-0.0018); emits 92; Killed — no materiality (`FEATURE_PACK_V3_NESTED_20260724.md`) |
 | 5d | Selective denser + disagreement (fpv2) | **exhausted** | best 0.779/0.693/77 emits; contract **false** |
 | 5b | Universe filter W2 | **exhausted/killed — universe collapse** | v1 −93.5%; v2 35,328 rows; v3 35,377 rows; 0 selective emits; flat-only filter still <100k |
 | 6 | Horizons/targets | absolute/h1 done; abs/h1 split selective **exhausted (0 emits)**; rel/h3 + abs/h3 + h5 exhausted | rel/h3 0.2285; **abs/h3 0.2061**; h5 0.1735; no Goal A/B unlock |
@@ -317,4 +317,11 @@ W1 materiality **not fired**. Selective 90% contract **still unmet** (honest).
 - Shared nested: `xgb_two_stage` 0.2865, `xgb_lmt` 0.2835, `hgb_lmt` 0.2816.
 - Best disagreement: primary `xgb_lmt` **0.883 / 0.798 / 60** — still fails emits/LCB/coverage.
 - SuccessContract **NOT MET**. Next W1 matrix: `feature_pack_v3`.
+
+## Cycle — 2026-07-24 feature pack v3
+
+- Best nested RankIC: `xgb_two_stage` **0.2843** (-0.0018 vs 0.2861).
+- Selective best emits: **92**; SuccessContract **NOT MET**.
+- W1 materiality: **not fired**.
+- Evidence: `FEATURE_PACK_V3_NESTED_20260724.md`.
 

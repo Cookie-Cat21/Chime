@@ -27,7 +27,8 @@ needed**).
 | **W0 score path** | **Partial** | Forced path-backfill → bars through 2026-07-24; DE non-partial scored **0** (needs next session); see `E8_SHADOW_SCORE_PROGRESS_20260724.md` |
 | **W1d** fpv2 remaining families | **Killed (no materiality)** | best `lgb_lmt` **0.2814** (−0.0047); selective 0.738/0.636/61 (`REMAINING_FAMILIES_NESTED_20260724.md`) |
 | **W1e** near-miss disagreement | **Killed** | best 0.883/0.798/60 (`NEARMISS_DISAGREEMENT_20260724.md`) |
-| **In flight** | Feature pack v3 nested baseline trio; Mon 2026-07-27 non-partial shadow scheduled |
+| **W1f** feature_pack_v3 | **Killed (no materiality)** | best `xgb_two_stage` 0.2843 (-0.0018); emits 92 (`FEATURE_PACK_V3_NESTED_20260724.md`) |
+| **In flight** | Mon 2026-07-27 non-partial shadow; E7/E8 accumulation |
 
 **Champions unchanged:** RankIC `xgb_two_stage` rel/h1 **0.2861**; cost DE persist split **+0.49%** @112; selective near-miss **0.770 / 0.681 / 74 emits**.
 

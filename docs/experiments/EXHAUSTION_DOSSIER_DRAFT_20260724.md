@@ -56,6 +56,12 @@ Same-matrix hypers, ensembles, selective grids, fpv1/v2, fpv2 extra (bagged/LMT/
 - Full CSE path-backfill period=2: `daily_bars` ~287 symbols for Jul 20–24.
 - Shadow score pass #3: +914 legs; DE non-partial scored sessions still **0** (Jul-24 h1 awaits Jul-25).
 
+## 2026-07-24 addendum — feature pack v3
+
+- fpv3 nested: best `xgb_two_stage` RankIC **0.2843** (-0.0018).
+- Selective emits 92; W1 materiality **not met**.
+- SuccessContract still **NOT MET**.
+
 ## Still open
 
 - E7 non-partial shadow receipts (**1/60** sessions; daily accumulation)
