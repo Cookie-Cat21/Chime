@@ -440,3 +440,17 @@ Interventions:
 
 - fpv2-extra load max ~3.0; watchdog OK; ~40 min wall time.
 
+## Cycle — ranking models nested complete (2026-07-24)
+
+Status: **exhausted** — 0 selective emits; RankIC below champion; retained.
+
+Evidence: `RANKING_MODELS_NESTED_20260724.md`, `cpu_exhaust_rel_h1_rankers_summary.json`
+
+Decision:
+
+- Best `lgb_lambdarank` RankIC **0.2647** vs frozen **0.2861** (−0.0214).
+- All ranking models **0 selective emits** — contract **still false**.
+- Lever **exhausted**; frozen champions retained.
+
+Next (serial): DE blends → E7 non-partial shadow after 14:35 SLT.
+
