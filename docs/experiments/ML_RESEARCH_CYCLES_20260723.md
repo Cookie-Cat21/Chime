@@ -314,6 +314,23 @@ Decision (abs/h3):
 - Cost: DE `weekly_5_sessions_top_bottom_05` **+0.69%** net@112 on abs/h3 shards.
 - Champions unchanged; SuccessContract **still unmet**.
 
-Next: complete W5 hyper fpv2; recovery re-run fpv2 nested; compare vs frozen
-xgb RankIC 0.2861 and selective contract honesty.
+Next: complete fpv2 step-2-only recovery nested; compare vs frozen xgb RankIC
+0.2861 and selective contract honesty.
+
+## Cycle — W5 fpv2 2k hyper complete (2026-07-24)
+
+Status: **exhausted** — no materiality vs frozen champion.
+
+Evidence: `CPU_W5_FPV2_2K_20260724.md`, `cpu_w5_fpv2_2k_summary.json`
+
+Decision:
+
+- fpv2 nested xgb RankIC **0.2865** vs frozen **0.2861** (+0.0004) — below
+  W1 +0.005 threshold.
+- Hyper 2k best test RankIC **0.2675** — no challenger.
+- Selective: xgb 105 emits / LCB 0.688 — contract **still false** (honest).
+- DE persist +0.41% vs frozen +0.49% (−0.08 pp).
+- Champions retained; SuccessContract **still unmet**.
+
+Next: fpv2 step-2-only nested recovery (`/tmp/koel-recovery-step2.sh`).
 

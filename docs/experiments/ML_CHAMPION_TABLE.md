@@ -28,7 +28,8 @@ Source artifacts:
 - `docs/experiments/CPU_EXHAUST_REL_H3_20260723.md`
 - `docs/experiments/cpu_exhaust_rel_h3_summary.json`
 - `docs/experiments/CPU_EXHAUST_ABS_H3_20260724.md`
-- `docs/experiments/cpu_exhaust_abs_h3_summary.json`
+- `docs/experiments/cpu_w5_fpv2_2k_summary.json`
+- `docs/experiments/CPU_W5_FPV2_2K_20260724.md`
 - `docs/experiments/UNIVERSE_FILTER_LIQ_V3_SPEC.md`
 - `docs/experiments/UNIVERSE_FILTER_LIQ_V3_NESTED_20260723.md`
 - `docs/experiments/cpu_exhaust_rel_h1_liqv3_summary.json`
@@ -263,9 +264,16 @@ Nested absolute/h3 on split snapshot (`CPU_EXHAUST_ABS_H3_20260724.md`):
 Below abs/h1 champion 0.2546 and rel/h3 0.2285. Selective 90% **unmet**.
 Champions unchanged.
 
-## W1 feature pack v2 (2026-07-24) — in flight
+## W1 feature pack v2 (2026-07-24) — no materiality (W5 run)
 
-Nested relative/h1 with `--feature-pack v2` (sector-relative). Queue step 2
-failed on missing `xgboost`/`sklearn`/`lightgbm` (deps installed mid-run);
-recovery pending after W5 hyper step. Frozen baseline: `xgb_two_stage` RankIC
-**0.2861**. See `FEATURE_PACK_V2_SPEC.md`.
+W5 nested+2k hyper on fpv2 matrix (`CPU_W5_FPV2_2K_20260724.md`,
+`cpu_w5_fpv2_2k_summary.json`). Clean step-2-only nested recovery in flight.
+
+| Model | Frozen RankIC | fpv2 RankIC | Δ | Selective emits | Best net@112 |
+|---|---:|---:|---:|---:|---:|
+| `xgb_two_stage` | 0.2861 | 0.2865 | +0.0004 | 105 (vs 74) | −0.70% |
+| `hgb_two_stage` | 0.2816 | 0.2836 | +0.0020 | 73 (vs 86) | −0.87% |
+| `double_ensemble_native` | 0.2566 | 0.2553 | −0.0013 | 0 | +0.41% persist |
+
+Hyper 2k best test RankIC 0.2675 — exhausted. W1 thresholds **not fired**.
+Selective 90% contract **still unmet** (xgb LCB 0.688). Champions retained.
