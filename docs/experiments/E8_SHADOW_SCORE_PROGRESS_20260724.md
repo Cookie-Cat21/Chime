@@ -41,3 +41,24 @@ Research only — not financial advice. **E7/E8 still open.**
 
 Prefer scoring shadows explicitly (or raise/loop `ml-score-outcomes`) after each
 path-backfill; do not assume a single default pass drains the shadow ledger.
+
+
+## Abs non-partial prospective (scored Jul-21 legs)
+
+Not DE-persist E7/E8 qualification, but useful live hit-rate context after
+path-backfill unlocked realization:
+
+| Policy | Gate | Scored | Hit rate | Mean y_real |
+|---|---|---:|---:|---:|
+| `shadow_policy_abs_hgb2_v1` | `shadow_all` | 175 | 0.629 | +0.34% |
+| `shadow_policy_abs_xgb2_v1` | `shadow_all` | 175 | 0.608 | +0.34% |
+| `shadow_policy_abs_xgb_domain_v1` | `shadow_all` | 175 | 0.608 | +0.34% |
+| `shadow_policy_abs_xgb2_pressure_v1` | `shadow_book` | 22 | 0.500 | +0.08% |
+
+DE-persist non-partial scored sessions remain **0** until Jul-24 h1 can realize
+on the next session.
+
+## Ops fix shipped
+
+`ml-score-outcomes --model-prefix shadow` so FIFO no longer starves shadow rows
+behind older non-shadow outcomes (see `docs/runbooks/ML_LIVE_SHADOW.md`).

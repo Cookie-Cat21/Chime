@@ -9,6 +9,17 @@ Research only — not financial advice. Living draft until E7–E8 close.
 
 ## Offline Goal A status: NOT MET
 
+### Offline modeling levers (2026-07-24) — treated exhausted for current matrices
+
+All `CPU_EXHAUST_MODELS` families on fpv2, denser/disagreement selective,
+horizons h3/h5, universe filters, sample weights, blends/rankers, and
+**feature_pack_v3** baseline+dense+disagree have been run without SuccessContract
+or W1 materiality unlock. Remaining path to Goal A requires a **new** matrix with
+material RankIC/emit gain or prospective evidence that contradicts offline
+failure — not another same-matrix grind.
+
+## Offline Goal A status: NOT MET
+
 Best near-misses (relative/h1 unless noted):
 
 | Attempt | Best prec / LCB / emits | Notes |

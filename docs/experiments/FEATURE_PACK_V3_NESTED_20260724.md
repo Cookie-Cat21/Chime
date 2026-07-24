@@ -43,4 +43,14 @@ Research only — not financial advice. SuccessContract **still unmet**.
 
 **Verdict: Killed — no materiality.** No W5 unlock. Champions retained. SuccessContract **NOT MET**.
 
+## Post-nested dense selective + disagreement
+
+| Variant | Precision | LCB | Emits | Contract |
+|---|---:|---:|---:|:---:|
+| dense `xgb_two_stage` | 0.760 | 0.671 | 75 | false |
+| dense `hgb_two_stage` | 0.781 | 0.686 | 64 | false |
+| disagreement primary xgb | 0.750 | 0.658 | 72 | false |
+
+No unlock vs default selective. Lever remains **killed**.
+
 Research only — not financial advice.

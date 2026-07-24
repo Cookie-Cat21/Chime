@@ -203,13 +203,23 @@ def _nth_session_after(
     return dates_sorted[j]
 
 
-async def score_due_outcomes(storage: Storage, *, limit: int = 5000) -> ScoreOutcomesResult:
+async def score_due_outcomes(
+    storage: Storage,
+    *,
+    limit: int = 5000,
+    model_id_prefix: str | None = None,
+) -> ScoreOutcomesResult:
     """Fill y_real/hit when the horizon's session exists in daily_bars.
 
     Also backfills ``realized_at`` from each symbol's own calendar when null
     (global calendar often has no *future* sessions at emit time).
+
+    ``model_id_prefix`` (e.g. ``shadow``) prioritizes research/shadow rows so
+    the default 5000-row FIFO cannot starve Loop-0 ledgers behind older
+    non-shadow outcomes.
     """
     lim = max(1, min(int(limit), 50_000))
+    prefix = (model_id_prefix or "").strip()
     # Only consider rows that could already have a next session in daily_bars.
     async with storage._pool.connection() as conn:
         max_bar = await (
@@ -218,19 +228,35 @@ async def score_due_outcomes(storage: Storage, *, limit: int = 5000) -> ScoreOut
         max_d = dict(max_bar).get("d") if max_bar else None
         if not isinstance(max_d, date):
             return ScoreOutcomesResult(0, 0, 0)
-        rows = await (
-            await conn.execute(
-                """
-                SELECT id, symbol, issued_at, horizon_days, y_pred, realized_at
-                FROM forecast_outcomes
-                WHERE scored = FALSE
-                  AND issued_at < %s
-                ORDER BY issued_at ASC, id ASC
-                LIMIT %s
-                """,
-                (max_d, lim),
-            )
-        ).fetchall()
+        if prefix:
+            rows = await (
+                await conn.execute(
+                    """
+                    SELECT id, symbol, issued_at, horizon_days, y_pred, realized_at
+                    FROM forecast_outcomes
+                    WHERE scored = FALSE
+                      AND issued_at < %s
+                      AND model_id LIKE %s
+                    ORDER BY issued_at ASC, id ASC
+                    LIMIT %s
+                    """,
+                    (max_d, f"{prefix}%", lim),
+                )
+            ).fetchall()
+        else:
+            rows = await (
+                await conn.execute(
+                    """
+                    SELECT id, symbol, issued_at, horizon_days, y_pred, realized_at
+                    FROM forecast_outcomes
+                    WHERE scored = FALSE
+                      AND issued_at < %s
+                    ORDER BY issued_at ASC, id ASC
+                    LIMIT %s
+                    """,
+                    (max_d, lim),
+                )
+            ).fetchall()
 
     examined = scored = skipped = 0
     bar_cache: dict[str, tuple[dict[date, float], list[date]]] = {}

@@ -50,7 +50,8 @@ ML_DATABASE_URL=... python3 -m koel.ml.snapshot export \
 ML_DATABASE_URL=... python3 -m koel.ml.live_shadow \
   --snapshot /tmp/koel-live-snapshot
 
-DATABASE_URL=... python3 -m koel ml-score-outcomes
+# Prefer shadow-first scoring so older non-shadow rows cannot starve E7/E8.
+DATABASE_URL=... python3 -m koel ml-score-outcomes --model-prefix shadow --limit 20000
 ML_DATABASE_URL=... python3 -m koel.ml.live_shadow_report
 ```
 
