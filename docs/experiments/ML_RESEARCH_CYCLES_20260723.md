@@ -296,3 +296,24 @@ Research only — not financial advice.
 - Shadow canary2: DE-persist 22 partial legs; h3-weekly 16 partial; **0 non-partial** yet
 - Next: abs/h3 nested + W5 2k hyper on fpv1 matrix (running)
 
+## Cycle — serial ML queue 2026-07-24
+
+Status: in flight (step 4 W5 hyper running).
+
+Evidence:
+
+- Snapshot export: hybrid split, 917 087 rows, 292 symbols (`/tmp/koel-live-final-snapshot-split`)
+- Step 2 fpv2 rel/h1: **failed** (missing ML deps at start; pip install mid-queue)
+- Step 3 abs/h3: `CPU_EXHAUST_ABS_H3_20260724.md`, `cpu_exhaust_abs_h3_summary.json`
+- Step 4 W5 2k hyper fpv2: `/tmp/cpu-w5-fpv2-2k` (running)
+
+Decision (abs/h3):
+
+- Best RankIC `hgb_bagged` **0.2061** — below abs/h1 0.2546 and rel/h3 0.2285.
+- Selective 90%: **unmet** (0 emits all models).
+- Cost: DE `weekly_5_sessions_top_bottom_05` **+0.69%** net@112 on abs/h3 shards.
+- Champions unchanged; SuccessContract **still unmet**.
+
+Next: complete W5 hyper fpv2; recovery re-run fpv2 nested; compare vs frozen
+xgb RankIC 0.2861 and selective contract honesty.
+

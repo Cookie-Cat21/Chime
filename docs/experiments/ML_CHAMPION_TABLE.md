@@ -1,6 +1,6 @@
 # ML champion table
 
-Updated: 2026-07-23 (W2 universe filters exhausted; h3 exhausted)
+Updated: 2026-07-24 (serial queue: abs/h3 landed; fpv2 + W5 hyper in flight)
 
 Source artifacts:
 
@@ -27,6 +27,8 @@ Source artifacts:
 - `docs/experiments/cpu_exhaust_rel_h1_liqv2_summary.json`
 - `docs/experiments/CPU_EXHAUST_REL_H3_20260723.md`
 - `docs/experiments/cpu_exhaust_rel_h3_summary.json`
+- `docs/experiments/CPU_EXHAUST_ABS_H3_20260724.md`
+- `docs/experiments/cpu_exhaust_abs_h3_summary.json`
 - `docs/experiments/UNIVERSE_FILTER_LIQ_V3_SPEC.md`
 - `docs/experiments/UNIVERSE_FILTER_LIQ_V3_NESTED_20260723.md`
 - `docs/experiments/cpu_exhaust_rel_h1_liqv3_summary.json`
@@ -127,7 +129,7 @@ cycle 0) < champion 0.2861; best net@112 −0.49%; **no pos112**. See
 | 4 | Ensembles/stacking | **exhausted** | best RankIC 0.2858 (−0.0003 vs champion); no net gain |
 | 5 | New features | **fpv1 nested done — no materiality** | RankIC Δ −0.0007 best; W1 thresholds **not fired** |
 | 5b | Universe filter W2 | **exhausted/killed — universe collapse** | v1 −93.5%; v2 35,328 rows; v3 35,377 rows; 0 selective emits; flat-only filter still <100k |
-| 6 | Horizons/targets | absolute/h1 done; **h3 + h5 exhausted** | h3 RankIC 0.2285; h5 0.1735; no Goal A/B unlock |
+| 6 | Horizons/targets | absolute/h1 done; rel/h3 + abs/h3 + h5 exhausted | rel/h3 0.2285; **abs/h3 0.2061**; h5 0.1735; no Goal A/B unlock |
 | — | Improve-loop 6×1000 | **exhausted** | best RankIC 0.2746; no pos112 |
 
 ## Research cycle — W1 feature pack v1 (2026-07-23)
@@ -247,3 +249,23 @@ selective 90%. See `CPU_EXHAUST_REL_H3_20260723.md`,
 ## Absolute/h5 (2026-07-23)
 
 Best RankIC `hgb_bagged` **0.1380** (≪ abs/h1 0.2546). Selective 0 emits. Best cost −0.29% net@112. Horizon lever exhausted for absolute too.
+
+## Absolute/h3 (2026-07-24) — exhausted
+
+Nested absolute/h3 on split snapshot (`CPU_EXHAUST_ABS_H3_20260724.md`):
+
+| Model | RankIC | Selective | Best net@112 |
+|---|---:|---|---:|
+| `hgb_bagged` | **0.2061** | 0 emits | −1.21% daily L/S |
+| `xgb_two_stage` | 0.2014 | 0 emits | −1.06% |
+| `double_ensemble_native` | 0.1790 | 0 emits | **+0.69%** (`weekly_5_sessions_top_bottom_05`) |
+
+Below abs/h1 champion 0.2546 and rel/h3 0.2285. Selective 90% **unmet**.
+Champions unchanged.
+
+## W1 feature pack v2 (2026-07-24) — in flight
+
+Nested relative/h1 with `--feature-pack v2` (sector-relative). Queue step 2
+failed on missing `xgboost`/`sklearn`/`lightgbm` (deps installed mid-run);
+recovery pending after W5 hyper step. Frozen baseline: `xgb_two_stage` RankIC
+**0.2861**. See `FEATURE_PACK_V2_SPEC.md`.
