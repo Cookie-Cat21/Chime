@@ -80,6 +80,33 @@ def config_fingerprint(config: dict[str, float | int]) -> str:
     return f"lgb_{digest}"
 
 
+def _filter_material_median(samples: list[Sample]) -> list[Sample]:
+    """Keep rows whose |y_ret| is at/above the same-day cross-sectional median.
+
+    New label policy for Goal A sharpness tests — does not alter SuccessContract
+    thresholds. Day medians use absolute returns before relative demeaning.
+    """
+    by_day: dict[date, list[Sample]] = {}
+    for sample in samples:
+        by_day.setdefault(sample.as_of, []).append(sample)
+    kept: list[Sample] = []
+    for day_rows in by_day.values():
+        abs_rets = [abs(float(sample.y_ret)) for sample in day_rows]
+        if not abs_rets:
+            continue
+        ordered = sorted(abs_rets)
+        mid = len(ordered) // 2
+        median = (
+            ordered[mid]
+            if len(ordered) % 2 == 1
+            else 0.5 * (ordered[mid - 1] + ordered[mid])
+        )
+        kept.extend(
+            sample for sample in day_rows if abs(float(sample.y_ret)) >= median
+        )
+    return kept
+
+
 def _prepare_samples(
     snapshot_dir: Path,
     *,
@@ -91,11 +118,15 @@ def _prepare_samples(
     universe_filter: str = "",
     sample_weight: str = "",
     label_skip: int = 0,
+    label_policy: str = "",
 ) -> tuple[list[Sample], dict, list[date], str, list[float] | None]:
     if sample_weight not in SAMPLE_WEIGHT_CHOICES:
         raise ValueError("sample_weight must be '' or 'adv20'")
     if label_skip < 0:
         raise ValueError("label_skip must be >= 0")
+    policy = label_policy.strip().lower()
+    if policy not in {"", "material_median"}:
+        raise ValueError("label_policy must be '' or 'material_median'")
     loaded = load_bar_snapshot(snapshot_dir)
     metadata = build_research_bar_metadata(
         loaded.series,
@@ -111,6 +142,8 @@ def _prepare_samples(
         corporate_actions=loaded.corporate_actions,
         label_skip=label_skip,
     )
+    if policy == "material_median":
+        base = _filter_material_median(base)
     research = enrich_research_quality(base, metadata)
     research = enrich_fundamentals(research, loaded.fundamentals)
     research = enrich_market_context(research)
@@ -170,6 +203,8 @@ def _prepare_samples(
                 if manifest is None
                 else f"|universe_filter={manifest.name}:{manifest.version}"
             )
+            + (f"|label_skip={label_skip}" if label_skip else "")
+            + (f"|label_policy={policy}" if policy else "")
         ).encode("utf-8")
     ).hexdigest()
     return samples, metadata, dates, composite, sample_weights
@@ -890,6 +925,7 @@ def run_exhaust(
     universe_filter: str = "",
     sample_weight: str = "",
     label_skip: int = 0,
+    label_policy: str = "",
 ) -> dict[str, Any]:
     if sample_weight not in SAMPLE_WEIGHT_CHOICES:
         raise ValueError("sample_weight must be '' or 'adv20'")
@@ -906,15 +942,18 @@ def run_exhaust(
         universe_filter=universe_filter,
         sample_weight=sample_weight,
         label_skip=label_skip,
+        label_policy=label_policy,
     )
     pack_tag = feature_pack.strip() or "none"
     universe_tag = universe_filter.strip() or "none"
     sample_weight_tag = sample_weight.strip() or "none"
+    policy_tag = label_policy.strip() or "none"
     print(
         f"[exhaust] samples={len(samples)} dates={len(dates)} "
         f"sha={snapshot_sha[:16]}… target={target} h={horizon} "
-        f"label_skip={label_skip} feature_pack={pack_tag} "
-        f"universe_filter={universe_tag} sample_weight={sample_weight_tag}",
+        f"label_skip={label_skip} label_policy={policy_tag} "
+        f"feature_pack={pack_tag} universe_filter={universe_tag} "
+        f"sample_weight={sample_weight_tag}",
         flush=True,
     )
     chosen_models = models or CPU_EXHAUST_MODELS
@@ -1017,6 +1056,7 @@ def run_exhaust(
         "target": target,
         "horizon": horizon,
         "label_skip": label_skip,
+        "label_policy": label_policy,
         "evaluation_domain": evaluation_domain,
         "feature_pack": feature_pack,
         "universe_filter": universe_filter,
@@ -1134,6 +1174,15 @@ def main(argv: list[str] | None = None) -> int:
             "(0 = frozen default; 1 = skip-day / execution-lag label)"
         ),
     )
+    parser.add_argument(
+        "--label-policy",
+        default="",
+        choices=("", "material_median"),
+        help=(
+            "Optional label policy; material_median keeps |y_ret| at/above "
+            "same-day median (new matrix id; SuccessContract unchanged)"
+        ),
+    )
     parser.add_argument("--evaluation-domain", default="cse")
     parser.add_argument("--max-flat-fraction", type=float, default=0.40)
     parser.add_argument("--screen-top-k", type=int, default=6)
@@ -1207,6 +1256,7 @@ def main(argv: list[str] | None = None) -> int:
         universe_filter=args.universe_filter,
         sample_weight=args.sample_weight,
         label_skip=args.label_skip,
+        label_policy=args.label_policy,
     )
     return 0
 
